@@ -4,6 +4,7 @@ import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { CATEGORIES, catLabel, getMyBalances, getMyRecent, submitExpense, submitSalaryAdvance } from "@/lib/expenses";
 import { getMuster } from "@/lib/mobile";
+import { todayLocal } from "@/lib/today";
 
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN");
 
@@ -33,7 +34,7 @@ export default function MoneyScreen() {
     const w = workers.find(x => x.id === Number(f.worker_id));
     const res = await submitExpense({
       site_id: siteId, holder_user_id: userId,
-      expense_date: new Date().toISOString().slice(0, 10),
+      expense_date: todayLocal(),
       category: f.category, amount: Number(f.amount), paid_to: f.paid_to,
       pay_mode: f.pay_mode, note: f.note,
       worker_id: f.worker_id ? Number(f.worker_id) : null,
