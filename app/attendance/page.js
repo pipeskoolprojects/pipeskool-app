@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
+import { todayLocal } from "@/lib/today";
 import { getAttendance, getSites } from "@/lib/data";
 import { isDemo } from "@/lib/supabase";
 
@@ -16,7 +17,7 @@ const verifyBadge = v =>
   <span className="badge warn">Pending</span>;
 
 export default function AttendancePage() {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => todayLocal());
   const [site, setSite] = useState("all");
   const [sites, setSites] = useState([]);
   const [rows, setRows] = useState(null);

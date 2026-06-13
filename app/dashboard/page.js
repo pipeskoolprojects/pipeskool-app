@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
+import { todayLocal } from "@/lib/today";
 import { getTodaySummary } from "@/lib/data";
 import { isDemo } from "@/lib/supabase";
 
 export default function Dashboard() {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => todayLocal());
   const [s, setS] = useState(null);
 
   useEffect(() => { getTodaySummary(date).then(setS); }, [date]);

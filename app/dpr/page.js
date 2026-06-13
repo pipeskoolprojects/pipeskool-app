@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
+import { todayLocal } from "@/lib/today";
 import { getDigest, getProgress, getHindranceRegister, reasonLabel } from "@/lib/dpr";
 import { isDemo } from "@/lib/supabase";
 
 export default function DPRPage() {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => todayLocal());
   const [digest, setDigest] = useState(null);
   const [progress, setProgress] = useState([]);
 
