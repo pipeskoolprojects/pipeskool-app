@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
+import { getSession } from "@/lib/auth";
 import {
   EXPENSE_CATEGORIES, inr, getBeneficiaries, raiseAdvanceSalary,
   claimExpense, getMyRecentMoney, getPettyBalance, respondAdvance, respondExpense,
@@ -25,7 +26,9 @@ export default function MoneyScreen() {
   const [replyText, setReplyText] = useState("");
   const [replyAmount, setReplyAmount] = useState("");
   const [replyPhoto, setReplyPhoto] = useState(null);
-  const userId = 1, siteId = 1;
+  const sess = typeof window !== "undefined" ? getSession() : null;
+  const userId = sess?.id || 1;
+  const siteId = sess?.siteIds?.[0] || 1;
 
   const load = () => { getPettyBalance(userId).then(setPetty); getMyRecentMoney(userId).then(setRecent); };
   useEffect(() => { load(); getBeneficiaries(userId, [siteId]).then(setBens); }, []);
