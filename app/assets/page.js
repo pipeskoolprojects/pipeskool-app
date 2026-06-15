@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
+import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import { getAssets, getCalibrationDue, getRepairHistory, idleAssets, statusInfo, inr } from "@/lib/assets";
 
@@ -64,28 +65,17 @@ export default function AssetsPage() {
 
         <div className="panel">
           <h2>Asset location &amp; status — all sites</h2>
-          <table>
-            <thead>
-              <tr><th>Code</th><th>Asset</th><th>Category</th><th>Site</th><th>Custodian</th><th className="num">Value</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-              {!assets ? <tr><td colSpan="7" className="muted">Loading…</td></tr> :
-                assets.map(a => {
-                  const [label, color] = statusInfo(a.status);
-                  return (
-                    <tr key={a.id}>
-                      <td style={{ fontWeight: 600 }}>{a.code}</td>
-                      <td>{a.name}<div className="muted">{a.make}</div></td>
-                      <td>{a.category}</td>
-                      <td><span className="badge gray">{a.site}</span></td>
-                      <td className="muted">{a.custodian || "—"}</td>
-                      <td className="num">{inr(a.cost)}</td>
-                      <td><span className={"badge " + color}>{label}</span></td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
+          {!assets ? <div className="muted">Loading…</div> :
+            <DataTable exportName="assets" rows={assets}
+              columns={[
+                { key: "code", label: "Code", filter: "search", render: a => <span style={{ fontWeight: 600 }}>{a.code}</span> },
+                { key: "name", label: "Asset", filter: "search", render: a => <span>{a.name}<div className="muted">{a.make}</div></span> },
+                { key: "category", label: "Category", filter: "select" },
+                { key: "site", label: "Site", filter: "select", render: a => <span className="badge gray">{a.site}</span> },
+                { key: "custodian", label: "Custodian", filter: "search", render: a => <span className="muted">{a.custodian || "—"}</span> },
+                { key: "cost", label: "Value", type: "num", render: a => inr(a.cost), exportValue: a => a.cost },
+                { key: "status", label: "Status", filter: "select", render: a => { const [l,c] = statusInfo(a.status); return <span className={"badge "+c}>{l}</span>; } },
+              ]} />}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 14 }}>

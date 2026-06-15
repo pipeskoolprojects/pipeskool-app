@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
+import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import {
   getAdvanceQueue, reviewAdvance, getExpenseClaimQueue, reviewExpenseClaim,
@@ -23,20 +24,55 @@ export default function ExpensesPage() {
   async function actAdv(id, status) {
     let note = null;
     if (status === "queried") { note = prompt("Query to send back:"); if (!note) return; }
-    await reviewAdvance(id, status, note);
-    setMsg(status === "approved" ? "Advance approved — to be paid to bank account." : "Updated.");
-    load();
+    await reviewAdvance(id, status, note); setMsg("Updated."); load();
   }
   async function actClaim(id, status) {
     let note = null;
     if (status === "queried") { note = prompt("Query to send back:"); if (!note) return; }
-    await reviewExpenseClaim(id, status, note);
-    setMsg(status === "approved" ? "Claim approved." : "Updated.");
-    load();
+    await reviewExpenseClaim(id, status, note); setMsg("Updated."); load();
   }
 
-  const pendingAdv = (adv || []).filter(a => a.status === "pending");
-  const pendingClaims = (claims || []).filter(c => c.status === "pending");
+  const advCols = [
+    { key: "date", label: "Date", filter: "search" },
+    { key: "beneficiary_name", label: "Beneficiary", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.beneficiary_name}</span> },
+    { key: "beneficiary_kind", label: "Type", filter: "select", optionLabel: o => o === "labour" ? "Labour" : "Staff", render: r => r.beneficiary_kind === "labour" ? "Labour" : "Staff" },
+    { key: "site", label: "Site", filter: "select" },
+    { key: "reason", label: "Reason", render: r => <span className="muted">{r.reason || "—"}{r.response && <div style={{ color: "var(--green)" }}>↩ {r.response}</div>}{r.status === "queried" && r.query && <div style={{ color: "var(--amber)" }}>❓ {r.query}</div>}</span> },
+    { key: "amount", label: "Amount", type: "num", render: r => inr(r.amount), exportValue: r => r.amount },
+    { key: "bank_on_file", label: "Bank", filter: "select", optionLabel: o => o ? "On file" : "Missing", render: r => r.bank_on_file ? <span className="badge p">On file</span> : <span className="badge warn">⚠ Missing</span>, exportValue: r => r.bank_on_file ? "On file" : "Missing" },
+    { key: "status", label: "Status", filter: "select", render: r => r.status === "approved" ? <span className="badge p">Approved</span> : r.status === "rejected" ? <span className="badge a">Rejected</span> : r.status === "queried" ? <span className="badge h">Queried</span> : <span className="badge gray">Pending</span> },
+    { key: "_action", label: "Action", sortable: false, render: r => (r.status === "pending" || r.status === "queried") ? (
+      <span style={{ whiteSpace: "nowrap" }}>
+        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actAdv(r.id, "approved")}>✓</button>
+        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actAdv(r.id, "queried")}>?</button>
+        <button style={{ fontSize: 11.5 }} onClick={() => actAdv(r.id, "rejected")}>✕</button>
+      </span>) : null },
+  ];
+
+  const claimCols = [
+    { key: "date", label: "Date", filter: "search" },
+    { key: "claimant", label: "Claimant", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.claimant || "—"}</span> },
+    { key: "site", label: "Site", filter: "select" },
+    { key: "category", label: "Category", filter: "select", render: r => catLabel(r.category), exportValue: r => catLabel(r.category) },
+    { key: "paid_to", label: "Paid to", filter: "search", render: r => <span>{r.paid_to}{r.response && <div className="muted" style={{ color: "var(--green)" }}>↩ {r.response}</div>}{r.status === "queried" && r.query && <div className="muted" style={{ color: "var(--amber)" }}>❓ {r.query}</div>}</span> },
+    { key: "funding_source", label: "Source", filter: "select", optionLabel: o => o === "petty_cash" ? "Petty cash" : "Own pocket", render: r => r.funding_source === "petty_cash" ? <span className="badge info">Petty cash</span> : <span className="badge gray">Own pocket</span> },
+    { key: "amount", label: "Amount", type: "num", render: r => inr(r.amount), exportValue: r => r.amount },
+    { key: "photo", label: "Proof", render: r => r.photo ? <span className="badge p">📎 Bill</span> : <span className="badge warn">No proof</span>, exportValue: r => r.photo ? "Yes" : "No" },
+    { key: "_action", label: "Action", sortable: false, render: r => (r.status === "pending" || r.status === "queried") ? (
+      <span style={{ whiteSpace: "nowrap" }}>
+        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actClaim(r.id, "approved")}>✓</button>
+        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actClaim(r.id, "queried")}>?</button>
+        <button style={{ fontSize: 11.5 }} onClick={() => actClaim(r.id, "rejected")}>✕</button>
+      </span>) : null },
+  ];
+
+  const pettyCols = [
+    { key: "holder", label: "Holder", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.holder}</span> },
+    { key: "site", label: "Site", filter: "select" },
+    { key: "granted", label: "Granted", type: "num", render: r => inr(r.granted), exportValue: r => r.granted },
+    { key: "spent", label: "Spent", type: "num", render: r => inr(r.spent), exportValue: r => r.spent },
+    { key: "balance", label: "Balance", type: "num", render: r => <b>{inr(r.balance)}</b>, exportValue: r => r.balance },
+  ];
 
   return (
     <div className="layout">
@@ -47,82 +83,21 @@ export default function ExpensesPage() {
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
 
         <div className="panel">
-          <h2>Advance salary requests {pendingAdv.length > 0 && <span className="badge warn">{pendingAdv.length} pending</span>}</h2>
-          {!adv ? <div className="muted">Loading…</div> : adv.length === 0 ? <span className="muted">No requests yet.</span> : (
-            <table>
-              <thead><tr><th>Date</th><th>Beneficiary</th><th>Reason</th><th className="num">Amount</th><th>Bank</th><th>Status</th><th>Action</th></tr></thead>
-              <tbody>
-                {adv.map(a => (
-                  <tr key={a.id}>
-                    <td className="muted">{a.date}</td>
-                    <td><div style={{ fontWeight: 600 }}>{a.beneficiary_name}</div><div className="muted">{a.beneficiary_kind === "labour" ? "Labour" : "Staff"}{a.site ? " · " + a.site : ""}</div></td>
-                    <td className="muted">{a.reason || "—"}{a.response && <div style={{ color: "var(--green)" }}>↩ Reply: {a.response}</div>}{a.status === "queried" && a.query && <div style={{ color: "var(--amber)" }}>❓ {a.query}</div>}</td>
-                    <td className="num" style={{ fontWeight: 600 }}>{inr(a.amount)}</td>
-                    <td>{a.bank_on_file ? <span className="badge p">On file</span> : <span className="badge warn">⚠ Missing</span>}</td>
-                    <td>{a.status === "approved" ? <span className="badge p">Approved</span> : a.status === "rejected" ? <span className="badge a">Rejected</span> : a.status === "queried" ? <span className="badge h">Queried</span> : <span className="badge gray">Pending</span>}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>
-                      {a.status === "pending" && <>
-                        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actAdv(a.id, "approved")}>✓</button>
-                        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actAdv(a.id, "queried")}>?</button>
-                        <button style={{ fontSize: 11.5 }} onClick={() => actAdv(a.id, "rejected")}>✕</button>
-                      </>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <div className="muted" style={{ marginTop: 8 }}>Approved advances are paid to the beneficiary's bank account. A missing-bank flag is a warning, not a blocker — but payment needs bank details.</div>
+          <h2>Advance salary requests</h2>
+          {!adv ? <div className="muted">Loading…</div> :
+            <DataTable columns={advCols} rows={adv} exportName="advance_requests" dateField="date" />}
         </div>
 
         <div className="panel">
-          <h2>Site expense claims {pendingClaims.length > 0 && <span className="badge warn">{pendingClaims.length} pending</span>}</h2>
-          {!claims ? <div className="muted">Loading…</div> : claims.length === 0 ? <span className="muted">No claims yet.</span> : (
-            <table>
-              <thead><tr><th>Date</th><th>Claimant / site</th><th>Category</th><th>Paid to</th><th>Source</th><th className="num">Amount</th><th>Proof</th><th>Action</th></tr></thead>
-              <tbody>
-                {claims.map(c => (
-                  <tr key={c.id}>
-                    <td className="muted">{c.date}</td>
-                    <td><div style={{ fontWeight: 600 }}>{c.claimant || "—"}</div><div className="muted">{c.site}</div></td>
-                    <td>{catLabel(c.category)}</td>
-                    <td>{c.paid_to}{c.response && <div className="muted" style={{ color: "var(--green)" }}>↩ {c.response}</div>}{c.status === "queried" && c.query && <div className="muted" style={{ color: "var(--amber)" }}>❓ {c.query}</div>}</td>
-                    <td>{c.funding_source === "petty_cash" ? <span className="badge info">Petty cash</span> : <span className="badge gray">Own pocket</span>}</td>
-                    <td className="num" style={{ fontWeight: 600 }}>{inr(c.amount)}</td>
-                    <td>{c.photo ? <span className="badge p">📎 Bill</span> : <span className="badge warn">No proof</span>}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>
-                      {c.status === "pending" && <>
-                        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actClaim(c.id, "approved")}>✓</button>
-                        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actClaim(c.id, "queried")}>?</button>
-                        <button style={{ fontSize: 11.5 }} onClick={() => actClaim(c.id, "rejected")}>✕</button>
-                      </>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <div className="muted" style={{ marginTop: 8 }}>Own-pocket claims are reimbursed to the claimant's bank. Petty-cash claims are deducted from the balance they hold.</div>
+          <h2>Site expense claims</h2>
+          {!claims ? <div className="muted">Loading…</div> :
+            <DataTable columns={claimCols} rows={claims} exportName="expense_claims" dateField="date" />}
         </div>
 
         <div className="panel">
           <h2>Petty cash — balance held by person</h2>
-          {petty.length === 0 ? <span className="muted">No petty cash issued yet.</span> : (
-            <table>
-              <thead><tr><th>Holder</th><th>Site</th><th className="num">Granted</th><th className="num">Spent</th><th className="num">Balance</th></tr></thead>
-              <tbody>
-                {petty.map((r, i) => (
-                  <tr key={i}>
-                    <td style={{ fontWeight: 600 }}>{r.holder}</td>
-                    <td className="muted">{r.site}</td>
-                    <td className="num">{inr(r.granted)}</td>
-                    <td className="num">{inr(r.spent)}</td>
-                    <td className="num" style={{ fontWeight: 600 }}>{inr(r.balance)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          {petty.length === 0 ? <span className="muted">No petty cash issued yet.</span> :
+            <DataTable columns={pettyCols} rows={petty} exportName="petty_cash" />}
         </div>
       </main>
     </div>

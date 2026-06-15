@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
+import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import { getBalances, getBoqNorms, getRequests, deadStock, lowStock } from "@/lib/stock";
 
@@ -95,33 +96,21 @@ export default function StockPage() {
 
         <div className="panel">
           <h2>Live stock position &amp; reconciliation</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Item</th><th>Site</th>
-                <th className="num">Received</th><th className="num">Issued</th>
-                <th className="num">Returned</th><th className="num">Consumed</th>
-                <th className="num">Balance</th><th className="num">Rate</th><th className="num">Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {!balances ? <tr><td colSpan="9" className="muted">Loading…</td></tr> :
-                balances.map(b => (
-                  <tr key={b.item_id + b.site_code}>
-                    <td style={{ fontWeight: 600 }}>{b.display_name}</td>
-                    <td><span className="badge gray">{b.site_code}</span></td>
-                    <td className="num">{b.received}</td>
-                    <td className="num">{b.issued}</td>
-                    <td className="num">{b.returned}</td>
-                    <td className="num">{b.consumed}</td>
-                    <td className="num" style={{ fontWeight: 700, color: b.balance <= b.min_stock ? "var(--red)" : "inherit" }}>{b.balance} {b.unit}</td>
-                    <td className="num">{inr(b.rate)}</td>
-                    <td className="num">{inr(b.value)}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-          <div className="muted" style={{ marginTop: 8 }}>Reconciliation: Received − Issued − Consumed + Returned = Balance. Any mismatch on physical count exposes theft/loss.</div>
+          {!balances ? <div className="muted">Loading…</div> :
+            <DataTable exportName="stock_position" rows={balances.map(b => ({ ...b, key: b.item_id + b.site_code }))}
+              columns={[
+                { key: "display_name", label: "Item", filter: "search", render: b => <span style={{ fontWeight: 600 }}>{b.display_name}</span> },
+                { key: "item_type", label: "Type", filter: "select" },
+                { key: "site_code", label: "Site", filter: "select", render: b => <span className="badge gray">{b.site_code}</span> },
+                { key: "received", label: "Received", type: "num" },
+                { key: "issued", label: "Issued", type: "num" },
+                { key: "returned", label: "Returned", type: "num" },
+                { key: "consumed", label: "Consumed", type: "num" },
+                { key: "balance", label: "Balance", type: "num", render: b => <span style={{ fontWeight: 700, color: b.balance <= b.min_stock ? "var(--red)" : "inherit" }}>{b.balance} {b.unit}</span>, exportValue: b => b.balance },
+                { key: "rate", label: "Rate", type: "num", render: b => inr(b.rate), exportValue: b => b.rate },
+                { key: "value", label: "Value", type: "num", render: b => inr(b.value), exportValue: b => b.value },
+              ]} />}
+          <div className="muted" style={{ marginTop: 8 }}>Reconciliation: Received − Issued − Consumed + Returned = Balance.</div>
         </div>
 
         {dead.length > 0 && (

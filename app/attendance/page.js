@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
-import { todayLocal } from "@/lib/today";
+import DataTable from "@/components/DataTable";
 import { getAttendance, getSites } from "@/lib/data";
+import { todayLocal } from "@/lib/today";
 import { isDemo } from "@/lib/supabase";
 
 const statusBadge = s =>
@@ -10,11 +11,6 @@ const statusBadge = s =>
   s === "half_day" ? <span className="badge h">½</span> :
   s === "absent" ? <span className="badge a">A</span> :
   <span className="badge gray">…</span>;
-
-const verifyBadge = v =>
-  v === "verified" ? <span className="badge p">Verified</span> :
-  v === "corrected" ? <span className="badge info">Corrected</span> :
-  <span className="badge warn">Pending</span>;
 
 export default function AttendancePage() {
   const [date, setDate] = useState(() => todayLocal());
@@ -24,6 +20,22 @@ export default function AttendancePage() {
 
   useEffect(() => { getSites().then(setSites); }, []);
   useEffect(() => { getAttendance(date, site).then(setRows); }, [date, site]);
+
+  const columns = [
+    { key: "worker", label: "Worker", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.worker}</span> },
+    { key: "category", label: "Category", filter: "select" },
+    { key: "contractor", label: "Labour", filter: "select", render: r => <span className="muted">{r.contractor}</span> },
+    { key: "in", label: "In", type: "num" },
+    { key: "out", label: "Out", type: "num" },
+    { key: "hours", label: "Hrs", type: "num", render: r => r.hours ?? "—" },
+    { key: "status", label: "Status", filter: "select", render: r => statusBadge(r.status), exportValue: r => r.status },
+    { key: "ot", label: "OT", type: "num", render: r => r.ot > 0 ? r.ot + "h" : "—" },
+    { key: "punch", label: "Punch", filter: "select",
+      render: r => r.punch === "proxy" ? <span className="badge warn">Proxy 📷</span> : <span className="badge gray">Self</span> },
+    { key: "verify", label: "Verification", filter: "select",
+      render: r => r.verify === "verified" ? <span className="badge p">Verified</span> :
+        r.verify === "corrected" ? <span className="badge info">Corrected</span> : <span className="badge warn">Pending</span> },
+  ];
 
   return (
     <div className="layout">
@@ -39,45 +51,12 @@ export default function AttendancePage() {
             </select>
           </div>
         </div>
-
         {isDemo && <div className="demo-banner">Demo mode — sample register shown.</div>}
-
         <div className="panel">
-          {!rows ? <div className="muted">Loading…</div> : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Worker</th><th>Category</th><th>Labour</th>
-                  <th className="num">In</th><th className="num">Out</th>
-                  <th className="num">Hrs</th><th>Status</th>
-                  <th className="num">OT</th><th>Punch</th><th>Verification</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(r => (
-                  <tr key={r.id}>
-                    <td style={{ fontWeight: 600 }}>{r.worker}</td>
-                    <td>{r.category}</td>
-                    <td className="muted">{r.contractor}</td>
-                    <td className="num">{r.in}</td>
-                    <td className="num">{r.out}</td>
-                    <td className="num">{r.hours ?? "—"}</td>
-                    <td>{statusBadge(r.status)}</td>
-                    <td className="num">{r.ot > 0 ? r.ot + "h" : "—"}</td>
-                    <td>{r.punch === "proxy"
-                      ? <span className="badge warn">Proxy 📷</span>
-                      : <span className="badge gray">Self</span>}</td>
-                    <td>{verifyBadge(r.verify)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          {!rows ? <div className="muted">Loading…</div> :
+            <DataTable columns={columns} rows={rows} exportName={"attendance_" + date} />}
         </div>
-        <div className="muted">
-          Proxy entries always carry a live photo of the worker. Pending rows must be verified
-          by the site supervisor before the day&apos;s muster locks.
-        </div>
+        <div className="muted">The date and site pickers above set the day; the filters below the heading search and sort within it.</div>
       </main>
     </div>
   );
