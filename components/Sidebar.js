@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
-import { getSession, clearSession, canSeeModule } from "@/lib/auth";
+import { getSession, clearSession, canSeeModuleAnySite, setCurrentSite } from "@/lib/auth";
 
 const allLinks = [
   { href: "/dashboard", label: "Dashboard", module: "dashboard" },
@@ -30,7 +30,7 @@ export default function Sidebar() {
 
   function logout() { clearSession(); router.push("/login"); }
 
-  const links = allLinks.filter(l => !session || canSeeModule(session, l.module));
+  const links = allLinks.filter(l => !session || canSeeModuleAnySite(session, l.module));
   const showAccess = session && session.role === "director";
 
   return (
@@ -44,7 +44,13 @@ export default function Sidebar() {
       {session && (
         <div style={{ padding: "10px 18px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           <div style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{session.name}</div>
-          <div style={{ color: "#6E7780", fontSize: 11, textTransform: "capitalize" }}>{(session.role || "").replace("_", " ")}</div>
+          <div style={{ color: "#6E7780", fontSize: 11, textTransform: "capitalize", marginBottom: 6 }}>{(session.role || "").replace("_", " ")}</div>
+          {session.sites?.length > 1 && (
+            <select defaultValue={session.currentSite} onChange={e => { setCurrentSite(e.target.value); window.location.reload(); }}
+              style={{ width: "100%", fontSize: 11.5, background: "rgba(255,255,255,0.08)", color: "#fff", borderColor: "rgba(255,255,255,0.15)" }}>
+              {session.sites.map(s => <option key={s.id} value={s.id} style={{ color: "#000" }}>{s.name}</option>)}
+            </select>
+          )}
         </div>
       )}
       <div className="module-label">Core site operations</div>
