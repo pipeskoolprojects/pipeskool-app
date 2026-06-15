@@ -2,62 +2,62 @@
 import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
-import { CATEGORIES, catLabel, getMyBalances, getMyRecent, submitExpense, submitSalaryAdvance } from "@/lib/expenses";
-import { getMuster } from "@/lib/mobile";
-import { todayLocal } from "@/lib/today";
-
-const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN");
+import {
+  EXPENSE_CATEGORIES, inr, getBeneficiaries, raiseAdvanceSalary,
+  claimExpense, getMyRecentMoney, getPettyBalance,
+} from "@/lib/money";
 
 export default function MoneyScreen() {
-  const [bal, setBal] = useState(null);
+  const [mode, setMode] = useState("none");     // none | advance | expense
+  const [petty, setPetty] = useState(0);
   const [recent, setRecent] = useState([]);
-  const [mode, setMode] = useState("none");   // none | expense | salary
-  const [workers, setWorkers] = useState([]);
-  const [f, setF] = useState({ category: "local_material", amount: "", paid_to: "", pay_mode: "cash", worker_id: "", note: "" });
-  const [sf, setSf] = useState({ amount: "", reason: "" });
+  const [bens, setBens] = useState([]);
+  // advance form
+  const [a, setA] = useState({ beneficiary: "", amount: "", reason: "" });
+  // expense form
+  const [e, setE] = useState({ category: "local_material", amount: "", paid_to: "", funding_source: "own_pocket", note: "" });
   const [photo, setPhoto] = useState(null);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
-  const userId = 1, siteId = 1; // role/auth wiring in launch step
+  const userId = 1, siteId = 1;
 
-  const load = () => { getMyBalances(userId).then(setBal); getMyRecent(userId).then(setRecent); };
-  useEffect(() => { load(); getMuster(siteId).then(setWorkers); }, []);
+  const load = () => { getPettyBalance(userId).then(setPetty); getMyRecentMoney(userId).then(setRecent); };
+  useEffect(() => { load(); getBeneficiaries(userId, [siteId]).then(setBens); }, []);
 
-  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
-
-  async function saveExpense() {
+  async function submitAdvance() {
     setErr(""); setMsg("");
-    if (!f.amount || !f.paid_to) { setErr("Amount and paid-to are mandatory."); return; }
-    if (f.category === "labour_advance" && !f.worker_id) { setErr("Select the worker for labour advance."); return; }
+    if (!a.beneficiary || !a.amount) { setErr("Select a person and enter the amount."); return; }
+    const b = bens.find(x => `${x.kind}:${x.id}` === a.beneficiary);
     setBusy(true);
-    const w = workers.find(x => x.id === Number(f.worker_id));
-    const res = await submitExpense({
-      site_id: siteId, holder_user_id: userId,
-      expense_date: todayLocal(),
-      category: f.category, amount: Number(f.amount), paid_to: f.paid_to,
-      pay_mode: f.pay_mode, note: f.note,
-      worker_id: f.worker_id ? Number(f.worker_id) : null,
-      worker_name: w?.name, photoFile: photo,
+    const res = await raiseAdvanceSalary({
+      site_id: siteId, beneficiary_id: b.id, beneficiary_kind: b.kind,
+      beneficiary_name: b.name, amount: Number(a.amount), reason: a.reason,
+      bank_on_file: b.bank, raised_by: userId,
     });
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg(f.category === "labour_advance"
-      ? "Labour advance request sent — needs Director/Accountant verification. On approval it auto-deducts from the worker's wages."
-      : "Expense submitted for approval." + (!photo ? " (No bill photo — it will be flagged at HO.)" : ""));
-    setF({ category: "local_material", amount: "", paid_to: "", pay_mode: "cash", worker_id: "", note: "" });
-    setPhoto(null); setMode("none"); load();
+    setMsg(`Advance salary request sent for ${b.name}. Needs Director/Accountant approval; on approval it is paid to their bank account.${!b.bank ? " ⚠ Bank details not on file — please add them." : ""}`);
+    setA({ beneficiary: "", amount: "", reason: "" }); setMode("none"); load();
   }
 
-  async function saveSalary() {
+  async function submitExpense() {
     setErr(""); setMsg("");
-    if (!sf.amount) { setErr("Enter the advance amount."); return; }
+    if (!e.amount || !e.paid_to) { setErr("Amount and paid-to are required."); return; }
+    if (e.funding_source === "own_pocket" && !photo) { setErr("Please attach a bill photo as proof for reimbursement."); return; }
     setBusy(true);
-    const res = await submitSalaryAdvance({ user_id: userId, site_id: siteId, amount: Number(sf.amount), reason: sf.reason });
+    const res = await claimExpense({
+      site_id: siteId, user_id: userId, category: e.category, amount: Number(e.amount),
+      paid_to: e.paid_to, funding_source: e.funding_source, note: e.note,
+      photoFile: photo, bank_on_file: true,
+    });
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg("Salary advance request sent for approval. On approval it links to your salary and deducts automatically.");
-    setSf({ amount: "", reason: "" }); setMode("none"); load();
+    setMsg(e.funding_source === "own_pocket"
+      ? "Expense claim submitted with proof. On approval it is reimbursed to your bank account."
+      : "Expense recorded against petty cash. On approval it is deducted from your held balance.");
+    setE({ category: "local_material", amount: "", paid_to: "", funding_source: "own_pocket", note: "" });
+    setPhoto(null); setMode("none"); load();
   }
 
   const statusBadge = s =>
@@ -69,92 +69,74 @@ export default function MoneyScreen() {
   return (
     <div className="m-wrap">
       <div className="m-head">
-        <div>
-          <div className="title">Money</div>
-          <div className="sub">Site expenses · advances · my balance</div>
-        </div>
+        <div><div className="title">Money / Expense</div><div className="sub">Advances &amp; site expenses</div></div>
       </div>
       <div className="m-body">
-        {isDemo && <div className="note amber">Demo mode — sample balances.</div>}
+        {isDemo && <div className="note amber">Demo mode — sample data, resets on refresh.</div>}
 
-        {bal && (
-          <div className="stat-row">
-            <div className="stat-box"><div className="k">Imprest in hand</div><div className="v">{inr(bal.imprestInHand)}</div></div>
-            <div className="stat-box"><div className="k">Pending review</div><div className="v">{inr(bal.pendingEntries)}</div></div>
-            <div className="stat-box"><div className="k">My salary adv.</div><div className="v" style={{ color: bal.salaryAdvOutstanding ? "var(--amber)" : "inherit" }}>{inr(bal.salaryAdvOutstanding)}</div></div>
-          </div>
-        )}
+        <div className="stat-row" style={{ gridTemplateColumns: "1fr" }}>
+          <div className="stat-box"><div className="k">Petty cash held by me</div><div className="v">{inr(petty)}</div></div>
+        </div>
 
         {mode === "none" && (
           <div style={{ display: "grid", gap: 10, margin: "14px 0" }}>
-            <button className="primary btn-block" onClick={() => { setMode("expense"); setMsg(""); }}>
-              🧾 Request / enter site expense
+            <button className="primary btn-block" onClick={() => { setMode("advance"); setMsg(""); setErr(""); }}>
+              💰 Request for Advance Salary
             </button>
-            <button className="btn-block" onClick={() => { setMode("salary"); setMsg(""); }}>
-              💰 Request salary advance (my salary)
+            <div className="sub" style={{ marginTop: -4, marginBottom: 6 }}>For yourself or any worker/employee at your site. Paid to bank after approval.</div>
+            <button className="btn-block" onClick={() => { setMode("expense"); setMsg(""); setErr(""); }}>
+              🧾 Claim Site Expense
             </button>
+            <div className="sub" style={{ marginTop: -4 }}>Money you spent on site (attach proof). Reimbursed to bank, or deducted from petty cash.</div>
           </div>
         )}
 
-        {mode === "expense" && (
+        {mode === "advance" && (
           <div style={{ background: "var(--bg)", borderRadius: 12, padding: 12, margin: "12px 0" }}>
-            <h3 style={{ fontSize: 14, marginBottom: 10 }}>Site expense entry</h3>
-            <div className="m-field"><label>Category</label>
-              <select value={f.category} onChange={e => set("category", e.target.value)}>
-                {CATEGORIES.map(c => <option key={c[0]} value={c[0]}>{c[1]}</option>)}
+            <h3 style={{ fontSize: 14, marginBottom: 10 }}>Advance salary request</h3>
+            <div className="m-field"><label>For whom *</label>
+              <select value={a.beneficiary} onChange={ev => setA(p => ({ ...p, beneficiary: ev.target.value }))}>
+                <option value="">Select person…</option>
+                {bens.map(b => <option key={`${b.kind}:${b.id}`} value={`${b.kind}:${b.id}`}>
+                  {b.name} {b.kind === "labour" ? "· Labour" : "· Staff"}{!b.bank ? " · ⚠ no bank" : ""}
+                </option>)}
               </select></div>
-            {f.category === "labour_advance" && (
-              <div className="m-field"><label>Worker (advance will deduct from his wages)</label>
-                <select value={f.worker_id} onChange={e => set("worker_id", e.target.value)}>
-                  <option value="">Select worker…</option>
-                  {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </select></div>
-            )}
-            <div className="m-grid2">
-              <div className="m-field"><label>Amount ₹ *</label>
-                <input inputMode="numeric" value={f.amount} onChange={e => set("amount", e.target.value)} placeholder="0" /></div>
-              <div className="m-field"><label>Payment mode</label>
-                <select value={f.pay_mode} onChange={e => set("pay_mode", e.target.value)}>
-                  <option value="cash">Cash</option><option value="upi">UPI</option>
-                </select></div>
-            </div>
-            <div className="m-field"><label>Paid to *</label>
-              <input value={f.paid_to} onChange={e => set("paid_to", e.target.value)} placeholder="Shop / person name" /></div>
-            <div className="m-field"><label>Note (optional)</label>
-              <input value={f.note} onChange={e => set("note", e.target.value)} placeholder="What was it for" /></div>
-            <button style={{ fontSize: 12.5 }} onClick={() => fileRef.current?.click()}>
-              📷 {photo ? "Bill photo attached ✓" : "Attach bill photo"}
-            </button>
-            <input ref={fileRef} type="file" accept="image/*" capture="environment"
-                   style={{ display: "none" }} onChange={e => setPhoto(e.target.files?.[0] || null)} />
-            {f.category === "labour_advance" && (
-              <div className="note amber" style={{ marginTop: 8 }}>
-                Labour advances require Director / Accountant verification before they count.
-              </div>
-            )}
+            <div className="m-field"><label>Amount ₹ *</label>
+              <input inputMode="numeric" value={a.amount} onChange={ev => setA(p => ({ ...p, amount: ev.target.value }))} placeholder="0" /></div>
+            <div className="m-field"><label>Reason</label>
+              <input value={a.reason} onChange={ev => setA(p => ({ ...p, reason: ev.target.value }))} placeholder="e.g. medical / festival advance" /></div>
+            <div className="note amber">Once approved by Director/Accountant, payment is made to the person's bank account. A missing-bank flag does not stop the request.</div>
             {err && <div className="note red">{err}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <button className="primary" style={{ flex: 1 }} onClick={saveExpense} disabled={busy}>
-                {busy ? "Saving…" : "Submit"}
-              </button>
+              <button className="primary" style={{ flex: 1 }} disabled={busy} onClick={submitAdvance}>{busy ? "Sending…" : "Send request"}</button>
               <button onClick={() => setMode("none")}>Cancel</button>
             </div>
           </div>
         )}
 
-        {mode === "salary" && (
+        {mode === "expense" && (
           <div style={{ background: "var(--bg)", borderRadius: 12, padding: 12, margin: "12px 0" }}>
-            <h3 style={{ fontSize: 14, marginBottom: 10 }}>Salary advance request</h3>
+            <h3 style={{ fontSize: 14, marginBottom: 10 }}>Claim site expense</h3>
+            <div className="m-field"><label>Paid from *</label>
+              <select value={e.funding_source} onChange={ev => setE(p => ({ ...p, funding_source: ev.target.value }))}>
+                <option value="own_pocket">My own pocket (reimburse me to bank)</option>
+                <option value="petty_cash">Petty cash I hold (deduct from balance)</option>
+              </select></div>
+            <div className="m-field"><label>Category</label>
+              <select value={e.category} onChange={ev => setE(p => ({ ...p, category: ev.target.value }))}>
+                {EXPENSE_CATEGORIES.map(c => <option key={c[0]} value={c[0]}>{c[1]}</option>)}
+              </select></div>
             <div className="m-field"><label>Amount ₹ *</label>
-              <input inputMode="numeric" value={sf.amount} onChange={e => setSf(p => ({ ...p, amount: e.target.value }))} placeholder="0" /></div>
-            <div className="m-field"><label>Reason</label>
-              <input value={sf.reason} onChange={e => setSf(p => ({ ...p, reason: e.target.value }))} placeholder="e.g. Medical / rent" /></div>
-            <div className="note amber">This links to YOUR salary and will be deducted from it after approval.</div>
+              <input inputMode="numeric" value={e.amount} onChange={ev => setE(p => ({ ...p, amount: ev.target.value }))} placeholder="0" /></div>
+            <div className="m-field"><label>Paid to *</label>
+              <input value={e.paid_to} onChange={ev => setE(p => ({ ...p, paid_to: ev.target.value }))} placeholder="Shop / person" /></div>
+            <div className="m-field"><label>Note</label>
+              <input value={e.note} onChange={ev => setE(p => ({ ...p, note: ev.target.value }))} placeholder="What was it for" /></div>
+            <button style={{ fontSize: 12.5 }} onClick={() => fileRef.current?.click()}>📷 {photo ? "Proof attached ✓" : "Attach bill photo (proof)"}</button>
+            <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={ev => setPhoto(ev.target.files?.[0] || null)} />
             {err && <div className="note red">{err}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <button className="primary" style={{ flex: 1 }} onClick={saveSalary} disabled={busy}>
-                {busy ? "Sending…" : "Send request"}
-              </button>
+              <button className="primary" style={{ flex: 1 }} disabled={busy} onClick={submitExpense}>{busy ? "Saving…" : "Submit claim"}</button>
               <button onClick={() => setMode("none")}>Cancel</button>
             </div>
           </div>
@@ -162,13 +144,12 @@ export default function MoneyScreen() {
 
         {msg && <div className="note green">{msg}</div>}
 
-        <h3 style={{ fontSize: 14, margin: "14px 0 6px" }}>My recent entries</h3>
-        {recent.map(r => (
-          <div className="m-row" key={r.id}>
+        <h3 style={{ fontSize: 14, margin: "14px 0 6px" }}>My recent requests</h3>
+        {recent.length === 0 ? <div className="muted">Nothing yet.</div> : recent.map((r, i) => (
+          <div className="m-row" key={i}>
             <div className="info">
-              <div className="nm">{inr(r.amount)} — {r.paid_to}</div>
-              <div className="dt">{catLabel(r.category)} · {r.date}</div>
-              {r.query && <div className="flag">❓ HO query: {r.query}</div>}
+              <div className="nm">{inr(r.amount)} — {r.name}</div>
+              <div className="dt">{r.type} · {r.date}</div>
             </div>
             {statusBadge(r.status)}
           </div>
