@@ -4,7 +4,7 @@ import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import {
   EXPENSE_CATEGORIES, inr, getBeneficiaries, raiseAdvanceSalary,
-  claimExpense, getMyRecentMoney, getPettyBalance,
+  claimExpense, getMyRecentMoney, getPettyBalance, respondAdvance, respondExpense,
 } from "@/lib/money";
 
 export default function MoneyScreen() {
@@ -20,6 +20,11 @@ export default function MoneyScreen() {
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
+  const replyFileRef = useRef(null);
+  const [reply, setReply] = useState(null);     // the queried item being answered
+  const [replyText, setReplyText] = useState("");
+  const [replyAmount, setReplyAmount] = useState("");
+  const [replyPhoto, setReplyPhoto] = useState(null);
   const userId = 1, siteId = 1;
 
   const load = () => { getPettyBalance(userId).then(setPetty); getMyRecentMoney(userId).then(setRecent); };
@@ -58,6 +63,18 @@ export default function MoneyScreen() {
       : "Expense recorded against petty cash. On approval it is deducted from your held balance.");
     setE({ category: "local_material", amount: "", paid_to: "", funding_source: "own_pocket", note: "" });
     setPhoto(null); setMode("none"); load();
+  }
+
+  async function submitReply() {
+    setErr(""); setMsg("");
+    setBusy(true);
+    const res = reply.type === "Advance"
+      ? await respondAdvance(reply.id, replyText, replyAmount)
+      : await respondExpense(reply.id, replyText, replyAmount, replyPhoto);
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg("Reply sent — request is back with the approver as Pending.");
+    setReply(null); setReplyText(""); setReplyAmount(""); setReplyPhoto(null); load();
   }
 
   const statusBadge = s =>
@@ -146,14 +163,39 @@ export default function MoneyScreen() {
 
         <h3 style={{ fontSize: 14, margin: "14px 0 6px" }}>My recent requests</h3>
         {recent.length === 0 ? <div className="muted">Nothing yet.</div> : recent.map((r, i) => (
-          <div className="m-row" key={i}>
+          <div className="m-row" key={i} onClick={() => { if (r.status === "queried") { setReply(r); setReplyAmount(String(r.amount)); setReplyText(""); setMsg(""); setErr(""); } }} style={{ cursor: r.status === "queried" ? "pointer" : "default" }}>
             <div className="info">
               <div className="nm">{inr(r.amount)} — {r.name}</div>
               <div className="dt">{r.type} · {r.date}</div>
+              {r.status === "queried" && r.query && <div className="flag">❓ Query: {r.query} — tap to reply</div>}
             </div>
             {statusBadge(r.status)}
           </div>
         ))}
+
+        {reply && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 60, display: "flex", alignItems: "flex-end" }} onClick={() => setReply(null)}>
+            <div onClick={e => e.stopPropagation()} style={{ width: "min(430px,100%)", margin: "0 auto", background: "#fff", borderRadius: "14px 14px 0 0", padding: 16 }}>
+              <h3 style={{ fontSize: 15, marginBottom: 4 }}>Reply to query</h3>
+              <div className="note amber">❓ {reply.query || "The approver raised a query on this."}</div>
+              <div className="m-field"><label>Your reply *</label>
+                <input value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Explain / clarify" /></div>
+              <div className="m-field"><label>Corrected amount ₹ (if needed)</label>
+                <input inputMode="numeric" value={replyAmount} onChange={e => setReplyAmount(e.target.value)} /></div>
+              {reply.type === "Expense" && (
+                <>
+                  <button style={{ fontSize: 12.5 }} onClick={() => replyFileRef.current?.click()}>📷 {replyPhoto ? "New proof attached ✓" : "Attach fresh proof (optional)"}</button>
+                  <input ref={replyFileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => setReplyPhoto(e.target.files?.[0] || null)} />
+                </>
+              )}
+              {err && <div className="note red">{err}</div>}
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <button className="primary" style={{ flex: 1 }} disabled={busy} onClick={submitReply}>{busy ? "Sending…" : "Send reply & resubmit"}</button>
+                <button onClick={() => setReply(null)}>Close</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       <MobileNav />
     </div>

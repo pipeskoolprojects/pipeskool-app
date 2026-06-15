@@ -56,7 +56,7 @@ export default function ExpensesPage() {
                   <tr key={a.id}>
                     <td className="muted">{a.date}</td>
                     <td><div style={{ fontWeight: 600 }}>{a.beneficiary_name}</div><div className="muted">{a.beneficiary_kind === "labour" ? "Labour" : "Staff"}{a.site ? " · " + a.site : ""}</div></td>
-                    <td className="muted">{a.reason || "—"}</td>
+                    <td className="muted">{a.reason || "—"}{a.response && <div style={{ color: "var(--green)" }}>↩ Reply: {a.response}</div>}{a.status === "queried" && a.query && <div style={{ color: "var(--amber)" }}>❓ {a.query}</div>}</td>
                     <td className="num" style={{ fontWeight: 600 }}>{inr(a.amount)}</td>
                     <td>{a.bank_on_file ? <span className="badge p">On file</span> : <span className="badge warn">⚠ Missing</span>}</td>
                     <td>{a.status === "approved" ? <span className="badge p">Approved</span> : a.status === "rejected" ? <span className="badge a">Rejected</span> : a.status === "queried" ? <span className="badge h">Queried</span> : <span className="badge gray">Pending</span>}</td>
@@ -86,7 +86,7 @@ export default function ExpensesPage() {
                     <td className="muted">{c.date}</td>
                     <td><div style={{ fontWeight: 600 }}>{c.claimant || "—"}</div><div className="muted">{c.site}</div></td>
                     <td>{catLabel(c.category)}</td>
-                    <td>{c.paid_to}</td>
+                    <td>{c.paid_to}{c.response && <div className="muted" style={{ color: "var(--green)" }}>↩ {c.response}</div>}{c.status === "queried" && c.query && <div className="muted" style={{ color: "var(--amber)" }}>❓ {c.query}</div>}</td>
                     <td>{c.funding_source === "petty_cash" ? <span className="badge info">Petty cash</span> : <span className="badge gray">Own pocket</span>}</td>
                     <td className="num" style={{ fontWeight: 600 }}>{inr(c.amount)}</td>
                     <td>{c.photo ? <span className="badge p">📎 Bill</span> : <span className="badge warn">No proof</span>}</td>
