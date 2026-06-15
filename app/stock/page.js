@@ -4,6 +4,8 @@ import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import { getBalances, getBoqNorms, getRequests, deadStock, lowStock } from "@/lib/stock";
+import StockEntry from "@/components/StockEntry";
+import { getSession, can } from "@/lib/auth";
 
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN");
 
@@ -12,8 +14,11 @@ export default function StockPage() {
   const [balances, setBalances] = useState(null);
   const [norms, setNorms] = useState([]);
   const [requests, setRequests] = useState([]);
+  const [session, setSession] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  useEffect(() => { getBalances(site).then(setBalances); }, [site]);
+  useEffect(() => { setSession(getSession()); }, []);
+  useEffect(() => { getBalances(site).then(setBalances); }, [site, reloadKey]);
   useEffect(() => { getBoqNorms().then(setNorms); getRequests().then(setRequests); }, []);
 
   const low = balances ? lowStock(balances) : [];
@@ -35,6 +40,10 @@ export default function StockPage() {
             </select>
           </div>
         </div>
+
+        {session && can(session, "stock", "create", site !== "all" ? Number(site) : undefined) && (
+          <StockEntry siteId={site !== "all" ? Number(site) : (session.currentSite || 1)} userId={session.id} onDone={() => setReloadKey(k => k + 1)} />
+        )}
 
         {isDemo && <div className="demo-banner">Demo mode — sample inventory.</div>}
 
