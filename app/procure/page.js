@@ -16,6 +16,8 @@ export default function ProcurePage() {
   const [rates, setRates] = useState({});
   const [cmp, setCmp] = useState(null);
   const [awardVendor, setAwardVendor] = useState("");
+  const [splitMode, setSplitMode] = useState(false);
+  const [itemVendor, setItemVendor] = useState({});
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
 
@@ -24,7 +26,7 @@ export default function ProcurePage() {
 
   function openIndent(ind) {
     setOpenId(openId === ind.id ? null : ind.id);
-    setCmp(null); setRates({}); setQuoteVendors(["", "", ""]); setAwardVendor(""); setReason(""); setMsg(""); setErr("");
+    setCmp(null); setRates({}); setQuoteVendors(["", "", ""]); setAwardVendor(""); setReason(""); setMsg(""); setErr(""); setSplitMode(false); setItemVendor({});
   }
   const setRate = (itemId, vendor, val) => setRates(r => ({ ...r, [itemId]: { ...(r[itemId] || {}), [vendor]: val } }));
 
@@ -38,7 +40,11 @@ export default function ProcurePage() {
     const { vendors, quotes } = buildQuotes(ind);
     if (vendors.length === 0) { setErr("Enter at least one vendor name."); return; }
     if (quotes.length === 0) { setErr("Enter at least one rate."); return; }
-    setErr(""); setCmp(buildComparison(ind.items, quotes));
+    setErr("");
+    const c = buildComparison(ind.items, quotes);
+    setCmp(c);
+    const iv = {}; Object.entries(c.splitChoice).forEach(([itemId, ch]) => iv[itemId] = ch.vendor);
+    setItemVendor(iv);
   }
   async function persistQuotes(ind) {
     const { quotes } = buildQuotes(ind);
@@ -59,6 +65,32 @@ export default function ProcurePage() {
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
     setMsg("PO " + res.po_no + " issued to " + awardVendor + (isLowest ? " (lowest)" : " — reason recorded")); setOpenId(null); load();
+  }
+
+  async function awardSplit(ind) {
+    setErr("");
+    // every item must have a chosen vendor with a quoted rate
+    for (const it of ind.items) {
+      const v = itemVendor[it.id];
+      if (!v) { setErr("Choose a vendor for every item."); return; }
+      if (!rates[it.id]?.[v]) { setErr(`No rate from ${v} for ${it.item_name}.`); return; }
+    }
+    // group items by vendor
+    const byVendor = {};
+    ind.items.forEach(it => {
+      const v = itemVendor[it.id];
+      (byVendor[v] = byVendor[v] || []).push({ indent_item_id: it.id, item_id: it.item_id, item_name: it.item_name, qty: it.qty, unit: it.unit, rate: Number(rates[it.id][v]) });
+    });
+    setBusy(true);
+    const issued = [];
+    for (const [vendor, lines] of Object.entries(byVendor)) {
+      const res = await createPO({ indent_id: ind.id, site_id: ind.site_id || 1, vendor_name: vendor,
+        is_lowest: true, split_note: "Split award — cheapest per item", lines }, session?.id);
+      if (!res.ok) { setBusy(false); setErr(res.error); return; }
+      issued.push(res.po_no);
+    }
+    setBusy(false);
+    setMsg("Split done — " + issued.length + " POs issued: " + issued.join(", ")); setOpenId(null); load();
   }
 
   const open = (indents || []).filter(i => i.status === "open" || i.status === "quoting");
@@ -136,16 +168,52 @@ export default function ProcurePage() {
                           {" "}Split to cheapest per item: <b>{inr(cmp.splitTotal)}</b>
                           {cmp.gap > 0 && <> — splitting saves <b style={{ color: "var(--copper-deep)" }}>{inr(cmp.gap)} ({cmp.gapPct}%)</b> but needs multiple POs / more transport.</>}
                         </div>
-                        <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                          <label className="muted">Award whole indent to:</label>
-                          <select value={awardVendor} onChange={e => { setAwardVendor(e.target.value); setReason(""); }}>
-                            <option value="">Select vendor…</option>
-                            {cmp.vendors.map(v => <option key={v} value={v}>{v}</option>)}
-                          </select>
-                          {awardVendor && cmp.bestWhole && awardVendor !== cmp.bestWhole.vendor &&
-                            <input placeholder="Reason for not choosing lowest *" value={reason} onChange={e => setReason(e.target.value)} style={{ width: 280 }} />}
-                          <button className="primary" disabled={busy} onClick={() => award(ind)}>{busy ? "Issuing…" : "Issue PO"}</button>
+                        <div style={{ marginTop: 10, marginBottom: 4 }}>
+                          <label style={{ fontSize: 12.5, display: "inline-flex", gap: 7, alignItems: "center", cursor: "pointer" }}>
+                            <input type="checkbox" checked={splitMode} onChange={e => setSplitMode(e.target.checked)} style={{ width: 16, height: 16, accentColor: "var(--copper)" }} />
+                            Split — choose a vendor per item (creates one PO per vendor)
+                          </label>
                         </div>
+
+                        {!splitMode ? (
+                          <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                            <label className="muted">Award whole indent to:</label>
+                            <select value={awardVendor} onChange={e => { setAwardVendor(e.target.value); setReason(""); }}>
+                              <option value="">Select vendor…</option>
+                              {cmp.vendors.map(v => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                            {awardVendor && cmp.bestWhole && awardVendor !== cmp.bestWhole.vendor &&
+                              <input placeholder="Reason for not choosing lowest *" value={reason} onChange={e => setReason(e.target.value)} style={{ width: 280 }} />}
+                            <button className="primary" disabled={busy} onClick={() => award(ind)}>{busy ? "Issuing…" : "Issue PO"}</button>
+                          </div>
+                        ) : (
+                          <div style={{ marginTop: 8 }}>
+                            <div className="muted" style={{ marginBottom: 6 }}>Pick who supplies each item (pre-filled with the cheapest):</div>
+                            <table className="dt-compact">
+                              <thead><tr><th>Item</th><th className="num">Qty</th><th>Vendor</th><th className="num">Rate</th></tr></thead>
+                              <tbody>
+                                {ind.items.map(it => {
+                                  const v = itemVendor[it.id] || "";
+                                  const r = v ? rates[it.id]?.[v] : "";
+                                  return (
+                                    <tr key={it.id}>
+                                      <td style={{ fontWeight: 600 }}>{it.item_name}</td>
+                                      <td className="num">{it.qty} {it.unit}</td>
+                                      <td>
+                                        <select value={v} onChange={e => setItemVendor(p => ({ ...p, [it.id]: e.target.value }))}>
+                                          <option value="">Select…</option>
+                                          {cmp.vendors.filter(vn => rates[it.id]?.[vn]).map(vn => <option key={vn} value={vn}>{vn} (₹{rates[it.id][vn]})</option>)}
+                                        </select>
+                                      </td>
+                                      <td className="num">{r ? inr(Number(r) * Number(it.qty)) : "—"}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                            <button className="primary" disabled={busy} onClick={() => awardSplit(ind)} style={{ marginTop: 10 }}>{busy ? "Issuing…" : "Issue split POs"}</button>
+                          </div>
+                        )}
                       </div>
                     )}
                     {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
