@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import { isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import {
-  getOpenIndents, saveQuotes, buildComparison, createPO, getPOs, inr,
+  getOpenIndents, saveQuotes, buildComparison, createPO, getPOs, cancelPO, inr,
 } from "@/lib/procure";
 
 export default function ProcurePage() {
@@ -95,6 +95,7 @@ export default function ProcurePage() {
 
   const open = (indents || []).filter(i => i.status === "open" || i.status === "quoting");
   const activeVendors = quoteVendors.filter(v => v.trim());
+  async function doCancel(p) { if (!confirm("Cancel PO " + p.po_no + "?")) return; await cancelPO(p.id); load(); }
 
   return (
     <div className="layout">
@@ -229,7 +230,7 @@ export default function ProcurePage() {
           {pos.length === 0 ? <span className="muted">No POs yet.</span> : (
             <div style={{ overflowX: "auto" }}>
               <table className="dt-compact">
-                <thead><tr><th>PO no</th><th>Indent</th><th>Vendor</th><th>Site</th><th className="num">Amount</th><th>Lowest?</th><th>Status</th><th>Date</th></tr></thead>
+                <thead><tr><th>PO no</th><th>Indent</th><th>Vendor</th><th>Site</th><th className="num">Amount</th><th>Lowest?</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
                 <tbody>
                   {pos.map(p => (
                     <tr key={p.id}>
@@ -241,6 +242,10 @@ export default function ProcurePage() {
                       <td>{p.is_lowest ? <span className="badge p">Lowest</span> : <span className="badge warn" title={p.reason}>Reason ✎</span>}</td>
                       <td><span className="badge gray">{p.status}</span></td>
                       <td className="muted">{p.date}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <a href={"/purchase/po?po=" + p.id} target="_blank" rel="noreferrer"><button style={{ fontSize: 11.5, marginRight: 4 }}>View / Print</button></a>
+                        {p.status !== "cancelled" && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => doCancel(p)}>Cancel</button>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
