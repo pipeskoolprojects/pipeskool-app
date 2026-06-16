@@ -60,7 +60,7 @@ export default function ExpensesPage() {
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actAdv(r.id, "approved")}>✓</button>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actAdv(r.id, "queried")}>?</button>
         <button style={{ fontSize: 11.5 }} onClick={() => actAdv(r.id, "rejected")}>✕</button>
-      </span>) : null },
+      </span>) : <span className="muted" style={{ fontSize: 11.5 }}>Done</span> },
   ];
 
   const claimCols = [
@@ -87,7 +87,7 @@ export default function ExpensesPage() {
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actClaim(r.id, "approved")}>✓</button>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actClaim(r.id, "queried")}>?</button>
         <button style={{ fontSize: 11.5 }} onClick={() => actClaim(r.id, "rejected")}>✕</button>
-      </span>) : null },
+      </span>) : <span className="muted" style={{ fontSize: 11.5 }}>Done</span> },
   ];
 
   const pettyCols = [
