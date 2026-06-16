@@ -5,6 +5,7 @@ import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import { getBalances, getBoqNorms, getRequests, deadStock, lowStock } from "@/lib/stock";
 import StockEntry from "@/components/StockEntry";
+import IndentForm from "@/components/IndentForm";
 import { getSession, can } from "@/lib/auth";
 
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN");
@@ -43,6 +44,9 @@ export default function StockPage() {
 
         {session && can(session, "stock", "create", site !== "all" ? Number(site) : undefined) && (
           <StockEntry siteId={site !== "all" ? Number(site) : (session.currentSite || 1)} userId={session.id} onDone={() => setReloadKey(k => k + 1)} />
+        )}
+        {session && can(session, "indent", "create", site !== "all" ? Number(site) : undefined) && (
+          <IndentForm siteId={site !== "all" ? Number(site) : (session.currentSite || 1)} userId={session.id} onDone={() => setReloadKey(k => k + 1)} />
         )}
 
         {isDemo && <div className="demo-banner">Demo mode — sample inventory.</div>}

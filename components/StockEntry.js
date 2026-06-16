@@ -1,44 +1,82 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ITEM_TYPES, searchItems, addItem, recordTxn, logConsumption, bulkImport, BULK_TEMPLATE_HEADERS } from "@/lib/stock";
+import { ITEM_TYPES, searchItems, addItem, recordTxn, logConsumption, recordMultiGRN, bulkImport, BULK_TEMPLATE_HEADERS } from "@/lib/stock";
 
 const UNITS = ["Nos", "Rmt", "Mtr", "Kg", "Set", "Box", "Litre", "Bag"];
 
+function ItemPicker({ onPick, placeholder = "Search item…" }) {
+  const [q, setQ] = useState(""); const [results, setResults] = useState([]);
+  useEffect(() => { if (q.length >= 2) searchItems(q).then(setResults); else setResults([]); }, [q]);
+  return (
+    <div style={{ position: "relative" }}>
+      <input style={{ width: "100%" }} value={q} onChange={e => setQ(e.target.value)} placeholder={placeholder} />
+      {results.length > 0 && (
+        <div style={{ position: "absolute", zIndex: 5, background: "#fff", border: "1px solid var(--border)", borderRadius: 8, marginTop: 2, width: "100%", maxHeight: 200, overflowY: "auto" }}>
+          {results.map(r => <div key={r.id} onClick={() => { onPick(r); setQ(""); setResults([]); }} style={{ padding: "8px 10px", cursor: "pointer", borderBottom: "1px solid var(--border)", fontSize: 13 }}>{r.display_name} <span className="muted">· {r.unit}</span></div>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function StockEntry({ siteId, userId, onDone }) {
-  const [open, setOpen] = useState(null);   // 'item'|'grn'|'issue'|'consume'|'bulk'
+  const [open, setOpen] = useState(null);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
 
-  // new item form
-  const [it, setIt] = useState({ item_type: "Pipe", material: "", size: "", item_class: "", make: "", unit: "Rmt", min_stock: "" });
-  // movement forms
-  const [q, setQ] = useState(""); const [results, setResults] = useState([]); const [picked, setPicked] = useState(null);
-  const [mv, setMv] = useState({ qty: "", rate: "", supplier: "", challan: "", purpose: "" });
-  // bulk
+  const [it, setIt] = useState({ item_type: "Pipe", material: "", size: "", item_class: "", make: "", unit: "Rmt", hsn_code: "", min_stock: "" });
+
+  // multi-line GRN
+  const [grnHead, setGrnHead] = useState({ vendor: "", challan_no: "", challan_date: "" });
+  const [grnLines, setGrnLines] = useState([]);
+
+  // issue/consume single
+  const [picked, setPicked] = useState(null);
+  const [mv, setMv] = useState({ qty: "", purpose: "" });
+
   const [bulkRows, setBulkRows] = useState([]); const [bulkResult, setBulkResult] = useState(null);
   const fileRef = useRef(null);
 
-  useEffect(() => { if (q.length >= 2) searchItems(q).then(setResults); else setResults([]); }, [q]);
-
-  const reset = () => { setMsg(""); setErr(""); setMv({ qty: "", rate: "", supplier: "", challan: "", purpose: "" }); setPicked(null); setQ(""); setBulkRows([]); setBulkResult(null); };
+  const reset = () => { setMsg(""); setErr(""); setMv({ qty: "", purpose: "" }); setPicked(null); setGrnLines([]); setGrnHead({ vendor: "", challan_no: "", challan_date: "" }); setBulkRows([]); setBulkResult(null); };
 
   async function saveItem() {
     setErr(""); if (!it.material) { setErr("Material is required."); return; }
     setBusy(true); const res = await addItem({ ...it, min_stock: Number(it.min_stock || 0) }); setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg("Item added: " + res.name); setIt({ item_type: "Pipe", material: "", size: "", item_class: "", make: "", unit: "Rmt", min_stock: "" });
-    onDone?.();
+    setMsg("Item added: " + res.name); setIt({ item_type: "Pipe", material: "", size: "", item_class: "", make: "", unit: "Rmt", hsn_code: "", min_stock: "" }); onDone?.();
   }
+
+  function addGrnLine(item) {
+    if (grnLines.some(l => l.item_id === item.id)) return;
+    setGrnLines(ls => [...ls, { item_id: item.id, item_name: item.display_name, unit: item.unit, challan_qty: "", received_qty: "", rate: item.last_rate || "" }]);
+  }
+  function setLine(i, k, v) { setGrnLines(ls => ls.map((l, idx) => idx === i ? { ...l, [k]: v } : l)); }
+  function removeLine(i) { setGrnLines(ls => ls.filter((_, idx) => idx !== i)); }
+
+  async function saveGRN() {
+    setErr("");
+    if (grnLines.length === 0) { setErr("Add at least one item line."); return; }
+    if (!grnHead.vendor) { setErr("Enter the vendor / supplier."); return; }
+    setBusy(true);
+    const res = await recordMultiGRN(
+      { site_id: siteId, vendor: grnHead.vendor, challan_no: grnHead.challan_no, challan_date: grnHead.challan_date, done_by: userId },
+      grnLines.map(l => ({ ...l, challan_qty: Number(l.challan_qty || l.received_qty || 0), received_qty: Number(l.received_qty || l.challan_qty || 0), rate: Number(l.rate || 0) }))
+    );
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg(`GRN ${res.grn_no} recorded — ${grnLines.length} item(s)` + (res.discrepancies ? `. ⚠ ${res.discrepancies} discrepancy issue(s) raised.` : "."));
+    reset(); onDone?.();
+  }
+
   async function saveMovement(type) {
     setErr(""); if (!picked) { setErr("Pick an item first."); return; }
     if (!mv.qty) { setErr("Quantity required."); return; }
     setBusy(true);
-    let res;
-    if (type === "consume") res = await logConsumption({ site_id: siteId, item_id: picked.id, qty: Number(mv.qty), purpose: mv.purpose, done_by: userId });
-    else res = await recordTxn({ site_id: siteId, item_id: picked.id, txn_type: type, qty: Number(mv.qty), rate: Number(mv.rate || 0), supplier: mv.supplier, challan_no: mv.challan, done_by: userId });
+    const res = type === "consume"
+      ? await logConsumption({ site_id: siteId, item_id: picked.id, qty: Number(mv.qty), purpose: mv.purpose, done_by: userId })
+      : await recordTxn({ site_id: siteId, item_id: picked.id, txn_type: type, qty: Number(mv.qty), done_by: userId });
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg((type === "grn" ? "Received" : type === "issue" ? "Issued" : "Consumed") + " " + mv.qty + " of " + picked.display_name);
-    reset(); onDone?.();
+    setMsg((type === "issue" ? "Issued " : "Consumed ") + mv.qty + " of " + picked.display_name); reset(); onDone?.();
   }
 
   function downloadTemplate() {
@@ -54,18 +92,12 @@ export default function StockEntry({ siteId, userId, onDone }) {
     reader.onload = () => {
       const lines = String(reader.result).split(/\r?\n/).filter(l => l.trim());
       const headers = lines[0].split(",").map(h => h.trim());
-      const rows = lines.slice(1).map(line => {
-        const cells = line.split(",");
-        const o = {}; headers.forEach((h, i) => o[h] = (cells[i] || "").trim()); return o;
-      });
-      setBulkRows(rows); setBulkResult(null);
+      setBulkRows(lines.slice(1).map(line => { const c = line.split(","); const o = {}; headers.forEach((h, i) => o[h] = (c[i] || "").trim()); return o; }));
+      setBulkResult(null);
     };
     reader.readAsText(f);
   }
-  async function runBulk() {
-    setBusy(true); const res = await bulkImport(bulkRows, siteId, userId); setBusy(false);
-    setBulkResult(res); onDone?.();
-  }
+  async function runBulk() { setBusy(true); const res = await bulkImport(bulkRows, siteId, userId); setBusy(false); setBulkResult(res); onDone?.(); }
 
   const btn = (k, label) => <button className={open === k ? "primary" : ""} onClick={() => { setOpen(open === k ? null : k); reset(); }} style={{ fontSize: 13 }}>{label}</button>;
 
@@ -83,67 +115,87 @@ export default function StockEntry({ siteId, userId, onDone }) {
       {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)", marginTop: 12 }}>{msg}</div>}
       {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
 
+      {/* ---------- MULTI-ITEM GRN ---------- */}
+      {open === "grn" && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 12 }}>
+            <div><label className="muted">Vendor / supplier *</label><input style={{ width: "100%" }} value={grnHead.vendor} onChange={e => setGrnHead(p => ({ ...p, vendor: e.target.value }))} /></div>
+            <div><label className="muted">Vendor challan no</label><input style={{ width: "100%" }} value={grnHead.challan_no} onChange={e => setGrnHead(p => ({ ...p, challan_no: e.target.value }))} /></div>
+            <div><label className="muted">Challan date</label><input type="date" style={{ width: "100%" }} value={grnHead.challan_date} onChange={e => setGrnHead(p => ({ ...p, challan_date: e.target.value }))} /></div>
+          </div>
+          <label className="muted">Add items from this challan</label>
+          <div style={{ maxWidth: 360, marginBottom: 10 }}><ItemPicker onPick={addGrnLine} placeholder="Search material master…" /></div>
+
+          {grnLines.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <table className="dt-compact">
+                <thead><tr><th>Item</th><th className="num">Challan qty</th><th className="num">Received qty</th><th className="num">Rate ₹</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                  {grnLines.map((l, i) => {
+                    const c = Number(l.challan_qty || 0), r = Number(l.received_qty || 0);
+                    const diff = (l.received_qty !== "" && l.challan_qty !== "") ? r - c : null;
+                    return (
+                      <tr key={i}>
+                        <td style={{ fontWeight: 600 }}>{l.item_name}<div className="muted">{l.unit}</div></td>
+                        <td className="num"><input style={{ width: 80 }} value={l.challan_qty} onChange={e => setLine(i, "challan_qty", e.target.value)} /></td>
+                        <td className="num"><input style={{ width: 80 }} value={l.received_qty} onChange={e => setLine(i, "received_qty", e.target.value)} /></td>
+                        <td className="num"><input style={{ width: 80 }} value={l.rate} onChange={e => setLine(i, "rate", e.target.value)} /></td>
+                        <td>{diff === null ? <span className="muted">—</span> : diff === 0 ? <span className="badge p">OK</span> : <span className="badge a">{diff > 0 ? "+" : ""}{diff}</span>}</td>
+                        <td><button style={{ fontSize: 11 }} onClick={() => removeLine(i)}>✕</button></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="muted" style={{ margin: "8px 0" }}>Enter challan qty and the qty actually received. Any mismatch is flagged and a discrepancy issue is raised automatically.</div>
+          <button className="primary" disabled={busy} onClick={saveGRN}>{busy ? "Saving…" : `Record GRN (${grnLines.length} item${grnLines.length === 1 ? "" : "s"})`}</button>
+        </div>
+      )}
+
+      {/* ---------- NEW ITEM ---------- */}
       {open === "item" && (
-        <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
+        <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 10 }}>
           <div><label className="muted">Type</label><select style={{ width: "100%" }} value={it.item_type} onChange={e => setIt(p => ({ ...p, item_type: e.target.value }))}>{ITEM_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
           <div><label className="muted">Material *</label><input style={{ width: "100%" }} value={it.material} onChange={e => setIt(p => ({ ...p, material: e.target.value }))} placeholder="MS 350NB Heavy" /></div>
-          <div><label className="muted">Size</label><input style={{ width: "100%" }} value={it.size} onChange={e => setIt(p => ({ ...p, size: e.target.value }))} placeholder="350mm" /></div>
+          <div><label className="muted">Size</label><input style={{ width: "100%" }} value={it.size} onChange={e => setIt(p => ({ ...p, size: e.target.value }))} /></div>
           <div><label className="muted">Class</label><input style={{ width: "100%" }} value={it.item_class} onChange={e => setIt(p => ({ ...p, item_class: e.target.value }))} /></div>
           <div><label className="muted">Make</label><input style={{ width: "100%" }} value={it.make} onChange={e => setIt(p => ({ ...p, make: e.target.value }))} /></div>
           <div><label className="muted">Unit</label><select style={{ width: "100%" }} value={it.unit} onChange={e => setIt(p => ({ ...p, unit: e.target.value }))}>{UNITS.map(u => <option key={u}>{u}</option>)}</select></div>
+          <div><label className="muted">HSN code</label><input style={{ width: "100%" }} value={it.hsn_code} onChange={e => setIt(p => ({ ...p, hsn_code: e.target.value }))} /></div>
           <div><label className="muted">Min stock</label><input style={{ width: "100%" }} value={it.min_stock} onChange={e => setIt(p => ({ ...p, min_stock: e.target.value }))} /></div>
           <div style={{ display: "flex", alignItems: "flex-end" }}><button className="primary" disabled={busy} onClick={saveItem} style={{ width: "100%" }}>Add item</button></div>
         </div>
       )}
 
-      {(open === "grn" || open === "issue" || open === "consume") && (
+      {/* ---------- ISSUE / CONSUME (single) ---------- */}
+      {(open === "issue" || open === "consume") && (
         <div style={{ marginTop: 14 }}>
           {!picked ? (
-            <div>
-              <label className="muted">Search item</label>
-              <input style={{ width: "100%", maxWidth: 360 }} value={q} onChange={e => setQ(e.target.value)} placeholder="Type item name…" />
-              {results.length > 0 && (
-                <div style={{ border: "1px solid var(--border)", borderRadius: 8, marginTop: 6, maxWidth: 360 }}>
-                  {results.map(r => <div key={r.id} onClick={() => setPicked(r)} style={{ padding: "8px 10px", cursor: "pointer", borderBottom: "1px solid var(--border)" }}>{r.display_name} <span className="muted">· {r.unit}</span></div>)}
-                </div>
-              )}
-            </div>
+            <div style={{ maxWidth: 360 }}><label className="muted">Search item</label><ItemPicker onPick={setPicked} /></div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
               <div style={{ gridColumn: "1 / -1" }}><b>{picked.display_name}</b> <button style={{ fontSize: 11, marginLeft: 8 }} onClick={() => setPicked(null)}>change</button></div>
               <div><label className="muted">Quantity *</label><input style={{ width: "100%" }} value={mv.qty} onChange={e => setMv(p => ({ ...p, qty: e.target.value }))} /></div>
-              {open === "grn" && <>
-                <div><label className="muted">Rate ₹</label><input style={{ width: "100%" }} value={mv.rate} onChange={e => setMv(p => ({ ...p, rate: e.target.value }))} /></div>
-                <div><label className="muted">Supplier</label><input style={{ width: "100%" }} value={mv.supplier} onChange={e => setMv(p => ({ ...p, supplier: e.target.value }))} /></div>
-                <div><label className="muted">Challan no</label><input style={{ width: "100%" }} value={mv.challan} onChange={e => setMv(p => ({ ...p, challan: e.target.value }))} /></div>
-              </>}
               {open === "consume" && <div><label className="muted">Purpose / location</label><input style={{ width: "100%" }} value={mv.purpose} onChange={e => setMv(p => ({ ...p, purpose: e.target.value }))} /></div>}
-              <div style={{ display: "flex", alignItems: "flex-end" }}><button className="primary" disabled={busy} onClick={() => saveMovement(open)} style={{ width: "100%" }}>{open === "grn" ? "Record GRN" : open === "issue" ? "Issue" : "Log consumption"}</button></div>
+              <div style={{ display: "flex", alignItems: "flex-end" }}><button className="primary" disabled={busy} onClick={() => saveMovement(open)} style={{ width: "100%" }}>{open === "issue" ? "Issue" : "Log consumption"}</button></div>
             </div>
           )}
         </div>
       )}
 
+      {/* ---------- BULK ---------- */}
       {open === "bulk" && (
         <div style={{ marginTop: 14 }}>
           <div className="muted" style={{ marginBottom: 8 }}>
-            Step 1: <a onClick={downloadTemplate} style={{ color: "var(--copper)", cursor: "pointer", textDecoration: "underline" }}>Download the Excel template</a>, fill your items in Excel, and save as CSV.
-            Step 2: upload it below. Each row creates an item and (if opening_qty &gt; 0) records opening stock.
+            Step 1: <a onClick={downloadTemplate} style={{ color: "var(--copper)", cursor: "pointer", textDecoration: "underline" }}>Download the Excel template</a>, fill your items in Excel, save as CSV.
+            Step 2: upload it. Each row creates an item and (if opening_qty &gt; 0) opening stock.
           </div>
           <button onClick={() => fileRef.current?.click()}>📁 Choose CSV file</button>
           <input ref={fileRef} type="file" accept=".csv" style={{ display: "none" }} onChange={onBulkFile} />
-          {bulkRows.length > 0 && (
-            <div style={{ marginTop: 12 }}>
-              <div className="muted">{bulkRows.length} rows ready to import.</div>
-              <button className="primary" disabled={busy} onClick={runBulk} style={{ marginTop: 8 }}>{busy ? "Importing…" : `Import ${bulkRows.length} items`}</button>
-            </div>
-          )}
-          {bulkResult && (
-            <div className="demo-banner" style={{ marginTop: 12, background: bulkResult.ok ? "var(--green-bg)" : "var(--copper-soft)", color: bulkResult.ok ? "var(--green)" : "var(--copper-deep)" }}>
-              Imported {bulkResult.created} items, {bulkResult.received} with opening stock.
-              {bulkResult.errors.length > 0 && <div style={{ marginTop: 6 }}>{bulkResult.errors.length} issues: {bulkResult.errors.slice(0, 5).join("; ")}</div>}
-            </div>
-          )}
+          {bulkRows.length > 0 && <div style={{ marginTop: 12 }}><div className="muted">{bulkRows.length} rows ready.</div><button className="primary" disabled={busy} onClick={runBulk} style={{ marginTop: 8 }}>{busy ? "Importing…" : `Import ${bulkRows.length} items`}</button></div>}
+          {bulkResult && <div className="demo-banner" style={{ marginTop: 12, background: bulkResult.ok ? "var(--green-bg)" : "var(--copper-soft)", color: bulkResult.ok ? "var(--green)" : "var(--copper-deep)" }}>Imported {bulkResult.created} items, {bulkResult.received} with opening stock.{bulkResult.errors.length > 0 && <div style={{ marginTop: 6 }}>{bulkResult.errors.length} issues: {bulkResult.errors.slice(0, 5).join("; ")}</div>}</div>}
         </div>
       )}
     </div>
