@@ -5,32 +5,37 @@ import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import {
   getAdvanceQueue, reviewAdvance, getExpenseClaimQueue, reviewExpenseClaim,
-  getPettyReconciliation, catLabel, inr,
+  getPettyReconciliation, catLabel, inr, markAdvancePosted, markExpensePosted,
 } from "@/lib/money";
+import { getSession } from "@/lib/auth";
 
 export default function ExpensesPage() {
   const [adv, setAdv] = useState(null);
   const [claims, setClaims] = useState(null);
   const [petty, setPetty] = useState([]);
   const [msg, setMsg] = useState("");
+  const [session, setSession] = useState(null);
 
   const load = () => {
     getAdvanceQueue().then(setAdv);
     getExpenseClaimQueue().then(setClaims);
     getPettyReconciliation().then(setPetty);
   };
-  useEffect(load, []);
+  useEffect(() => { setSession(getSession()); load(); }, []);
 
   async function actAdv(id, status) {
     let note = null;
     if (status === "queried") { note = prompt("Query to send back:"); if (!note) return; }
-    await reviewAdvance(id, status, note); setMsg("Updated."); load();
+    await reviewAdvance(id, status, note, session?.id); setMsg("Updated."); load();
   }
   async function actClaim(id, status) {
     let note = null;
     if (status === "queried") { note = prompt("Query to send back:"); if (!note) return; }
-    await reviewExpenseClaim(id, status, note); setMsg("Updated."); load();
+    await reviewExpenseClaim(id, status, note, session?.id); setMsg("Updated."); load();
   }
+
+  async function togglePostAdv(r) { await markAdvancePosted(r.id, !r.posted, session?.id); load(); }
+  async function togglePostExp(r) { await markExpensePosted(r.id, !r.posted, session?.id); load(); }
 
   const advCols = [
     { key: "date", label: "Date", filter: "search" },
@@ -41,6 +46,15 @@ export default function ExpensesPage() {
     { key: "amount", label: "Amount", type: "num", render: r => inr(r.amount), exportValue: r => r.amount },
     { key: "bank_on_file", label: "Bank", filter: "select", optionLabel: o => o ? "On file" : "Missing", render: r => r.bank_on_file ? <span className="badge p">On file</span> : <span className="badge warn">⚠ Missing</span>, exportValue: r => r.bank_on_file ? "On file" : "Missing" },
     { key: "status", label: "Status", filter: "select", render: r => r.status === "approved" ? <span className="badge p">Approved</span> : r.status === "rejected" ? <span className="badge a">Rejected</span> : r.status === "queried" ? <span className="badge h">Queried</span> : <span className="badge gray">Pending</span> },
+    { key: "approved_on", label: "Approved on", render: r => <span className="muted">{r.approved_on || "—"}</span> },
+    { key: "approved_by", label: "Approved by", filter: "select", render: r => <span className="muted">{r.approved_by || "—"}</span> },
+    { key: "posted", label: "Posted to Tally", filter: "select", optionLabel: o => o ? "Posted" : "Not posted",
+      render: r => r.status === "approved" ? (
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 12 }}>
+          <input type="checkbox" checked={!!r.posted} onChange={() => togglePostAdv(r)} style={{ width: 16, height: 16, accentColor: "var(--copper)" }} />
+          {r.posted ? <span className="badge p">Posted</span> : <span className="badge gray">Mark posted</span>}
+        </label>) : <span className="muted">—</span>,
+      exportValue: r => r.posted ? "Posted" : "" },
     { key: "_action", label: "Action", sortable: false, render: r => (r.status === "pending" || r.status === "queried") ? (
       <span style={{ whiteSpace: "nowrap" }}>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actAdv(r.id, "approved")}>✓</button>
@@ -58,6 +72,16 @@ export default function ExpensesPage() {
     { key: "funding_source", label: "Source", filter: "select", optionLabel: o => o === "petty_cash" ? "Petty cash" : "Own pocket", render: r => r.funding_source === "petty_cash" ? <span className="badge info">Petty cash</span> : <span className="badge gray">Own pocket</span> },
     { key: "amount", label: "Amount", type: "num", render: r => inr(r.amount), exportValue: r => r.amount },
     { key: "photo", label: "Proof", render: r => r.photo ? <span className="badge p">📎 Bill</span> : <span className="badge warn">No proof</span>, exportValue: r => r.photo ? "Yes" : "No" },
+    { key: "status", label: "Status", filter: "select", render: r => r.status === "approved" ? <span className="badge p">Approved</span> : r.status === "rejected" ? <span className="badge a">Rejected</span> : r.status === "queried" ? <span className="badge h">Queried</span> : <span className="badge gray">Pending</span> },
+    { key: "approved_on", label: "Approved on", render: r => <span className="muted">{r.approved_on || "—"}</span> },
+    { key: "approved_by", label: "Approved by", filter: "select", render: r => <span className="muted">{r.approved_by || "—"}</span> },
+    { key: "posted", label: "Posted to Tally", filter: "select", optionLabel: o => o ? "Posted" : "Not posted",
+      render: r => r.status === "approved" ? (
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 12 }}>
+          <input type="checkbox" checked={!!r.posted} onChange={() => togglePostExp(r)} style={{ width: 16, height: 16, accentColor: "var(--copper)" }} />
+          {r.posted ? <span className="badge p">Posted</span> : <span className="badge gray">Mark posted</span>}
+        </label>) : <span className="muted">—</span>,
+      exportValue: r => r.posted ? "Posted" : "" },
     { key: "_action", label: "Action", sortable: false, render: r => (r.status === "pending" || r.status === "queried") ? (
       <span style={{ whiteSpace: "nowrap" }}>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actClaim(r.id, "approved")}>✓</button>
