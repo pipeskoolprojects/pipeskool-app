@@ -107,7 +107,8 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
         </div>
       </div>
 
-      <table>
+      <div style={{ overflowX: "auto", width: "100%" }}>
+      <table style={{ minWidth: "100%" }} className="dt-compact">
         <thead>
           <tr>
             {columns.map(c => (
@@ -133,7 +134,8 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
           ))}
         </tbody>
       </table>
-      <div className="muted" style={{ marginTop: 8 }}>{filtered.length} of {(rows||[]).length} records · click a column heading to sort</div>
+      </div>
+      <div className="muted" style={{ marginTop: 8 }}>{filtered.length} of {(rows||[]).length} records · click a column heading to sort · scroll sideways to see all columns</div>
     </div>
   );
 }
