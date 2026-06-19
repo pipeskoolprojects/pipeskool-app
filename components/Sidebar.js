@@ -15,6 +15,7 @@ const allLinks = [
   { href: "/stock", label: "Material stock", module: "stock" },
   { href: "/purchase", label: "Indent & purchase", module: "indent" },
   { href: "/procure", label: "Procurement (enquiry/PO)", module: "indent" },
+  { href: "/vendors", label: "Vendor master", module: "indent" },
   { href: "/assets", label: "Tools & assets", module: "assets" },
 ];
 
