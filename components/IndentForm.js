@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { searchItems, createIndent } from "@/lib/stock";
+import { getSession } from "@/lib/auth";
 
 function ItemPicker({ onPick }) {
   const [q, setQ] = useState(""); const [results, setResults] = useState([]);
@@ -19,10 +20,18 @@ function ItemPicker({ onPick }) {
 
 export default function IndentForm({ siteId, userId, onDone }) {
   const [show, setShow] = useState(false);
+  const [sites, setSites] = useState([]);
+  const [chosenSite, setChosenSite] = useState(siteId);
   const [head, setHead] = useState({ required_by: "", urgency: "normal", note: "" });
   const [lines, setLines] = useState([]);
   const [freeName, setFreeName] = useState("");
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const sess = getSession();
+    if (sess?.sites?.length) setSites(sess.sites);
+    setChosenSite(siteId);
+  }, [siteId]);
 
   function addFromMaster(item) {
     if (lines.some(l => l.item_id === item.id)) return;
@@ -41,7 +50,7 @@ export default function IndentForm({ siteId, userId, onDone }) {
     if (lines.length === 0) { setErr("Add at least one item."); return; }
     if (lines.some(l => !l.qty)) { setErr("Enter quantity for every item."); return; }
     setBusy(true);
-    const res = await createIndent({ site_id: siteId, raised_by: userId, ...head }, lines);
+    const res = await createIndent({ site_id: chosenSite || siteId, raised_by: userId, ...head }, lines);
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
     setMsg("Material request " + res.indent_no + " raised with " + lines.length + " item(s). Sent to office for rate enquiry.");
@@ -59,6 +68,11 @@ export default function IndentForm({ siteId, userId, onDone }) {
       {show && (
         <div style={{ marginTop: 14 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 12 }}>
+            <div><label className="muted">Site *</label>
+              <select style={{ width: "100%" }} value={chosenSite || ""} onChange={e => setChosenSite(Number(e.target.value))}>
+                {sites.length === 0 && <option value={siteId}>Current site</option>}
+                {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select></div>
             <div><label className="muted">Required by</label><input type="date" style={{ width: "100%" }} value={head.required_by} onChange={e => setHead(p => ({ ...p, required_by: e.target.value }))} /></div>
             <div><label className="muted">Urgency</label><select style={{ width: "100%" }} value={head.urgency} onChange={e => setHead(p => ({ ...p, urgency: e.target.value }))}><option value="normal">Normal</option><option value="urgent">Urgent</option></select></div>
             <div style={{ gridColumn: "span 2" }}><label className="muted">Note</label><input style={{ width: "100%" }} value={head.note} onChange={e => setHead(p => ({ ...p, note: e.target.value }))} placeholder="Any instruction for office" /></div>
