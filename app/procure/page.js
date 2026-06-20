@@ -19,6 +19,7 @@ export default function ProcurePage() {
   const [awardVendor, setAwardVendor] = useState("");
   const [splitMode, setSplitMode] = useState(false);
   const [itemVendor, setItemVendor] = useState({});
+  const [itemSplits, setItemSplits] = useState({}); // {itemId: [{vendor, qty}]} when qty-split is on
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [masterVendors, setMasterVendors] = useState([]);
@@ -28,7 +29,7 @@ export default function ProcurePage() {
 
   function openIndent(ind) {
     setOpenId(openId === ind.id ? null : ind.id);
-    setCmp(null); setRates({}); setQuoteVendors(["", "", ""]); setAwardVendor(""); setReason(""); setMsg(""); setErr(""); setSplitMode(false); setItemVendor({});
+    setCmp(null); setRates({}); setQuoteVendors(["", "", ""]); setAwardVendor(""); setReason(""); setMsg(""); setErr(""); setSplitMode(false); setItemVendor({}); setItemSplits({});
   }
   const setRate = (itemId, vendor, val) => setRates(r => ({ ...r, [itemId]: { ...(r[itemId] || {}), [vendor]: val } }));
 
@@ -71,18 +72,31 @@ export default function ProcurePage() {
 
   async function awardSplit(ind) {
     setErr("");
-    // every item must have a chosen vendor with a quoted rate
-    for (const it of ind.items) {
-      const v = itemVendor[it.id];
-      if (!v) { setErr("Choose a vendor for every item."); return; }
-      if (!rates[it.id]?.[v]) { setErr(`No rate from ${v} for ${it.item_name}.`); return; }
-    }
-    // group items by vendor
     const byVendor = {};
-    ind.items.forEach(it => {
-      const v = itemVendor[it.id];
-      (byVendor[v] = byVendor[v] || []).push({ indent_item_id: it.id, item_id: it.item_id, item_name: it.item_name, qty: it.qty, unit: it.unit, rate: Number(rates[it.id][v]) });
-    });
+    for (const it of ind.items) {
+      const splits = itemSplits[it.id];
+      if (splits && splits.length) {
+        // quantity-split across vendors for this item
+        const totalSplit = splits.reduce((s, r) => s + Number(r.qty || 0), 0);
+        if (totalSplit !== Number(it.qty)) {
+          setErr(`${it.item_name}: split quantities (${totalSplit}) must add up to required ${it.qty} ${it.unit}.`); return;
+        }
+        for (const row of splits) {
+          if (!row.vendor) { setErr(`Choose a vendor for every split row of ${it.item_name}.`); return; }
+          if (!Number(row.qty)) { setErr(`Enter quantity for every split row of ${it.item_name}.`); return; }
+          if (!rates[it.id]?.[row.vendor]) { setErr(`No rate from ${row.vendor} for ${it.item_name}.`); return; }
+          (byVendor[row.vendor] = byVendor[row.vendor] || []).push({ indent_item_id: it.id, item_id: it.item_id,
+            item_name: it.item_name, qty: Number(row.qty), unit: it.unit, rate: Number(rates[it.id][row.vendor]) });
+        }
+      } else {
+        // whole item to one vendor
+        const v = itemVendor[it.id];
+        if (!v) { setErr("Choose a vendor for every item (or split it by quantity)."); return; }
+        if (!rates[it.id]?.[v]) { setErr(`No rate from ${v} for ${it.item_name}.`); return; }
+        (byVendor[v] = byVendor[v] || []).push({ indent_item_id: it.id, item_id: it.item_id,
+          item_name: it.item_name, qty: Number(it.qty), unit: it.unit, rate: Number(rates[it.id][v]) });
+      }
+    }
     setBusy(true);
     const issued = [];
     for (const [vendor, lines] of Object.entries(byVendor)) {
@@ -194,22 +208,55 @@ export default function ProcurePage() {
                           </div>
                         ) : (
                           <div style={{ marginTop: 8 }}>
-                            <div className="muted" style={{ marginBottom: 6 }}>Pick who supplies each item (pre-filled with the cheapest):</div>
+                            <div className="muted" style={{ marginBottom: 6 }}>Pick who supplies each item. Use “+ split qty” if one item must come from more than one vendor.</div>
                             <table className="dt-compact">
-                              <thead><tr><th>Item</th><th className="num">Qty</th><th>Vendor</th><th className="num">Rate</th></tr></thead>
+                              <thead><tr><th>Item</th><th className="num">Qty</th><th>Vendor / split</th><th className="num">Amount</th></tr></thead>
                               <tbody>
                                 {ind.items.map(it => {
+                                  const splits = itemSplits[it.id];
+                                  const vendorOpts = cmp.vendors.filter(vn => rates[it.id]?.[vn]);
+                                  if (splits && splits.length) {
+                                    const totalSplit = splits.reduce((s, r) => s + Number(r.qty || 0), 0);
+                                    const okTotal = totalSplit === Number(it.qty);
+                                    return (
+                                      <tr key={it.id}>
+                                        <td style={{ fontWeight: 600 }}>{it.item_name}</td>
+                                        <td className="num">{it.qty} {it.unit}</td>
+                                        <td>
+                                          {splits.map((row, ri) => (
+                                            <div key={ri} style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
+                                              <select value={row.vendor} onChange={e => setItemSplits(p => ({ ...p, [it.id]: p[it.id].map((r, i) => i === ri ? { ...r, vendor: e.target.value } : r) }))}>
+                                                <option value="">Vendor…</option>
+                                                {vendorOpts.map(vn => <option key={vn} value={vn}>{vn} (₹{rates[it.id][vn]})</option>)}
+                                              </select>
+                                              <input style={{ width: 70 }} placeholder="qty" value={row.qty} onChange={e => setItemSplits(p => ({ ...p, [it.id]: p[it.id].map((r, i) => i === ri ? { ...r, qty: e.target.value } : r) }))} />
+                                              <button style={{ fontSize: 11 }} onClick={() => setItemSplits(p => ({ ...p, [it.id]: p[it.id].filter((_, i) => i !== ri) }))}>✕</button>
+                                            </div>
+                                          ))}
+                                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                            <button style={{ fontSize: 11 }} onClick={() => setItemSplits(p => ({ ...p, [it.id]: [...p[it.id], { vendor: "", qty: "" }] }))}>+ vendor</button>
+                                            <button style={{ fontSize: 11 }} onClick={() => setItemSplits(p => { const n = { ...p }; delete n[it.id]; return n; })}>cancel split</button>
+                                            <span style={{ fontSize: 11.5, color: okTotal ? "var(--green)" : "var(--red)" }}>
+                                              {totalSplit}/{it.qty} {it.unit}{okTotal ? " ✓" : " — must total " + it.qty}
+                                            </span>
+                                          </div>
+                                        </td>
+                                        <td className="num">{splits.reduce((s, r) => s + (rates[it.id]?.[r.vendor] ? Number(rates[it.id][r.vendor]) * Number(r.qty || 0) : 0), 0) ? inr(splits.reduce((s, r) => s + (rates[it.id]?.[r.vendor] ? Number(rates[it.id][r.vendor]) * Number(r.qty || 0) : 0), 0)) : "—"}</td>
+                                      </tr>
+                                    );
+                                  }
                                   const v = itemVendor[it.id] || "";
                                   const r = v ? rates[it.id]?.[v] : "";
                                   return (
                                     <tr key={it.id}>
                                       <td style={{ fontWeight: 600 }}>{it.item_name}</td>
                                       <td className="num">{it.qty} {it.unit}</td>
-                                      <td>
+                                      <td style={{ display: "flex", gap: 8, alignItems: "center" }}>
                                         <select value={v} onChange={e => setItemVendor(p => ({ ...p, [it.id]: e.target.value }))}>
                                           <option value="">Select…</option>
-                                          {cmp.vendors.filter(vn => rates[it.id]?.[vn]).map(vn => <option key={vn} value={vn}>{vn} (₹{rates[it.id][vn]})</option>)}
+                                          {vendorOpts.map(vn => <option key={vn} value={vn}>{vn} (₹{rates[it.id][vn]})</option>)}
                                         </select>
+                                        <button style={{ fontSize: 11 }} onClick={() => setItemSplits(p => ({ ...p, [it.id]: [{ vendor: v || "", qty: it.qty }, { vendor: "", qty: "" }] }))}>+ split qty</button>
                                       </td>
                                       <td className="num">{r ? inr(Number(r) * Number(it.qty)) : "—"}</td>
                                     </tr>
