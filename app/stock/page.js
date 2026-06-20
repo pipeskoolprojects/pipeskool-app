@@ -60,6 +60,53 @@ export default function StockPage() {
           <div className="card"><div className="label">Open material requests</div><div className="value">{requests.length}</div></div>
         </div>
 
+        <div className="panel">
+          <h2>Live stock position &amp; reconciliation</h2>
+          {!balances ? <div className="muted">Loading…</div> :
+            <DataTable exportName="stock_position" rows={balances.map(b => ({ ...b, key: b.item_id + b.site_code }))}
+              columns={[
+                { key: "display_name", label: "Item", filter: "search", render: b => <span style={{ fontWeight: 600 }}>{b.display_name}</span> },
+                { key: "item_type", label: "Type", filter: "select" },
+                { key: "site_code", label: "Site", filter: "select", render: b => <span className="badge gray">{b.site_code}</span> },
+                { key: "received", label: "Received", type: "num" },
+                { key: "issued", label: "Issued", type: "num" },
+                { key: "returned", label: "Ret→store", type: "num" },
+                { key: "returned_vendor", label: "Ret→vendor", type: "num" },
+                { key: "consumed", label: "Consumed", type: "num" },
+                { key: "with_site", label: "With site", type: "num", render: b => b.with_site > 0 ? <span style={{ color: "var(--amber)", fontWeight: 600 }}>{b.with_site}</span> : "0", exportValue: b => b.with_site },
+                { key: "balance", label: "Balance", type: "num", render: b => <span style={{ fontWeight: 700, color: b.balance <= b.min_stock ? "var(--red)" : "inherit" }}>{b.balance} {b.unit}</span>, exportValue: b => b.balance },
+                { key: "rate", label: "Rate", type: "num", render: b => inr(b.rate), exportValue: b => b.rate },
+                { key: "value", label: "Value", type: "num", render: b => inr(b.value), exportValue: b => b.value },
+              ]} />}
+          <div className="muted" style={{ marginTop: 8 }}>Reconciliation: Received − Issued − Consumed + Returned = Balance.</div>
+        </div>
+
+        {holdings.length > 0 && (
+          <div className="panel">
+            <h2>Pending settlements — material with workers {holdings.some(h => h.days >= 1) && <span className="badge a">{holdings.filter(h => h.days >= 1).length} overdue</span>}</h2>
+            <div style={{ overflowX: "auto" }}>
+              <table className="dt-compact">
+                <thead><tr><th>Worker</th><th>Item</th><th>Site</th><th className="num">Issued</th><th className="num">Used</th><th className="num">Returned</th><th className="num">Still held</th><th className="num">Days</th></tr></thead>
+                <tbody>
+                  {holdings.map((h, i) => (
+                    <tr key={i} style={h.days >= 1 ? { background: "#fff7f2" } : {}}>
+                      <td style={{ fontWeight: 600 }}>{h.worker}</td>
+                      <td>{h.item}</td>
+                      <td><span className="badge gray">{h.site_code}</span></td>
+                      <td className="num">{h.issued}</td>
+                      <td className="num">{h.used}</td>
+                      <td className="num">{h.returned}</td>
+                      <td className="num" style={{ fontWeight: 700 }}>{h.held} {h.unit}</td>
+                      <td className="num">{h.days >= 1 ? <span className="badge a">{h.days}d</span> : <span className="badge gray">today</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="muted" style={{ marginTop: 8 }}>Material issued to workers but not yet settled. Use Add/move stock → Settle to record used &amp; returned. Rows turn amber after 1 day.</div>
+          </div>
+        )}
+
         {low.length > 0 && (
           <div className="panel">
             <h2>⚠ Low stock — auto-suggest indent</h2>
@@ -127,53 +174,6 @@ export default function StockPage() {
           <div className="muted" style={{ marginTop: 8 }}>
             Expected use = BOQ qty × work-done %. <b>Variance over +15%</b> is flagged red (possible wastage, theft, or under-reported progress). Worst items shown first.
           </div>
-        </div>
-
-        {holdings.length > 0 && (
-          <div className="panel">
-            <h2>Pending settlements — material with workers {holdings.some(h => h.days >= 1) && <span className="badge a">{holdings.filter(h => h.days >= 1).length} overdue</span>}</h2>
-            <div style={{ overflowX: "auto" }}>
-              <table className="dt-compact">
-                <thead><tr><th>Worker</th><th>Item</th><th>Site</th><th className="num">Issued</th><th className="num">Used</th><th className="num">Returned</th><th className="num">Still held</th><th className="num">Days</th></tr></thead>
-                <tbody>
-                  {holdings.map((h, i) => (
-                    <tr key={i} style={h.days >= 1 ? { background: "#fff7f2" } : {}}>
-                      <td style={{ fontWeight: 600 }}>{h.worker}</td>
-                      <td>{h.item}</td>
-                      <td><span className="badge gray">{h.site_code}</span></td>
-                      <td className="num">{h.issued}</td>
-                      <td className="num">{h.used}</td>
-                      <td className="num">{h.returned}</td>
-                      <td className="num" style={{ fontWeight: 700 }}>{h.held} {h.unit}</td>
-                      <td className="num">{h.days >= 1 ? <span className="badge a">{h.days}d</span> : <span className="badge gray">today</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="muted" style={{ marginTop: 8 }}>Material issued to workers but not yet settled. Use Add/move stock → Settle to record used &amp; returned. Rows turn amber after 1 day.</div>
-          </div>
-        )}
-
-        <div className="panel">
-          <h2>Live stock position &amp; reconciliation</h2>
-          {!balances ? <div className="muted">Loading…</div> :
-            <DataTable exportName="stock_position" rows={balances.map(b => ({ ...b, key: b.item_id + b.site_code }))}
-              columns={[
-                { key: "display_name", label: "Item", filter: "search", render: b => <span style={{ fontWeight: 600 }}>{b.display_name}</span> },
-                { key: "item_type", label: "Type", filter: "select" },
-                { key: "site_code", label: "Site", filter: "select", render: b => <span className="badge gray">{b.site_code}</span> },
-                { key: "received", label: "Received", type: "num" },
-                { key: "issued", label: "Issued", type: "num" },
-                { key: "returned", label: "Ret→store", type: "num" },
-                { key: "returned_vendor", label: "Ret→vendor", type: "num" },
-                { key: "consumed", label: "Consumed", type: "num" },
-                { key: "with_site", label: "With site", type: "num", render: b => b.with_site > 0 ? <span style={{ color: "var(--amber)", fontWeight: 600 }}>{b.with_site}</span> : "0", exportValue: b => b.with_site },
-                { key: "balance", label: "Balance", type: "num", render: b => <span style={{ fontWeight: 700, color: b.balance <= b.min_stock ? "var(--red)" : "inherit" }}>{b.balance} {b.unit}</span>, exportValue: b => b.balance },
-                { key: "rate", label: "Rate", type: "num", render: b => inr(b.rate), exportValue: b => b.rate },
-                { key: "value", label: "Value", type: "num", render: b => inr(b.value), exportValue: b => b.value },
-              ]} />}
-          <div className="muted" style={{ marginTop: 8 }}>Reconciliation: Received − Issued − Consumed + Returned = Balance.</div>
         </div>
 
         {dead.length > 0 && (
