@@ -13,8 +13,7 @@ const allLinks = [
   { href: "/dpr", label: "Daily progress (DPR)", module: "dpr" },
   { href: "/expenses", label: "Expenses & petty cash", module: "money" },
   { href: "/stock", label: "Material stock", module: "stock" },
-  { href: "/purchase", label: "Indent & purchase", module: "indent" },
-  { href: "/procure", label: "Procurement (enquiry/PO)", module: "indent" },
+  { href: "/procure", label: "Indent & purchase", module: "indent" },
   { href: "/vendors", label: "Vendor master", module: "indent" },
   { href: "/assets", label: "Tools & assets", module: "assets" },
 ];
