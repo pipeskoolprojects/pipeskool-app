@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
-import { getBalances, getBoqNorms, getRequests, deadStock, lowStock } from "@/lib/stock";
+import { getBalances, getBoqNorms, getRequests, deadStock, lowStock, getHoldings } from "@/lib/stock";
 import StockEntry from "@/components/StockEntry";
 import IndentForm from "@/components/IndentForm";
 import { getSession, can } from "@/lib/auth";
@@ -17,9 +17,11 @@ export default function StockPage() {
   const [requests, setRequests] = useState([]);
   const [session, setSession] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [holdings, setHoldings] = useState([]);
 
   useEffect(() => { setSession(getSession()); }, []);
   useEffect(() => { getBalances(site).then(setBalances); }, [site, reloadKey]);
+  useEffect(() => { getHoldings(site === "all" ? undefined : undefined).then(rows => setHoldings(site === "all" ? rows : rows)); }, [site, reloadKey]);
   useEffect(() => { getBoqNorms().then(setNorms); getRequests().then(setRequests); }, []);
 
   const low = balances ? lowStock(balances) : [];
@@ -127,6 +129,32 @@ export default function StockPage() {
           </div>
         </div>
 
+        {holdings.length > 0 && (
+          <div className="panel">
+            <h2>Pending settlements — material with workers {holdings.some(h => h.days >= 1) && <span className="badge a">{holdings.filter(h => h.days >= 1).length} overdue</span>}</h2>
+            <div style={{ overflowX: "auto" }}>
+              <table className="dt-compact">
+                <thead><tr><th>Worker</th><th>Item</th><th>Site</th><th className="num">Issued</th><th className="num">Used</th><th className="num">Returned</th><th className="num">Still held</th><th className="num">Days</th></tr></thead>
+                <tbody>
+                  {holdings.map((h, i) => (
+                    <tr key={i} style={h.days >= 1 ? { background: "#fff7f2" } : {}}>
+                      <td style={{ fontWeight: 600 }}>{h.worker}</td>
+                      <td>{h.item}</td>
+                      <td><span className="badge gray">{h.site_code}</span></td>
+                      <td className="num">{h.issued}</td>
+                      <td className="num">{h.used}</td>
+                      <td className="num">{h.returned}</td>
+                      <td className="num" style={{ fontWeight: 700 }}>{h.held} {h.unit}</td>
+                      <td className="num">{h.days >= 1 ? <span className="badge a">{h.days}d</span> : <span className="badge gray">today</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="muted" style={{ marginTop: 8 }}>Material issued to workers but not yet settled. Use Add/move stock → Settle to record used &amp; returned. Rows turn amber after 1 day.</div>
+          </div>
+        )}
+
         <div className="panel">
           <h2>Live stock position &amp; reconciliation</h2>
           {!balances ? <div className="muted">Loading…</div> :
@@ -140,6 +168,7 @@ export default function StockPage() {
                 { key: "returned", label: "Ret→store", type: "num" },
                 { key: "returned_vendor", label: "Ret→vendor", type: "num" },
                 { key: "consumed", label: "Consumed", type: "num" },
+                { key: "with_site", label: "With site", type: "num", render: b => b.with_site > 0 ? <span style={{ color: "var(--amber)", fontWeight: 600 }}>{b.with_site}</span> : "0", exportValue: b => b.with_site },
                 { key: "balance", label: "Balance", type: "num", render: b => <span style={{ fontWeight: 700, color: b.balance <= b.min_stock ? "var(--red)" : "inherit" }}>{b.balance} {b.unit}</span>, exportValue: b => b.balance },
                 { key: "rate", label: "Rate", type: "num", render: b => inr(b.rate), exportValue: b => b.rate },
                 { key: "value", label: "Value", type: "num", render: b => inr(b.value), exportValue: b => b.value },

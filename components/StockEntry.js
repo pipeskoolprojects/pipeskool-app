@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ITEM_TYPES, searchItems, addItem, recordTxn, logConsumption, recordMultiGRN, recordReturn, bulkImport, BULK_TEMPLATE_HEADERS } from "@/lib/stock";
+import { ITEM_TYPES, searchItems, addItem, recordTxn, logConsumption, recordMultiGRN, recordReturn, issueToWorker, getWorkerList, getHoldings, settleHolding, bulkImport, BULK_TEMPLATE_HEADERS } from "@/lib/stock";
 import { getSession } from "@/lib/auth";
 import { getVendors } from "@/lib/vendors";
 
@@ -28,6 +28,9 @@ export default function StockEntry({ siteId, userId, onDone }) {
   const [vendors, setVendors] = useState([]);
   useEffect(() => { const sess = getSession(); if (sess?.sites?.length) setSites(sess.sites); setChosenSite(siteId); }, [siteId]);
   useEffect(() => { getVendors(false).then(setVendors); }, []);
+  const siteCode = (sites.find(x => x.id === chosenSite)?.name || "").split(",")[0];
+  useEffect(() => { if (chosenSite) { getWorkerList(undefined).then(setWorkers); refreshHoldings(); } }, [chosenSite]);
+  function refreshHoldings() { getHoldings(undefined).then(rows => setHoldings(rows.filter(r => r.site_id === chosenSite))); }
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
 
   const [it, setIt] = useState({ item_type: "Pipe", material: "", size: "", item_class: "", make: "", unit: "Rmt", hsn_code: "", min_stock: "" });
@@ -42,6 +45,11 @@ export default function StockEntry({ siteId, userId, onDone }) {
   const [retKind, setRetKind] = useState("return_store");
   const [retReason, setRetReason] = useState("");
   const [retVendor, setRetVendor] = useState("");
+  const [workers, setWorkers] = useState([]);
+  const [issWorker, setIssWorker] = useState("");
+  const [holdings, setHoldings] = useState([]);
+  const [settleSel, setSettleSel] = useState(null);
+  const [settleVals, setSettleVals] = useState({ used: "", returned: "", purpose: "" });
 
   const [bulkRows, setBulkRows] = useState([]); const [bulkResult, setBulkResult] = useState(null);
   const fileRef = useRef(null);
@@ -102,6 +110,48 @@ export default function StockEntry({ siteId, userId, onDone }) {
     reset(); onDone?.();
   }
 
+  async function saveIssue() {
+    setErr(""); if (!picked) { setErr("Pick an item first."); return; }
+    if (!issWorker) { setErr("Select the worker."); return; }
+    if (!mv.qty) { setErr("Quantity required."); return; }
+    const w = workers.find(x => String(x.id) === String(issWorker));
+    setBusy(true);
+    const res = await issueToWorker({ site_id: chosenSite, item_id: picked.id, qty: Number(mv.qty),
+      worker_id: w?.id, worker_name: w?.name || "", purpose: mv.purpose, done_by: userId });
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg("Issued " + mv.qty + " of " + picked.display_name + " to " + (w?.name || "worker"));
+    setPicked(null); setIssWorker(""); setMv({ qty: "", purpose: "" }); refreshHoldings(); onDone?.();
+  }
+
+  async function saveSettle() {
+    setErr("");
+    const u = Number(settleVals.used || 0), r = Number(settleVals.returned || 0);
+    if (u + r <= 0) { setErr("Enter used and/or returned quantity."); return; }
+    if (u + r > settleSel.held) { setErr("Used + returned cannot exceed held quantity (" + settleSel.held + ")."); return; }
+    setBusy(true);
+    const res = await settleHolding({ site_id: settleSel.site_id, item_id: settleSel.item_id,
+      worker_id: settleSel.worker_id, worker_name: settleSel.worker, used: u, returned: r,
+      purpose: settleVals.purpose, done_by: userId });
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg("Settled " + settleSel.worker + " — used " + u + ", returned " + r);
+    setSettleSel(null); refreshHoldings(); onDone?.();
+  }
+
+  async function saveReturnVendor() {
+    setErr(""); if (!picked) { setErr("Pick an item first."); return; }
+    if (!mv.qty) { setErr("Quantity required."); return; }
+    if (!retVendor) { setErr("Select the vendor."); return; }
+    setBusy(true);
+    const res = await recordReturn({ site_id: chosenSite, item_id: picked.id, qty: Number(mv.qty),
+      kind: "return_vendor", reason: retReason, vendor: retVendor, done_by: userId });
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg("Returned to vendor: " + mv.qty + " of " + picked.display_name);
+    setPicked(null); setRetVendor(""); setRetReason(""); setMv({ qty: "", purpose: "" }); onDone?.();
+  }
+
   function downloadTemplate() {
     const csv = BULK_TEMPLATE_HEADERS.join(",") + "\n" +
       "Pipe,MS 350NB Heavy,350mm,Heavy,Jindal,Rmt,100,500,1850,Test Supplier\n" +
@@ -134,9 +184,9 @@ export default function StockEntry({ siteId, userId, onDone }) {
           </select>
         )}
         {btn("grn", "＋ GRN (receive)")}
-        {btn("issue", "Issue")}
-        {btn("consume", "Consume")}
-        {btn("return", "Return")}
+        {btn("issue", "Issue to worker")}
+        {btn("settle", holdings.length ? `Settle (${holdings.length})` : "Settle")}
+        {btn("return", "Return to vendor")}
         {btn("item", "New item")}
         {btn("bulk", "⬆ Bulk import (Excel)")}
       </div>
@@ -203,59 +253,91 @@ export default function StockEntry({ siteId, userId, onDone }) {
         </div>
       )}
 
-      {/* ---------- ISSUE / CONSUME (single) ---------- */}
-      {(open === "issue" || open === "consume") && (
+      {/* ---------- ISSUE TO WORKER ---------- */}
+      {open === "issue" && (
         <div style={{ marginTop: 14 }}>
           {!picked ? (
             <div style={{ maxWidth: 360 }}><label className="muted">Search item</label><ItemPicker onPick={setPicked} /></div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10 }}>
               <div style={{ gridColumn: "1 / -1" }}><b>{picked.display_name}</b> <button style={{ fontSize: 11, marginLeft: 8 }} onClick={() => setPicked(null)}>change</button></div>
+              <div><label className="muted">Issue to worker *</label>
+                <select style={{ width: "100%" }} value={issWorker} onChange={e => setIssWorker(e.target.value)}>
+                  <option value="">Select worker…</option>
+                  {workers.map(w => <option key={w.id} value={w.id}>{w.name}{w.contractor && w.contractor !== "—" ? " (" + w.contractor + ")" : ""}</option>)}
+                </select>
+              </div>
               <div><label className="muted">Quantity *</label><input style={{ width: "100%" }} value={mv.qty} onChange={e => setMv(p => ({ ...p, qty: e.target.value }))} /></div>
-              {open === "consume" && <div><label className="muted">Purpose / location</label><input style={{ width: "100%" }} value={mv.purpose} onChange={e => setMv(p => ({ ...p, purpose: e.target.value }))} /></div>}
-              <div style={{ display: "flex", alignItems: "flex-end" }}><button className="primary" disabled={busy} onClick={() => saveMovement(open)} style={{ width: "100%" }}>{open === "issue" ? "Issue" : "Log consumption"}</button></div>
+              <div><label className="muted">Purpose / location</label><input style={{ width: "100%" }} value={mv.purpose} onChange={e => setMv(p => ({ ...p, purpose: e.target.value }))} /></div>
+              <div style={{ display: "flex", alignItems: "flex-end" }}><button className="primary" disabled={busy} onClick={saveIssue} style={{ width: "100%" }}>Issue</button></div>
+            </div>
+          )}
+          <div className="muted" style={{ marginTop: 8 }}>Material leaves the store and is held by the worker until settled (used + returned).</div>
+        </div>
+      )}
+
+      {/* ---------- SETTLE (used + returned) ---------- */}
+      {open === "settle" && (
+        <div style={{ marginTop: 14 }}>
+          {holdings.length === 0 ? <span className="muted">Nothing pending settlement. Issue material to a worker first.</span> : !settleSel ? (
+            <div style={{ overflowX: "auto" }}>
+              <div className="muted" style={{ marginBottom: 6 }}>Pick a worker's held material to settle:</div>
+              <table className="dt-compact">
+                <thead><tr><th>Worker</th><th>Item</th><th className="num">Held</th><th className="num">Days</th><th></th></tr></thead>
+                <tbody>
+                  {holdings.map((h, i) => (
+                    <tr key={i}>
+                      <td style={{ fontWeight: 600 }}>{h.worker}</td>
+                      <td>{h.item}</td>
+                      <td className="num">{h.held} {h.unit}</td>
+                      <td className="num">{h.days >= 1 ? <span className="badge a">{h.days}d</span> : <span className="badge gray">today</span>}</td>
+                      <td><button style={{ fontSize: 11.5 }} onClick={() => { setSettleSel(h); setSettleVals({ used: "", returned: "", purpose: "" }); }}>Settle</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div>
+              <div style={{ marginBottom: 8 }}><b>{settleSel.worker}</b> — {settleSel.item} · holding <b>{settleSel.held} {settleSel.unit}</b> <button style={{ fontSize: 11, marginLeft: 8 }} onClick={() => setSettleSel(null)}>back</button></div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
+                <div><label className="muted">Used (incl. wastage) *</label><input style={{ width: "100%" }} value={settleVals.used} onChange={e => setSettleVals(v => ({ ...v, used: e.target.value }))} /></div>
+                <div><label className="muted">Returned to store</label><input style={{ width: "100%" }} value={settleVals.returned} onChange={e => setSettleVals(v => ({ ...v, returned: e.target.value }))} /></div>
+                <div><label className="muted">Purpose / location</label><input style={{ width: "100%" }} value={settleVals.purpose} onChange={e => setSettleVals(v => ({ ...v, purpose: e.target.value }))} /></div>
+                <div style={{ display: "flex", alignItems: "flex-end" }}><button className="primary" disabled={busy} onClick={saveSettle} style={{ width: "100%" }}>Record settlement</button></div>
+              </div>
+              <div className="muted" style={{ marginTop: 8 }}>
+                Used → consumption (for Tally &amp; BOQ check). Returned → back to store. Remainder stays with the worker.
+                {(Number(settleVals.used||0) + Number(settleVals.returned||0)) > settleSel.held && <span style={{ color: "var(--red)" }}> · Used + returned exceeds held qty!</span>}
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* ---------- RETURN ---------- */}
+      {/* ---------- RETURN TO VENDOR (wrong / excess received) ---------- */}
       {open === "return" && (
         <div style={{ marginTop: 14 }}>
-          <div style={{ display: "flex", gap: 16, marginBottom: 12, flexWrap: "wrap" }}>
-            <label style={{ display: "inline-flex", gap: 6, alignItems: "center", cursor: "pointer", fontSize: 13 }}>
-              <input type="radio" name="retkind" checked={retKind === "return_store"} onChange={() => setRetKind("return_store")} /> Return to store (surplus from site)
-            </label>
-            <label style={{ display: "inline-flex", gap: 6, alignItems: "center", cursor: "pointer", fontSize: 13 }}>
-              <input type="radio" name="retkind" checked={retKind === "return_vendor"} onChange={() => setRetKind("return_vendor")} /> Return to vendor (wrong / excess)
-            </label>
-          </div>
           {!picked ? (
             <div style={{ maxWidth: 360 }}><label className="muted">Search item</label><ItemPicker onPick={setPicked} /></div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
               <div style={{ gridColumn: "1 / -1" }}><b>{picked.display_name}</b> <button style={{ fontSize: 11, marginLeft: 8 }} onClick={() => setPicked(null)}>change</button></div>
               <div><label className="muted">Quantity *</label><input style={{ width: "100%" }} value={mv.qty} onChange={e => setMv(p => ({ ...p, qty: e.target.value }))} /></div>
-              {retKind === "return_vendor" && (
-                <div><label className="muted">Vendor *</label>
-                  <select style={{ width: "100%" }} value={retVendor} onChange={e => setRetVendor(e.target.value)}>
-                    <option value="">Select vendor…</option>
-                    {vendors.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}
-                  </select>
-                </div>
-              )}
-              <div style={{ gridColumn: retKind === "return_vendor" ? "1 / -1" : "auto" }}>
-                <label className="muted">{retKind === "return_vendor" ? "Reason (damaged / wrong spec / excess)" : "Note (optional)"}</label>
-                <input style={{ width: "100%" }} value={retReason} onChange={e => setRetReason(e.target.value)} />
+              <div><label className="muted">Vendor *</label>
+                <select style={{ width: "100%" }} value={retVendor} onChange={e => setRetVendor(e.target.value)}>
+                  <option value="">Select vendor…</option>
+                  {vendors.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}
+                </select>
               </div>
+              <div style={{ gridColumn: "1 / -1" }}><label className="muted">Reason (damaged / wrong spec / excess)</label>
+                <input style={{ width: "100%" }} value={retReason} onChange={e => setRetReason(e.target.value)} /></div>
               <div style={{ display: "flex", alignItems: "flex-end" }}>
-                <button className="primary" disabled={busy} onClick={saveReturn} style={{ width: "100%" }}>{retKind === "return_store" ? "Return to store" : "Return to vendor"}</button>
+                <button className="primary" disabled={busy} onClick={saveReturnVendor} style={{ width: "100%" }}>Return to vendor</button>
               </div>
             </div>
           )}
-          <div className="muted" style={{ marginTop: 8 }}>
-            {retKind === "return_store" ? "Adds the surplus back to the site store balance." : "Removes the material from site stock (goes back to the vendor)."}
-          </div>
+          <div className="muted" style={{ marginTop: 8 }}>For wrong or excess material received — removes it from store stock and sends it back to the vendor.</div>
         </div>
       )}
 
