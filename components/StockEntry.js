@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ITEM_TYPES, searchItems, addItem, recordTxn, logConsumption, recordMultiGRN, bulkImport, BULK_TEMPLATE_HEADERS } from "@/lib/stock";
+import { ITEM_TYPES, searchItems, addItem, recordTxn, logConsumption, recordMultiGRN, recordReturn, bulkImport, BULK_TEMPLATE_HEADERS } from "@/lib/stock";
 import { getSession } from "@/lib/auth";
 import { getVendors } from "@/lib/vendors";
 
@@ -39,11 +39,14 @@ export default function StockEntry({ siteId, userId, onDone }) {
   // issue/consume single
   const [picked, setPicked] = useState(null);
   const [mv, setMv] = useState({ qty: "", purpose: "" });
+  const [retKind, setRetKind] = useState("return_store");
+  const [retReason, setRetReason] = useState("");
+  const [retVendor, setRetVendor] = useState("");
 
   const [bulkRows, setBulkRows] = useState([]); const [bulkResult, setBulkResult] = useState(null);
   const fileRef = useRef(null);
 
-  const reset = () => { setMsg(""); setErr(""); setMv({ qty: "", purpose: "" }); setPicked(null); setGrnLines([]); setGrnHead({ vendor: "", challan_no: "", challan_date: "" }); setBulkRows([]); setBulkResult(null); };
+  const reset = () => { setMsg(""); setErr(""); setMv({ qty: "", purpose: "" }); setRetKind("return_store"); setRetReason(""); setRetVendor(""); setPicked(null); setGrnLines([]); setGrnHead({ vendor: "", challan_no: "", challan_date: "" }); setBulkRows([]); setBulkResult(null); };
 
   async function saveItem() {
     setErr(""); if (!it.material) { setErr("Material is required."); return; }
@@ -86,6 +89,19 @@ export default function StockEntry({ siteId, userId, onDone }) {
     setMsg((type === "issue" ? "Issued " : "Consumed ") + mv.qty + " of " + picked.display_name); reset(); onDone?.();
   }
 
+  async function saveReturn() {
+    setErr(""); if (!picked) { setErr("Pick an item first."); return; }
+    if (!mv.qty) { setErr("Quantity required."); return; }
+    if (retKind === "return_vendor" && !retVendor) { setErr("Select the vendor the material goes back to."); return; }
+    setBusy(true);
+    const res = await recordReturn({ site_id: chosenSite, item_id: picked.id, qty: Number(mv.qty),
+      kind: retKind, reason: retReason, vendor: retKind === "return_vendor" ? retVendor : null, done_by: userId });
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg((retKind === "return_store" ? "Returned to store: " : "Returned to vendor: ") + mv.qty + " of " + picked.display_name);
+    reset(); onDone?.();
+  }
+
   function downloadTemplate() {
     const csv = BULK_TEMPLATE_HEADERS.join(",") + "\n" +
       "Pipe,MS 350NB Heavy,350mm,Heavy,Jindal,Rmt,100,500,1850,Test Supplier\n" +
@@ -120,6 +136,7 @@ export default function StockEntry({ siteId, userId, onDone }) {
         {btn("grn", "＋ GRN (receive)")}
         {btn("issue", "Issue")}
         {btn("consume", "Consume")}
+        {btn("return", "Return")}
         {btn("item", "New item")}
         {btn("bulk", "⬆ Bulk import (Excel)")}
       </div>
@@ -199,6 +216,46 @@ export default function StockEntry({ siteId, userId, onDone }) {
               <div style={{ display: "flex", alignItems: "flex-end" }}><button className="primary" disabled={busy} onClick={() => saveMovement(open)} style={{ width: "100%" }}>{open === "issue" ? "Issue" : "Log consumption"}</button></div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ---------- RETURN ---------- */}
+      {open === "return" && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 16, marginBottom: 12, flexWrap: "wrap" }}>
+            <label style={{ display: "inline-flex", gap: 6, alignItems: "center", cursor: "pointer", fontSize: 13 }}>
+              <input type="radio" name="retkind" checked={retKind === "return_store"} onChange={() => setRetKind("return_store")} /> Return to store (surplus from site)
+            </label>
+            <label style={{ display: "inline-flex", gap: 6, alignItems: "center", cursor: "pointer", fontSize: 13 }}>
+              <input type="radio" name="retkind" checked={retKind === "return_vendor"} onChange={() => setRetKind("return_vendor")} /> Return to vendor (wrong / excess)
+            </label>
+          </div>
+          {!picked ? (
+            <div style={{ maxWidth: 360 }}><label className="muted">Search item</label><ItemPicker onPick={setPicked} /></div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
+              <div style={{ gridColumn: "1 / -1" }}><b>{picked.display_name}</b> <button style={{ fontSize: 11, marginLeft: 8 }} onClick={() => setPicked(null)}>change</button></div>
+              <div><label className="muted">Quantity *</label><input style={{ width: "100%" }} value={mv.qty} onChange={e => setMv(p => ({ ...p, qty: e.target.value }))} /></div>
+              {retKind === "return_vendor" && (
+                <div><label className="muted">Vendor *</label>
+                  <select style={{ width: "100%" }} value={retVendor} onChange={e => setRetVendor(e.target.value)}>
+                    <option value="">Select vendor…</option>
+                    {vendors.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <div style={{ gridColumn: retKind === "return_vendor" ? "1 / -1" : "auto" }}>
+                <label className="muted">{retKind === "return_vendor" ? "Reason (damaged / wrong spec / excess)" : "Note (optional)"}</label>
+                <input style={{ width: "100%" }} value={retReason} onChange={e => setRetReason(e.target.value)} />
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-end" }}>
+                <button className="primary" disabled={busy} onClick={saveReturn} style={{ width: "100%" }}>{retKind === "return_store" ? "Return to store" : "Return to vendor"}</button>
+              </div>
+            </div>
+          )}
+          <div className="muted" style={{ marginTop: 8 }}>
+            {retKind === "return_store" ? "Adds the surplus back to the site store balance." : "Removes the material from site stock (goes back to the vendor)."}
+          </div>
         </div>
       )}
 
