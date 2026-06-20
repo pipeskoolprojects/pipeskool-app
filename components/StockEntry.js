@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { ITEM_TYPES, searchItems, addItem, recordTxn, logConsumption, recordMultiGRN, bulkImport, BULK_TEMPLATE_HEADERS } from "@/lib/stock";
+import { getSession } from "@/lib/auth";
 
 const UNITS = ["Nos", "Rmt", "Mtr", "Kg", "Set", "Box", "Litre", "Bag"];
 
@@ -21,6 +22,9 @@ function ItemPicker({ onPick, placeholder = "Search item…" }) {
 
 export default function StockEntry({ siteId, userId, onDone }) {
   const [open, setOpen] = useState(null);
+  const [sites, setSites] = useState([]);
+  const [chosenSite, setChosenSite] = useState(siteId);
+  useEffect(() => { const sess = getSession(); if (sess?.sites?.length) setSites(sess.sites); setChosenSite(siteId); }, [siteId]);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
 
   const [it, setIt] = useState({ item_type: "Pipe", material: "", size: "", item_class: "", make: "", unit: "Rmt", hsn_code: "", min_stock: "" });
@@ -58,7 +62,7 @@ export default function StockEntry({ siteId, userId, onDone }) {
     if (!grnHead.vendor) { setErr("Enter the vendor / supplier."); return; }
     setBusy(true);
     const res = await recordMultiGRN(
-      { site_id: siteId, vendor: grnHead.vendor, challan_no: grnHead.challan_no, challan_date: grnHead.challan_date, done_by: userId },
+      { site_id: chosenSite, vendor: grnHead.vendor, challan_no: grnHead.challan_no, challan_date: grnHead.challan_date, done_by: userId },
       grnLines.map(l => ({ ...l, challan_qty: Number(l.challan_qty || l.received_qty || 0), received_qty: Number(l.received_qty || l.challan_qty || 0), rate: Number(l.rate || 0) }))
     );
     setBusy(false);
@@ -73,7 +77,7 @@ export default function StockEntry({ siteId, userId, onDone }) {
     setBusy(true);
     const res = type === "consume"
       ? await logConsumption({ site_id: siteId, item_id: picked.id, qty: Number(mv.qty), purpose: mv.purpose, done_by: userId })
-      : await recordTxn({ site_id: siteId, item_id: picked.id, txn_type: type, qty: Number(mv.qty), done_by: userId });
+      : await recordTxn({ site_id: chosenSite, item_id: picked.id, txn_type: type, qty: Number(mv.qty), done_by: userId });
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
     setMsg((type === "issue" ? "Issued " : "Consumed ") + mv.qty + " of " + picked.display_name); reset(); onDone?.();
@@ -97,7 +101,7 @@ export default function StockEntry({ siteId, userId, onDone }) {
     };
     reader.readAsText(f);
   }
-  async function runBulk() { setBusy(true); const res = await bulkImport(bulkRows, siteId, userId); setBusy(false); setBulkResult(res); onDone?.(); }
+  async function runBulk() { setBusy(true); const res = await bulkImport(bulkRows, chosenSite, userId); setBusy(false); setBulkResult(res); onDone?.(); }
 
   const btn = (k, label) => <button className={open === k ? "primary" : ""} onClick={() => { setOpen(open === k ? null : k); reset(); }} style={{ fontSize: 13 }}>{label}</button>;
 
@@ -105,6 +109,11 @@ export default function StockEntry({ siteId, userId, onDone }) {
     <div className="panel">
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <b style={{ marginRight: 6 }}>Add / move stock:</b>
+        {sites.length > 0 && (
+          <select value={chosenSite || ""} onChange={e => setChosenSite(Number(e.target.value))} style={{ fontSize: 13, marginRight: 6 }} title="Site for this entry">
+            {sites.map(s => <option key={s.id} value={s.id}>{s.name.split(",")[0]}</option>)}
+          </select>
+        )}
         {btn("grn", "＋ GRN (receive)")}
         {btn("issue", "Issue")}
         {btn("consume", "Consume")}
