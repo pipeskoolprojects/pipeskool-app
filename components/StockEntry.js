@@ -54,7 +54,7 @@ export default function StockEntry({ siteId, userId, onDone }) {
 
   function addGrnLine(item) {
     if (grnLines.some(l => l.item_id === item.id)) return;
-    setGrnLines(ls => [...ls, { item_id: item.id, item_name: item.display_name, unit: item.unit, challan_qty: "", received_qty: "", rate: item.last_rate || "" }]);
+    setGrnLines(ls => [...ls, { item_id: item.id, item_name: item.display_name, unit: item.unit, challan_qty: "", received_qty: "" }]);
   }
   function setLine(i, k, v) { setGrnLines(ls => ls.map((l, idx) => idx === i ? { ...l, [k]: v } : l)); }
   function removeLine(i) { setGrnLines(ls => ls.filter((_, idx) => idx !== i)); }
@@ -66,7 +66,7 @@ export default function StockEntry({ siteId, userId, onDone }) {
     setBusy(true);
     const res = await recordMultiGRN(
       { site_id: chosenSite, vendor: grnHead.vendor, challan_no: grnHead.challan_no, challan_date: grnHead.challan_date, done_by: userId },
-      grnLines.map(l => ({ ...l, challan_qty: Number(l.challan_qty || l.received_qty || 0), received_qty: Number(l.received_qty || l.challan_qty || 0), rate: Number(l.rate || 0) }))
+      grnLines.map(l => ({ ...l, challan_qty: Number(l.challan_qty || l.received_qty || 0), received_qty: Number(l.received_qty || l.challan_qty || 0) }))
     );
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
@@ -147,7 +147,7 @@ export default function StockEntry({ siteId, userId, onDone }) {
           {grnLines.length > 0 && (
             <div style={{ overflowX: "auto" }}>
               <table className="dt-compact">
-                <thead><tr><th>Item</th><th className="num">Challan qty</th><th className="num">Received qty</th><th className="num">Rate ₹</th><th>Status</th><th></th></tr></thead>
+                <thead><tr><th>Item</th><th className="num">Challan qty</th><th className="num">Received qty</th><th>Status</th><th></th></tr></thead>
                 <tbody>
                   {grnLines.map((l, i) => {
                     const c = Number(l.challan_qty || 0), r = Number(l.received_qty || 0);
@@ -157,7 +157,6 @@ export default function StockEntry({ siteId, userId, onDone }) {
                         <td style={{ fontWeight: 600 }}>{l.item_name}<div className="muted">{l.unit}</div></td>
                         <td className="num"><input style={{ width: 80 }} value={l.challan_qty} onChange={e => setLine(i, "challan_qty", e.target.value)} /></td>
                         <td className="num"><input style={{ width: 80 }} value={l.received_qty} onChange={e => setLine(i, "received_qty", e.target.value)} /></td>
-                        <td className="num"><input style={{ width: 80 }} value={l.rate} onChange={e => setLine(i, "rate", e.target.value)} /></td>
                         <td>{diff === null ? <span className="muted">—</span> : diff === 0 ? <span className="badge p">OK</span> : <span className="badge a">{diff > 0 ? "+" : ""}{diff}</span>}</td>
                         <td><button style={{ fontSize: 11 }} onClick={() => removeLine(i)}>✕</button></td>
                       </tr>

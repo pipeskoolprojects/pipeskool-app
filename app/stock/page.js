@@ -80,30 +80,50 @@ export default function StockPage() {
 
         <div className="panel">
           <h2>Consumption vs BOQ norm</h2>
-          <table>
-            <thead><tr><th>Item</th><th>Site</th><th className="num">BOQ qty</th><th className="num">Consumed</th><th className="num">Work done</th><th>Status</th></tr></thead>
-            <tbody>
-              {norms.map((n, i) => {
-                const expected = n.boqQty * n.workPct / 100;
-                const ratio = expected ? n.consumed / expected : 0;
-                const over = ratio > 1.05;
-                return (
-                  <tr key={i} style={over ? { background: "#fffaf2" } : {}}>
-                    <td style={{ fontWeight: 600 }}>{n.item}</td>
-                    <td><span className="badge gray">{n.site}</span></td>
-                    <td className="num">{n.boqQty.toLocaleString("en-IN")} {n.unit}</td>
-                    <td className="num">{n.consumed.toLocaleString("en-IN")} {n.unit}</td>
-                    <td className="num">{n.workPct}%</td>
-                    <td>{over
-                      ? <span className="badge a">⚠ Over by {Math.round((ratio - 1) * 100)}% — check wastage</span>
-                      : <span className="badge p">Within norm</span>}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          {(() => {
+            const THRESHOLD = 15; // % over expected before flagged red
+            const rows = norms.map((n, i) => {
+              const expected = Math.round(n.boqQty * n.workPct / 100);
+              const variance = expected ? Math.round((n.consumed - expected) / expected * 100) : 0;
+              return { id: i, item: n.item, site: n.site, unit: n.unit, boqQty: n.boqQty,
+                workPct: n.workPct, expected, consumed: n.consumed, variance,
+                flag: variance > THRESHOLD ? "over" : (variance < -THRESHOLD ? "under" : "ok") };
+            }).sort((a, b) => b.variance - a.variance); // worst (most over) first
+
+            const VarBar = ({ v }) => {
+              const mag = Math.min(Math.abs(v), 60);
+              const color = v > THRESHOLD ? "var(--red)" : v < -THRESHOLD ? "var(--amber)" : "var(--green)";
+              return (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 130 }}>
+                  <div style={{ position: "relative", width: 90, height: 8, background: "#eee", borderRadius: 4 }}>
+                    <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, background: "#bbb" }} />
+                    <div style={{ position: "absolute", top: 0, height: 8, borderRadius: 4, background: color,
+                      width: (mag / 60 * 45) + "%", left: v >= 0 ? "50%" : undefined, right: v < 0 ? "50%" : undefined }} />
+                  </div>
+                  <span style={{ color, fontWeight: 600, fontSize: 12 }}>{v > 0 ? "+" : ""}{v}%</span>
+                </div>
+              );
+            };
+
+            const columns = [
+              { key: "item", label: "Item", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.item}</span> },
+              { key: "site", label: "Site", filter: "select", render: r => <span className="badge gray">{r.site}</span> },
+              { key: "boqQty", label: "BOQ qty", type: "num", render: r => r.boqQty.toLocaleString("en-IN") + " " + r.unit, exportValue: r => r.boqQty },
+              { key: "workPct", label: "Work done", type: "num", render: r => r.workPct + "%", exportValue: r => r.workPct },
+              { key: "expected", label: "Expected use", type: "num", render: r => r.expected.toLocaleString("en-IN") + " " + r.unit, exportValue: r => r.expected },
+              { key: "consumed", label: "Actual used", type: "num", render: r => r.consumed.toLocaleString("en-IN") + " " + r.unit, exportValue: r => r.consumed },
+              { key: "variance", label: "Variance", type: "num", render: r => <VarBar v={r.variance} />, exportValue: r => r.variance + "%" },
+              { key: "flag", label: "Status", filter: "select",
+                optionLabel: o => o === "over" ? "Over (check wastage)" : o === "under" ? "Under" : "Within norm",
+                render: r => r.flag === "over" ? <span className="badge a">⚠ Check wastage</span>
+                  : r.flag === "under" ? <span className="badge h">Under norm</span>
+                  : <span className="badge p">Within norm</span>,
+                exportValue: r => r.flag },
+            ];
+            return <DataTable columns={columns} rows={rows} exportName="consumption_vs_boq" />;
+          })()}
           <div className="muted" style={{ marginTop: 8 }}>
-            Expected consumption = BOQ qty × work-done %. Consuming materially more than that signals wastage, theft, or under-reported progress.
+            Expected use = BOQ qty × work-done %. <b>Variance over +15%</b> is flagged red (possible wastage, theft, or under-reported progress). Worst items shown first.
           </div>
         </div>
 
