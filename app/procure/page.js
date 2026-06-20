@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import {
   getOpenIndents, saveQuotes, buildComparison, createPO, getPOs, cancelPO, inr,
 } from "@/lib/procure";
+import { getVendors } from "@/lib/vendors";
 
 export default function ProcurePage() {
   const [session, setSession] = useState(null);
@@ -20,9 +21,10 @@ export default function ProcurePage() {
   const [itemVendor, setItemVendor] = useState({});
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+  const [masterVendors, setMasterVendors] = useState([]);
 
   const load = () => { getOpenIndents("all").then(setIndents); getPOs("all").then(setPos); };
-  useEffect(() => { setSession(getSession()); load(); }, []);
+  useEffect(() => { setSession(getSession()); load(); getVendors(false).then(setMasterVendors); }, []);
 
   function openIndent(ind) {
     setOpenId(openId === ind.id ? null : ind.id);
@@ -124,8 +126,11 @@ export default function ProcurePage() {
                     <div className="muted" style={{ margin: "4px 0 10px" }}>Enter vendor names, then each vendor's rate per item. Compare, then award the PO.</div>
                     <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
                       {quoteVendors.map((v, i) => (
-                        <input key={i} placeholder={"Vendor " + (i + 1)} value={v}
-                          onChange={e => setQuoteVendors(qv => qv.map((x, idx) => idx === i ? e.target.value : x))} style={{ width: 160 }} />
+                        <select key={i} value={v}
+                          onChange={e => setQuoteVendors(qv => qv.map((x, idx) => idx === i ? e.target.value : x))} style={{ width: 180 }}>
+                          <option value="">Vendor {i + 1}…</option>
+                          {masterVendors.map(mv => <option key={mv.id} value={mv.name}>{mv.name}</option>)}
+                        </select>
                       ))}
                     </div>
                     <div style={{ overflowX: "auto" }}>

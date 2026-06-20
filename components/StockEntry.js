@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ITEM_TYPES, searchItems, addItem, recordTxn, logConsumption, recordMultiGRN, bulkImport, BULK_TEMPLATE_HEADERS } from "@/lib/stock";
 import { getSession } from "@/lib/auth";
+import { getVendors } from "@/lib/vendors";
 
 const UNITS = ["Nos", "Rmt", "Mtr", "Kg", "Set", "Box", "Litre", "Bag"];
 
@@ -24,7 +25,9 @@ export default function StockEntry({ siteId, userId, onDone }) {
   const [open, setOpen] = useState(null);
   const [sites, setSites] = useState([]);
   const [chosenSite, setChosenSite] = useState(siteId);
+  const [vendors, setVendors] = useState([]);
   useEffect(() => { const sess = getSession(); if (sess?.sites?.length) setSites(sess.sites); setChosenSite(siteId); }, [siteId]);
+  useEffect(() => { getVendors(false).then(setVendors); }, []);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
 
   const [it, setIt] = useState({ item_type: "Pipe", material: "", size: "", item_class: "", make: "", unit: "Rmt", hsn_code: "", min_stock: "" });
@@ -128,7 +131,13 @@ export default function StockEntry({ siteId, userId, onDone }) {
       {open === "grn" && (
         <div style={{ marginTop: 14 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 12 }}>
-            <div><label className="muted">Vendor / supplier *</label><input style={{ width: "100%" }} value={grnHead.vendor} onChange={e => setGrnHead(p => ({ ...p, vendor: e.target.value }))} /></div>
+            <div><label className="muted">Vendor / supplier *</label>
+              <select style={{ width: "100%" }} value={grnHead.vendor} onChange={e => setGrnHead(p => ({ ...p, vendor: e.target.value }))}>
+                <option value="">Select vendor…</option>
+                {vendors.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}
+              </select>
+              {vendors.length === 0 && <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>No vendors yet — add them in Vendor master.</div>}
+            </div>
             <div><label className="muted">Vendor challan no</label><input style={{ width: "100%" }} value={grnHead.challan_no} onChange={e => setGrnHead(p => ({ ...p, challan_no: e.target.value }))} /></div>
             <div><label className="muted">Challan date</label><input type="date" style={{ width: "100%" }} value={grnHead.challan_date} onChange={e => setGrnHead(p => ({ ...p, challan_date: e.target.value }))} /></div>
           </div>
