@@ -2,14 +2,17 @@
 import { useEffect, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
-import { createIndent, getMyIndents } from "@/lib/purchase";
+import { createIndent, getIndents } from "@/lib/stock";
 import { searchItems } from "@/lib/stock";
 import { getSitesList } from "@/lib/mobile";
+import { getSession } from "@/lib/auth";
 
 const STATUS = {
-  pending: ["Pending", "gray"], approved: ["Approved", "info"], rejected: ["Rejected", "a"],
+  open: ["Open", "gray"], quoting: ["Getting quotes", "h"], pending: ["Pending", "gray"],
+  approved: ["Approved", "info"], rejected: ["Rejected", "a"],
   po_issued: ["PO issued", "info"], dispatched: ["Dispatched", "h"],
-  partial: ["Partly delivered", "h"], delivered: ["Delivered", "p"], cancelled: ["Cancelled", "a"],
+  partially_received: ["Partly delivered", "h"], partial: ["Partly delivered", "h"],
+  received: ["Received", "p"], delivered: ["Delivered", "p"], closed: ["Closed", "p"], cancelled: ["Cancelled", "a"],
 };
 
 export default function IndentScreen() {
@@ -24,7 +27,7 @@ export default function IndentScreen() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { getSitesList().then(setSites); }, []);
-  useEffect(() => { getMyIndents(siteId).then(setIndents); }, [siteId, msg]);
+  useEffect(() => { getIndents(siteId).then(setIndents); }, [siteId, msg]);
   useEffect(() => { if (q) searchItems(q).then(setItems); else setItems([]); }, [q]);
 
   function addToCart(it) {
@@ -40,13 +43,14 @@ export default function IndentScreen() {
     const valid = cart.filter(c => Number(c.qty) > 0);
     if (!valid.length) { setErr("Add at least one item with quantity."); return; }
     setBusy(true);
-    const res = await createIndent({
-      site_id: siteId, required_by: meta.required_by || null, urgency: meta.urgency,
-      purpose: meta.purpose, raised_by: 1, items: valid.map(c => ({ ...c, qty: Number(c.qty) })),
-    });
+    const sess = getSession();
+    const res = await createIndent(
+      { site_id: siteId, required_by: meta.required_by || null, urgency: meta.urgency, note: meta.purpose, raised_by: sess?.id || null },
+      valid.map(c => ({ item_id: c.item_id, item_name: c.name, qty: Number(c.qty), unit: c.unit, purpose: meta.purpose }))
+    );
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg("Indent " + res.no + " raised — track its status below.");
+    setMsg("Indent " + res.indent_no + " raised — track its status below.");
     setCart([]); setMeta({ required_by: "", urgency: "normal", purpose: "" }); setTab("track");
   }
 
@@ -75,9 +79,9 @@ export default function IndentScreen() {
                 <div style={{ fontWeight: 700, fontSize: 13.5 }}>{d.indent_no}</div>
                 <span className={"badge " + color}>{label}</span>
               </div>
-              <div className="dt" style={{ margin: "4px 0 8px" }}>{d.site} · by {d.required_by || "—"}{d.urgency === "urgent" ? " · URGENT" : ""}</div>
+              <div className="dt" style={{ margin: "4px 0 8px" }}>{d.site} · by {d.raised_by || "—"}{d.required_by ? " · need by " + d.required_by : ""}{d.urgency === "urgent" ? " · URGENT" : ""}</div>
               {d.items.map((it, i) => (
-                <div key={i} style={{ fontSize: 12.5, padding: "3px 0" }}>• {it.qty} {it.unit} — {it.name}</div>
+                <div key={i} style={{ fontSize: 12.5, padding: "3px 0" }}>• {it.qty} {it.unit} — {it.item_name}</div>
               ))}
             </div>
           );
