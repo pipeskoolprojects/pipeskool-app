@@ -13,7 +13,6 @@ export default function DPRScreen() {
   const [work, setWork] = useState([]);          // {kind, boq_item_id|item_id|activity_text, label, unit, qty, loc, boq_qty, done_qty}
   const [wq, setWq] = useState(""); const [wres, setWres] = useState([]);
   const [hindrances, setHindrances] = useState([]);
-  const [materials, setMaterials] = useState([]);
   const [photos, setPhotos] = useState([]);      // {file, caption}
   const [plan, setPlan] = useState("");
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
@@ -39,9 +38,6 @@ export default function DPRScreen() {
   const setH = (i, k, v) => setHindrances(h => h.map((r, j) => j === i ? { ...r, [k]: v } : r));
   const delH = i => setHindrances(h => h.filter((_, j) => j !== i));
 
-  const addMaterial = () => setMaterials(m => [...m, { name: "", qty: "", unit: "Rmt" }]);
-  const setM = (i, k, v) => setMaterials(m => m.map((r, j) => j === i ? { ...r, [k]: v } : r));
-  const delM = i => setMaterials(m => m.filter((_, j) => j !== i));
 
   function onPhoto(e) {
     const files = Array.from(e.target.files || []);
@@ -67,7 +63,6 @@ export default function DPRScreen() {
       manpower, plan,
       work: doneWork,
       hindrances: hindrances.filter(h => h.reason).map(h => ({ ...h, hours: Number(h.hours || 0) })),
-      materials: materials.filter(m => m.name && Number(m.qty) > 0).map(m => ({ ...m, qty: Number(m.qty) })),
       photoFiles: photos,
     });
     setBusy(false);
@@ -144,18 +139,6 @@ export default function DPRScreen() {
           </div>
         ))}
         <button onClick={addHindrance} style={{ fontSize: 12.5 }}>+ Add hindrance</button>
-
-        <h3 style={{ fontSize: 14, margin: "16px 0 8px" }}>Material consumed today</h3>
-        {materials.map((m, i) => (
-          <div key={i} className="m-grid2" style={{ marginBottom: 6 }}>
-            <input placeholder="Item (e.g. 110mm UPVC pipe)" value={m.name} onChange={e => setM(i, "name", e.target.value)} />
-            <div style={{ display: "flex", gap: 6 }}>
-              <input inputMode="decimal" placeholder="Qty" value={m.qty} onChange={e => setM(i, "qty", e.target.value)} style={{ flex: 1 }} />
-              <button style={{ fontSize: 11.5 }} onClick={() => delM(i)}>✕</button>
-            </div>
-          </div>
-        ))}
-        <button onClick={addMaterial} style={{ fontSize: 12.5 }}>+ Add material</button>
 
         <h3 style={{ fontSize: 14, margin: "16px 0 8px" }}>Site photos (min 2, geo-tagged) {photos.length > 0 && <span className="badge p">{photos.length}</span>}</h3>
         {photos.map((p, i) => (
