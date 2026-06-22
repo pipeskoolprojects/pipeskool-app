@@ -11,6 +11,7 @@ const allLinks = [
   { href: "/wages", label: "Muster roll & wages", module: "wages" },
   { href: "/workers", label: "Workers", module: "workers" },
   { href: "/dpr", label: "Daily progress (DPR)", module: "dpr" },
+  { href: "/boq", label: "BOQ master", module: "dpr" },
   { href: "/expenses", label: "Expenses & petty cash", module: "money" },
   { href: "/stock", label: "Material stock", module: "stock" },
   { href: "/procure", label: "Indent & purchase", module: "indent" },

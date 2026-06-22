@@ -2,15 +2,16 @@
 import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
-import { getActivities, getManpowerToday, submitDPR, HINDRANCE_REASONS } from "@/lib/dpr";
+import { getManpowerToday, submitDPR, HINDRANCE_REASONS } from "@/lib/dpr";
+import { searchWorkItems } from "@/lib/boq";
 import { getSitesList } from "@/lib/mobile";
 
 export default function DPRScreen() {
   const [siteId, setSiteId] = useState(1);
   const [sites, setSites] = useState([]);
-  const [acts, setActs] = useState([]);
   const [manpower, setManpower] = useState(0);
-  const [work, setWork] = useState([]);          // {activity_id, qty, loc}
+  const [work, setWork] = useState([]);          // {kind, boq_item_id|item_id|activity_text, label, unit, qty, loc, boq_qty, done_qty}
+  const [wq, setWq] = useState(""); const [wres, setWres] = useState([]);
   const [hindrances, setHindrances] = useState([]);
   const [materials, setMaterials] = useState([]);
   const [photos, setPhotos] = useState([]);      // {file, caption}
@@ -20,13 +21,17 @@ export default function DPRScreen() {
   const fileRef = useRef(null);
 
   useEffect(() => { getSitesList().then(s => setSites(s)); }, []);
-  useEffect(() => {
-    getActivities(siteId).then(a => {
-      setActs(a);
-      setWork(a.map(x => ({ activity_id: x.id, qty: "", loc: "" })));
-    });
-    getManpowerToday(siteId).then(setManpower);
-  }, [siteId]);
+  useEffect(() => { setWork([]); getManpowerToday(siteId).then(setManpower); }, [siteId]);
+  useEffect(() => { if (wq.length >= 1) searchWorkItems(siteId, wq).then(setWres); else setWres([]); }, [wq, siteId]);
+
+  function addWorkLine(opt) {
+    setWork(w => [...w, { kind: opt.kind, boq_item_id: opt.boq_item_id, item_id: opt.item_id,
+      activity_text: opt.kind === "free" ? wq : (opt.kind === "material" ? opt.label : null),
+      label: opt.label || wq, unit: opt.unit || "", qty: "", loc: "",
+      boq_qty: opt.boq_qty, done_qty: opt.done_qty, pct: opt.pct }]);
+    setWq(""); setWres([]);
+  }
+  const delWork = i => setWork(w => w.filter((_, j) => j !== i));
 
   const setW = (i, k, v) => setWork(w => w.map((r, j) => j === i ? { ...r, [k]: v } : r));
 
@@ -50,9 +55,11 @@ export default function DPRScreen() {
 
   async function submit() {
     setErr(""); setMsg("");
-    const doneWork = work.filter(w => Number(w.qty) > 0)
-      .map(w => ({ ...w, qty: Number(w.qty) }));
-    if (!doneWork.length) { setErr("Enter quantity against at least one activity."); return; }
+    const doneWork = work.filter(w => Number(w.qty) > 0).map(w => ({
+      boq_item_id: w.boq_item_id || null, item_id: w.item_id || null,
+      activity_text: w.activity_text || null, unit: w.unit || null,
+      qty: Number(w.qty), loc: w.loc }));
+    if (!doneWork.length) { setErr("Add at least one work item with quantity."); return; }
     if (photos.length < 2) { setErr("Minimum 2 site photos required (currently " + photos.length + ")."); return; }
     if (!plan.trim()) { setErr("Write one line for tomorrow's plan."); return; }
     setBusy(true);
@@ -85,18 +92,38 @@ export default function DPRScreen() {
           </select></div>
 
         <h3 style={{ fontSize: 14, margin: "14px 0 8px" }}>Work done today</h3>
-        <div className="sub" style={{ marginBottom: 8 }}>Enter quantity only where work happened — leave the rest blank.</div>
-        {acts.map((a, i) => (
-          <div key={a.id} style={{ borderBottom: "1px solid var(--border)", padding: "8px 0" }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{a.description}</div>
-            <div className="m-grid2" style={{ marginTop: 6 }}>
-              <input inputMode="decimal" placeholder={"Qty (" + a.unit + ")"}
-                     value={work[i]?.qty || ""} onChange={e => setW(i, "qty", e.target.value)} />
-              <input placeholder="Location (Bay-5 / Grid B-F)"
-                     value={work[i]?.loc || ""} onChange={e => setW(i, "loc", e.target.value)} />
-            </div>
+        <div className="sub" style={{ marginBottom: 8 }}>Search a BOQ line or material, or type a free activity, then add the quantity done.</div>
+        <input value={wq} onChange={e => setWq(e.target.value)} placeholder="Search BOQ / material / type activity…" style={{ width: "100%" }} />
+        {(wres.length > 0 || wq.length >= 1) && (
+          <div style={{ border: "1px solid var(--border)", borderRadius: 8, marginTop: 4, maxHeight: 200, overflowY: "auto" }}>
+            {wres.map((o, k) => (
+              <div key={k} onClick={() => addWorkLine(o)} style={{ padding: "8px 10px", fontSize: 12.5, borderBottom: "1px solid var(--border)" }}>
+                <span className={"badge " + (o.kind === "boq" ? "info" : "gray")} style={{ marginRight: 6 }}>{o.kind === "boq" ? "BOQ" : "Material"}</span>
+                {o.label}<span className="muted"> · {o.unit}</span>
+              </div>
+            ))}
+            {wq.length >= 1 && (
+              <div onClick={() => addWorkLine({ kind: "free", label: wq })} style={{ padding: "8px 10px", fontSize: 12.5, color: "var(--copper-deep)" }}>
+                ＋ Add &quot;{wq}&quot; as a free activity
+              </div>
+            )}
           </div>
-        ))}
+        )}
+
+        {work.length > 0 && <div style={{ marginTop: 10 }}>
+          {work.map((w, i) => (
+            <div key={i} style={{ borderBottom: "1px solid var(--border)", padding: "8px 0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{w.label}</div>
+                <button style={{ fontSize: 11 }} onClick={() => delWork(i)}>✕</button>
+              </div>
+              <div className="m-grid2" style={{ marginTop: 6 }}>
+                <input inputMode="decimal" placeholder={"Qty done" + (w.unit ? " (" + w.unit + ")" : "")} value={w.qty} onChange={e => setW(i, "qty", e.target.value)} />
+                <input placeholder="Location (Bay-5 / Grid B-F)" value={w.loc} onChange={e => setW(i, "loc", e.target.value)} />
+              </div>
+            </div>
+          ))}
+        </div>}
 
         <h3 style={{ fontSize: 14, margin: "16px 0 8px" }}>Hindrances {hindrances.length > 0 && <span className="badge a">{hindrances.length}</span>}</h3>
         {hindrances.map((h, i) => (
