@@ -91,6 +91,9 @@ export default function DPRScreen() {
             {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select></div>
 
+        <div className="m-field"><label>Manpower today (auto from attendance — edit if needed)</label>
+          <input inputMode="numeric" value={manpower} onChange={e => setManpower(Number(e.target.value) || 0)} /></div>
+
         <h3 style={{ fontSize: 14, margin: "14px 0 8px" }}>Work done today</h3>
         <div className="sub" style={{ marginBottom: 8 }}>Search a BOQ line or material, or type a free activity, then add the quantity done.</div>
         <input value={wq} onChange={e => setWq(e.target.value)} placeholder="Search BOQ / material / type activity…" style={{ width: "100%" }} />

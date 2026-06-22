@@ -2,16 +2,14 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { todayLocal } from "@/lib/today";
-import { getDigest, getProgress, getHindranceRegister, reasonLabel } from "@/lib/dpr";
+import { getDigest, getHindranceRegister, reasonLabel } from "@/lib/dpr";
 import { isDemo } from "@/lib/supabase";
 
 export default function DPRPage() {
   const [date, setDate] = useState(() => todayLocal());
   const [digest, setDigest] = useState(null);
-  const [progress, setProgress] = useState([]);
 
   useEffect(() => { getDigest(date).then(setDigest); }, [date]);
-  useEffect(() => { getProgress().then(setProgress); }, []);
 
   async function exportHindrances() {
     const to = new Date().toISOString().slice(0, 10);
@@ -61,8 +59,7 @@ export default function DPRPage() {
                 </div>
                 {d.work.map((w, i) => (
                   <div key={i} style={{ fontSize: 13, padding: "5px 0", borderBottom: "1px solid var(--border)" }}>
-                    <b>{w.qty} {w.unit}</b> — {w.activity}
-                    {w.loc && <span className="muted"> · {w.loc}</span>}
+                    <b>{w.activity}</b> — {w.qty}{w.unit ? " " + w.unit : ""}{w.loc && <span className="muted"> — {w.loc}</span>}
                   </div>
                 ))}
                 {d.hindrances.map((h, i) => (
@@ -76,43 +73,6 @@ export default function DPRPage() {
           </div>
         )}
 
-        <div className="panel">
-          <h2>Progress vs BOQ &amp; productivity</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Site</th><th>Activity</th>
-                <th className="num">BOQ qty</th><th className="num">Done</th>
-                <th style={{ width: "20%" }}>% complete</th>
-                <th className="num">Qty / manday</th>
-              </tr>
-            </thead>
-            <tbody>
-              {progress.map((r, i) => {
-                const pct = r.boq ? Math.min(100, Math.round((r.done / r.boq) * 100)) : 0;
-                const prod = r.manDays ? (r.done / r.manDays).toFixed(2) : "—";
-                return (
-                  <tr key={i}>
-                    <td><span className="badge gray">{r.site}</span></td>
-                    <td style={{ fontWeight: 600 }}>{r.description}</td>
-                    <td className="num">{r.boq.toLocaleString("en-IN")} {r.unit}</td>
-                    <td className="num">{r.done.toLocaleString("en-IN")}</td>
-                    <td>
-                      <div className="bar-track"><div className="bar-fill"
-                        style={{ width: pct + "%", background: pct >= 70 ? "var(--green)" : pct >= 40 ? "var(--blue)" : "var(--amber)" }} /></div>
-                      <div className="muted" style={{ marginTop: 3 }}>{pct}%</div>
-                    </td>
-                    <td className="num">{prod}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <div className="muted" style={{ marginTop: 10 }}>
-            Qty/manday compares the same activity across sites — a low number means
-            investigate: front availability, supervision, or gang composition.
-          </div>
-        </div>
       </main>
     </div>
   );
