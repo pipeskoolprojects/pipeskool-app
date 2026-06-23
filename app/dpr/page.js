@@ -6,6 +6,7 @@ import { getDigest, getHindranceRegister, reasonLabel } from "@/lib/dpr";
 import { isDemo } from "@/lib/supabase";
 
 export default function DPRPage() {
+  const [lightbox, setLightbox] = useState(null);
   const [date, setDate] = useState(() => todayLocal());
   const [digest, setDigest] = useState(null);
 
@@ -67,12 +68,25 @@ export default function DPRPage() {
                     ⚠ {reasonLabel(h.reason)} — {h.hours}h lost. {h.desc}
                   </div>
                 ))}
+                {d.photos && d.photos.length > 0 && (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "10px 0" }}>
+                    {d.photos.map((p, i) => p.url && (
+                      <img key={i} src={p.url} alt={p.caption || "site photo"} onClick={() => setLightbox(p.url)}
+                        style={{ width: 84, height: 84, objectFit: "cover", borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer" }} />
+                    ))}
+                  </div>
+                )}
                 {d.plan && <div className="muted" style={{ marginTop: 8 }}>→ Tomorrow: {d.plan}</div>}
               </div>
             ))}
           </div>
         )}
 
+        {lightbox && (
+          <div onClick={() => setLightbox(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, cursor: "zoom-out" }}>
+            <img src={lightbox} alt="enlarged" style={{ maxWidth: "90%", maxHeight: "90%", borderRadius: 8 }} />
+          </div>
+        )}
       </main>
     </div>
   );

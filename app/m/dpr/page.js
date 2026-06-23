@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
-import { getManpowerToday, submitDPR, HINDRANCE_REASONS } from "@/lib/dpr";
+import { getManpowerToday, submitDPR, HINDRANCE_REASONS, getDprHistory, getTodayDpr } from "@/lib/dpr";
 import { searchWorkItems } from "@/lib/boq";
 import { getSitesList } from "@/lib/mobile";
 
@@ -18,9 +18,29 @@ export default function DPRScreen() {
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
+  const [view, setView] = useState("entry");      // entry | history
+  const [history, setHistory] = useState([]);
+  const [existingPhotos, setExistingPhotos] = useState([]);
+  const [editing, setEditing] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
 
   useEffect(() => { getSitesList().then(s => setSites(s)); }, []);
-  useEffect(() => { setWork([]); getManpowerToday(siteId).then(setManpower); }, [siteId]);
+  useEffect(() => {
+    getManpowerToday(siteId).then(setManpower);
+    getDprHistory(siteId).then(setHistory);
+    getTodayDpr(siteId).then(t => {
+      if (t) {
+        setEditing(true);
+        setWork((t.work || []).map(w => ({ ...w, qty: w.qty ?? "", loc: w.loc ?? "" })));
+        setHindrances((t.hindrances || []).map(h => ({ reason: h.reason, hours: h.hours ?? "", desc: h.desc ?? "" })));
+        setPlan(t.plan || "");
+        if (t.manpower != null) setManpower(t.manpower);
+        setExistingPhotos(t.existingPhotos || []);
+      } else {
+        setEditing(false); setWork([]); setHindrances([]); setPlan(""); setExistingPhotos([]);
+      }
+    });
+  }, [siteId]);
   useEffect(() => { if (wq.length >= 1) searchWorkItems(siteId, wq).then(setWres); else setWres([]); }, [wq, siteId]);
 
   function addWorkLine(opt) {
@@ -56,7 +76,7 @@ export default function DPRScreen() {
       activity_text: w.activity_text || null, unit: w.unit || null,
       qty: Number(w.qty), loc: w.loc }));
     if (!doneWork.length) { setErr("Add at least one work item with quantity."); return; }
-    if (photos.length < 2) { setErr("Minimum 2 site photos required (currently " + photos.length + ")."); return; }
+    if ((photos.length + existingPhotos.length) < 2) { setErr("Minimum 2 site photos required (currently " + (photos.length + existingPhotos.length) + ")."); return; }
     if (!plan.trim()) { setErr("Write one line for tomorrow's plan."); return; }
     setBusy(true);
     const res = await submitDPR(siteId, {
@@ -67,7 +87,7 @@ export default function DPRScreen() {
     });
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg("DPR submitted — visible on the Director's dashboard now.");
+    setMsg((editing ? "DPR updated" : "DPR submitted") + " — now on the dashboard."); getDprHistory(siteId).then(setHistory);
   }
 
   return (
@@ -80,6 +100,34 @@ export default function DPRScreen() {
       </div>
       <div className="m-body">
         {isDemo && <div className="note amber">Demo mode — form works, data not stored yet.</div>}
+
+        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+          <button className={view === "entry" ? "primary" : ""} style={{ flex: 1, fontSize: 13 }} onClick={() => setView("entry")}>{editing ? "Edit today" : "New entry"}</button>
+          <button className={view === "history" ? "primary" : ""} style={{ flex: 1, fontSize: 13 }} onClick={() => setView("history")}>History ({history.length})</button>
+        </div>
+
+        {view === "history" ? (
+          <div>
+            {history.length === 0 ? <div className="muted" style={{ fontSize: 13 }}>No past DPRs for this site yet.</div> :
+              history.map(d => (
+                <div key={d.id} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12, marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <b style={{ fontSize: 13 }}>{d.date}</b>
+                    <span className="badge gray">Manpower {d.manpower}</span>
+                  </div>
+                  {d.work.map((w, i) => <div key={i} className="dt" style={{ marginTop: 4 }}>{w.activity} — {w.qty}{w.unit ? " " + w.unit : ""}{w.loc ? " — " + w.loc : ""}</div>)}
+                  {d.photos.length > 0 && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                      {d.photos.map((p, i) => p.url && <img key={i} src={p.url} onClick={() => setLightbox(p.url)} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)" }} />)}
+                    </div>
+                  )}
+                  {d.date !== new Date().toISOString().slice(0,10) && <div className="dt" style={{ marginTop: 6, color: "var(--mist)" }}>🔒 Past DPR — locked (view only)</div>}
+                </div>
+              ))}
+          </div>
+        ) : (<>
+
+        {editing && <div className="note amber" style={{ marginBottom: 10 }}>You already submitted today's DPR — you're editing it. Saving will update it.</div>}
 
         <div className="m-field"><label>Site</label>
           <select value={siteId} onChange={e => setSiteId(Number(e.target.value))}>
@@ -140,7 +188,12 @@ export default function DPRScreen() {
         ))}
         <button onClick={addHindrance} style={{ fontSize: 12.5 }}>+ Add hindrance</button>
 
-        <h3 style={{ fontSize: 14, margin: "16px 0 8px" }}>Site photos (min 2, geo-tagged) {photos.length > 0 && <span className="badge p">{photos.length}</span>}</h3>
+        <h3 style={{ fontSize: 14, margin: "16px 0 8px" }}>Site photos (min 2, geo-tagged) {(photos.length + existingPhotos.length) > 0 && <span className="badge p">{photos.length + existingPhotos.length}</span>}</h3>
+        {existingPhotos.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+            {existingPhotos.map((p, i) => p.url && <img key={i} src={p.url} onClick={() => setLightbox(p.url)} style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)" }} />)}
+          </div>
+        )}
         {photos.map((p, i) => (
           <div key={i} className="photo-chip">
             <span className="badge gray">📷 {i + 1}</span>
@@ -158,9 +211,15 @@ export default function DPRScreen() {
         {err && <div className="note red">{err}</div>}
         {msg && <div className="note green">{msg}</div>}
         <button className="primary btn-block" style={{ marginTop: 14 }} onClick={submit} disabled={busy}>
-          {busy ? "Submitting…" : "Submit DPR"}
+          {busy ? "Saving…" : editing ? "Update DPR" : "Submit DPR"}
         </button>
+        </>)}
       </div>
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }}>
+          <img src={lightbox} style={{ maxWidth: "92%", maxHeight: "85%", borderRadius: 8 }} />
+        </div>
+      )}
       <MobileNav />
     </div>
   );
