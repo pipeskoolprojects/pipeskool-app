@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
-import { getManpowerToday, submitDPRCore, uploadDPRPhotos, HINDRANCE_REASONS, getDprHistory, getTodayDpr } from "@/lib/dpr";
+import { getManpowerToday, submitDPRCore, uploadDPRPhotos, HINDRANCE_REASONS, getDprHistory, getAllSitesDprHistory, getTodayDpr } from "@/lib/dpr";
 import { todayLocal } from "@/lib/today";
 import { searchWorkItems } from "@/lib/boq";
 import { getSitesList } from "@/lib/mobile";
@@ -21,6 +21,8 @@ export default function DPRScreen() {
   const fileRef = useRef(null);
   const [view, setView] = useState("entry");      // entry | history
   const [history, setHistory] = useState([]);
+  const [allHistory, setAllHistory] = useState([]);
+  const [histScope, setHistScope] = useState("all"); // all | site
   const [existingPhotos, setExistingPhotos] = useState([]);
   const [editing, setEditing] = useState(false);
   const [lightbox, setLightbox] = useState(null);
@@ -29,6 +31,9 @@ export default function DPRScreen() {
   const [photoErr, setPhotoErr] = useState("");        // retry message if any failed
 
   useEffect(() => { getSitesList().then(s => setSites(s)); }, []);
+  useEffect(() => {
+    if (view === "history" && histScope === "all") getAllSitesDprHistory().then(setAllHistory);
+  }, [view, histScope, savedDprId]);
   useEffect(() => {
     getManpowerToday(siteId).then(setManpower);
     getDprHistory(siteId).then(setHistory);
@@ -152,31 +157,71 @@ export default function DPRScreen() {
 
         <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
           <button className={view === "entry" ? "primary" : ""} style={{ flex: 1, fontSize: 13 }} onClick={() => setView("entry")}>{editing ? "Edit today" : "New entry"}</button>
-          <button className={view === "history" ? "primary" : ""} style={{ flex: 1, fontSize: 13 }} onClick={() => setView("history")}>History ({history.length})</button>
+          <button className={view === "history" ? "primary" : ""} style={{ flex: 1, fontSize: 13 }} onClick={() => setView("history")}>History ({histScope === "all" ? allHistory.length : history.length})</button>
         </div>
 
         {view === "history" ? (
           <div>
-            <div className="sub" style={{ marginBottom: 8 }}>Showing DPRs for <b>{sites.find(s => s.id === siteId)?.name || "this site"}</b></div>
-            {history.length === 0 ? <div className="muted" style={{ fontSize: 13 }}>No past DPRs for this site yet.</div> :
-              history.map(d => (
-                <div key={d.id} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12, marginBottom: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <b style={{ fontSize: 13 }}>
-                      {d.date}
-                      {d.date === todayLocal() && <span className="badge p" style={{ marginLeft: 6 }}>Today</span>}
-                    </b>
-                    <span className="badge gray">Manpower {d.manpower}</span>
-                  </div>
-                  {d.work.map((w, i) => <div key={i} className="dt" style={{ marginTop: 4 }}>{w.activity} — {w.qty}{w.unit ? " " + w.unit : ""}{w.loc ? " — " + w.loc : ""}</div>)}
-                  {d.photos.length > 0 && (
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-                      {d.photos.map((p, i) => p.url && <img key={i} src={p.url} onClick={() => setLightbox(p.url)} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)" }} />)}
+            <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+              <button className={histScope === "all" ? "primary" : ""} style={{ flex: 1, fontSize: 12 }} onClick={() => setHistScope("all")}>All sites · date-wise</button>
+              <button className={histScope === "site" ? "primary" : ""} style={{ flex: 1, fontSize: 12 }} onClick={() => setHistScope("site")}>This site only</button>
+            </div>
+
+            {histScope === "all" ? (
+              allHistory.length === 0 ? <div className="muted" style={{ fontSize: 13 }}>No DPRs yet across any site.</div> :
+              (() => {
+                let lastDate = null;
+                return allHistory.map(d => {
+                  const head = d.date !== lastDate; lastDate = d.date;
+                  const isToday = d.date === todayLocal();
+                  return (
+                    <div key={d.id}>
+                      {head && (
+                        <div className="sub" style={{ margin: "12px 0 6px", fontWeight: 700, color: "var(--deep)" }}>
+                          {new Date(d.date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                          {isToday && <span className="badge p" style={{ marginLeft: 6 }}>Today</span>}
+                        </div>
+                      )}
+                      <div style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12, marginBottom: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <b style={{ fontSize: 13 }}>{d.site}</b>
+                          <span className="badge gray">Manpower {d.manpower}</span>
+                        </div>
+                        {d.work.map((w, i) => <div key={i} className="dt" style={{ marginTop: 4 }}>{w.activity} — {w.qty}{w.unit ? " " + w.unit : ""}{w.loc ? " — " + w.loc : ""}</div>)}
+                        {d.photos.length > 0 && (
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                            {d.photos.map((p, i) => p.url && <img key={i} src={p.url} onClick={() => setLightbox(p.url)} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)" }} />)}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  {d.date !== todayLocal() && <div className="dt" style={{ marginTop: 6, color: "var(--mist)" }}>🔒 Past DPR — locked (view only)</div>}
-                </div>
-              ))}
+                  );
+                });
+              })()
+            ) : (
+              <>
+                <div className="sub" style={{ marginBottom: 8 }}>Showing DPRs for <b>{sites.find(s => s.id === siteId)?.name || "this site"}</b></div>
+                {history.length === 0 ? <div className="muted" style={{ fontSize: 13 }}>No past DPRs for this site yet.</div> :
+                  history.map(d => (
+                    <div key={d.id} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12, marginBottom: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <b style={{ fontSize: 13 }}>
+                          {d.date}
+                          {d.date === todayLocal() && <span className="badge p" style={{ marginLeft: 6 }}>Today</span>}
+                        </b>
+                        <span className="badge gray">Manpower {d.manpower}</span>
+                      </div>
+                      {d.work.map((w, i) => <div key={i} className="dt" style={{ marginTop: 4 }}>{w.activity} — {w.qty}{w.unit ? " " + w.unit : ""}{w.loc ? " — " + w.loc : ""}</div>)}
+                      {d.photos.length > 0 && (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                          {d.photos.map((p, i) => p.url && <img key={i} src={p.url} onClick={() => setLightbox(p.url)} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)" }} />)}
+                        </div>
+                      )}
+                      {d.date !== todayLocal() && <div className="dt" style={{ marginTop: 6, color: "var(--mist)" }}>🔒 Past DPR — locked (view only)</div>}
+                    </div>
+                  ))}
+              </>
+            )}
           </div>
         ) : (<>
 
