@@ -1,18 +1,62 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
-import { getAssets, getCalibrationDue, getRepairHistory, idleAssets, statusInfo, inr } from "@/lib/assets";
+import { getAssets, getCalibrationDue, getRepairHistory, idleAssets, statusInfo, inr, addAsset, bulkImportAssets, ASSET_TEMPLATE_HEADERS, CATEGORIES } from "@/lib/assets";
+
+const SITE_NAMES = { 1: "KEI Sanand", 2: "SOUL Campus", 3: "The Creek" };
+const blankAsset = { asset_code: "", name: "", category: "", make_model: "", purchase_cost: "", calib: false, calib_due: "" };
 
 export default function AssetsPage() {
   const [site, setSite] = useState("all");
   const [assets, setAssets] = useState(null);
   const [calib, setCalib] = useState([]);
   const [repairs, setRepairs] = useState([]);
+  const [addSite, setAddSite] = useState(1);
+  const [form, setForm] = useState(null);
+  const [bulkRows, setBulkRows] = useState([]); const [bulkResult, setBulkResult] = useState(null);
+  const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+  const fileRef = useRef(null);
 
-  useEffect(() => { getAssets(site).then(setAssets); }, [site]);
+  useEffect(() => { getAssets(site).then(setAssets); }, [site, msg]);
   useEffect(() => { getCalibrationDue().then(setCalib); getRepairHistory().then(setRepairs); }, []);
+
+  const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  async function saveOne() {
+    setErr("");
+    if (!form.asset_code || !form.name || !form.category) { setErr("Code, name and category are required."); return; }
+    setBusy(true);
+    const res = await addAsset({ asset_code: form.asset_code, name: form.name, category: form.category,
+      make_model: form.make_model || null, purchase_cost: form.purchase_cost ? Number(form.purchase_cost) : null,
+      current_site_id: addSite, calibration_required: !!form.calib, calibration_due: form.calib_due || null });
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg("Asset " + form.asset_code + " added to " + (SITE_NAMES[addSite] || "site") + "."); setForm(null);
+  }
+  function downloadTemplate() {
+    const csv = ASSET_TEMPLATE_HEADERS.join(",") + "\n" +
+      "PSK-TM-002,Threading machine (2 inch),Machine,Ridgid 535,165000,no,\n" +
+      "PSK-PG-002,Pressure gauge set,Testing,Wika 0-100bar,11000,yes,2026-12-31";
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = "pipeskool_assets_template.csv"; a.click();
+  }
+  function onFile(e) {
+    const f = e.target.files?.[0]; if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const lines = String(reader.result).split(/\r?\n/).filter(l => l.trim());
+      const headers = lines[0].split(",").map(h => h.trim());
+      setBulkRows(lines.slice(1).map(line => { const c = line.split(","); const o = {}; headers.forEach((h, i) => o[h] = (c[i] || "").trim()); return o; }));
+      setBulkResult(null); setMsg("");
+    };
+    reader.readAsText(f); e.target.value = "";
+  }
+  async function runBulk() {
+    setBusy(true); const res = await bulkImportAssets(bulkRows, addSite); setBusy(false);
+    setBulkResult(res);
+    if (res.created) { setMsg(res.created + " asset(s) imported to " + (SITE_NAMES[addSite] || "site") + "."); setBulkRows([]); }
+  }
 
   const idle = assets ? idleAssets(assets) : [];
   const totalValue = (assets || []).reduce((s, a) => s + a.cost, 0);
@@ -31,10 +75,74 @@ export default function AssetsPage() {
               <option value="2">SOUL Campus</option>
               <option value="3">The Creek</option>
             </select>
+            <button onClick={() => { setForm({ ...blankAsset }); setMsg(""); setErr(""); }}>＋ Add asset</button>
+            <button onClick={() => fileRef.current?.click()}>⬆ Import CSV</button>
+            <input ref={fileRef} type="file" accept=".csv" style={{ display: "none" }} onChange={onFile} />
           </div>
         </div>
 
         {isDemo && <div className="demo-banner">Demo mode — sample asset register.</div>}
+        {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
+
+        {bulkRows.length > 0 && (
+          <div className="panel">
+            <h2>Import preview — {bulkRows.length} asset(s)</h2>
+            <div className="muted" style={{ marginBottom: 10 }}>
+              Importing into{" "}
+              <select value={addSite} onChange={e => setAddSite(Number(e.target.value))} style={{ margin: "0 6px" }}>
+                <option value={1}>KEI Sanand</option><option value={2}>SOUL Campus</option><option value={3}>The Creek</option>
+              </select>
+              · Need a layout? <a onClick={downloadTemplate} style={{ color: "var(--copper)", cursor: "pointer", textDecoration: "underline" }}>Download CSV template</a>.
+            </div>
+            <div style={{ overflowX: "auto", marginBottom: 10 }}>
+              <table>
+                <thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Make/model</th><th className="num">Cost ₹</th><th>Calib?</th><th>Due</th></tr></thead>
+                <tbody>
+                  {bulkRows.slice(0, 12).map((r, i) => (
+                    <tr key={i}>
+                      <td style={{ fontWeight: 600 }}>{r.asset_code}</td><td>{r.name}</td><td>{r.category}</td>
+                      <td className="muted">{r.make_model}</td><td className="num">{r.purchase_cost}</td>
+                      <td>{r.calibration_required}</td><td>{r.calibration_due}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {bulkRows.length > 12 && <div className="muted" style={{ marginTop: 6 }}>…and {bulkRows.length - 12} more.</div>}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="primary" disabled={busy} onClick={runBulk}>{busy ? "Importing…" : `Import ${bulkRows.length} asset(s)`}</button>
+              <button onClick={() => { setBulkRows([]); setBulkResult(null); }}>Cancel</button>
+            </div>
+            {bulkResult && bulkResult.errors?.length > 0 && <div className="error" style={{ marginTop: 8 }}>{bulkResult.errors.slice(0, 6).join("; ")}</div>}
+          </div>
+        )}
+
+        {form && (
+          <div className="panel">
+            <h2>Add asset</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10 }}>
+              <div><label className="muted">Asset code *</label><input style={{ width: "100%" }} value={form.asset_code} onChange={e => setF("asset_code", e.target.value)} placeholder="PSK-TM-002" /></div>
+              <div style={{ gridColumn: "span 2" }}><label className="muted">Name *</label><input style={{ width: "100%" }} value={form.name} onChange={e => setF("name", e.target.value)} placeholder='Threading machine (2 inch)' /></div>
+              <div><label className="muted">Category *</label>
+                <select style={{ width: "100%" }} value={form.category} onChange={e => setF("category", e.target.value)}>
+                  <option value="">Select…</option>{CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select></div>
+              <div><label className="muted">Make / model</label><input style={{ width: "100%" }} value={form.make_model} onChange={e => setF("make_model", e.target.value)} /></div>
+              <div><label className="muted">Purchase cost ₹</label><input style={{ width: "100%" }} value={form.purchase_cost} onChange={e => setF("purchase_cost", e.target.value)} /></div>
+              <div><label className="muted">Add to site</label>
+                <select style={{ width: "100%" }} value={addSite} onChange={e => setAddSite(Number(e.target.value))}>
+                  <option value={1}>KEI Sanand</option><option value={2}>SOUL Campus</option><option value={3}>The Creek</option>
+                </select></div>
+              <div><label className="muted">Calibration due (if any)</label><input type="date" style={{ width: "100%" }} value={form.calib_due} onChange={e => { setF("calib_due", e.target.value); setF("calib", !!e.target.value); }} /></div>
+            </div>
+            {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button className="primary" disabled={busy} onClick={saveOne}>{busy ? "Saving…" : "Save asset"}</button>
+              <button onClick={() => { setForm(null); setErr(""); }}>Cancel</button>
+            </div>
+            <div className="muted" style={{ marginTop: 10 }}>Adding many at once? Use <b>Import CSV</b> in the top bar — <a onClick={downloadTemplate} style={{ color: "var(--copper)", cursor: "pointer", textDecoration: "underline" }}>download the template</a>, fill it in Excel, and upload.</div>
+          </div>
+        )}
 
         <div className="cards">
           <div className="card"><div className="label">Total assets</div><div className="value">{assets?.length ?? "—"}</div></div>
