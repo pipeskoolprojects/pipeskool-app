@@ -23,6 +23,7 @@ export default function DPRScreen() {
   const [history, setHistory] = useState([]);
   const [allHistory, setAllHistory] = useState([]);
   const [histScope, setHistScope] = useState("all"); // all | site
+  const [histDate, setHistDate] = useState("");        // "" = recent feed, else a specific day
   const [existingPhotos, setExistingPhotos] = useState([]);
   const [editing, setEditing] = useState(false);
   const [lightbox, setLightbox] = useState(null);
@@ -32,8 +33,8 @@ export default function DPRScreen() {
 
   useEffect(() => { getSitesList().then(s => setSites(s)); }, []);
   useEffect(() => {
-    if (view === "history" && histScope === "all") getAllSitesDprHistory().then(setAllHistory);
-  }, [view, histScope, savedDprId]);
+    if (view === "history" && histScope === "all") getAllSitesDprHistory({ date: histDate || null }).then(setAllHistory);
+  }, [view, histScope, histDate, savedDprId]);
   useEffect(() => {
     getManpowerToday(siteId).then(setManpower);
     getDprHistory(siteId).then(setHistory);
@@ -168,7 +169,19 @@ export default function DPRScreen() {
             </div>
 
             {histScope === "all" ? (
-              allHistory.length === 0 ? <div className="muted" style={{ fontSize: 13 }}>No DPRs yet across any site.</div> :
+              <>
+                <div className="m-field" style={{ marginBottom: 10 }}>
+                  <label>Jump to a date (leave blank for recent)</label>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input type="date" value={histDate} max={todayLocal()} onChange={e => setHistDate(e.target.value)} style={{ flex: 1 }} />
+                    {histDate && <button onClick={() => setHistDate("")} style={{ fontSize: 12, whiteSpace: "nowrap" }}>Show recent</button>}
+                  </div>
+                </div>
+                {allHistory.length === 0 ? (
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    {histDate ? `No DPRs on ${new Date(histDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} for any site.` : "No DPRs yet across any site."}
+                  </div>
+                ) :
               (() => {
                 let lastDate = null;
                 return allHistory.map(d => {
@@ -197,7 +210,8 @@ export default function DPRScreen() {
                     </div>
                   );
                 });
-              })()
+              })()}
+              </>
             ) : (
               <>
                 <div className="sub" style={{ marginBottom: 8 }}>Showing DPRs for <b>{sites.find(s => s.id === siteId)?.name || "this site"}</b></div>
