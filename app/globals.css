@@ -129,3 +129,6 @@ th.num { text-align: right; font-family: var(--font); }
 .m-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
 .m-grid2 > * { min-width: 0; }   /* prevents children overflowing the grid track */
 .m-body button { box-sizing: border-box; }
+
+/* DPR clickable summary cards (update37) */
+.dpr-card:hover { border-color: var(--copper, #FF7A1A); box-shadow: 0 4px 16px rgba(255,122,26,0.12); }

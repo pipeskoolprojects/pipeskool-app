@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { getManpowerToday, submitDPR, HINDRANCE_REASONS, getDprHistory, getTodayDpr } from "@/lib/dpr";
+import { todayLocal } from "@/lib/today";
 import { searchWorkItems } from "@/lib/boq";
 import { getSitesList } from "@/lib/mobile";
 
@@ -87,7 +88,11 @@ export default function DPRScreen() {
     });
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg((editing ? "DPR updated" : "DPR submitted") + " — now on the dashboard."); getDprHistory(siteId).then(setHistory);
+    if (res.photoWarning) { setErr(res.photoWarning); }
+    setMsg((editing ? "DPR updated" : "DPR submitted") + " — now on the dashboard.");
+    setPhotos([]);
+    getDprHistory(siteId).then(setHistory);
+    getTodayDpr(siteId).then(t => { if (t) { setEditing(true); setExistingPhotos(t.existingPhotos || []); } });
   }
 
   return (
@@ -101,6 +106,12 @@ export default function DPRScreen() {
       <div className="m-body">
         {isDemo && <div className="note amber">Demo mode — form works, data not stored yet.</div>}
 
+        {/* Site selector — always visible, drives both Entry and History */}
+        <div className="m-field" style={{ marginBottom: 10 }}><label>Site</label>
+          <select value={siteId} onChange={e => setSiteId(Number(e.target.value))}>
+            {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select></div>
+
         <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
           <button className={view === "entry" ? "primary" : ""} style={{ flex: 1, fontSize: 13 }} onClick={() => setView("entry")}>{editing ? "Edit today" : "New entry"}</button>
           <button className={view === "history" ? "primary" : ""} style={{ flex: 1, fontSize: 13 }} onClick={() => setView("history")}>History ({history.length})</button>
@@ -108,11 +119,15 @@ export default function DPRScreen() {
 
         {view === "history" ? (
           <div>
+            <div className="sub" style={{ marginBottom: 8 }}>Showing DPRs for <b>{sites.find(s => s.id === siteId)?.name || "this site"}</b></div>
             {history.length === 0 ? <div className="muted" style={{ fontSize: 13 }}>No past DPRs for this site yet.</div> :
               history.map(d => (
                 <div key={d.id} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12, marginBottom: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <b style={{ fontSize: 13 }}>{d.date}</b>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <b style={{ fontSize: 13 }}>
+                      {d.date}
+                      {d.date === todayLocal() && <span className="badge p" style={{ marginLeft: 6 }}>Today</span>}
+                    </b>
                     <span className="badge gray">Manpower {d.manpower}</span>
                   </div>
                   {d.work.map((w, i) => <div key={i} className="dt" style={{ marginTop: 4 }}>{w.activity} — {w.qty}{w.unit ? " " + w.unit : ""}{w.loc ? " — " + w.loc : ""}</div>)}
@@ -121,18 +136,13 @@ export default function DPRScreen() {
                       {d.photos.map((p, i) => p.url && <img key={i} src={p.url} onClick={() => setLightbox(p.url)} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)" }} />)}
                     </div>
                   )}
-                  {d.date !== new Date().toISOString().slice(0,10) && <div className="dt" style={{ marginTop: 6, color: "var(--mist)" }}>🔒 Past DPR — locked (view only)</div>}
+                  {d.date !== todayLocal() && <div className="dt" style={{ marginTop: 6, color: "var(--mist)" }}>🔒 Past DPR — locked (view only)</div>}
                 </div>
               ))}
           </div>
         ) : (<>
 
         {editing && <div className="note amber" style={{ marginBottom: 10 }}>You already submitted today's DPR — you're editing it. Saving will update it.</div>}
-
-        <div className="m-field"><label>Site</label>
-          <select value={siteId} onChange={e => setSiteId(Number(e.target.value))}>
-            {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select></div>
 
         <div className="m-field"><label>Manpower today (auto from attendance — edit if needed)</label>
           <input inputMode="numeric" value={manpower} onChange={e => setManpower(Number(e.target.value) || 0)} /></div>
