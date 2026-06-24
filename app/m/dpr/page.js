@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
-import { getManpowerToday, submitDPR, HINDRANCE_REASONS, getDprHistory, getTodayDpr } from "@/lib/dpr";
+import { getManpowerToday, submitDPRCore, uploadDPRPhotos, HINDRANCE_REASONS, getDprHistory, getTodayDpr } from "@/lib/dpr";
 import { todayLocal } from "@/lib/today";
 import { searchWorkItems } from "@/lib/boq";
 import { getSitesList } from "@/lib/mobile";
@@ -24,6 +24,9 @@ export default function DPRScreen() {
   const [existingPhotos, setExistingPhotos] = useState([]);
   const [editing, setEditing] = useState(false);
   const [lightbox, setLightbox] = useState(null);
+  const [savedDprId, setSavedDprId] = useState(null);
+  const [photoProg, setPhotoProg] = useState(null);   // {done,total} while uploading
+  const [photoErr, setPhotoErr] = useState("");        // retry message if any failed
 
   useEffect(() => { getSitesList().then(s => setSites(s)); }, []);
   useEffect(() => {
@@ -71,7 +74,7 @@ export default function DPRScreen() {
   const setCaption = (i, v) => setPhotos(p => p.map((r, j) => j === i ? { ...r, caption: v } : r));
 
   async function submit() {
-    setErr(""); setMsg("");
+    setErr(""); setMsg(""); setPhotoErr("");
     const doneWork = work.filter(w => Number(w.qty) > 0).map(w => ({
       boq_item_id: w.boq_item_id || null, item_id: w.item_id || null,
       activity_text: w.activity_text || null, unit: w.unit || null,
@@ -79,20 +82,55 @@ export default function DPRScreen() {
     if (!doneWork.length) { setErr("Add at least one work item with quantity."); return; }
     if ((photos.length + existingPhotos.length) < 2) { setErr("Minimum 2 site photos required (currently " + (photos.length + existingPhotos.length) + ")."); return; }
     if (!plan.trim()) { setErr("Write one line for tomorrow's plan."); return; }
+
+    // PHASE 1 — save the record. Fast. The engineer waits only for this.
     setBusy(true);
-    const res = await submitDPR(siteId, {
+    const core = await submitDPRCore(siteId, {
       manpower, plan,
       work: doneWork,
       hindrances: hindrances.filter(h => h.reason).map(h => ({ ...h, hours: Number(h.hours || 0) })),
-      photoFiles: photos,
+      materials: [],
     });
     setBusy(false);
-    if (!res.ok) { setErr(res.error); return; }
-    if (res.photoWarning) { setErr(res.photoWarning); }
-    setMsg((editing ? "DPR updated" : "DPR submitted") + " — now on the dashboard.");
-    setPhotos([]);
+    if (!core.ok) { setErr(core.error || "Could not save the DPR. Try again."); return; }
+
+    // Record is saved — confirm immediately and refresh history.
+    setSavedDprId(core.dprId);
+    setMsg((editing ? "DPR updated" : "DPR saved") + " ✓");
     getDprHistory(siteId).then(setHistory);
+
+    // PHASE 2 — photos upload in the background. Engineer is already free to move on.
+    if (photos.length) {
+      setPhotoProg({ done: 0, total: photos.length });
+      const r = await uploadDPRPhotos(core.dprId, photos, (done, total) => setPhotoProg({ done, total }));
+      setPhotoProg(null);
+      if (r.failedFiles.length) {
+        setPhotos(r.failedFiles);   // keep only the failed ones so retry doesn't duplicate
+        setPhotoErr(`${r.failedFiles.length} of ${r.total} photo(s) didn't upload (${r.errors[0]}). Your DPR is saved — tap "Retry photos".`);
+      } else {
+        setPhotos([]);
+        setMsg((editing ? "DPR updated" : "DPR saved") + " ✓ — all photos uploaded.");
+      }
+    } else {
+      setPhotos([]);
+    }
     getTodayDpr(siteId).then(t => { if (t) { setEditing(true); setExistingPhotos(t.existingPhotos || []); } });
+  }
+
+  async function retryPhotos() {
+    if (!savedDprId || !photos.length) return;
+    setPhotoErr("");
+    setPhotoProg({ done: 0, total: photos.length });
+    const r = await uploadDPRPhotos(savedDprId, photos, (done, total) => setPhotoProg({ done, total }));
+    setPhotoProg(null);
+    if (r.failedFiles.length) {
+      setPhotos(r.failedFiles);
+      setPhotoErr(`${r.failedFiles.length} still failed (${r.errors[0]}). Check your signal and retry.`);
+    } else {
+      setPhotos([]);
+      setMsg("All photos uploaded ✓");
+      getTodayDpr(siteId).then(t => { if (t) setExistingPhotos(t.existingPhotos || []); });
+    }
   }
 
   return (
@@ -220,9 +258,23 @@ export default function DPRScreen() {
 
         {err && <div className="note red">{err}</div>}
         {msg && <div className="note green">{msg}</div>}
-        <button className="primary btn-block" style={{ marginTop: 14 }} onClick={submit} disabled={busy}>
-          {busy ? "Saving…" : editing ? "Update DPR" : "Submit DPR"}
+        <button className="primary btn-block" style={{ marginTop: 14 }} onClick={submit} disabled={busy || !!photoProg}>
+          {busy ? "Saving…" : editing ? "Update DPR" : "Save DPR"}
         </button>
+
+        {photoProg && (
+          <div className="note amber" style={{ marginTop: 10 }}>
+            Uploading photos… {photoProg.done}/{photoProg.total} (your DPR is already saved)
+          </div>
+        )}
+        {photoErr && (
+          <div style={{ marginTop: 10 }}>
+            <div className="note red">{photoErr}</div>
+            <button className="btn-block" style={{ marginTop: 8 }} onClick={retryPhotos} disabled={!!photoProg}>
+              Retry photos ({photos.length})
+            </button>
+          </div>
+        )}
         </>)}
       </div>
       {lightbox && (
