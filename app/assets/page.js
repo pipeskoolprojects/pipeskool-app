@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
-import { getAssets, getCalibrationDue, getRepairHistory, idleAssets, statusInfo, inr, addAsset, bulkImportAssets, ASSET_TEMPLATE_HEADERS, CATEGORIES } from "@/lib/assets";
+import { getAssets, getCalibrationDue, getRepairHistory, idleAssets, statusInfo, inr, addAsset, bulkImportAssets, ASSET_TEMPLATE_HEADERS, CATEGORIES, getStaffNames, transferAsset, flagNeedsRepair, sendForRepair, cancelRepair, repairDone, reportLost } from "@/lib/assets";
 
 const SITE_NAMES = { 1: "KEI Sanand", 2: "SOUL Campus", 3: "The Creek" };
 const blankAsset = { asset_code: "", name: "", category: "", make_model: "", purchase_cost: "", calib: false, calib_due: "" };
@@ -18,9 +18,38 @@ export default function AssetsPage() {
   const [bulkRows, setBulkRows] = useState([]); const [bulkResult, setBulkResult] = useState(null);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
+  const [staff, setStaff] = useState([]);
+  const [modal, setModal] = useState(null);   // { type, asset }
+  const [mv, setMv] = useState({});
 
   useEffect(() => { getAssets(site).then(setAssets); }, [site, msg]);
-  useEffect(() => { getCalibrationDue().then(setCalib); getRepairHistory().then(setRepairs); }, []);
+  useEffect(() => { getCalibrationDue().then(setCalib); getRepairHistory().then(setRepairs); getStaffNames().then(setStaff); }, []);
+
+  function openModal(type, asset) { setErr(""); setMsg(""); setMv({}); setModal({ type, asset }); }
+  function closeModal() { setModal(null); setMv({}); }
+  async function runModal() {
+    const a = modal.asset; setErr(""); setBusy(true); let res;
+    if (modal.type === "transfer") {
+      if (!mv.to) { setErr("Pick a destination site."); setBusy(false); return; }
+      res = await transferAsset(a.id, a.site_id, Number(mv.to), (mv.custodian || "").trim());
+    } else if (modal.type === "needs_repair") {
+      if (!mv.issue?.trim()) { setErr("Describe the problem."); setBusy(false); return; }
+      res = await flagNeedsRepair(a.id, mv.issue.trim());
+    } else if (modal.type === "send_repair") {
+      res = await sendForRepair(a.id, (mv.vendor || "").trim());
+    } else if (modal.type === "cancel_repair") {
+      res = await cancelRepair(a.id, a.custodian);
+    } else if (modal.type === "repair_done") {
+      res = await repairDone(a.id, mv.cost, a.custodian);
+    } else if (modal.type === "report_loss") {
+      if (!mv.reason?.trim()) { setErr("Add loss / damage details."); setBusy(false); return; }
+      res = await reportLost(a.id, mv.reason.trim());
+    }
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    closeModal(); setMsg(a.code + " — updated.");
+  }
+  const SITES = [{ id: 1, name: "KEI Sanand" }, { id: 2, name: "SOUL Campus" }, { id: 3, name: "The Creek" }];
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
   async function saveOne() {
@@ -183,6 +212,24 @@ export default function AssetsPage() {
                 { key: "custodian", label: "Custodian", filter: "search", render: a => <span className="muted">{a.custodian || "—"}</span> },
                 { key: "cost", label: "Value", type: "num", render: a => inr(a.cost), exportValue: a => a.cost },
                 { key: "status", label: "Status", filter: "select", render: a => { const [l,c] = statusInfo(a.status); return <span className={"badge "+c}>{l}</span>; } },
+                { key: "actions", label: "Actions", render: a => (
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {a.status === "needs_repair" ? (
+                      <>
+                        <button className="primary" style={{ fontSize: 11, padding: "3px 7px" }} onClick={() => openModal("send_repair", a)}>Send repair</button>
+                        <button style={{ fontSize: 11, padding: "3px 7px" }} onClick={() => openModal("cancel_repair", a)}>Back to service</button>
+                      </>
+                    ) : a.status === "under_repair" ? (
+                      <button className="primary" style={{ fontSize: 11, padding: "3px 7px" }} onClick={() => openModal("repair_done", a)}>Repair done</button>
+                    ) : a.status === "lost" ? <span className="muted" style={{ fontSize: 11 }}>—</span> : (
+                      <>
+                        <button style={{ fontSize: 11, padding: "3px 7px" }} onClick={() => openModal("transfer", a)}>Transfer</button>
+                        <button style={{ fontSize: 11, padding: "3px 7px" }} onClick={() => openModal("needs_repair", a)}>Needs repair</button>
+                        <button style={{ fontSize: 11, padding: "3px 7px", color: "var(--red)" }} onClick={() => openModal("report_loss", a)}>Loss</button>
+                      </>
+                    )}
+                  </div>
+                ) },
               ]} />}
         </div>
 
@@ -230,6 +277,61 @@ export default function AssetsPage() {
             </div>
           )}
         </div>
+
+        <datalist id="staff-list-web">{staff.map(n => <option key={n} value={n} />)}</datalist>
+
+        {modal && (
+          <div onClick={closeModal} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 90, padding: 16 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 460, width: "100%", padding: 22, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+              <h2 style={{ marginBottom: 2 }}>
+                {modal.type === "transfer" && "Transfer tool"}
+                {modal.type === "needs_repair" && "Flag for repair"}
+                {modal.type === "send_repair" && "Send for repair"}
+                {modal.type === "cancel_repair" && "Return to service"}
+                {modal.type === "repair_done" && "Repair done"}
+                {modal.type === "report_loss" && "Report lost / damaged"}
+              </h2>
+              <div className="muted" style={{ marginBottom: 14 }}>{modal.asset.code} · {modal.asset.name}</div>
+
+              {modal.type === "transfer" && (
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div><label className="muted">Move to site</label>
+                    <select style={{ width: "100%" }} value={mv.to || ""} onChange={e => setMv(v => ({ ...v, to: e.target.value }))}>
+                      <option value="">Select site…</option>
+                      {SITES.filter(s => s.id !== modal.asset.site_id).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select></div>
+                  <div><label className="muted">New custodian (optional)</label>
+                    <input list="staff-list-web" style={{ width: "100%" }} value={mv.custodian || ""} onChange={e => setMv(v => ({ ...v, custodian: e.target.value }))} placeholder="Person at receiving site" /></div>
+                </div>
+              )}
+              {modal.type === "needs_repair" && (
+                <div><label className="muted">What's the problem?</label>
+                  <input style={{ width: "100%" }} value={mv.issue || ""} onChange={e => setMv(v => ({ ...v, issue: e.target.value }))} placeholder="e.g. motor not starting" /></div>
+              )}
+              {modal.type === "send_repair" && (
+                <div><label className="muted">Workshop / vendor (optional)</label>
+                  <input style={{ width: "100%" }} value={mv.vendor || ""} onChange={e => setMv(v => ({ ...v, vendor: e.target.value }))} placeholder="Where it's being sent" /></div>
+              )}
+              {modal.type === "cancel_repair" && (
+                <div className="muted" style={{ fontSize: 13 }}>This returns {modal.asset.code} to service without sending it out for repair.</div>
+              )}
+              {modal.type === "repair_done" && (
+                <div><label className="muted">Repair cost ₹ (optional)</label>
+                  <input style={{ width: "100%" }} value={mv.cost || ""} onChange={e => setMv(v => ({ ...v, cost: e.target.value }))} placeholder="e.g. 6500" /></div>
+              )}
+              {modal.type === "report_loss" && (
+                <div><label className="muted">Loss / damage details</label>
+                  <input style={{ width: "100%" }} value={mv.reason || ""} onChange={e => setMv(v => ({ ...v, reason: e.target.value }))} placeholder="What happened?" /></div>
+              )}
+
+              {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
+              <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                <button className="primary" disabled={busy} onClick={runModal}>{busy ? "Saving…" : "Confirm"}</button>
+                <button onClick={closeModal}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
