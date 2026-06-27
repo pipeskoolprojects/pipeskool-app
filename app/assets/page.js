@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
-import { getAssets, getCalibrationDue, getRepairHistory, idleAssets, statusInfo, inr, addAsset, bulkImportAssets, ASSET_TEMPLATE_HEADERS, CATEGORIES, getStaffNames, transferAsset, flagNeedsRepair, sendForRepair, cancelRepair, repairDone, reportLost } from "@/lib/assets";
+import { getAssets, getCalibrationDue, getRepairHistory, idleAssets, statusInfo, inr, addAsset, bulkImportAssets, ASSET_TEMPLATE_HEADERS, CATEGORIES, resolveSite, getStaffNames, transferAsset, flagNeedsRepair, sendForRepair, cancelRepair, repairDone, reportLost } from "@/lib/assets";
 
 const SITE_NAMES = { 1: "KEI Sanand", 2: "SOUL Campus", 3: "The Creek" };
 const blankAsset = { asset_code: "", name: "", category: "", make_model: "", purchase_cost: "", calib: false, calib_due: "" };
@@ -16,6 +16,7 @@ export default function AssetsPage() {
   const [addSite, setAddSite] = useState(1);
   const [form, setForm] = useState(null);
   const [bulkRows, setBulkRows] = useState([]); const [bulkResult, setBulkResult] = useState(null);
+  const [importing, setImporting] = useState(false);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
   const [staff, setStaff] = useState([]);
@@ -65,8 +66,9 @@ export default function AssetsPage() {
   }
   function downloadTemplate() {
     const csv = ASSET_TEMPLATE_HEADERS.join(",") + "\n" +
-      "PSK-TM-002,Threading machine (2 inch),Machine,Ridgid 535,165000,no,\n" +
-      "PSK-PG-002,Pressure gauge set,Testing,Wika 0-100bar,11000,yes,2026-12-31";
+      "PSK-TM-002,Threading machine (2 inch),Machine,KEI,Suresh,Ridgid 535,165000,no,\n" +
+      "PSK-WS-003,Welding set 400A,Machine,SOUL,,ESAB Buddy,62000,no,\n" +
+      "PSK-PG-002,Pressure gauge set,Testing,The Creek,Ramesh,Wika 0-100bar,11000,yes,2026-12-31";
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     a.download = "pipeskool_assets_template.csv"; a.click();
   }
@@ -82,9 +84,9 @@ export default function AssetsPage() {
     reader.readAsText(f); e.target.value = "";
   }
   async function runBulk() {
-    setBusy(true); const res = await bulkImportAssets(bulkRows, addSite); setBusy(false);
+    setBusy(true); const res = await bulkImportAssets(bulkRows, SITES); setBusy(false);
     setBulkResult(res);
-    if (res.created) { setMsg(res.created + " asset(s) imported to " + (SITE_NAMES[addSite] || "site") + "."); setBulkRows([]); }
+    if (res.created) { setMsg(res.created + " asset(s) imported."); setBulkRows([]); setImporting(false); }
   }
 
   const idle = assets ? idleAssets(assets) : [];
@@ -105,7 +107,7 @@ export default function AssetsPage() {
               <option value="3">The Creek</option>
             </select>
             <button onClick={() => { setForm({ ...blankAsset }); setMsg(""); setErr(""); }}>＋ Add asset</button>
-            <button onClick={() => fileRef.current?.click()}>⬆ Import CSV</button>
+            <button onClick={() => { setImporting(true); setBulkRows([]); setBulkResult(null); setMsg(""); }}>⬆ Import CSV</button>
             <input ref={fileRef} type="file" accept=".csv" style={{ display: "none" }} onChange={onFile} />
           </div>
         </div>
@@ -113,38 +115,61 @@ export default function AssetsPage() {
         {isDemo && <div className="demo-banner">Demo mode — sample asset register.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
 
-        {bulkRows.length > 0 && (
+        {importing && bulkRows.length === 0 && (
           <div className="panel">
-            <h2>Import preview — {bulkRows.length} asset(s)</h2>
+            <h2>Import tools &amp; assets from CSV</h2>
+            <div className="muted" style={{ marginBottom: 12 }}>
+              One file can cover all sites — each row names its own <b>site</b>. Fill the template in Excel, save as <b>.csv</b>, then choose the file.
+            </div>
+            <div style={{ background: "var(--vapor,#F0F0EC)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 12px", marginBottom: 12, fontSize: 12.5 }}>
+              <div><b>Site</b> — type one of: <b>KEI</b>, <b>SOUL</b>, <b>The Creek</b> (or 1 / 2 / 3)</div>
+              <div style={{ marginTop: 4 }}><b>Category</b> — one of: {CATEGORIES.join(", ")}</div>
+              <div style={{ marginTop: 4 }}><b>calibration_required</b> — yes / no &nbsp;·&nbsp; <b>calibration_due</b> — date like 2026-12-31 (blank if no)</div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button className="primary" onClick={downloadTemplate}>⬇ Download CSV template</button>
+              <button onClick={() => fileRef.current?.click()}>📄 Choose CSV file</button>
+              <button onClick={() => setImporting(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {bulkRows.length > 0 && (() => {
+          const ok = bulkRows.filter(r => r.asset_code && r.name && r.category && resolveSite(r.site, SITES));
+          const bad = bulkRows.length - ok.length;
+          return (
+          <div className="panel">
+            <h2>Import preview — {bulkRows.length} row(s){bad > 0 && <span style={{ color: "var(--red)", fontSize: 13 }}> · {bad} need fixing</span>}</h2>
             <div className="muted" style={{ marginBottom: 10 }}>
-              Importing into{" "}
-              <select value={addSite} onChange={e => setAddSite(Number(e.target.value))} style={{ margin: "0 6px" }}>
-                <option value={1}>KEI Sanand</option><option value={2}>SOUL Campus</option><option value={3}>The Creek</option>
-              </select>
-              · Need a layout? <a onClick={downloadTemplate} style={{ color: "var(--copper)", cursor: "pointer", textDecoration: "underline" }}>Download CSV template</a>.
+              Each row goes to the site named in its <b>site</b> column.{" "}
+              <a onClick={downloadTemplate} style={{ color: "var(--copper)", cursor: "pointer", textDecoration: "underline" }}>Download template</a>.
             </div>
             <div style={{ overflowX: "auto", marginBottom: 10 }}>
               <table>
-                <thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Make/model</th><th className="num">Cost ₹</th><th>Calib?</th><th>Due</th></tr></thead>
+                <thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Site → resolved</th><th>Make/model</th><th className="num">Cost ₹</th><th>Calib?</th></tr></thead>
                 <tbody>
-                  {bulkRows.slice(0, 12).map((r, i) => (
-                    <tr key={i}>
-                      <td style={{ fontWeight: 600 }}>{r.asset_code}</td><td>{r.name}</td><td>{r.category}</td>
-                      <td className="muted">{r.make_model}</td><td className="num">{r.purchase_cost}</td>
-                      <td>{r.calibration_required}</td><td>{r.calibration_due}</td>
-                    </tr>
-                  ))}
+                  {bulkRows.slice(0, 15).map((r, i) => {
+                    const sid = resolveSite(r.site, SITES);
+                    return (
+                      <tr key={i}>
+                        <td style={{ fontWeight: 600 }}>{r.asset_code}</td><td>{r.name}</td><td>{r.category}</td>
+                        <td>{sid ? <span className="badge gray">{SITE_NAMES[sid]}</span> : <span style={{ color: "var(--red)" }}>{r.site || "(blank)"} ✕</span>}</td>
+                        <td className="muted">{r.make_model}</td><td className="num">{r.purchase_cost}</td><td>{r.calibration_required}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-              {bulkRows.length > 12 && <div className="muted" style={{ marginTop: 6 }}>…and {bulkRows.length - 12} more.</div>}
+              {bulkRows.length > 15 && <div className="muted" style={{ marginTop: 6 }}>…and {bulkRows.length - 15} more.</div>}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="primary" disabled={busy} onClick={runBulk}>{busy ? "Importing…" : `Import ${bulkRows.length} asset(s)`}</button>
-              <button onClick={() => { setBulkRows([]); setBulkResult(null); }}>Cancel</button>
+              <button className="primary" disabled={busy || ok.length === 0} onClick={runBulk}>{busy ? "Importing…" : `Import ${ok.length} valid asset(s)`}</button>
+              <button onClick={() => { setBulkRows([]); setBulkResult(null); }}>Back</button>
             </div>
-            {bulkResult && bulkResult.errors?.length > 0 && <div className="error" style={{ marginTop: 8 }}>{bulkResult.errors.slice(0, 6).join("; ")}</div>}
+            {bulkResult && bulkResult.errors?.length > 0 && <div className="error" style={{ marginTop: 8 }}>{bulkResult.errors.slice(0, 8).join("; ")}</div>}
           </div>
-        )}
+          );
+        })()}
 
         {form && (
           <div className="panel">
