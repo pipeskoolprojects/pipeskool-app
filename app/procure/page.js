@@ -130,6 +130,7 @@ export default function ProcurePage() {
                   <div>
                     <span style={{ fontWeight: 700 }}>{ind.indent_no}</span>
                     {ind.urgency === "urgent" && <span className="badge a" style={{ marginLeft: 8 }}>Urgent</span>}
+                    {ind.edited_at && <span className="badge h" style={{ marginLeft: 8 }}>⚠ Edited by site</span>}
                     <div className="muted">{ind.site} · {ind.item_count} items · by {ind.raised_by || "—"} · {ind.date}{ind.required_by ? " · need by " + ind.required_by : ""}</div>
                   </div>
                   <span className="badge gray">{ind.status}</span>

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
-import { createIndent, getIndents } from "@/lib/stock";
+import { createIndent, editIndent, getIndents } from "@/lib/stock";
 import { searchItems } from "@/lib/stock";
 import { getSitesList } from "@/lib/mobile";
 import { getSession } from "@/lib/auth";
@@ -23,12 +23,20 @@ export default function IndentScreen() {
   const [cart, setCart] = useState([]);       // {item_id, name, unit, qty}
   const [q, setQ] = useState(""); const [items, setItems] = useState([]);
   const [meta, setMeta] = useState({ required_by: "", urgency: "normal", purpose: "" });
+  const [editId, setEditId] = useState(null); const [editNo, setEditNo] = useState("");
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { getSitesList().then(setSites); }, []);
   useEffect(() => { getIndents(siteId).then(setIndents); }, [siteId, msg]);
   useEffect(() => { if (q) searchItems(q).then(setItems); else setItems([]); }, [q]);
+
+  function startEdit(d) {
+    setCart(d.items.map(it => ({ item_id: it.item_id, name: it.item_name, unit: it.unit, qty: String(it.qty) })));
+    setMeta({ required_by: d.required_by || "", urgency: d.urgency || "normal", purpose: d.note || "" });
+    setEditId(d.id); setEditNo(d.indent_no); setTab("new"); setMsg(""); setErr("");
+  }
+  function cancelEdit() { setEditId(null); setEditNo(""); setCart([]); setMeta({ required_by: "", urgency: "normal", purpose: "" }); setTab("track"); }
 
   function addToCart(it) {
     if (!cart.find(c => c.item_id === it.id))
@@ -44,14 +52,13 @@ export default function IndentScreen() {
     if (!valid.length) { setErr("Add at least one item with quantity."); return; }
     setBusy(true);
     const sess = getSession();
-    const res = await createIndent(
-      { site_id: siteId, required_by: meta.required_by || null, urgency: meta.urgency, note: meta.purpose, raised_by: sess?.id || null },
-      valid.map(c => ({ item_id: c.item_id, item_name: c.name, qty: Number(c.qty), unit: c.unit, purpose: meta.purpose }))
-    );
+    const header = { site_id: siteId, required_by: meta.required_by || null, urgency: meta.urgency, note: meta.purpose, raised_by: sess?.id || null };
+    const lines = valid.map(c => ({ item_id: c.item_id, item_name: c.name, qty: Number(c.qty), unit: c.unit, purpose: meta.purpose }));
+    const res = editId ? await editIndent(editId, header, lines) : await createIndent(header, lines);
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg("Indent " + res.indent_no + " raised — track its status below.");
-    setCart([]); setMeta({ required_by: "", urgency: "normal", purpose: "" }); setTab("track");
+    setMsg(editId ? ("Indent " + editNo + " updated.") : ("Indent " + res.indent_no + " raised — track its status below."));
+    setCart([]); setMeta({ required_by: "", urgency: "normal", purpose: "" }); setEditId(null); setEditNo(""); setTab("track");
   }
 
   return (
@@ -76,19 +83,23 @@ export default function IndentScreen() {
           return (
             <div key={d.id} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12, marginBottom: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontWeight: 700, fontSize: 13.5 }}>{d.indent_no}</div>
+                <div style={{ fontWeight: 700, fontSize: 13.5 }}>{d.indent_no}{d.edited_at && <span className="badge h" style={{ marginLeft: 6 }}>Edited</span>}</div>
                 <span className={"badge " + color}>{label}</span>
               </div>
               <div className="dt" style={{ margin: "4px 0 8px" }}>{d.site} · by {d.raised_by || "—"}{d.required_by ? " · need by " + d.required_by : ""}{d.urgency === "urgent" ? " · URGENT" : ""}</div>
               {d.items.map((it, i) => (
                 <div key={i} style={{ fontSize: 12.5, padding: "3px 0" }}>• {it.qty} {it.unit} — {it.item_name}</div>
               ))}
+              {d.canEdit && (
+                <button style={{ fontSize: 11, marginTop: 8 }} onClick={() => startEdit(d)}>✎ Edit indent</button>
+              )}
             </div>
           );
         })}
 
         {tab === "new" && (
           <>
+            {editId && <div className="note amber" style={{ marginBottom: 10 }}>Editing <b>{editNo}</b> — changes save in real time and the indent is flagged as edited. <a onClick={cancelEdit} style={{ color: "var(--copper)", cursor: "pointer", textDecoration: "underline" }}>Cancel</a></div>}
             <div className="m-field">
               <label>Add items from master</label>
               <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search (e.g. MS 350NB)" />
@@ -115,7 +126,7 @@ export default function IndentScreen() {
               <div className="m-field"><label>Urgency</label><select value={meta.urgency} onChange={e => setMeta(m => ({ ...m, urgency: e.target.value }))}><option value="normal">Normal</option><option value="urgent">Urgent</option></select></div>
             </div>
             <div className="m-field"><label>Purpose / work area</label><input value={meta.purpose} onChange={e => setMeta(m => ({ ...m, purpose: e.target.value }))} placeholder="e.g. Bay-5 erection" /></div>
-            <button className="primary btn-block" disabled={busy} onClick={submit}>{busy ? "Raising…" : "Raise indent"}</button>
+            <button className="primary btn-block" disabled={busy} onClick={submit}>{busy ? "Saving…" : editId ? "Update indent" : "Raise indent"}</button>
           </>
         )}
       </div>
