@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import { isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import {
-  getOpenIndents, saveQuotes, buildComparison, createPO, getPOs, cancelPO, inr,
+  getOpenIndents, saveQuotes, getQuotes, buildComparison, createPO, getPOs, cancelPO, inr,
   DELIVERY_STATUS, updatePODelivery,
 } from "@/lib/procure";
 import { getVendors } from "@/lib/vendors";
@@ -15,8 +15,11 @@ export default function ProcurePage() {
   const [pos, setPos] = useState([]);
   const [deliv, setDeliv] = useState(null);   // PO being edited for delivery
   const [openId, setOpenId] = useState(null);
-  const [quoteVendors, setQuoteVendors] = useState(["", "", ""]);
-  const [rates, setRates] = useState({});
+  const [enqVendors, setEnqVendors] = useState([]);     // vendor names added to this enquiry
+  const [vendorPick, setVendorPick] = useState("");      // master select before "Add"
+  const [alloc, setAlloc] = useState({});                // {itemId: {vendor: true}}  which vendor quotes which item
+  const [qin, setQin] = useState({});                    // {itemId: {vendor: {list, disc}}}
+  const [rates, setRates] = useState({});                // derived NET map {itemId: {vendor: net}}
   const [cmp, setCmp] = useState(null);
   const [awardVendor, setAwardVendor] = useState("");
   const [splitMode, setSplitMode] = useState(false);
@@ -37,22 +40,73 @@ export default function ProcurePage() {
     setDeliv(null); setMsg("Delivery updated for " + deliv.po_no + " — site can see it now."); getPOs("all").then(setPos);
   }
 
-  function openIndent(ind) {
-    setOpenId(openId === ind.id ? null : ind.id);
-    setCmp(null); setRates({}); setQuoteVendors(["", "", ""]); setAwardVendor(""); setReason(""); setMsg(""); setErr(""); setSplitMode(false); setItemVendor({}); setItemSplits({});
+  async function openIndent(ind) {
+    const willOpen = openId !== ind.id;
+    setOpenId(willOpen ? ind.id : null);
+    setCmp(null); setRates({}); setAwardVendor(""); setReason(""); setMsg(""); setErr(""); setSplitMode(false); setItemVendor({}); setItemSplits({});
+    setEnqVendors([]); setVendorPick(""); setAlloc({}); setQin({});
+    if (willOpen) {
+      const quotes = await getQuotes(ind.id);
+      if (quotes.length) {
+        const vs = [], al = {}, qi = {};
+        quotes.forEach(q => {
+          if (!vs.includes(q.vendor_name)) vs.push(q.vendor_name);
+          (al[q.indent_item_id] = al[q.indent_item_id] || {})[q.vendor_name] = true;
+          const list = q.list_rate != null ? q.list_rate : (q.rate != null ? q.rate : "");
+          const disc = q.discount_pct != null ? q.discount_pct : "";
+          (qi[q.indent_item_id] = qi[q.indent_item_id] || {})[q.vendor_name] = { list: String(list), disc: String(disc) };
+        });
+        setEnqVendors(vs); setAlloc(al); setQin(qi);
+      }
+    }
   }
-  const setRate = (itemId, vendor, val) => setRates(r => ({ ...r, [itemId]: { ...(r[itemId] || {}), [vendor]: val } }));
+
+  function addVendor() {
+    const v = vendorPick.trim();
+    if (!v || enqVendors.includes(v)) { setVendorPick(""); return; }
+    setEnqVendors(vs => [...vs, v]); setVendorPick("");
+  }
+  function removeVendor(v) {
+    setEnqVendors(vs => vs.filter(x => x !== v));
+    const strip = obj => { const n = { ...obj }; Object.keys(n).forEach(k => { if (n[k]) { const m = { ...n[k] }; delete m[v]; n[k] = m; } }); return n; };
+    setAlloc(strip); setQin(strip);
+  }
+  const toggleAlloc = (itemId, v) => setAlloc(a => ({ ...a, [itemId]: { ...(a[itemId] || {}), [v]: !a[itemId]?.[v] } }));
+  const setQ = (itemId, v, k, val) => setQin(q => ({ ...q, [itemId]: { ...(q[itemId] || {}), [v]: { ...(q[itemId]?.[v] || {}), [k]: val } } }));
+  const netOf = (itemId, v) => {
+    const c = qin[itemId]?.[v]; if (!c) return null;
+    const list = Number(c.list); if (!list) return null;
+    const disc = Number(c.disc) || 0;
+    return +(list * (1 - disc / 100)).toFixed(2);
+  };
+
+  // derived NET-rate map → feeds the existing compare/award engine
+  useEffect(() => {
+    const r = {};
+    Object.keys(alloc).forEach(itemId => Object.keys(alloc[itemId] || {}).forEach(v => {
+      if (!alloc[itemId][v]) return;
+      const c = qin[itemId]?.[v]; if (!c) return;
+      const list = Number(c.list); if (!list) return;
+      const disc = Number(c.disc) || 0;
+      (r[itemId] = r[itemId] || {})[v] = +(list * (1 - disc / 100)).toFixed(2);
+    }));
+    setRates(r);
+  }, [qin, alloc]);
 
   function buildQuotes(ind) {
-    const vendors = quoteVendors.map(v => v.trim()).filter(Boolean);
+    const vendors = enqVendors;
     const quotes = [];
-    ind.items.forEach(it => vendors.forEach(v => { const rr = rates[it.id]?.[v]; if (rr) quotes.push({ indent_item_id: it.id, vendor_name: v, rate: Number(rr) }); }));
+    ind.items.forEach(it => vendors.forEach(v => {
+      if (!alloc[it.id]?.[v]) return;
+      const net = netOf(it.id, v);
+      if (net != null) quotes.push({ indent_item_id: it.id, vendor_name: v, rate: net });
+    }));
     return { vendors, quotes };
   }
   function compare(ind) {
     const { vendors, quotes } = buildQuotes(ind);
-    if (vendors.length === 0) { setErr("Enter at least one vendor name."); return; }
-    if (quotes.length === 0) { setErr("Enter at least one rate."); return; }
+    if (vendors.length === 0) { setErr("Add at least one vendor."); return; }
+    if (quotes.length === 0) { setErr("Enter at least one rate (list price)."); return; }
     setErr("");
     const c = buildComparison(ind.items, quotes);
     setCmp(c);
@@ -60,9 +114,15 @@ export default function ProcurePage() {
     setItemVendor(iv);
   }
   async function persistQuotes(ind) {
-    const { quotes } = buildQuotes(ind);
-    const res = await saveQuotes(ind.id, quotes);
-    setMsg(res.ok ? "Quotes saved for " + ind.indent_no : res.error);
+    const rows = [];
+    ind.items.forEach(it => enqVendors.forEach(v => {
+      if (!alloc[it.id]?.[v]) return;
+      const c = qin[it.id]?.[v] || {};
+      rows.push({ indent_item_id: it.id, vendor_name: v, list_rate: c.list || null, discount_pct: c.disc || null, rate: netOf(it.id, v) });
+    }));
+    const res = await saveQuotes(ind.id, rows);
+    setMsg(res.ok ? "Allocation & rates saved for " + ind.indent_no : res.error);
+    if (res.ok) load();
   }
   async function award(ind) {
     setErr("");
@@ -120,7 +180,6 @@ export default function ProcurePage() {
   }
 
   const open = (indents || []).filter(i => i.status === "open" || i.status === "quoting");
-  const activeVendors = quoteVendors.filter(v => v.trim());
   async function doCancel(p) { if (!confirm("Cancel PO " + p.po_no + "?")) return; await cancelPO(p.id); load(); }
 
   return (
@@ -148,35 +207,61 @@ export default function ProcurePage() {
 
                 {openId === ind.id && (
                   <div style={{ padding: "0 12px 14px" }}>
-                    <div className="muted" style={{ margin: "4px 0 10px" }}>Enter vendor names, then each vendor's rate per item. Compare, then award the PO.</div>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-                      {quoteVendors.map((v, i) => (
-                        <select key={i} value={v}
-                          onChange={e => setQuoteVendors(qv => qv.map((x, idx) => idx === i ? e.target.value : x))} style={{ width: 180 }}>
-                          <option value="">Vendor {i + 1}…</option>
-                          {masterVendors.map(mv => <option key={mv.id} value={mv.name}>{mv.name}</option>)}
-                        </select>
+                    <div className="muted" style={{ margin: "4px 0 8px" }}><b>1.</b> Add the vendors you'll ask, <b>2.</b> tick which items each one should quote, <b>3.</b> enter list rate + discount % (net is auto-calculated), then compare & award.</div>
+
+                    {/* 1. add vendors */}
+                    <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      <select value={vendorPick} onChange={e => setVendorPick(e.target.value)} style={{ width: 220 }}>
+                        <option value="">Add a vendor…</option>
+                        {masterVendors.filter(mv => !enqVendors.includes(mv.name)).map(mv => <option key={mv.id} value={mv.name}>{mv.name}</option>)}
+                      </select>
+                      <button onClick={addVendor} disabled={!vendorPick}>＋ Add vendor</button>
+                      {enqVendors.map(v => (
+                        <span key={v} className="badge gray" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                          {v}<span onClick={() => removeVendor(v)} style={{ cursor: "pointer", fontWeight: 700 }}>✕</span>
+                        </span>
                       ))}
                     </div>
-                    <div style={{ overflowX: "auto" }}>
-                      <table className="dt-compact">
-                        <thead><tr><th>Item</th><th className="num">Qty</th>{activeVendors.map((v, i) => <th key={i} className="num">{v}</th>)}</tr></thead>
-                        <tbody>
-                          {ind.items.map(it => (
-                            <tr key={it.id}>
-                              <td style={{ fontWeight: 600 }}>{it.item_name}<div className="muted">{it.purpose}</div></td>
-                              <td className="num">{it.qty} {it.unit}</td>
-                              {activeVendors.map((v, i) => (
-                                <td key={i} className="num"><input style={{ width: 80 }} value={rates[it.id]?.[v] || ""} onChange={e => setRate(it.id, v, e.target.value)} placeholder="rate" /></td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+
+                    {enqVendors.length === 0 ? (
+                      <div className="muted" style={{ padding: "8px 0" }}>Add at least one vendor to start. For comparison, add 2–3 vendors for the same items.</div>
+                    ) : (
+                      <div style={{ overflowX: "auto" }}>
+                        <table className="dt-compact">
+                          <thead><tr><th>Item</th><th className="num">Qty</th>{enqVendors.map(v => <th key={v} className="num">{v}</th>)}</tr></thead>
+                          <tbody>
+                            {ind.items.map(it => (
+                              <tr key={it.id}>
+                                <td style={{ fontWeight: 600 }}>{it.item_name}<div className="muted">{it.purpose}</div></td>
+                                <td className="num">{it.qty} {it.unit}</td>
+                                {enqVendors.map(v => {
+                                  const on = !!alloc[it.id]?.[v]; const net = netOf(it.id, v);
+                                  return (
+                                    <td key={v} className="num" style={{ verticalAlign: "top" }}>
+                                      <label style={{ display: "inline-flex", gap: 4, alignItems: "center", cursor: "pointer" }}>
+                                        <input type="checkbox" checked={on} onChange={() => toggleAlloc(it.id, v)} style={{ width: 15, height: 15, accentColor: "var(--copper)" }} />
+                                        <span className="muted" style={{ fontSize: 11 }}>quote</span>
+                                      </label>
+                                      {on && (
+                                        <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-end" }}>
+                                          <input style={{ width: 78 }} placeholder="list ₹" value={qin[it.id]?.[v]?.list || ""} onChange={e => setQ(it.id, v, "list", e.target.value)} />
+                                          <input style={{ width: 78 }} placeholder="disc %" value={qin[it.id]?.[v]?.disc || ""} onChange={e => setQ(it.id, v, "disc", e.target.value)} />
+                                          <div style={{ fontSize: 11.5, fontWeight: 700, color: net != null ? "var(--copper-deep)" : "var(--muted)" }}>{net != null ? "net " + inr(net) : "—"}</div>
+                                        </div>
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
                     <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                       <button onClick={() => compare(ind)}>Compare rates</button>
-                      <button onClick={() => persistQuotes(ind)}>Save quotes</button>
+                      <button onClick={() => persistQuotes(ind)}>Save allocation & rates</button>
                     </div>
 
                     {cmp && (
