@@ -5,24 +5,29 @@ import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 import { getSession, clearSession, canSeeModuleAnySite, setCurrentSite } from "@/lib/auth";
 
-const allLinks = [
-  { href: "/dashboard", label: "Dashboard", module: "dashboard" },
-  { href: "/attendance", label: "Attendance register", module: "attendance" },
-  { href: "/wages", label: "Muster roll & wages", module: "wages" },
-  { href: "/workers", label: "Workers", module: "workers" },
-  { href: "/dpr", label: "Daily progress (DPR)", module: "dpr" },
-  { href: "/boq", label: "BOQ master", module: "dpr" },
-  { href: "/expenses", label: "Expenses & petty cash", module: "money" },
-  { href: "/stock", label: "Material stock", module: "stock" },
-  { href: "/procure", label: "Indent & purchase", module: "indent" },
-  { href: "/vendors", label: "Vendor master", module: "indent" },
-  { href: "/assets", label: "Tools & assets", module: "assets" },
+const GROUPS = [
+  { label: "Core Site Operations", items: [
+    { href: "/attendance", label: "Attendance & Labour", module: "attendance" },
+    { href: "/wages", label: "Muster Roll & Wages", module: "wages" },
+    { href: "/workers", label: "Workers", module: "workers" },
+    { href: "/dpr", label: "Daily Progress Report (DPR)", module: "dpr" },
+    { href: "/boq", label: "BOQ Master", module: "dpr" },
+    { href: "/expenses", label: "Expenses & Petty Cash", module: "money" },
+    { href: "/stock", label: "Material Stock & Inventory", module: "stock" },
+    { href: "/procure", label: "Indent & Purchase", module: "indent" },
+    { href: "/vendors", label: "Vendor Master", module: "indent" },
+    { href: "/assets", label: "Tools & Assets", module: "assets" },
+  ] },
+  { label: "Commercial / Billing", items: [
+    { href: "/billing", label: "RA Billing", module: null },
+  ] },
 ];
 
 export default function Sidebar() {
   const path = usePathname();
   const router = useRouter();
   const [session, setSession] = useState(null);
+  const [open, setOpen] = useState({});
 
   useEffect(() => {
     const s = getSession();
@@ -30,10 +35,43 @@ export default function Sidebar() {
     setSession(s);
   }, [router]);
 
-  function logout() { clearSession(); router.push("/login"); }
+  // auto-expand the group that holds the current page
+  useEffect(() => {
+    const g = GROUPS.find(grp => grp.items.some(it => it.href === path));
+    setOpen(o => {
+      const next = { ...o };
+      if (g) next[g.label] = true;
+      if (path === "/access") next["Admin"] = true;
+      return next;
+    });
+  }, [path]);
 
-  const links = allLinks.filter(l => !session || canSeeModuleAnySite(session, l.module));
+  function logout() { clearSession(); router.push("/login"); }
+  const toggle = label => setOpen(o => ({ ...o, [label]: !o[label] }));
+
+  const canSee = m => !session || !m || canSeeModuleAnySite(session, m);
   const showAccess = session && session.role === "director";
+  const showDash = canSee("dashboard");
+
+  function Group({ label, items }) {
+    const visible = items.filter(it => canSee(it.module));
+    if (visible.length === 0) return null;
+    const hasActive = visible.some(it => it.href === path);
+    const isOpen = open[label] ?? hasActive;
+    return (
+      <div>
+        <button className={"nav-group" + (hasActive && !isOpen ? " has-active" : "")} onClick={() => toggle(label)}>
+          <span>{label}</span>
+          <span className="chev">{isOpen ? "▾" : "▸"}</span>
+        </button>
+        {isOpen && (
+          <nav className="nav-sub" style={{ marginTop: 0 }}>
+            {visible.map(l => <Link key={l.href} href={l.href} className={path === l.href ? "active" : ""}>{l.label}</Link>)}
+          </nav>
+        )}
+      </div>
+    );
+  }
 
   return (
     <aside className="sidebar">
@@ -55,16 +93,17 @@ export default function Sidebar() {
           )}
         </div>
       )}
-      <div className="module-label">Core site operations</div>
-      <nav>
-        {links.map(l => (
-          <Link key={l.href} href={l.href} className={path === l.href ? "active" : ""}>{l.label}</Link>
-        ))}
-      </nav>
-      {showAccess && <>
-        <div className="module-label" style={{ marginTop: 14 }}>Admin</div>
-        <nav><Link href="/access" className={path === "/access" ? "active" : ""}>Access rights</Link></nav>
-      </>}
+
+      {showDash && (
+        <nav style={{ marginTop: 10 }}>
+          <Link href="/dashboard" className={path === "/dashboard" ? "active" : ""}>Dashboard</Link>
+        </nav>
+      )}
+
+      {GROUPS.map(g => <Group key={g.label} label={g.label} items={g.items} />)}
+
+      {showAccess && <Group label="Admin" items={[{ href: "/access", label: "Access Rights", module: null }]} />}
+
       <nav style={{ marginTop: 20 }}>
         <a onClick={logout} style={{ cursor: "pointer" }}>Log out</a>
       </nav>
