@@ -14,6 +14,10 @@ const STATUS = {
   partially_received: ["Partly delivered", "h"], partial: ["Partly delivered", "h"],
   received: ["Received", "p"], delivered: ["Delivered", "p"], closed: ["Closed", "p"], cancelled: ["Cancelled", "a"],
 };
+const DELIV = {
+  pending: ["⏳ Awaiting confirmation", "gray"], confirmed: ["📅 Delivery date confirmed", "info"],
+  delayed: ["⚠ Delayed", "a"], dispatched: ["🚚 Out for delivery", "h"], delivered: ["✓ Delivered", "p"],
+};
 
 export default function IndentScreen() {
   const [tab, setTab] = useState("track");   // track | new
@@ -90,6 +94,16 @@ export default function IndentScreen() {
               {d.items.map((it, i) => (
                 <div key={i} style={{ fontSize: 12.5, padding: "3px 0" }}>• {it.qty} {it.unit} — {it.item_name}</div>
               ))}
+              {d.pos && d.pos.map((p, i) => {
+                const [dl, dc] = DELIV[p.delivery_status] || DELIV.pending;
+                return (
+                  <div key={"po" + i} style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span className={"badge " + dc} style={{ fontSize: 11 }}>{dl}</span>
+                    {p.expected_delivery && <span className="dt">expected {p.expected_delivery}</span>}
+                    <span className="muted" style={{ fontSize: 11 }}>· {p.vendor}</span>
+                  </div>
+                );
+              })}
               {d.canEdit && (
                 <button style={{ fontSize: 11, marginTop: 8 }} onClick={() => startEdit(d)}>✎ Edit indent</button>
               )}

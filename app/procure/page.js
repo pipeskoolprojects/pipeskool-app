@@ -5,6 +5,7 @@ import { isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import {
   getOpenIndents, saveQuotes, buildComparison, createPO, getPOs, cancelPO, inr,
+  DELIVERY_STATUS, updatePODelivery,
 } from "@/lib/procure";
 import { getVendors } from "@/lib/vendors";
 
@@ -12,6 +13,7 @@ export default function ProcurePage() {
   const [session, setSession] = useState(null);
   const [indents, setIndents] = useState(null);
   const [pos, setPos] = useState([]);
+  const [deliv, setDeliv] = useState(null);   // PO being edited for delivery
   const [openId, setOpenId] = useState(null);
   const [quoteVendors, setQuoteVendors] = useState(["", "", ""]);
   const [rates, setRates] = useState({});
@@ -26,6 +28,14 @@ export default function ProcurePage() {
 
   const load = () => { getOpenIndents("all").then(setIndents); getPOs("all").then(setPos); };
   useEffect(() => { setSession(getSession()); load(); getVendors(false).then(setMasterVendors); }, []);
+
+  async function saveDelivery() {
+    setBusy(true);
+    const res = await updatePODelivery(deliv.id, { expected_delivery: deliv.expected_delivery, delivery_status: deliv.delivery_status, delivery_note: deliv.delivery_note });
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setDeliv(null); setMsg("Delivery updated for " + deliv.po_no + " — site can see it now."); getPOs("all").then(setPos);
+  }
 
   function openIndent(ind) {
     setOpenId(openId === ind.id ? null : ind.id);
@@ -283,29 +293,53 @@ export default function ProcurePage() {
           {pos.length === 0 ? <span className="muted">No POs yet.</span> : (
             <div style={{ overflowX: "auto" }}>
               <table className="dt-compact">
-                <thead><tr><th>PO no</th><th>Indent</th><th>Vendor</th><th>Site</th><th className="num">Amount</th><th>Lowest?</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
+                <thead><tr><th>PO no</th><th>Indent</th><th>Vendor</th><th className="num">Amount</th><th>Delivery</th><th>Status</th><th>Action</th></tr></thead>
                 <tbody>
-                  {pos.map(p => (
+                  {pos.map(p => { const [dl, dc] = DELIVERY_STATUS[p.delivery_status] || DELIVERY_STATUS.pending; return (
                     <tr key={p.id}>
                       <td style={{ fontWeight: 600 }}>{p.po_no}</td>
                       <td className="muted">{p.indent_no}</td>
                       <td>{p.vendor}</td>
-                      <td className="muted">{p.site}</td>
                       <td className="num">{inr(p.total)}</td>
-                      <td>{p.is_lowest ? <span className="badge p">Lowest</span> : <span className="badge warn" title={p.reason}>Reason ✎</span>}</td>
-                      <td><span className="badge gray">{p.status}</span></td>
-                      <td className="muted">{p.date}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
-                        <a href={"/purchase/po?po=" + p.id} target="_blank" rel="noreferrer"><button style={{ fontSize: 11.5, marginRight: 4 }}>View / Print</button></a>
+                        <span className={"badge " + dc}>{dl}</span>
+                        {p.expected_delivery && <div className="muted" style={{ fontSize: 11 }}>by {p.expected_delivery}</div>}
+                      </td>
+                      <td><span className="badge gray">{p.status}</span></td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => setDeliv({ id: p.id, po_no: p.po_no, expected_delivery: p.expected_delivery || "", delivery_status: p.delivery_status || "pending", delivery_note: p.delivery_note || "" })}>📦 Delivery</button>
+                        <a href={"/purchase/po?po=" + p.id} target="_blank" rel="noreferrer"><button style={{ fontSize: 11.5, marginRight: 4 }}>Print</button></a>
                         {p.status !== "cancelled" && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => doCancel(p)}>Cancel</button>}
                       </td>
                     </tr>
-                  ))}
+                  ); })}
                 </tbody>
               </table>
             </div>
           )}
         </div>
+        {deliv && (
+          <div onClick={() => setDeliv(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 90, padding: 16 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 440, width: "100%", padding: 22 }}>
+              <h2 style={{ marginBottom: 2 }}>Delivery — {deliv.po_no}</h2>
+              <div className="muted" style={{ marginBottom: 14, fontSize: 13 }}>The site sees this live on their mobile indent list.</div>
+              <div style={{ display: "grid", gap: 10 }}>
+                <div><label className="muted">Expected delivery date</label>
+                  <input type="date" style={{ width: "100%" }} value={deliv.expected_delivery} onChange={e => setDeliv(d => ({ ...d, expected_delivery: e.target.value }))} /></div>
+                <div><label className="muted">Status</label>
+                  <select style={{ width: "100%" }} value={deliv.delivery_status} onChange={e => setDeliv(d => ({ ...d, delivery_status: e.target.value }))}>
+                    {Object.entries(DELIVERY_STATUS).map(([k, v]) => <option key={k} value={k}>{v[0]}</option>)}
+                  </select></div>
+                <div><label className="muted">Note (optional, e.g. reason for delay)</label>
+                  <input style={{ width: "100%" }} value={deliv.delivery_note} onChange={e => setDeliv(d => ({ ...d, delivery_note: e.target.value }))} /></div>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                <button className="primary" disabled={busy} onClick={saveDelivery}>{busy ? "Saving…" : "Update delivery"}</button>
+                <button onClick={() => setDeliv(null)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
