@@ -2,13 +2,14 @@
 import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
-import { getMuster, proxyPunch } from "@/lib/mobile";
+import { getMuster, proxyPunch, proxyPunchOut } from "@/lib/mobile";
 
 const initials = n => n.split(" ").map(x => x[0]).slice(0, 2).join("");
 
 export default function MusterScreen() {
   const [rows, setRows] = useState(null);
   const [target, setTarget] = useState(null);
+  const [mode, setMode] = useState("in");   // in | out
   const [msg, setMsg] = useState("");
   const fileRef = useRef(null);
   const siteId = 1; // v1: supervisor's own site; role-based later
@@ -16,17 +17,19 @@ export default function MusterScreen() {
   const load = () => getMuster(siteId).then(setRows);
   useEffect(() => { load(); }, []);
 
-  function startProxy(r) {
-    setTarget(r); setMsg("");
+  function startProxy(r, m) {
+    setTarget(r); setMode(m); setMsg("");
     fileRef.current?.click();
   }
 
   async function onPhoto(e) {
     const file = e.target.files?.[0];
     if (!file || !target) return;
-    const res = await proxyPunch(target.id, siteId, file, "Supervisor");
+    const res = mode === "out"
+      ? await proxyPunchOut(target.id, siteId, file)
+      : await proxyPunch(target.id, siteId, file, "Supervisor");
     if (!res.ok) { setMsg(res.error); return; }
-    setMsg(`Proxy punch saved for ${target.name} — photo attached, flagged in records.`);
+    setMsg(`Proxy punch-${mode} saved for ${target.name} — photo attached, flagged in records.`);
     setTarget(null); e.target.value = "";
     load();
   }
@@ -69,8 +72,13 @@ export default function MusterScreen() {
             {r.status === "present" ? <span className="badge p">P</span> :
              r.status === "half_day" ? <span className="badge h">½</span> :
              r.status === "absent" ? <span className="badge a">A</span> :
-             r.in ? <span className="badge gray">On site</span> : (
-              <button style={{ fontSize: 11.5, padding: "6px 10px" }} onClick={() => startProxy(r)}>
+             r.in && !r.out ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+                <span className="badge gray">On site</span>
+                <button style={{ fontSize: 11, padding: "5px 9px" }} onClick={() => startProxy(r, "out")}>Mark out</button>
+              </div>
+             ) : r.in && r.out ? <span className="badge gray">Out {r.out}</span> : (
+              <button style={{ fontSize: 11.5, padding: "6px 10px" }} onClick={() => startProxy(r, "in")}>
                 Mark on behalf
               </button>
             )}
