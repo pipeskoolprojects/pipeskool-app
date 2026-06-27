@@ -64,6 +64,10 @@ export default function AssetsPage() {
     if (!res.ok) { setErr(res.error); return; }
     setMsg("Asset " + form.asset_code + " added to " + (SITE_NAMES[addSite] || "site") + "."); setForm(null);
   }
+  function downloadExcel() {
+    const a = document.createElement("a");
+    a.href = "/pipeskool_assets_template.xlsx"; a.download = "pipeskool_assets_template.xlsx"; a.click();
+  }
   function downloadTemplate() {
     const csv = ASSET_TEMPLATE_HEADERS.join(",") + "\n" +
       "PSK-TM-002,Threading machine (2 inch),Machine,KEI,Suresh,Ridgid 535,165000,no,\n" +
@@ -106,6 +110,7 @@ export default function AssetsPage() {
               <option value="2">SOUL Campus</option>
               <option value="3">The Creek</option>
             </select>
+            <button onClick={downloadExcel} title="Download the Excel template (with Site & Category dropdowns)">⬇ Excel template</button>
             <button onClick={() => { setForm({ ...blankAsset }); setMsg(""); setErr(""); }}>＋ Add asset</button>
             <button onClick={() => { setImporting(true); setBulkRows([]); setBulkResult(null); setMsg(""); }}>⬆ Import CSV</button>
             <input ref={fileRef} type="file" accept=".csv" style={{ display: "none" }} onChange={onFile} />
@@ -127,9 +132,12 @@ export default function AssetsPage() {
               <div style={{ marginTop: 4 }}><b>calibration_required</b> — yes / no &nbsp;·&nbsp; <b>calibration_due</b> — date like 2026-12-31 (blank if no)</div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button className="primary" onClick={downloadTemplate}>⬇ Download CSV template</button>
+              <button className="primary" onClick={downloadExcel}>⬇ Download Excel template (dropdowns)</button>
               <button onClick={() => fileRef.current?.click()}>📄 Choose CSV file</button>
               <button onClick={() => setImporting(false)}>Cancel</button>
+            </div>
+            <div className="muted" style={{ marginTop: 10, fontSize: 12.5 }}>
+              Fill the Excel template (Site &amp; Category are dropdowns) → <b>File → Save As → CSV</b> → Choose CSV file above. Prefer plain CSV? <a onClick={downloadTemplate} style={{ color: "var(--copper)", cursor: "pointer", textDecoration: "underline" }}>Download CSV template</a> instead.
             </div>
           </div>
         )}
