@@ -207,9 +207,27 @@ export default function ProcurePage() {
 
                 {openId === ind.id && (
                   <div style={{ padding: "0 12px 14px" }}>
-                    <div className="muted" style={{ margin: "4px 0 8px" }}><b>1.</b> Add the vendors you'll ask, <b>2.</b> tick which items each one should quote, <b>3.</b> enter list rate + discount % (net is auto-calculated), then compare & award.</div>
+                    <div className="muted" style={{ margin: "4px 0 8px" }}><b>1.</b> Review what's required, <b>2.</b> add the vendors you'll ask, <b>3.</b> tick which items each one should quote, <b>4.</b> enter list rate + discount % (net is auto-calculated), then compare & award.</div>
 
-                    {/* 1. add vendors */}
+                    {/* requirement — always visible */}
+                    <div style={{ background: "var(--bg)", borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Requirement — {ind.items.length} item{ind.items.length !== 1 ? "s" : ""}{ind.required_by ? " · need by " + ind.required_by : ""}</div>
+                      <table className="dt-compact" style={{ width: "100%" }}>
+                        <thead><tr><th>#</th><th>Item</th><th className="num">Qty</th><th>Purpose</th></tr></thead>
+                        <tbody>
+                          {ind.items.map((it, idx) => (
+                            <tr key={it.id}>
+                              <td className="muted">{idx + 1}</td>
+                              <td style={{ fontWeight: 600 }}>{it.item_name}</td>
+                              <td className="num">{it.qty} {it.unit}</td>
+                              <td className="muted">{it.purpose || "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* add vendors */}
                     <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
                       <select value={vendorPick} onChange={e => setVendorPick(e.target.value)} style={{ width: 220 }}>
                         <option value="">Add a vendor…</option>
@@ -224,7 +242,7 @@ export default function ProcurePage() {
                     </div>
 
                     {enqVendors.length === 0 ? (
-                      <div className="muted" style={{ padding: "8px 0" }}>Add at least one vendor to start. For comparison, add 2–3 vendors for the same items.</div>
+                      <div className="muted" style={{ padding: "8px 0" }}>Add the vendors you want to send this enquiry to. For comparison, add 2–3 vendors for the same items.</div>
                     ) : (
                       <div style={{ overflowX: "auto" }}>
                         <table className="dt-compact">
