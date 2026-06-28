@@ -285,21 +285,50 @@ export default function ProcurePage() {
                     {cmp && (
                       <div style={{ marginTop: 14, background: "var(--bg)", borderRadius: 10, padding: 12 }}>
                         <h3 style={{ fontSize: 14, marginBottom: 8 }}>Comparison</h3>
-                        <table className="dt-compact">
-                          <thead><tr><th>Vendor (full indent)</th><th className="num">Total</th><th></th></tr></thead>
-                          <tbody>
-                            {cmp.vendorTotals.map((v, i) => (
-                              <tr key={v.vendor}>
-                                <td style={{ fontWeight: 600 }}>{v.vendor} {i === 0 && <span className="badge p">Lowest</span>}</td>
-                                <td className="num">{inr(v.total)}</td>
-                                <td>{i > 0 && <span className="muted">+{inr(v.total - cmp.bestWhole.total)}</span>}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+
+                        {/* per-item rate comparison — cheapest highlighted */}
+                        <div style={{ overflowX: "auto", marginBottom: 12 }}>
+                          <table className="dt-compact">
+                            <thead><tr><th>Item</th><th className="num">Qty</th>{cmp.vendors.map(v => <th key={v} className="num">{v}</th>)}<th>Cheapest</th></tr></thead>
+                            <tbody>
+                              {ind.items.map(it => {
+                                const row = cmp.matrix[it.id] || {};
+                                const best = cmp.splitChoice[it.id];
+                                return (
+                                  <tr key={it.id}>
+                                    <td style={{ fontWeight: 600 }}>{it.item_name}<div className="muted">{it.qty} {it.unit}</div></td>
+                                    <td className="num">{it.qty} {it.unit}</td>
+                                    {cmp.vendors.map(v => {
+                                      const r = row[v]; const isBest = best && best.vendor === v;
+                                      return <td key={v} className="num" style={{ fontWeight: isBest ? 700 : 400, color: isBest ? "var(--copper-deep)" : (r == null ? "var(--muted)" : "inherit"), background: isBest ? "rgba(255,122,26,0.10)" : "transparent" }}>{r == null ? "—" : inr(r)}</td>;
+                                    })}
+                                    <td>{best ? <span className="badge p">{best.vendor}</span> : <span className="muted">no quote</span>}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {cmp.vendorTotals.length > 0 ? (
+                          <table className="dt-compact">
+                            <thead><tr><th>Vendor (quoted full indent)</th><th className="num">Total</th><th></th></tr></thead>
+                            <tbody>
+                              {cmp.vendorTotals.map((v, i) => (
+                                <tr key={v.vendor}>
+                                  <td style={{ fontWeight: 600 }}>{v.vendor} {i === 0 && <span className="badge p">Lowest</span>}</td>
+                                  <td className="num">{inr(v.total)}</td>
+                                  <td>{i > 0 && <span className="muted">+{inr(v.total - cmp.bestWhole.total)}</span>}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <div className="muted" style={{ fontSize: 12.5 }}>No single vendor quoted every item — that's normal when you split pipes and hardware across different vendors. Use the per-item table above, or <b>Split</b> below to award each item to its cheapest vendor.</div>
+                        )}
                         <div className="muted" style={{ marginTop: 8 }}>
-                          Best single vendor: <b>{cmp.bestWhole ? cmp.bestWhole.vendor + " at " + inr(cmp.bestWhole.total) : "—"}</b>.
-                          {" "}Split to cheapest per item: <b>{inr(cmp.splitTotal)}</b>
+                          {cmp.bestWhole && <>Best single vendor: <b>{cmp.bestWhole.vendor} at {inr(cmp.bestWhole.total)}</b>. </>}
+                          Split to cheapest per item: <b>{inr(cmp.splitTotal)}</b>
                           {cmp.gap > 0 && <> — splitting saves <b style={{ color: "var(--copper-deep)" }}>{inr(cmp.gap)} ({cmp.gapPct}%)</b> but needs multiple POs / more transport.</>}
                         </div>
                         <div style={{ marginTop: 10, marginBottom: 4 }}>
