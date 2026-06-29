@@ -20,6 +20,7 @@ export default function ProcurePage() {
   const [alloc, setAlloc] = useState({});                // {itemId: {vendor: true}}  which vendor quotes which item
   const [qin, setQin] = useState({});                    // {itemId: {vendor: {list, disc}}}
   const [rates, setRates] = useState({});                // derived NET map {itemId: {vendor: net}}
+  const [enqSel, setEnqSel] = useState({});              // {itemId: bool} items to include in enquiry download
   const [cmp, setCmp] = useState(null);
   const [awardVendor, setAwardVendor] = useState("");
   const [splitMode, setSplitMode] = useState(false);
@@ -45,6 +46,7 @@ export default function ProcurePage() {
     setOpenId(willOpen ? ind.id : null);
     setCmp(null); setRates({}); setAwardVendor(""); setReason(""); setMsg(""); setErr(""); setSplitMode(false); setItemVendor({}); setItemSplits({});
     setEnqVendors([]); setVendorPick(""); setAlloc({}); setQin({});
+    const sel = {}; ind.items.forEach(it => sel[it.id] = true); setEnqSel(sel);
     if (willOpen) {
       const quotes = await getQuotes(ind.id);
       if (quotes.length) {
@@ -79,6 +81,39 @@ export default function ProcurePage() {
     const disc = Number(c.disc) || 0;
     return +(list * (1 - disc / 100)).toFixed(2);
   };
+
+  // ---- enquiry download (#6) ----
+  const toggleEnqItem = id => setEnqSel(s => ({ ...s, [id]: !s[id] }));
+  const toggleEnqCat = (list, on) => setEnqSel(s => { const n = { ...s }; list.forEach(it => n[it.id] = on); return n; });
+
+  function downloadEnquiryPDF(ind) {
+    const chosen = ind.items.filter(it => enqSel[it.id]);
+    if (!chosen.length) { setErr("Tick at least one item to download."); return; }
+    setErr("");
+    const cats = Array.from(new Set(chosen.map(it => it.category)));
+    const title = "Enquiry — " + cats.join(" & ");
+    const url = `/purchase/enquiry?indent=${ind.id}&items=${chosen.map(it => it.id).join(",")}&title=${encodeURIComponent(title)}`;
+    window.open(url, "_blank");
+  }
+
+  async function downloadEnquiryExcel(ind) {
+    const chosen = ind.items.filter(it => enqSel[it.id]);
+    if (!chosen.length) { setErr("Tick at least one item to download."); return; }
+    setErr("");
+    const XLSX = await import("xlsx");
+    const cats = Array.from(new Set(chosen.map(it => it.category)));
+    const head = [
+      ["Pipeskool Projects Pvt. Ltd. — Material Enquiry"],
+      ["Project", ind.site || ""], ["Indent ref", ind.indent_no], ["Required by", ind.required_by || ""], [],
+      ["#", "Category", "Description", "Qty", "Unit", "List Rate", "Disc %", "Net Rate"],
+    ];
+    const rows = chosen.map((it, i) => [i + 1, it.category, it.item_name, Number(it.qty), it.unit, "", "", ""]);
+    const ws = XLSX.utils.aoa_to_sheet([...head, ...rows]);
+    ws["!cols"] = [{ wch: 4 }, { wch: 14 }, { wch: 46 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 8 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Enquiry");
+    XLSX.writeFile(wb, `Enquiry_${ind.indent_no.replace(/\//g, "-")}_${cats.join("-")}.xlsx`);
+  }
 
   // derived NET-rate map → feeds the existing compare/award engine
   useEffect(() => {
@@ -226,6 +261,42 @@ export default function ProcurePage() {
                         </tbody>
                       </table>
                     </div>
+
+                    {/* enquiry download — by category (#6) */}
+                    {(() => {
+                      const byCat = ind.items.reduce((a, it) => { (a[it.category] = a[it.category] || []).push(it); return a; }, {});
+                      const chosenCount = ind.items.filter(it => enqSel[it.id]).length;
+                      return (
+                        <div style={{ border: "1px dashed var(--border)", borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>Send enquiry to vendors</div>
+                          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Tick the items to include, then download. Do it once per vendor group — e.g. pipes &amp; fittings together, hardware separately — and send via WhatsApp / mail.</div>
+                          {Object.entries(byCat).map(([cat, list]) => {
+                            const allOn = list.every(it => enqSel[it.id]);
+                            return (
+                              <div key={cat} style={{ marginBottom: 6 }}>
+                                <label style={{ fontWeight: 600, fontSize: 12.5, display: "inline-flex", gap: 6, alignItems: "center", cursor: "pointer" }}>
+                                  <input type="checkbox" checked={allOn} onChange={() => toggleEnqCat(list, !allOn)} style={{ accentColor: "var(--copper)" }} />
+                                  {cat} <span className="muted">({list.length})</span>
+                                </label>
+                                <div style={{ paddingLeft: 22 }}>
+                                  {list.map(it => (
+                                    <label key={it.id} style={{ display: "block", fontSize: 12, cursor: "pointer", padding: "1px 0" }}>
+                                      <input type="checkbox" checked={!!enqSel[it.id]} onChange={() => toggleEnqItem(it.id)} style={{ accentColor: "var(--copper)", marginRight: 6 }} />
+                                      {it.item_name} · {it.qty} {it.unit}
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                          <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+                            <button onClick={() => downloadEnquiryPDF(ind)} disabled={!chosenCount}>⬇ PDF</button>
+                            <button onClick={() => downloadEnquiryExcel(ind)} disabled={!chosenCount}>⬇ Excel</button>
+                            <span className="muted" style={{ fontSize: 11.5 }}>{chosenCount} of {ind.items.length} items selected</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* add vendors */}
                     <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
