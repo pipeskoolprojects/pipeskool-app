@@ -20,6 +20,7 @@ const GROUPS = [
   ] },
   { label: "Commercial / Billing", items: [
     { href: "/billing", label: "RA Billing", module: null },
+    { href: "/tally", label: "Tally Export", module: null },
   ] },
 ];
 
