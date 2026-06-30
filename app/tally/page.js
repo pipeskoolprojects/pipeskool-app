@@ -4,8 +4,8 @@ import Sidebar from "@/components/Sidebar";
 import { isDemo } from "@/lib/supabase";
 import {
   getTallySettings, saveTallySettings, getPurchasesForTally, getStockMasters,
-  markPurchasesExported, markPOsOrderExported,
-  buildPurchaseXml, buildPurchaseOrderXml, buildMasterXml, gstParts,
+  markPurchasesExported, markPOsOrderExported, getGrnsForTally, markGrnsExported,
+  buildPurchaseXml, buildPurchaseOrderXml, buildMasterXml, buildReceiptNoteXml, gstParts,
 } from "@/lib/tally";
 
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
@@ -37,10 +37,11 @@ export default function TallyPage() {
   const [rows, setRows] = useState(null);
   const [loading, setLoading] = useState(false);
   const [masters, setMasters] = useState(null);
+  const [grns, setGrns] = useState(null);
 
   useEffect(() => { getTallySettings().then(setS); }, []);
   const set = (k, v) => setS(x => ({ ...x, [k]: v }));
-  const switchTab = t => { setTab(t); setRows(null); setMasters(null); setMsg(""); setErr(""); };
+  const switchTab = t => { setTab(t); setRows(null); setMasters(null); setGrns(null); setMsg(""); setErr(""); };
 
   async function save() {
     setSavingS(true); const r = await saveTallySettings(s); setSavingS(false);
@@ -57,6 +58,23 @@ export default function TallyPage() {
   async function loadMasters() {
     setLoading(true); setMsg(""); setErr("");
     const m = await getStockMasters(); setMasters(m); setLoading(false);
+  }
+
+  async function loadGrns() {
+    setLoading(true); setMsg(""); setErr("");
+    const g = await getGrnsForTally(from, to, onlyNew); setGrns(g); setLoading(false);
+  }
+
+  function exportReceiptNotes() {
+    if (!grns || !grns.length) { setErr("Load goods receipts first."); return; }
+    downloadXml(buildReceiptNoteXml(grns, s), `Tally_ReceiptNotes_${from}_to_${to}.xml`);
+    setMsg("Receipt Note XML downloaded. In TallyPrime: Gateway → Import → Vouchers → select this file. (Stock items must already be synced.)");
+  }
+
+  async function markGrnsDone() {
+    if (!grns || !grns.length) return;
+    const r = await markGrnsExported(grns.map(g => g.grn_no));
+    if (r.ok) { setMsg("Marked " + grns.length + " receipt(s) as exported."); loadGrns(); } else setErr(r.error);
   }
 
   const totals = (rows || []).reduce((t, p) => {
@@ -122,7 +140,8 @@ export default function TallyPage() {
           <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
             <TabBtn id="masters" label="1 · Stock items" />
             <TabBtn id="orders" label="2 · Purchase orders" />
-            <TabBtn id="bills" label="3 · Purchase bills" />
+            <TabBtn id="grns" label="3 · Goods receipts" />
+            <TabBtn id="bills" label="4 · Purchase bills" />
           </div>
 
           {tab === "masters" ? (
@@ -138,6 +157,49 @@ export default function TallyPage() {
                   <button className="primary" onClick={exportMasters}>⬇ Download stock-item masters XML</button>
                 </div>
               )}
+            </>
+          ) : tab === "grns" ? (
+            <>
+              <div className="muted" style={{ marginBottom: 12, fontSize: 12.5 }}>Goods received from vendors (recorded as GRN on the mobile app). Print the delivery/goods-received challan, and export to Tally as <b>Receipt Note</b> vouchers. Stock items must be synced first (tab 1).</div>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 12 }}>
+                <div><label className="muted">From</label><input type="date" value={from} onChange={e => setFrom(e.target.value)} /></div>
+                <div><label className="muted">To</label><input type="date" value={to} onChange={e => setTo(e.target.value)} /></div>
+                <label style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+                  <input type="checkbox" checked={onlyNew} onChange={e => setOnlyNew(e.target.checked)} style={{ accentColor: "var(--copper)" }} />
+                  Only not-yet-exported
+                </label>
+                <button className="primary" disabled={loading} onClick={loadGrns}>{loading ? "Loading…" : "Load goods receipts"}</button>
+              </div>
+              {grns && (grns.length === 0 ? <div className="muted">No goods receipts in this range.</div> : (
+                <>
+                  <div style={{ overflowX: "auto" }}>
+                    <table className="dt-compact">
+                      <thead><tr><th>GRN</th><th>Date</th><th>Supplier</th><th>Vendor challan</th><th className="num">Items</th><th className="num">Value</th><th></th><th></th></tr></thead>
+                      <tbody>
+                        {grns.map(g => {
+                          const val = g.lines.reduce((sx, l) => sx + l.received_qty * l.rate, 0);
+                          return (
+                            <tr key={g.grn_no}>
+                              <td style={{ fontWeight: 600 }}>{g.grn_no}</td>
+                              <td className="muted">{g.date}</td>
+                              <td>{g.vendor || "—"}</td>
+                              <td className="muted">{g.challan_no || "—"}</td>
+                              <td className="num">{g.lines.length}</td>
+                              <td className="num">{inr(val)}</td>
+                              <td><a href={"/purchase/challan?grn=" + encodeURIComponent(g.grn_no)} target="_blank" rel="noreferrer"><button style={{ fontSize: 11.5 }}>🧾 Print challan</button></a></td>
+                              <td>{g.exported && <span className="badge gray">exported</span>}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                    <button className="primary" onClick={exportReceiptNotes}>⬇ Download Receipt Note XML</button>
+                    <button onClick={markGrnsDone}>Mark as exported</button>
+                  </div>
+                </>
+              ))}
             </>
           ) : (
             <>
