@@ -7,11 +7,13 @@ import {
   getStaff, getUserSites, getSitePermissions, setSitePermission, assignSite, removeSite,
   resetSiteToRole, copySitePermissions, addStaff, MODULES, ACTIONS, ALL_SITES,
 } from "@/lib/access";
+import { getRoles } from "@/lib/access";
 
-const ROLES = [
+const FALLBACK_ROLES = [
   ["director", "Director"], ["ho_admin", "Accountant"], ["supervisor", "Site Incharge"],
   ["site_engineer", "Site Engineer"], ["storekeeper", "Storekeeper"], ["worker", "Worker / Labour"],
 ];
+let ROLES = FALLBACK_ROLES;
 const roleLabel = r => (ROLES.find(x => x[0] === r) || ["", r])[1];
 
 export default function AccessPage() {
@@ -25,6 +27,7 @@ export default function AccessPage() {
   const [adding, setAdding] = useState(false);
   const [nf, setNf] = useState({ full_name: "", mobile: "", role: "supervisor", site_id: "" });
 
+  useEffect(() => { getRoles().then(rs => { if (rs?.length) ROLES = rs.map(r => [r.code, r.label]); }); }, []);
   useEffect(() => { setSession(getSession()); getStaff().then(setStaff); }, []);
 
   async function openUser(u) {

@@ -4,14 +4,13 @@ import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { getWorkers, saveWorker, inr } from "@/lib/data";
 import { getContractors, getSitesList } from "@/lib/mobile";
-import { getStaff, addStaff, updateStaff } from "@/lib/access";
+import { getStaff, addStaff, updateStaff, getRoles, addRole } from "@/lib/access";
 import { getSession } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
 
 const CATEGORIES = ["plumber", "fitter", "helper", "welder", "supervisor", "operator", "electrician", "mason", "other"];
 const EMPTY = { full_name: "", mobile: "", category: "plumber", labour_type: "own", contractor_id: "", site_id: "", daily_wage: "", is_active: true };
-const ROLES = [["director", "Director"], ["ho_admin", "Accountant / HO Admin"], ["site_engineer", "Site Engineer"], ["supervisor", "Site Incharge / Supervisor"], ["storekeeper", "Storekeeper"]];
-const roleLabel = r => (ROLES.find(x => x[0] === r) || ["", r])[1];
+// roles load dynamically from the Role Master (staff_roles table)
 const S_EMPTY = { full_name: "", mobile: "", role: "supervisor", site_id: "", is_active: true };
 
 export default function WorkersPage() {
@@ -19,6 +18,9 @@ export default function WorkersPage() {
   const [sites, setSites] = useState([]);
   const [contractors, setContractors] = useState([]);
   const [tab, setTab] = useState("workers");    // workers | staff
+  const [roles, setRoles] = useState([]);
+  const [roleModal, setRoleModal] = useState(false);
+  const [newRole, setNewRole] = useState("");
   const [staff, setStaff] = useState(null);
   const [smodal, setSmodal] = useState(null);    // staff add/edit modal
   const [modal, setModal] = useState(null);     // { id?, ...form }  null = closed
@@ -27,7 +29,8 @@ export default function WorkersPage() {
 
   const sess = typeof window !== "undefined" ? getSession() : null;
   const isDirector = sess?.role === "director";
-  const load = () => { getWorkers().then(setRows); getStaff().then(setStaff); };
+  const load = () => { getWorkers().then(setRows); getStaff().then(setStaff); getRoles().then(setRoles); };
+  const roleLabel = r => (roles.find(x => x.code === r) || { label: r }).label;
   useEffect(() => { load(); getSitesList().then(setSites); getContractors().then(setContractors); }, []);
 
   const incompleteCount = (rows || []).filter(r => !r.complete).length;
@@ -43,6 +46,14 @@ export default function WorkersPage() {
   }
 
   const sset = (k, v) => setSmodal(m => ({ ...m, [k]: v }));
+  async function saveNewRole() {
+    setBusy(true); setErr("");
+    const res = await addRole(newRole);
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setNewRole(""); setMsg("Role added — it's now available in the Role dropdown. Set its rights per staff member in Admin → Access Rights.");
+    getRoles().then(setRoles);
+  }
   async function saveStaff() {
     setBusy(true); setErr("");
     const res = smodal.id
@@ -77,7 +88,10 @@ export default function WorkersPage() {
           <h1>Workers &amp; Staff master</h1>
           {tab === "workers"
             ? <button className="primary" onClick={() => { setErr(""); setModal({ ...EMPTY }); }}>＋ Add worker</button>
-            : isDirector && <button className="primary" onClick={() => { setErr(""); setSmodal({ ...S_EMPTY }); }}>＋ Add staff</button>}
+            : isDirector && <span style={{ display: "inline-flex", gap: 8 }}>
+                <button onClick={() => { setErr(""); setRoleModal(true); }}>⚙ Manage roles</button>
+                <button className="primary" onClick={() => { setErr(""); setSmodal({ ...S_EMPTY }); }}>＋ Add staff</button>
+              </span>}
         </div>
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           <button className={tab === "workers" ? "primary" : ""} onClick={() => setTab("workers")}>Workers (labour)</button>
@@ -175,7 +189,7 @@ export default function WorkersPage() {
                   {smodal.id && <div className="muted" style={{ fontSize: 11 }}>⚠ Changing the mobile changes their login number — their password stays the same.</div>}</div>
                 <div><label className="muted">Role</label>
                   <select style={{ width: "100%" }} value={smodal.role} onChange={e => sset("role", e.target.value)}>
-                    {ROLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    {roles.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}
                   </select></div>
                 {!smodal.id && (
                   <div><label className="muted">First site (rights can be refined in Access Rights)</label>
@@ -196,6 +210,24 @@ export default function WorkersPage() {
                 <button className="primary" disabled={busy} onClick={saveStaff}>{busy ? "Saving…" : smodal.id ? "Save changes" : "Add staff"}</button>
                 <button onClick={() => setSmodal(null)}>Cancel</button>
               </div>
+            </div>
+          </div>
+        )}
+        {roleModal && (
+          <div onClick={() => setRoleModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 420, width: "100%", padding: 22 }}>
+              <h2 style={{ marginBottom: 4 }}>Role master</h2>
+              <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>Roles are labels for staff. A new role starts with <b>no rights</b> — after assigning it, open Admin → Access Rights and tick what that person can do per site.</div>
+              <div style={{ marginBottom: 12 }}>
+                {roles.map(r => <div key={r.code} style={{ padding: "7px 0", borderBottom: "1px solid var(--border)", fontSize: 13.5 }}>{r.label} <span className="muted" style={{ fontSize: 11 }}>({r.code})</span></div>)}
+              </div>
+              <label className="muted">New role name</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input style={{ flex: 1 }} value={newRole} onChange={e => setNewRole(e.target.value)} placeholder="e.g. Billing Engineer" />
+                <button className="primary" disabled={busy || !newRole.trim()} onClick={saveNewRole}>{busy ? "Adding…" : "＋ Add role"}</button>
+              </div>
+              {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
+              <div style={{ marginTop: 14 }}><button onClick={() => setRoleModal(false)}>Close</button></div>
             </div>
           </div>
         )}
