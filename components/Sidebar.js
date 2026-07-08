@@ -9,7 +9,7 @@ const GROUPS = [
   { label: "Core Site Operations", items: [
     { href: "/attendance", label: "Attendance & Labour", module: "attendance" },
     { href: "/wages", label: "Muster Roll & Wages", module: "wages" },
-    { href: "/workers", label: "Workers", module: "workers" },
+    { href: "/workers", label: "Workers & Staff Master", module: "workers" },
     { href: "/dpr", label: "Daily Progress Report (DPR)", module: "dpr" },
     { href: "/boq", label: "BOQ Master", module: "dpr" },
     { href: "/expenses", label: "Expenses & Petty Cash", module: "money" },

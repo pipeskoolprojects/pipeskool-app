@@ -4,20 +4,30 @@ import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { getWorkers, saveWorker, inr } from "@/lib/data";
 import { getContractors, getSitesList } from "@/lib/mobile";
+import { getStaff, addStaff, updateStaff } from "@/lib/access";
+import { getSession } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
 
 const CATEGORIES = ["plumber", "fitter", "helper", "welder", "supervisor", "operator", "electrician", "mason", "other"];
 const EMPTY = { full_name: "", mobile: "", category: "plumber", labour_type: "own", contractor_id: "", site_id: "", daily_wage: "", is_active: true };
+const ROLES = [["director", "Director"], ["ho_admin", "Accountant / HO Admin"], ["site_engineer", "Site Engineer"], ["supervisor", "Site Incharge / Supervisor"], ["storekeeper", "Storekeeper"]];
+const roleLabel = r => (ROLES.find(x => x[0] === r) || ["", r])[1];
+const S_EMPTY = { full_name: "", mobile: "", role: "supervisor", site_id: "", is_active: true };
 
 export default function WorkersPage() {
   const [rows, setRows] = useState(null);
   const [sites, setSites] = useState([]);
   const [contractors, setContractors] = useState([]);
+  const [tab, setTab] = useState("workers");    // workers | staff
+  const [staff, setStaff] = useState(null);
+  const [smodal, setSmodal] = useState(null);    // staff add/edit modal
   const [modal, setModal] = useState(null);     // { id?, ...form }  null = closed
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
 
-  const load = () => getWorkers().then(setRows);
+  const sess = typeof window !== "undefined" ? getSession() : null;
+  const isDirector = sess?.role === "director";
+  const load = () => { getWorkers().then(setRows); getStaff().then(setStaff); };
   useEffect(() => { load(); getSitesList().then(setSites); getContractors().then(setContractors); }, []);
 
   const incompleteCount = (rows || []).filter(r => !r.complete).length;
@@ -30,6 +40,18 @@ export default function WorkersPage() {
     if (!res.ok) { setErr(res.error); return; }
     setMsg(modal.id ? "Worker updated." : "Worker added — they can log in with their mobile and punch.");
     setModal(null); load();
+  }
+
+  const sset = (k, v) => setSmodal(m => ({ ...m, [k]: v }));
+  async function saveStaff() {
+    setBusy(true); setErr("");
+    const res = smodal.id
+      ? await updateStaff(smodal.id, smodal)
+      : await addStaff({ full_name: smodal.full_name, mobile: String(smodal.mobile || "").trim(), role: smodal.role, site_id: smodal.site_id ? Number(smodal.site_id) : null });
+    setBusy(false);
+    if (!res.ok && res.error) { setErr(res.error); return; }
+    setMsg(smodal.id ? "Staff member updated." : "Staff added — they sign in with their mobile and create a password on first login. Set their module rights in Admin → Access Rights.");
+    setSmodal(null); load();
   }
 
   const columns = [
@@ -52,20 +74,49 @@ export default function WorkersPage() {
       <Sidebar />
       <main className="main">
         <div className="page-head">
-          <h1>Worker master</h1>
-          <button className="primary" onClick={() => { setErr(""); setModal({ ...EMPTY }); }}>＋ Add worker</button>
+          <h1>Workers &amp; Staff master</h1>
+          {tab === "workers"
+            ? <button className="primary" onClick={() => { setErr(""); setModal({ ...EMPTY }); }}>＋ Add worker</button>
+            : isDirector && <button className="primary" onClick={() => { setErr(""); setSmodal({ ...S_EMPTY }); }}>＋ Add staff</button>}
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <button className={tab === "workers" ? "primary" : ""} onClick={() => setTab("workers")}>Workers (labour)</button>
+          <button className={tab === "staff" ? "primary" : ""} onClick={() => setTab("staff")}>Staff (login users)</button>
         </div>
         {isDemo && <div className="demo-banner">Demo mode — sample worker master shown.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
-        {incompleteCount > 0 && (
+        {tab === "workers" && incompleteCount > 0 && (
           <div className="demo-banner">
             {incompleteCount} profile{incompleteCount > 1 ? "s" : ""} incomplete (Aadhaar or bank pending).
           </div>
         )}
-        <div className="panel">
-          {!rows ? <div className="muted">Loading…</div> :
-            <DataTable columns={columns} rows={rows} exportName="workers" />}
-        </div>
+        {tab === "workers" && (
+          <div className="panel">
+            {!rows ? <div className="muted">Loading…</div> :
+              <DataTable columns={columns} rows={rows} exportName="workers" />}
+          </div>
+        )}
+        {tab === "staff" && (
+          <div className="panel">
+            <div className="muted" style={{ marginBottom: 10, fontSize: 12.5 }}>Staff sign in with mobile + password (created on first login). Module permissions per site are managed in <b>Admin → Access Rights</b>.</div>
+            {!staff ? <div className="muted">Loading…</div> : (
+              <table>
+                <thead><tr><th>Name</th><th>Mobile (login)</th><th>Role</th><th></th></tr></thead>
+                <tbody>
+                  {staff.map(u => (
+                    <tr key={u.id}>
+                      <td style={{ fontWeight: 600 }}>{u.full_name}</td>
+                      <td className="muted">{u.mobile}</td>
+                      <td>{roleLabel(u.role)}</td>
+                      <td style={{ textAlign: "right" }}>{isDirector && <button style={{ fontSize: 11.5 }} onClick={() => { setErr(""); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true }); }}>✎ Edit</button>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {!isDirector && <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>Only the Director can add or edit staff.</div>}
+          </div>
+        )}
 
         {modal && (
           <div onClick={() => setModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}>
@@ -110,6 +161,40 @@ export default function WorkersPage() {
               <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
                 <button className="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : modal.id ? "Save changes" : "Add worker"}</button>
                 <button onClick={() => setModal(null)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {smodal && (
+          <div onClick={() => setSmodal(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 440, width: "100%", padding: 22 }}>
+              <h2 style={{ marginBottom: 12 }}>{smodal.id ? "Edit staff member" : "Add staff member"}</h2>
+              <div style={{ display: "grid", gap: 10 }}>
+                <div><label className="muted">Full name *</label><input style={{ width: "100%" }} value={smodal.full_name} onChange={e => sset("full_name", e.target.value)} /></div>
+                <div><label className="muted">Mobile (login) *</label><input style={{ width: "100%" }} inputMode="numeric" value={smodal.mobile} onChange={e => sset("mobile", e.target.value)} />
+                  {smodal.id && <div className="muted" style={{ fontSize: 11 }}>⚠ Changing the mobile changes their login number — their password stays the same.</div>}</div>
+                <div><label className="muted">Role</label>
+                  <select style={{ width: "100%" }} value={smodal.role} onChange={e => sset("role", e.target.value)}>
+                    {ROLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select></div>
+                {!smodal.id && (
+                  <div><label className="muted">First site (rights can be refined in Access Rights)</label>
+                    <select style={{ width: "100%" }} value={smodal.site_id || ""} onChange={e => sset("site_id", e.target.value)}>
+                      <option value="">— none —</option>
+                      {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select></div>
+                )}
+                {smodal.id && (
+                  <label style={{ display: "inline-flex", gap: 7, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+                    <input type="checkbox" checked={smodal.is_active !== false} onChange={e => sset("is_active", e.target.checked)} style={{ accentColor: "var(--copper)" }} />
+                    Active (untick to deactivate — they can no longer sign in)
+                  </label>
+                )}
+              </div>
+              {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
+              <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                <button className="primary" disabled={busy} onClick={saveStaff}>{busy ? "Saving…" : smodal.id ? "Save changes" : "Add staff"}</button>
+                <button onClick={() => setSmodal(null)}>Cancel</button>
               </div>
             </div>
           </div>

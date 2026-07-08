@@ -30,7 +30,7 @@ export default function Login() {
     const res = await loginByMobilePassword(mobile, password);
     setBusy(false);
     if (!res.ok) { setError(res.error); return; }
-    router.push("/dashboard");
+    router.push(window.innerWidth <= 820 ? "/m" : "/dashboard");
   }
 
   async function handleCreate(e) {
@@ -41,7 +41,7 @@ export default function Login() {
     const res = await createPasswordAndLogin(mobile, password);
     setBusy(false);
     if (!res.ok) { setError(res.error); return; }
-    router.push("/dashboard");
+    router.push(window.innerWidth <= 820 ? "/m" : "/dashboard");
   }
 
   const back = () => { setMode("start"); setPassword(""); setConfirm(""); setError(""); };
