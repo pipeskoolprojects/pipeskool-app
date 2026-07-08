@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { getMuster, verifyDay } from "@/lib/mobile";
+import { getSession } from "@/lib/auth";
 
 const initials = n => n.split(" ").map(x => x[0]).slice(0, 2).join("");
 
@@ -10,7 +11,8 @@ export default function VerifyScreen() {
   const [rows, setRows] = useState(null);
   const [done, setDone] = useState(false);
   const [msg, setMsg] = useState("");
-  const siteId = 1;
+  const sess = typeof window !== "undefined" ? getSession() : null;
+  const siteId = sess?.currentSite || sess?.sites?.[0]?.id || 1;
 
   useEffect(() => { getMuster(siteId).then(setRows); }, []);
 

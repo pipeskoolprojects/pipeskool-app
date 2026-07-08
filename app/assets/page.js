@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
+import { getSession } from "@/lib/auth";
 import { getAssets, getCalibrationDue, getRepairHistory, idleAssets, statusInfo, inr, addAsset, bulkImportAssets, ASSET_TEMPLATE_HEADERS, CATEGORIES, resolveSite, getStaffNames, transferAsset, flagNeedsRepair, sendForRepair, cancelRepair, repairDone, reportLost } from "@/lib/assets";
 
 const SITE_NAMES = { 1: "KEI Sanand", 2: "SOUL Campus", 3: "The Creek" };
@@ -30,21 +31,22 @@ export default function AssetsPage() {
   function closeModal() { setModal(null); setMv({}); }
   async function runModal() {
     const a = modal.asset; setErr(""); setBusy(true); let res;
+    const uid = getSession()?.id || 1;
     if (modal.type === "transfer") {
       if (!mv.to) { setErr("Pick a destination site."); setBusy(false); return; }
-      res = await transferAsset(a.id, a.site_id, Number(mv.to), (mv.custodian || "").trim());
+      res = await transferAsset(a.id, a.site_id, Number(mv.to), (mv.custodian || "").trim(), uid);
     } else if (modal.type === "needs_repair") {
       if (!mv.issue?.trim()) { setErr("Describe the problem."); setBusy(false); return; }
-      res = await flagNeedsRepair(a.id, mv.issue.trim());
+      res = await flagNeedsRepair(a.id, mv.issue.trim(), uid);
     } else if (modal.type === "send_repair") {
-      res = await sendForRepair(a.id, (mv.vendor || "").trim());
+      res = await sendForRepair(a.id, (mv.vendor || "").trim(), uid);
     } else if (modal.type === "cancel_repair") {
-      res = await cancelRepair(a.id, a.custodian);
+      res = await cancelRepair(a.id, a.custodian, uid);
     } else if (modal.type === "repair_done") {
-      res = await repairDone(a.id, mv.cost, a.custodian);
+      res = await repairDone(a.id, mv.cost, a.custodian, uid);
     } else if (modal.type === "report_loss") {
       if (!mv.reason?.trim()) { setErr("Add loss / damage details."); setBusy(false); return; }
-      res = await reportLost(a.id, mv.reason.trim());
+      res = await reportLost(a.id, mv.reason.trim(), uid);
     }
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { getMuster, proxyPunch, proxyPunchOut } from "@/lib/mobile";
+import { getSession } from "@/lib/auth";
 
 const initials = n => n.split(" ").map(x => x[0]).slice(0, 2).join("");
 
@@ -12,7 +13,10 @@ export default function MusterScreen() {
   const [mode, setMode] = useState("in");   // in | out
   const [msg, setMsg] = useState("");
   const fileRef = useRef(null);
-  const siteId = 1; // v1: supervisor's own site; role-based later
+  const sess = typeof window !== "undefined" ? getSession() : null;
+  const siteId = sess?.currentSite || sess?.sites?.[0]?.id || 1;
+  const siteName = sess?.sites?.find(x => x.id === siteId)?.name || "";
+  const markedBy = sess?.name || "Supervisor";
 
   const load = () => getMuster(siteId).then(setRows);
   useEffect(() => { load(); }, []);
@@ -27,7 +31,7 @@ export default function MusterScreen() {
     if (!file || !target) return;
     const res = mode === "out"
       ? await proxyPunchOut(target.id, siteId, file)
-      : await proxyPunch(target.id, siteId, file, "Supervisor");
+      : await proxyPunch(target.id, siteId, file, markedBy);
     if (!res.ok) { setMsg(res.error); return; }
     setMsg(`Proxy punch-${mode} saved for ${target.name} — photo attached, flagged in records.`);
     setTarget(null); e.target.value = "";
@@ -47,7 +51,7 @@ export default function MusterScreen() {
       <div className="m-head">
         <div>
           <div className="title">Daily muster</div>
-          <div className="sub">KEI Industries, Sanand · {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</div>
+          <div className="sub">{siteName || "Site"} · {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</div>
         </div>
         <span className="geo-chip geo-ok" style={{ fontSize: 11 }}>📍 Inside site</span>
       </div>

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { getAttendance, getSites, approveOt } from "@/lib/data";
+import { getSession } from "@/lib/auth";
 import { todayLocal } from "@/lib/today";
 import { isDemo } from "@/lib/supabase";
 
@@ -26,7 +27,7 @@ export default function AttendancePage() {
   useEffect(() => { load(); }, [date, site]);
 
   async function saveOt() {
-    setBusy(true); const res = await approveOt(otEdit.id, otEdit.value); setBusy(false);
+    setBusy(true); const res = await approveOt(otEdit.id, otEdit.value, getSession()?.id || 1); setBusy(false);
     if (!res.ok) return;
     setOtEdit(null); load();
   }
