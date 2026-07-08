@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
-import { getMuster, proxyPunch, proxyPunchOut } from "@/lib/mobile";
+import { getMuster, proxyPunch, proxyPunchOut, getSiteGeo, getPosition, distanceMeters } from "@/lib/mobile";
 import { getSession } from "@/lib/auth";
 
 const initials = n => n.split(" ").map(x => x[0]).slice(0, 2).join("");
@@ -12,6 +12,7 @@ export default function MusterScreen() {
   const [target, setTarget] = useState(null);
   const [mode, setMode] = useState("in");   // in | out
   const [msg, setMsg] = useState("");
+  const [geo, setGeo] = useState(null);      // { dist, inside, unset }
   const fileRef = useRef(null);
   const sess = typeof window !== "undefined" ? getSession() : null;
   const siteId = sess?.currentSite || sess?.sites?.[0]?.id || 1;
@@ -20,6 +21,18 @@ export default function MusterScreen() {
 
   const load = () => getMuster(siteId).then(setRows);
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const g = await getSiteGeo(siteId);
+      if (!g || g.geofence_lat == null) { if (alive) setGeo({ unset: true }); return; }
+      const p = await getPosition();
+      if (!p) { if (alive) setGeo({ nogps: true }); return; }
+      const dist = Math.round(distanceMeters(p.lat, p.lng, g.geofence_lat, g.geofence_lng));
+      if (alive) setGeo({ dist, inside: dist <= (g.geofence_radius_m || 200) });
+    })();
+    return () => { alive = false; };
+  }, [siteId]);
 
   function startProxy(r, m) {
     setTarget(r); setMode(m); setMsg("");
@@ -53,7 +66,11 @@ export default function MusterScreen() {
           <div className="title">Daily muster</div>
           <div className="sub">{siteName || "Site"} · {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</div>
         </div>
-        <span className="geo-chip geo-ok" style={{ fontSize: 11 }}>📍 Inside site</span>
+        {!geo ? <span className="geo-chip geo-wait" style={{ fontSize: 11 }}>📍 Checking location…</span> :
+          geo.unset ? <span className="geo-chip geo-wait" style={{ fontSize: 11 }}>📍 Location not set</span> :
+          geo.nogps ? <span className="geo-chip geo-wait" style={{ fontSize: 11 }}>📍 GPS off</span> :
+          geo.inside ? <span className="geo-chip geo-ok" style={{ fontSize: 11 }}>📍 Inside site</span> :
+          <span className="geo-chip geo-bad" style={{ fontSize: 11 }}>📍 {geo.dist} m from site</span>}
       </div>
       <div className="m-body">
         {isDemo && <div className="note amber">Demo mode — sample muster.</div>}
