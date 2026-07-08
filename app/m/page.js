@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { getLocalWorker, getPosition, distanceMeters, getTodayPunch, punch } from "@/lib/mobile";
+import { getSession } from "@/lib/auth";
 import Logo from "@/components/Logo";
 
 export default function PunchScreen() {
@@ -18,7 +19,11 @@ export default function PunchScreen() {
 
   useEffect(() => {
     const w = getLocalWorker();
-    if (!w) { router.push("/m/login"); return; }
+    if (!w) {
+      // staff signed in but no worker punch profile on this phone -> staff home (muster)
+      router.push(getSession() ? "/m/muster" : "/m/login");
+      return;
+    }
     setWorker(w);
     getTodayPunch(w.id).then(setToday);
     getPosition().then(p => {
