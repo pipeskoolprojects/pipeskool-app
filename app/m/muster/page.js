@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { getMuster, proxyPunch, proxyPunchOut, getSiteGeo, getPosition, distanceMeters } from "@/lib/mobile";
-import { getSession } from "@/lib/auth";
+import { getSession, setCurrentSite } from "@/lib/auth";
 
 const initials = n => n.split(" ").map(x => x[0]).slice(0, 2).join("");
 
@@ -64,7 +64,14 @@ export default function MusterScreen() {
       <div className="m-head">
         <div>
           <div className="title">Daily muster</div>
-          <div className="sub">{siteName || "Site"} · {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</div>
+          {sess?.sites?.length > 1 ? (
+            <select value={siteId} onChange={e => { setCurrentSite(e.target.value); window.location.reload(); }}
+              style={{ marginTop: 2, fontSize: 12.5, background: "rgba(255,255,255,0.12)", color: "#fff", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 8, padding: "3px 8px" }}>
+              {sess.sites.map(s => <option key={s.id} value={s.id} style={{ color: "#000" }}>{s.name}</option>)}
+            </select>
+          ) : (
+            <div className="sub">{siteName || "Site"} · {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</div>
+          )}
         </div>
         {!geo ? <span className="geo-chip geo-wait" style={{ fontSize: 11 }}>📍 Checking location…</span> :
           geo.unset ? <span className="geo-chip geo-wait" style={{ fontSize: 11 }}>📍 Location not set</span> :

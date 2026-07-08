@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
-import { getLocalWorker, getPosition, distanceMeters, getTodayPunch, punch } from "@/lib/mobile";
+import { getLocalWorker, setLocalWorker, findWorkerByMobile, getPosition, distanceMeters, getTodayPunch, punch } from "@/lib/mobile";
 import { getSession } from "@/lib/auth";
 import Logo from "@/components/Logo";
 
@@ -11,6 +11,7 @@ export default function PunchScreen() {
   const router = useRouter();
   const [worker, setWorker] = useState(null);
   const [pos, setPos] = useState(null);
+  const [noProfile, setNoProfile] = useState(false);
   const [dist, setDist] = useState(null);
   const [today, setToday] = useState({});
   const [busy, setBusy] = useState(false);
@@ -20,8 +21,15 @@ export default function PunchScreen() {
   useEffect(() => {
     const w = getLocalWorker();
     if (!w) {
-      // staff signed in but no worker punch profile on this phone -> staff home (muster)
-      router.push(getSession() ? "/m/muster" : "/m/login");
+      const sess = getSession();
+      if (!sess) { router.push("/m/login"); return; }
+      // staff signed in: auto-link their own worker punch profile by mobile
+      if (sess.mobile) {
+        findWorkerByMobile(sess.mobile).then(wk => {
+          if (wk) { setLocalWorker(wk); window.location.reload(); }
+          else setNoProfile(true);
+        });
+      } else setNoProfile(true);
       return;
     }
     setWorker(w);
@@ -37,6 +45,15 @@ export default function PunchScreen() {
   }, [router]);
 
   if (!worker) return null;
+  if (noProfile) return (
+    <div className="m-wrap" style={{ padding: 20 }}>
+      <div className="note amber" style={{ marginTop: 30 }}>
+        You are signed in as <b>staff</b>, and no worker punch profile matches your mobile number — so there is nothing to punch here.
+        If you also punch attendance, ask the Director to add you as a worker with the same mobile in Workers &amp; Staff Master.
+      </div>
+      <button className="primary btn-block" style={{ marginTop: 14 }} onClick={() => window.location.href = "/m/muster"}>Go to Daily muster</button>
+    </div>
+  );
 
   const insideFence = dist !== null && dist <= (worker.geofence_radius_m || 200);
   const phase = !today.punch_in ? "in" : !today.punch_out ? "out" : "done";
