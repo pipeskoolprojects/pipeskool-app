@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import { logoutAuth } from "@/lib/auth";
 
 const primary = [
   { href: "/m", ico: "⏱", label: "Punch" },
@@ -19,8 +20,16 @@ const more = [
 
 export default function MobileNav() {
   const path = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const inMore = more.some(m => m.href === path);
+
+  async function logout() {
+    try { localStorage.removeItem("psk_worker"); } catch {}   // worker punch profile
+    await logoutAuth();                                        // staff session + database auth
+    setOpen(false);
+    router.push("/m/login");
+  }
 
   return (
     <>
@@ -35,6 +44,10 @@ export default function MobileNav() {
                 <span style={{ fontSize: 18 }}>{m.ico}</span>{m.label}
               </Link>
             ))}
+            <a onClick={logout}
+               style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", fontSize: 14, color: "var(--red)", cursor: "pointer" }}>
+              <span style={{ fontSize: 18 }}>⎋</span>Log out
+            </a>
           </div>
         </div>
       )}
