@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
-import { getSession, clearSession, canSeeModuleAnySite, setCurrentSite } from "@/lib/auth";
+import { getSession, clearSession, logoutAuth, canSeeModuleAnySite, setCurrentSite } from "@/lib/auth";
 
 const GROUPS = [
   { label: "Core Site Operations", items: [
@@ -47,7 +47,7 @@ export default function Sidebar() {
     });
   }, [path]);
 
-  function logout() { clearSession(); router.push("/login"); }
+  function logout() { logoutAuth(); router.push("/login"); }
   const toggle = label => setOpen(o => ({ ...o, [label]: !o[label] }));
 
   const canSee = m => !session || !m || canSeeModuleAnySite(session, m);
