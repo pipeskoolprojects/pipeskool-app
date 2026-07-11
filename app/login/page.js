@@ -30,7 +30,8 @@ export default function Login() {
     const res = await loginByMobilePassword(mobile, password);
     setBusy(false);
     if (!res.ok) { setError(res.error); return; }
-    router.push(window.innerWidth <= 820 ? "/m/muster" : "/dashboard");
+    const home = res.session?.role === "director" ? "/m/report" : "/m/muster";
+    router.push(window.innerWidth <= 820 ? home : "/dashboard");
   }
 
   async function handleCreate(e) {
@@ -41,7 +42,8 @@ export default function Login() {
     const res = await createPasswordAndLogin(mobile, password);
     setBusy(false);
     if (!res.ok) { setError(res.error); return; }
-    router.push(window.innerWidth <= 820 ? "/m/muster" : "/dashboard");
+    const home = res.session?.role === "director" ? "/m/report" : "/m/muster";
+    router.push(window.innerWidth <= 820 ? home : "/dashboard");
   }
 
   const back = () => { setMode("start"); setPassword(""); setConfirm(""); setError(""); };

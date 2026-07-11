@@ -11,6 +11,7 @@ const primary = [
   { href: "/m/stock", ico: "📦", label: "Stock" },
 ];
 const more = [
+  { href: "/m/report", label: "Site report", ico: "📊" },
   { href: "/m/indent", ico: "🧾", label: "Material indent" },
   { href: "/m/assets", ico: "🔧", label: "Tools & assets" },
   { href: "/m/money", ico: "₹", label: "Money / expenses" },

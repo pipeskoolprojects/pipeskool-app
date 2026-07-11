@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { getLocalWorker, setLocalWorker, findWorkerByMobile, getPosition, distanceMeters, getTodayPunch, punch } from "@/lib/mobile";
-import { getSession } from "@/lib/auth";
+import { getSession, refreshSessionMobile } from "@/lib/auth";
 import Logo from "@/components/Logo";
 
 export default function PunchScreen() {
@@ -24,12 +24,12 @@ export default function PunchScreen() {
       const sess = getSession();
       if (!sess) { router.push("/m/login"); return; }
       // staff signed in: auto-link their own worker punch profile by mobile
-      if (sess.mobile) {
-        findWorkerByMobile(sess.mobile).then(wk => {
-          if (wk) { setLocalWorker(wk); window.location.reload(); }
-          else setNoProfile(true);
-        });
-      } else setNoProfile(true);
+      (async () => {
+        const mob = sess.mobile || await refreshSessionMobile(sess);
+        const wk = mob ? await findWorkerByMobile(mob) : null;
+        if (wk) { setLocalWorker(wk); window.location.reload(); }
+        else setNoProfile(true);
+      })();
       return;
     }
     setWorker(w);
@@ -44,7 +44,6 @@ export default function PunchScreen() {
     });
   }, [router]);
 
-  if (!worker) return null;
   if (noProfile) return (
     <div className="m-wrap" style={{ padding: 20 }}>
       <div className="note amber" style={{ marginTop: 30 }}>
@@ -52,6 +51,11 @@ export default function PunchScreen() {
         If you also punch attendance, ask the Director to add you as a worker with the same mobile in Workers &amp; Staff Master.
       </div>
       <button className="primary btn-block" style={{ marginTop: 14 }} onClick={() => window.location.href = "/m/muster"}>Go to Daily muster</button>
+    </div>
+  );
+  if (!worker) return (
+    <div className="m-wrap" style={{ padding: 20, textAlign: "center" }}>
+      <div className="muted" style={{ marginTop: 60 }}>Checking your punch profile…</div>
     </div>
   );
 

@@ -98,6 +98,7 @@ export default function Sidebar() {
       {showDash && (
         <nav style={{ marginTop: 10 }}>
           <Link href="/dashboard" className={path === "/dashboard" ? "active" : ""}>Dashboard</Link>
+          <Link href="/reports" className={path === "/reports" ? "active" : ""}>Site Reports</Link>
         </nav>
       )}
 
