@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
-import { getLocalWorker, setLocalWorker, findWorkerByMobile, getPosition, distanceMeters, getTodayPunch, punch } from "@/lib/mobile";
+import { getLocalWorker, setLocalWorker, findWorkerByMobile, createStaffPunchProfile, getPosition, distanceMeters, getTodayPunch, punch } from "@/lib/mobile";
 import { getSession, refreshSessionMobile } from "@/lib/auth";
 import Logo from "@/components/Logo";
 
@@ -26,9 +26,14 @@ export default function PunchScreen() {
       // staff signed in: auto-link their own worker punch profile by mobile
       (async () => {
         const mob = sess.mobile || await refreshSessionMobile(sess);
-        const wk = mob ? await findWorkerByMobile(mob) : null;
+        let wk = mob ? await findWorkerByMobile(mob) : null;
+        if (!wk && sess.role !== "director" && mob) {
+          // every staff member (except Directors) must punch — enrol them automatically
+          const made = await createStaffPunchProfile({ ...sess, mobile: mob });
+          if (made.ok) wk = await findWorkerByMobile(mob);
+        }
         if (wk) { setLocalWorker(wk); window.location.reload(); }
-        else setNoProfile(true);
+        else setNoProfile(sess.role === "director" ? "director" : true);
       })();
       return;
     }
@@ -47,8 +52,9 @@ export default function PunchScreen() {
   if (noProfile) return (
     <div className="m-wrap" style={{ padding: 20 }}>
       <div className="note amber" style={{ marginTop: 30 }}>
-        You are signed in as <b>staff</b>, and no worker punch profile matches your mobile number — so there is nothing to punch here.
-        If you also punch attendance, ask the Director to add you as a worker with the same mobile in Workers &amp; Staff Master.
+        {noProfile === "director"
+          ? <>You are signed in as <b>Director</b> — Directors are exempt from punch in/out. Everyone else punches automatically from this tab.</>
+          : <>Your punch profile could not be set up automatically. Ask the Director to check your mobile number and site in Workers &amp; Staff Master, then try again.</>}
       </div>
       <button className="primary btn-block" style={{ marginTop: 14 }} onClick={() => window.location.href = "/m/muster"}>Go to Daily muster</button>
     </div>
