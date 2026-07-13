@@ -2,9 +2,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { logoutAuth } from "@/lib/auth";
+import { logoutAuth, getSession } from "@/lib/auth";
 
-const primary = [
+const primaryBase = [
   { href: "/m", ico: "⏱", label: "Punch" },
   { href: "/m/muster", ico: "👥", label: "Muster" },
   { href: "/m/dpr", ico: "📋", label: "DPR" },
@@ -20,6 +20,10 @@ const more = [
 ];
 
 export default function MobileNav() {
+  const sess = typeof window !== "undefined" ? getSession() : null;
+  const primary = sess?.role === "director"
+    ? [{ href: "/m/report", ico: "📊", label: "Report" }, ...primaryBase.slice(1)]
+    : primaryBase;
   const path = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
