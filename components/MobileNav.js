@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { logoutAuth, getSession } from "@/lib/auth";
 
 const primaryBase = [
@@ -20,8 +20,9 @@ const more = [
 ];
 
 export default function MobileNav() {
-  const sess = typeof window !== "undefined" ? getSession() : null;
-  const primary = sess?.role === "director"
+  const [role, setRole] = useState(null);
+  useEffect(() => { setRole(getSession()?.role || null); }, []);
+  const primary = role === "director"
     ? [{ href: "/m/report", ico: "📊", label: "Report" }, ...primaryBase.slice(1)]
     : primaryBase;
   const path = usePathname();
