@@ -12,6 +12,7 @@ export default function MobileReport() {
   const [days, setDays] = useState(7);
   const [siteId, setSiteId] = useState("all");
   const [r, setR] = useState(null);
+  const [open, setOpen] = useState({});   // siteId -> expanded
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const sess = typeof window !== "undefined" ? getSession() : null;
@@ -116,9 +117,9 @@ export default function MobileReport() {
 
             {/* per-site composition + detail */}
             {view.sites.map(s => (
-              <div key={s.id} style={card}>
+              <div key={s.id} style={{ ...card, cursor: "pointer" }} onClick={() => setOpen(o => ({ ...o, [s.id]: !o[s.id] }))}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <div style={{ fontWeight: 800, fontSize: 14 }}>{s.short}</div>
+                  <div style={{ fontWeight: 800, fontSize: 14 }}>{s.short} <span className="muted" style={{ fontSize: 11 }}>{open[s.id] ? "▾" : "▸ tap for details"}</span></div>
                   {s.dpr === "submitted" ? <span className="badge p">DPR ✓</span> : s.dpr === "draft" ? <span className="badge h">DPR draft</span> : <span className="badge a">DPR missing</span>}
                 </div>
                 <div style={{ display: "flex", height: 18, borderRadius: 5, overflow: "hidden", background: "var(--bg)", marginBottom: 6 }}>
@@ -138,11 +139,52 @@ export default function MobileReport() {
                     <span style={{ display: "block", width: s.boqPct + "%", background: "#1a7f4f", height: "100%", borderRadius: 4 }} />
                   </span>
                 </div>
-                {s.upcoming.slice(0, 2).map(u => (
+                {!open[s.id] && s.upcoming.slice(0, 2).map(u => (
                   <div key={u.po} style={{ fontSize: 11.5, marginTop: 6 }} className="muted">
                     🚚 {u.po} · {u.vendor} · <b style={{ color: u.status === "delayed" ? "var(--red)" : "inherit" }}>{DL[u.status] || u.status}</b>{u.expected ? " · exp " + u.expected : ""}
                   </div>
                 ))}
+
+                {open[s.id] && (
+                  <div onClick={e => e.stopPropagation()} style={{ marginTop: 10, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                    <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 4 }}>Attendance today</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginBottom: 10 }}>
+                      {[["Present", s.present], ["Half day", s.half], ["Still on site", s.onsite], ["Absent", s.absent], ["Proxy ⚠", s.proxy], ["Unverified", s.pendingVerify]].map(([l, v]) => (
+                        <div key={l} style={{ background: "var(--bg)", borderRadius: 8, padding: "6px 8px", textAlign: "center" }}>
+                          <div style={{ fontWeight: 800, fontSize: 15 }}>{v}</div>
+                          <div className="muted" style={{ fontSize: 9.5 }}>{l}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 4 }}>Open indents ({s.indents.length})</div>
+                    {s.indents.length === 0 ? <div className="muted" style={{ fontSize: 11.5, marginBottom: 8 }}>None open.</div> :
+                      s.indents.map(i => (
+                        <div key={i.no} style={{ fontSize: 12, padding: "2px 0" }}>
+                          • {i.no} — waiting <b style={{ color: i.age >= 3 ? "var(--red)" : "inherit" }}>{i.age}d</b>{i.urgent && <span className="badge a" style={{ marginLeft: 6, fontSize: 10 }}>URGENT</span>}
+                        </div>
+                      ))}
+
+                    <div style={{ fontWeight: 700, fontSize: 12, margin: "10px 0 4px" }}>Deliveries in transit ({s.upcoming.length})</div>
+                    {s.upcoming.length === 0 ? <div className="muted" style={{ fontSize: 11.5 }}>Nothing in transit.</div> :
+                      s.upcoming.map(u => (
+                        <div key={u.po} style={{ fontSize: 12, padding: "2px 0" }}>
+                          🚚 {u.po} · {u.vendor} · <b style={{ color: u.status === "delayed" ? "var(--red)" : "inherit" }}>{DL[u.status] || u.status}</b>{u.expected ? " · exp " + u.expected : ""}
+                        </div>
+                      ))}
+
+                    <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 12 }}>
+                      <span>Month spend <b>{inr(s.expenses)}</b></span>
+                      <span>BOQ <b>{inr(s.boqDone)}</b> / {inr(s.boqValue)} ({s.boqPct}%)</span>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                      <button style={{ fontSize: 11.5, flex: 1 }} onClick={() => window.location.href = "/m/muster"}>👥 Muster</button>
+                      <button style={{ fontSize: 11.5, flex: 1 }} onClick={() => window.location.href = "/m/dpr"}>📋 DPR</button>
+                      <button style={{ fontSize: 11.5, flex: 1 }} onClick={() => window.location.href = "/m/indent"}>🧾 Indents</button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
             <div className="muted" style={{ fontSize: 10.5 }}>As of {r.asOf} · BOQ % moves with RA bills · spend = this month</div>

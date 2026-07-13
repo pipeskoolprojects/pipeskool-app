@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { getWorkers, saveWorker, inr } from "@/lib/data";
 import { getContractors, getSitesList } from "@/lib/mobile";
-import { getStaff, addStaff, updateStaff, getRoles, addRole } from "@/lib/access";
+import { getStaff, addStaff, updateStaff, getRoles, addRole, resetStaffPassword } from "@/lib/access";
 import { getSession } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
 
@@ -54,6 +54,16 @@ export default function WorkersPage() {
     setNewRole(""); setMsg("Role added — it's now available in the Role dropdown. Set its rights per staff member in Admin → Access Rights.");
     getRoles().then(setRoles);
   }
+  async function doResetPassword() {
+    if (!confirm(`Reset ${smodal.full_name}'s password?\n\nTheir current password stops working for staff access, and on their next login they will be asked to create a new one.`)) return;
+    setBusy(true); setErr("");
+    const res = await resetStaffPassword(smodal.id);
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg(smodal.full_name + " — password reset. On their next sign-in they'll create a new password. (If they're removed from the company, also untick Active.)");
+    setSmodal(null); load();
+  }
+
   async function saveStaff() {
     setBusy(true); setErr("");
     const res = smodal.id
@@ -203,6 +213,12 @@ export default function WorkersPage() {
                     <input type="checkbox" checked={smodal.is_active !== false} onChange={e => sset("is_active", e.target.checked)} style={{ accentColor: "var(--copper)" }} />
                     Active (untick to deactivate — they can no longer sign in)
                   </label>
+                )}
+                {smodal.id && (
+                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                    <button style={{ color: "var(--red)", fontSize: 12.5 }} disabled={busy} onClick={doResetPassword}>🔑 Reset password</button>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Use if the password is forgotten or suspected leaked. They create a new one on next login.</div>
+                  </div>
                 )}
               </div>
               {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
