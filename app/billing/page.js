@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import { isDemo } from "@/lib/supabase";
 import {
   BILL_STATUS, inr, lineCum, linePrev,
-  getRaSettings, saveRaSettings, getRaBills, createRaBill, getRaBill, saveRaBill, deleteRaBill,
+  getRaSettings, saveRaSettings, getRaBills, createRaBill, getRaBill, saveRaBill, deleteRaBill, getRaBillTotals,
 } from "@/lib/billing";
 
 const SITES = [{ id: 1, name: "KEI Sanand" }, { id: 2, name: "SOUL Campus" }, { id: 3, name: "The Creek" }];
@@ -14,12 +14,13 @@ export default function BillingPage() {
   const [site, setSite] = useState(2);
   const [settings, setSettings] = useState(null);
   const [bills, setBills] = useState([]);
+  const [billTotals, setBillTotals] = useState({});
   const [edit, setEdit] = useState(null);   // { id, no, status, mode, matPct, instPct, date, remarks }
   const [lines, setLines] = useState([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
 
-  useEffect(() => { getRaSettings(site).then(setSettings); getRaBills(site).then(setBills); setEdit(null); setMsg(""); setErr(""); }, [site]);
+  useEffect(() => { getRaSettings(site).then(setSettings); getRaBills(site).then(setBills); getRaBillTotals(site).then(setBillTotals); setEdit(null); setMsg(""); setErr(""); }, [site]);
 
   const setLine = (i, k, v) => setLines(ls => ls.map((l, j) => j === i ? { ...l, [k]: v } : l));
 
@@ -125,7 +126,7 @@ export default function BillingPage() {
               </div>
               {bills.length === 0 ? <div className="muted" style={{ marginTop: 12 }}>No RA bills yet. Create RA-1 to start billing this project.</div> : (
                 <table style={{ marginTop: 12 }}>
-                  <thead><tr><th>Bill</th><th>Date</th><th>Mode</th><th>Status</th><th></th></tr></thead>
+                  <thead><tr><th>Bill</th><th>Date</th><th>Mode</th><th>Status</th><th className="num">This bill</th><th className="num">Cumulative</th><th></th></tr></thead>
                   <tbody>
                     {bills.map(b => { const [l, c] = BILL_STATUS[b.status] || ["—", "gray"]; return (
                       <tr key={b.id}>
@@ -133,8 +134,11 @@ export default function BillingPage() {
                         <td className="muted">{b.bill_date}</td>
                         <td className="muted">{b.billing_mode === "split" ? `Split ${b.material_pct}/${b.install_pct}` : "Simple"}</td>
                         <td><span className={"badge " + c}>{l}</span></td>
-                        <td style={{ textAlign: "right" }}>
+                        <td className="num" style={{ fontWeight: 700 }}>{billTotals[b.id] ? inr(billTotals[b.id].thisBill) : "—"}</td>
+                        <td className="num">{billTotals[b.id] ? inr(billTotals[b.id].cum) : "—"}</td>
+                        <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                           <button style={{ fontSize: 12 }} onClick={() => openExisting(b)}>Open</button>{" "}
+                          <a href={"/billing/print?bill=" + b.id + "&site=" + site} target="_blank" rel="noreferrer"><button style={{ fontSize: 12 }}>🖨 Abstract</button></a>{" "}
                           <button style={{ fontSize: 12, color: "var(--red)" }} onClick={() => removeBill(b)}>Delete</button>
                         </td>
                       </tr>
@@ -175,8 +179,16 @@ export default function BillingPage() {
                 </thead>
                 <tbody>
                   {lines.map((l, i) => {
+                    const prevL = lines[i - 1];
+                    const showSection = !prevL || (prevL.section || "General") !== (l.section || "General");
+                    const nextL = lines[i + 1];
+                    const endSection = !nextL || (nextL.section || "General") !== (l.section || "General");
+                    const secRows = lines.filter(x => (x.section || "General") === (l.section || "General"));
+                    const secBill = secRows.reduce((t, x) => t + (lineCum(x, mode, mp, ip) - linePrev(x, mode, mp, ip)), 0);
                     const cum = lineCum(l, mode, mp, ip), prev = linePrev(l, mode, mp, ip), thisBill = cum - prev;
                     return (
+                      <>
+                      {showSection && <tr key={"sec" + l.boq_item_id}><td colSpan={7} style={{ fontWeight: 800, background: "var(--bg)" }}>{l.section || "General"}</td></tr>}
                       <tr key={l.boq_item_id}>
                         <td style={{ fontWeight: 600 }}>{l.item_code}</td>
                         <td style={{ maxWidth: 280 }}>{l.description}<span className="muted"> ({l.unit})</span></td>
@@ -197,6 +209,8 @@ export default function BillingPage() {
                         )}
                         <td className="num" style={{ fontWeight: 600, color: thisBill < 0 ? "var(--red)" : "inherit" }}>{inr(thisBill)}</td>
                       </tr>
+                      {endSection && <tr key={"sub" + l.boq_item_id} style={{ fontWeight: 700, background: "var(--bg)" }}><td colSpan={6}>Sub-total — {l.section || "General"}</td><td className="num">{inr(secBill)}</td></tr>}
+                      </>
                     );
                   })}
                 </tbody>
@@ -215,6 +229,7 @@ export default function BillingPage() {
 
             <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
               <button className="primary" disabled={busy} onClick={() => save(null)}>{busy ? "Saving…" : "Save draft"}</button>
+              <a href={"/billing/print?bill=" + edit.id + "&site=" + site} target="_blank" rel="noreferrer"><button>🖨 Print abstract</button></a>
               <select value={edit.status} onChange={e => save(e.target.value)} disabled={busy} title="Set status">
                 {STATUS_FLOW.map(s => <option key={s} value={s}>{BILL_STATUS[s][0]}</option>)}
               </select>
