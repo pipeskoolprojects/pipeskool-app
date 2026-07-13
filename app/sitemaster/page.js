@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
-import { getSitesFull, updateSiteTimings, updateSiteGeofence } from "@/lib/data";
+import { getSitesFull, updateSiteTimings, updateSiteGeofence, addSite } from "@/lib/data";
 import { isDemo } from "@/lib/supabase";
 
 function endHint(start, std = 8, lunch = 60) {
@@ -19,6 +19,17 @@ export default function SiteMasterPage() {
   const [geoSavingId, setGeoSavingId] = useState(null);
   const [capturingId, setCapturingId] = useState(null);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
+  const [add, setAdd] = useState(null);   // { name, code, shift_start, shift_end, radius }
+  const [adding, setAdding] = useState(false);
+
+  async function saveNewSite() {
+    setAdding(true); setErr(""); setMsg("");
+    const res = await addSite(add);
+    setAdding(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg(add.name + " added — now capture its location below (on a phone, standing there) so punching works.");
+    setAdd(null); getSitesFull().then(s2 => { setSites(s2); const d = {}; s2.forEach(x => d[x.id] = { shift_start: (x.shift_start || "09:00").slice(0, 5), shift_end: (x.shift_end || "18:00").slice(0, 5), geofence_lat: x.geofence_lat ?? "", geofence_lng: x.geofence_lng ?? "", geofence_radius_m: x.geofence_radius_m ?? 200 }); setDraft(d); });
+  }
 
   useEffect(() => { getSitesFull().then(s => {
     setSites(s);
@@ -60,7 +71,25 @@ export default function SiteMasterPage() {
     <div className="layout">
       <Sidebar />
       <main className="main">
-        <div className="page-head"><h1>Site Master</h1></div>
+        <div className="page-head">
+          <h1>Site Master</h1>
+          <button className="primary" onClick={() => { setErr(""); setAdd({ name: "", code: "", shift_start: "09:30", shift_end: "18:30", radius: 150 }); }}>＋ Add site / office</button>
+        </div>
+        {add && (
+          <div className="panel">
+            <h2>Add site / office location</h2>
+            <div className="muted" style={{ marginBottom: 10, fontSize: 12.5 }}>Use this for project sites AND your Head Office — office staff punch against the office location the same way site staff punch at site.</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div><label className="muted">Name *</label><input style={{ width: 240 }} value={add.name} onChange={e => setAdd(a => ({ ...a, name: e.target.value }))} placeholder="e.g. Head Office, Ahmedabad" /></div>
+              <div><label className="muted">Short code</label><input style={{ width: 110 }} value={add.code} onChange={e => setAdd(a => ({ ...a, code: e.target.value }))} placeholder="HO" /></div>
+              <div><label className="muted">Shift start</label><input type="time" value={add.shift_start} onChange={e => setAdd(a => ({ ...a, shift_start: e.target.value }))} /></div>
+              <div><label className="muted">Shift end</label><input type="time" value={add.shift_end} onChange={e => setAdd(a => ({ ...a, shift_end: e.target.value }))} /></div>
+              <div><label className="muted">Radius (m)</label><input style={{ width: 90 }} value={add.radius} onChange={e => setAdd(a => ({ ...a, radius: e.target.value }))} /></div>
+              <button className="primary" disabled={adding} onClick={saveNewSite}>{adding ? "Adding…" : "Add"}</button>
+              <button onClick={() => setAdd(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
         {isDemo && <div className="demo-banner">Demo mode — sample sites.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
         {err && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
