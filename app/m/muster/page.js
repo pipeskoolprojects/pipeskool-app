@@ -24,6 +24,7 @@ export default function MusterScreen() {
   useEffect(() => {
     let alive = true;
     (async () => {
+      if (sess?.role === "director") { if (alive) setGeo({ director: true }); return; }
       const g = await getSiteGeo(siteId);
       if (!g || g.geofence_lat == null) { if (alive) setGeo({ unset: true }); return; }
       const p = await getPosition();
@@ -73,7 +74,8 @@ export default function MusterScreen() {
             <div className="sub">{siteName || "Site"} · {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</div>
           )}
         </div>
-        {!geo ? <span className="geo-chip geo-wait" style={{ fontSize: 11 }}>📍 Checking location…</span> :
+        {geo?.director ? null :
+          !geo ? <span className="geo-chip geo-wait" style={{ fontSize: 11 }}>📍 Checking location…</span> :
           geo.unset ? <span className="geo-chip geo-wait" style={{ fontSize: 11 }}>📍 Location not set</span> :
           geo.nogps ? <span className="geo-chip geo-wait" style={{ fontSize: 11 }}>📍 GPS off</span> :
           geo.inside ? <span className="geo-chip geo-ok" style={{ fontSize: 11 }}>📍 Inside site</span> :
