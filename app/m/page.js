@@ -33,7 +33,8 @@ export default function PunchScreen() {
           if (made.ok) wk = await findWorkerByMobile(mob);
         }
         if (wk) { setLocalWorker(wk); window.location.reload(); }
-        else setNoProfile(sess.role === "director" ? "director" : true);
+        else if (sess.role === "director") { router.push("/m/report"); }
+        else setNoProfile(true);
       })();
       return;
     }
