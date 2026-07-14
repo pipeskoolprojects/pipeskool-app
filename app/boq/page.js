@@ -5,6 +5,7 @@ import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import { getBoqItems, saveBoqItem, bulkImportBoq, BOQ_TEMPLATE_HEADERS, inr } from "@/lib/boq";
+import * as XLSX from "xlsx";
 
 const blank = { item_code: "", description: "", unit: "Rmt", boq_qty: "", rate: "", section: "" };
 
@@ -43,12 +44,17 @@ export default function BoqPage() {
     const f = e.target.files?.[0]; if (!f) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const lines = String(reader.result).split(/\r?\n/).filter(l => l.trim());
-      const headers = lines[0].split(",").map(h => h.trim());
-      setBulkRows(lines.slice(1).map(line => { const c = line.split(","); const o = {}; headers.forEach((h, i) => o[h] = (c[i] || "").trim()); return o; }));
-      setBulkResult(null);
+      try {
+        const wb = XLSX.read(reader.result, { type: "array" });          // handles CSV, XLSX, XLS
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });        // proper quoted-comma handling
+        setBulkRows(rows.map(r => { const o = {}; Object.keys(r).forEach(k => o[String(k).trim()] = String(r[k]).trim()); return o; }));
+        setBulkResult(null);
+      } catch (err) {
+        setBulkResult({ ok: false, error: "Could not read the file: " + err.message + ". Use the downloaded template (CSV or Excel) with the same columns." });
+      }
     };
-    reader.readAsText(f);
+    reader.readAsArrayBuffer(f);
   }
   async function runBulk() {
     setBusy(true); const res = await bulkImportBoq(bulkRows, site); setBusy(false);
@@ -81,8 +87,8 @@ export default function BoqPage() {
               {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             <button onClick={() => { setForm({ ...blank }); setMsg(""); }}>＋ Add line</button>
-            <button onClick={() => fileRef.current?.click()}>⬆ Upload BOQ Excel</button>
-            <input ref={fileRef} type="file" accept=".csv" style={{ display: "none" }} onChange={onFile} />
+            <button onClick={() => fileRef.current?.click()}>⬆ Import BOQ (CSV / Excel)</button>
+            <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={onFile} />
           </div>
         </div>
         {isDemo && <div className="demo-banner">Demo mode — sample BOQ.</div>}
