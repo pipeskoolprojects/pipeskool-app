@@ -63,7 +63,8 @@ export default function BoqPage() {
 
   const columns = [
     { key: "item_code", label: "Code", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.item_code || "—"}</span> },
-    { key: "description", label: "Description", filter: "search" },
+    { key: "description", label: "Description", filter: "search",
+      render: r => <span style={{ display: "block", whiteSpace: "normal", maxWidth: 520, minWidth: 320, lineHeight: 1.4, fontSize: 12.5 }}>{r.description}</span> },
     { key: "section", label: "Section", filter: "select" },
     { key: "unit", label: "Unit" },
     { key: "boq_qty", label: "BOQ qty", type: "num", render: r => r.boq_qty.toLocaleString("en-IN"), exportValue: r => r.boq_qty },
