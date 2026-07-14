@@ -62,11 +62,10 @@ export default function BoqPage() {
   }
 
   const columns = [
-    { key: "item_code", label: "Code", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.item_code || "—"}</span> },
-    { key: "description", label: "Description", filter: "search",
-      render: r => <span style={{ display: "block", whiteSpace: "normal", maxWidth: 520, minWidth: 320, lineHeight: 1.4, fontSize: 12.5 }}>{r.description}</span> },
-    { key: "section", label: "Section", filter: "select" },
-    { key: "unit", label: "Unit" },
+    { key: "item_code", label: "Code", width: 72, filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.item_code || "—"}</span> },
+    { key: "description", label: "Description", filter: "search", wrap: true },
+    { key: "section", label: "Section", width: 150, wrap: true, filter: "select" },
+    { key: "unit", label: "Unit", width: 58 },
     { key: "boq_qty", label: "BOQ qty", type: "num", render: r => r.boq_qty.toLocaleString("en-IN"), exportValue: r => r.boq_qty },
     { key: "done_qty", label: "Measured (RA)", type: "num", render: r => r.done_qty.toLocaleString("en-IN"), exportValue: r => r.done_qty },
     { key: "pct", label: "Progress (from RA bills)", type: "num", render: r => (
@@ -127,7 +126,7 @@ export default function BoqPage() {
         )}
 
         <div className="panel">
-          {!rows ? <div className="muted">Loading…</div> : <DataTable columns={columns} rows={rows} exportName="boq" />}
+          {!rows ? <div className="muted">Loading…</div> : <DataTable fixed columns={columns} rows={rows} exportName="boq" />}
         </div>
       </main>
     </div>
