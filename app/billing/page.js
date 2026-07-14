@@ -210,7 +210,19 @@ export default function BillingPage() {
             </div>
 
             <div style={{ overflowX: "auto" }}>
-              <table className="dt-compact">
+              <table className="dt-compact" style={{ width: "100%", tableLayout: "fixed" }}>
+                <colgroup>
+                  {edit.mode === "staged" ? (
+                    <><col style={{ width: 64 }} /><col /><col style={{ width: 118 }} /><col style={{ width: 76 }} />
+                      <col style={{ width: 92 }} /><col style={{ width: 92 }} /><col style={{ width: 92 }} /><col style={{ width: 104 }} /></>
+                  ) : edit.mode === "split" ? (
+                    <><col style={{ width: 64 }} /><col /><col style={{ width: 76 }} /><col style={{ width: 70 }} />
+                      <col style={{ width: 108 }} /><col style={{ width: 108 }} /><col style={{ width: 104 }} /></>
+                  ) : (
+                    <><col style={{ width: 64 }} /><col /><col style={{ width: 76 }} /><col style={{ width: 70 }} />
+                      <col style={{ width: 84 }} /><col style={{ width: 108 }} /><col style={{ width: 104 }} /></>
+                  )}
+                </colgroup>
                 <thead>
                   {edit.mode === "staged" ? (
                     <tr><th>Code</th><th>Description</th><th>Group</th><th className="num">BOQ qty</th>
@@ -237,7 +249,10 @@ export default function BillingPage() {
                       {showSection && <tr key={"sec" + l.boq_item_id}><td colSpan={edit.mode === "staged" ? 8 : 7} style={{ fontWeight: 800, background: "var(--bg)" }}>{l.section || "General"}</td></tr>}
                       <tr key={l.boq_item_id}>
                         <td style={{ fontWeight: 600 }}>{l.item_code}</td>
-                        <td style={{ maxWidth: 280 }}>{l.description}<span className="muted"> ({l.unit})</span></td>
+                        <td style={{ whiteSpace: "normal", wordBreak: "break-word", verticalAlign: "top" }} title={l.description}>
+                          <span style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontSize: 12, lineHeight: 1.35 }}>{l.description}</span>
+                          <span className="muted" style={{ fontSize: 11 }}>({l.unit})</span>
+                        </td>
                         <td className="num">{l.boq_qty}</td>
                         <td className="num">{l.rate}</td>
                         {edit.mode === "staged" ? (
@@ -245,15 +260,15 @@ export default function BillingPage() {
                       <th className="num">Supply cum</th><th className="num">Install cum</th><th className="num">T&C cum</th><th className="num">This bill ₹</th></tr>
                   ) : edit.mode === "split" ? (
                           <>
-                            <td className="num"><input style={{ width: 80, textAlign: "right" }} value={l.cum_material_qty} onChange={e => setLine(i, "cum_material_qty", e.target.value)} />
+                            <td className="num"><input style={{ width: "100%", textAlign: "right" }} value={l.cum_material_qty} onChange={e => setLine(i, "cum_material_qty", e.target.value)} />
                               <div className="muted" style={{ fontSize: 10 }}>prev {l.prev_material_qty}</div></td>
-                            <td className="num"><input style={{ width: 80, textAlign: "right" }} value={l.cum_install_qty} onChange={e => setLine(i, "cum_install_qty", e.target.value)} />
+                            <td className="num"><input style={{ width: "100%", textAlign: "right" }} value={l.cum_install_qty} onChange={e => setLine(i, "cum_install_qty", e.target.value)} />
                               <div className="muted" style={{ fontSize: 10 }}>prev {l.prev_install_qty}</div></td>
                           </>
                         ) : (
                           <>
                             <td className="num muted">{l.prev_qty}</td>
-                            <td className="num"><input style={{ width: 90, textAlign: "right" }} value={l.cum_qty} onChange={e => setLine(i, "cum_qty", e.target.value)} /></td>
+                            <td className="num"><input style={{ width: "100%", textAlign: "right" }} value={l.cum_qty} onChange={e => setLine(i, "cum_qty", e.target.value)} /></td>
                           </>
                         )}
                         <td className="num" style={{ fontWeight: 600, color: thisBill < 0 ? "var(--red)" : "inherit" }}>{inr(thisBill)}</td>
