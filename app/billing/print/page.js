@@ -21,7 +21,8 @@ function AbstractView() {
 
   const { hdr, lines } = d;
   const mode = hdr.billing_mode, mp = Number(hdr.material_pct), ip = Number(hdr.install_pct);
-  const split = mode === "split";
+  const split = mode === "split" || mode === "staged";
+  const gstPct = Number(d.gst_pct) || 0;
   const today = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
   // group by section preserving order
@@ -63,7 +64,7 @@ function AbstractView() {
           <div><b>Bill date:</b> {hdr.bill_date} {hdr.period_from ? `· Period ${hdr.period_from} to ${hdr.period_to || ""}` : ""}</div>
         </div>
         <div style={{ textAlign: "right" }}>
-          <div><b>Billing basis:</b> {split ? `Split — Material ${mp}% + Installation ${ip}%` : "Measured quantity"}</div>
+          <div><b>Billing basis:</b> {mode === "staged" ? "Staged — per-item payment groups (Supply / Installation / T&C %)" : mode === "split" ? `Split — Material ${mp}% + Installation ${ip}%` : "Measured quantity"}</div>
           <div><b>Status:</b> {hdr.status}</div>
         </div>
       </div>
@@ -99,9 +100,13 @@ function AbstractView() {
       </table>
 
       <div style={{ display: "flex", gap: 24, marginTop: 14, fontSize: 12 }}>
-        <div style={{ border: "1.5px solid #0F1419", borderRadius: 8, padding: "10px 16px" }}>
-          <div><b>Amount claimed this bill (RA-{hdr.bill_no}):</b> {rup(totals.cur)}</div>
-          <div className="muted" style={{ color: "#555", fontSize: 11 }}>Cumulative to date {rup(totals.cum)} of BOQ {rup(totals.boq)} ({totals.boq ? Math.round(totals.cum / totals.boq * 100) : 0}%) · GST & deductions as per work order</div>
+        <div style={{ border: "1.5px solid #0F1419", borderRadius: 8, padding: "10px 16px", minWidth: 330 }}>
+          <table style={{ fontSize: 12, borderCollapse: "collapse" }}><tbody>
+            <tr><td style={{ padding: "2px 14px 2px 0" }}>Total this bill (I)</td><td style={{ textAlign: "right", fontWeight: 700 }}>{rup(totals.cur)}</td></tr>
+            <tr><td style={{ padding: "2px 14px 2px 0" }}>GST @ {gstPct}% (II)</td><td style={{ textAlign: "right", fontWeight: 700 }}>{rup(totals.cur * gstPct / 100)}</td></tr>
+            <tr style={{ borderTop: "1.5px solid #0F1419" }}><td style={{ padding: "3px 14px 2px 0", fontWeight: 800 }}>GRAND TOTAL (I + II)</td><td style={{ textAlign: "right", fontWeight: 800 }}>{rup(totals.cur * (1 + gstPct / 100))}</td></tr>
+          </tbody></table>
+          <div style={{ color: "#555", fontSize: 10.5, marginTop: 4 }}>Cumulative to date {rup(totals.cum)} of BOQ {rup(totals.boq)} ({totals.boq ? Math.round(totals.cum / totals.boq * 100) : 0}%) · deductions as per work order</div>
         </div>
       </div>
       {hdr.remarks && <div style={{ marginTop: 8, fontSize: 11.5 }}><b>Remarks:</b> {hdr.remarks}</div>}
