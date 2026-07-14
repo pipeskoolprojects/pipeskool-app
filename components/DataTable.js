@@ -9,7 +9,7 @@ import { useMemo, useState } from "react";
     title, exportName
     dateField: key used by the from/to date-range picker (optional)
 */
-export default function DataTable({ columns, rows, exportName = "export", dateField, rightExtra }) {
+export default function DataTable({ columns, rows, exportName = "export", dateField, rightExtra, fixed }) {
   const [search, setSearch] = useState("");
   const [selects, setSelects] = useState({});      // {colKey: value}
   const [from, setFrom] = useState("");
@@ -108,7 +108,8 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
       </div>
 
       <div style={{ overflowX: "auto", width: "100%" }}>
-      <table style={{ minWidth: "100%" }} className="dt-compact">
+      <table style={fixed ? { width: "100%", tableLayout: "fixed" } : { minWidth: "100%" }} className="dt-compact">
+        {fixed && <colgroup>{columns.map(c => <col key={c.key} style={c.width ? { width: c.width } : {}} />)}</colgroup>}
         <thead>
           <tr>
             {columns.map(c => (
@@ -126,7 +127,8 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
           ) : filtered.map((r, i) => (
             <tr key={r.id ?? i}>
               {columns.map(c => (
-                <td key={c.key} className={c.type === "num" ? "num" : ""}>
+                <td key={c.key} className={c.type === "num" ? "num" : ""}
+                    style={c.wrap ? { whiteSpace: "normal", wordBreak: "break-word", verticalAlign: "top", lineHeight: 1.4, fontSize: 12.5 } : {}}>
                   {c.render ? c.render(r) : r[c.key]}
                 </td>
               ))}
