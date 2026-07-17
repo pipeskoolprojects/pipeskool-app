@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { getWorkers, saveWorker, uploadAadhaarDoc, inr } from "@/lib/data";
 import { getContractors, getSitesList } from "@/lib/mobile";
-import { getStaff, addStaff, updateStaff, getRoles, addRole, resetStaffPassword } from "@/lib/access";
+import { getStaff, addStaff, updateStaff, getRoles, addRole, resetStaffPassword, getUserSites, assignSite, removeSite } from "@/lib/access";
 import { getSession } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
 
@@ -69,6 +69,11 @@ export default function WorkersPage() {
     const res = smodal.id
       ? await updateStaff(smodal.id, smodal)
       : await addStaff({ full_name: smodal.full_name, mobile: String(smodal.mobile || "").trim(), role: smodal.role, site_id: smodal.site_id ? Number(smodal.site_id) : null });
+    if (res.ok && smodal.id && smodal.siteIds) {
+      const now = smodal.siteIds, before = smodal.origSiteIds || [];
+      for (const sid of now.filter(x => !before.includes(x))) await assignSite(smodal.id, sid, smodal.role);
+      for (const sid of before.filter(x => !now.includes(x))) await removeSite(smodal.id, sid);
+    }
     setBusy(false);
     if (!res.ok && res.error) { setErr(res.error); return; }
     setMsg(smodal.id ? "Staff member updated." : "Staff added — they sign in with their mobile and create a password on first login. Set their module rights in Admin → Access Rights.");
@@ -132,7 +137,7 @@ export default function WorkersPage() {
                       <td style={{ fontWeight: 600 }}>{u.full_name}</td>
                       <td className="muted">{u.mobile}</td>
                       <td>{roleLabel(u.role)}</td>
-                      <td style={{ textAlign: "right" }}>{isDirector && <button style={{ fontSize: 11.5 }} onClick={() => { setErr(""); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true }); }}>✎ Edit</button>}</td>
+                      <td style={{ textAlign: "right" }}>{isDirector && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const ids = await getUserSites(u.id); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, siteIds: ids.map(Number), origSiteIds: ids.map(Number) }); }}>✎ Edit</button>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -225,6 +230,24 @@ export default function WorkersPage() {
                       <option value="">— none —</option>
                       {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select></div>
+                )}
+                {smodal.id && (
+                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                    <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 6 }}>Sites assigned <span className="muted" style={{ fontWeight: 400 }}>(tick all that apply — multi-site staff see a site switcher on mobile)</span></div>
+                    <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                      {sites.map(st => (
+                        <label key={st.id} style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+                          <input type="checkbox" style={{ accentColor: "var(--copper)" }}
+                            checked={(smodal.siteIds || []).includes(Number(st.id))}
+                            onChange={e => sset("siteIds", e.target.checked
+                              ? [ ...(smodal.siteIds || []), Number(st.id) ]
+                              : (smodal.siteIds || []).filter(x => x !== Number(st.id)))} />
+                          {st.name}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>New sites get the role's default rights — fine-tune per site in Admin → Access Rights.</div>
+                  </div>
                 )}
                 {smodal.id && (
                   <label style={{ display: "inline-flex", gap: 7, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
