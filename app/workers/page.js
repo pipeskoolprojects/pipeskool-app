@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
-import { getWorkers, saveWorker, inr } from "@/lib/data";
+import { getWorkers, saveWorker, uploadAadhaarDoc, inr } from "@/lib/data";
 import { getContractors, getSitesList } from "@/lib/mobile";
 import { getStaff, addStaff, updateStaff, getRoles, addRole, resetStaffPassword } from "@/lib/access";
 import { getSession } from "@/lib/auth";
@@ -166,6 +166,24 @@ export default function WorkersPage() {
                       <option value="">Select…</option>
                       {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select></div>
+                </div>
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 6 }}>KYC & bank <span className="muted" style={{ fontWeight: 400 }}>(all three needed for "Complete" profile)</span></div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <div style={{ flex: 1.4 }}><label className="muted">Bank account no</label><input style={{ width: "100%" }} inputMode="numeric" value={modal.bank_account_no || ""} onChange={e => set("bank_account_no", e.target.value)} /></div>
+                    <div style={{ flex: 1 }}><label className="muted">IFSC</label><input style={{ width: "100%" }} value={modal.bank_ifsc || ""} onChange={e => set("bank_ifsc", e.target.value.toUpperCase())} placeholder="e.g. SBIN0001234" /></div>
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <label className="muted">Aadhaar copy {modal.aadhaar_doc_url && <a href={modal.aadhaar_doc_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
+                    <input type="file" accept="image/*,.pdf" onChange={async e => {
+                      const f = e.target.files?.[0]; if (!f) return;
+                      setBusy(true); setErr("");
+                      const r = await uploadAadhaarDoc(modal.mobile || modal.id || "w", f);
+                      setBusy(false);
+                      if (!r.ok) { setErr(r.error); return; }
+                      set("aadhaar_doc_url", r.url);
+                    }} />
+                  </div>
                 </div>
                 {modal.labour_type === "contractor" && (
                   <div><label className="muted">Contractor</label>
