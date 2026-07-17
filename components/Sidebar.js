@@ -6,20 +6,22 @@ import Logo from "@/components/Logo";
 import { getSession, clearSession, logoutAuth, canSeeModuleAnySite, setCurrentSite } from "@/lib/auth";
 
 const GROUPS = [
-  { label: "Labour & Attendance", items: [
-    { href: "/attendance", label: "Attendance & Labour", module: "attendance" },
-    { href: "/wages", label: "Muster Roll & Wages", module: "wages" },
-    { href: "/workers", label: "Workers & Staff Master", module: "workers" },
-  ] },
-  { label: "Materials & Procurement", items: [
-    { href: "/procure", label: "Indent & Purchase", module: "indent" },
-    { href: "/stock", label: "Material Stock & Inventory", module: "stock" },
-    { href: "/vendors", label: "Vendor Master", module: "indent" },
-    { href: "/assets", label: "Tools & Assets", module: "assets" },
-  ] },
-  { label: "Site Execution", items: [
-    { href: "/dpr", label: "Daily Progress Report (DPR)", module: "dpr" },
-    { href: "/expenses", label: "Expenses & Petty Cash", module: "money" },
+  { label: "Core Site Operations", subs: [
+    { label: "Labour & Attendance", items: [
+      { href: "/attendance", label: "Attendance & Labour", module: "attendance" },
+      { href: "/wages", label: "Muster Roll & Wages", module: "wages" },
+      { href: "/workers", label: "Workers & Staff Master", module: "workers" },
+    ] },
+    { label: "Material & Procurement", items: [
+      { href: "/procure", label: "Indent & Purchase", module: "indent" },
+      { href: "/stock", label: "Material Stock & Inventory", module: "stock" },
+      { href: "/vendors", label: "Vendor Master", module: "indent" },
+      { href: "/assets", label: "Tools & Assets", module: "assets" },
+    ] },
+    { label: "Site Execution", items: [
+      { href: "/dpr", label: "Daily Progress Report (DPR)", module: "dpr" },
+      { href: "/expenses", label: "Expenses & Petty Cash", module: "money" },
+    ] },
   ] },
   { label: "Commercial / Billing", items: [
     { href: "/boq", label: "BOQ Master", module: "dpr" },
@@ -27,6 +29,7 @@ const GROUPS = [
     { href: "/tally", label: "Tally Export", module: null },
   ] },
 ];
+const groupItems = g => g.items || (g.subs || []).flatMap(x => x.items);
 
 export default function Sidebar() {
   const path = usePathname();
@@ -42,10 +45,13 @@ export default function Sidebar() {
 
   // auto-expand the group that holds the current page
   useEffect(() => {
-    const g = GROUPS.find(grp => grp.items.some(it => it.href === path));
+    const g = GROUPS.find(grp => groupItems(grp).some(it => it.href === path));
     setOpen(o => {
       const next = { ...o };
-      if (g) next[g.label] = true;
+      if (g) {
+        next[g.label] = true;
+        (g.subs || []).forEach(sg => { if (sg.items.some(it => it.href === path)) next[sg.label] = true; });
+      }
       if (path === "/access") next["Admin"] = true;
       return next;
     });
@@ -58,22 +64,29 @@ export default function Sidebar() {
   const showAccess = session && session.role === "director";
   const showDash = canSee("dashboard");
 
-  function Group({ label, items }) {
-    const visible = items.filter(it => canSee(it.module));
-    if (visible.length === 0) return null;
-    const hasActive = visible.some(it => it.href === path);
+  function Group({ label, items, subs, depth = 0 }) {
+    const all = items || (subs || []).flatMap(x => x.items);
+    const visibleAll = all.filter(it => canSee(it.module));
+    if (visibleAll.length === 0) return null;
+    const hasActive = visibleAll.some(it => it.href === path);
     const isOpen = open[label] ?? hasActive;
     return (
-      <div>
-        <button className={"nav-group" + (hasActive && !isOpen ? " has-active" : "")} onClick={() => toggle(label)}>
+      <div style={depth ? { paddingLeft: 10 } : undefined}>
+        <button className={"nav-group" + (hasActive && !isOpen ? " has-active" : "")}
+                style={depth ? { fontSize: 11, opacity: 0.95 } : undefined}
+                onClick={() => toggle(label)}>
           <span>{label}</span>
           <span className="chev">{isOpen ? "▾" : "▸"}</span>
         </button>
-        {isOpen && (
-          <nav className="nav-sub" style={{ marginTop: 0 }}>
-            {visible.map(l => <Link key={l.href} href={l.href} className={path === l.href ? "active" : ""}>{l.label}</Link>)}
+        {isOpen && (subs ? (
+          subs.map(sg => <Group key={sg.label} label={sg.label} items={sg.items} depth={depth + 1} />)
+        ) : (
+          <nav className="nav-sub" style={{ marginTop: 0, paddingLeft: depth ? 6 : 0 }}>
+            {items.filter(it => canSee(it.module)).map(l => (
+              <Link key={l.href} href={l.href} className={path === l.href ? "active" : ""}>{l.label}</Link>
+            ))}
           </nav>
-        )}
+        ))}
       </div>
     );
   }
@@ -106,7 +119,7 @@ export default function Sidebar() {
         </nav>
       )}
 
-      {GROUPS.map(g => <Group key={g.label} label={g.label} items={g.items} />)}
+      {GROUPS.map(g => <Group key={g.label} label={g.label} items={g.items} subs={g.subs} />)}
 
       {showAccess && <Group label="Admin" items={[{ href: "/access", label: "Access Rights", module: null }, { href: "/sitemaster", label: "Site Master (timings)", module: null }]} />}
 
