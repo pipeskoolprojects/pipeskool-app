@@ -137,7 +137,7 @@ export default function WorkersPage() {
                       <td style={{ fontWeight: 600 }}>{u.full_name}</td>
                       <td className="muted">{u.mobile}</td>
                       <td>{roleLabel(u.role)}</td>
-                      <td style={{ textAlign: "right" }}>{isDirector && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const ids = await getUserSites(u.id); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, siteIds: ids.map(Number), origSiteIds: ids.map(Number) }); }}>✎ Edit</button>}</td>
+                      <td style={{ textAlign: "right" }}>{isDirector && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const us = await getUserSites(u.id); const ids = us.map(x => Number(x.id)); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, siteIds: ids, origSiteIds: [...ids] }); }}>✎ Edit</button>}</td>
                     </tr>
                   ))}
                 </tbody>
