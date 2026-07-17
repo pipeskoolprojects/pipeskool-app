@@ -6,19 +6,23 @@ import Logo from "@/components/Logo";
 import { getSession, clearSession, logoutAuth, canSeeModuleAnySite, setCurrentSite } from "@/lib/auth";
 
 const GROUPS = [
-  { label: "Core Site Operations", items: [
+  { label: "Labour & Attendance", items: [
     { href: "/attendance", label: "Attendance & Labour", module: "attendance" },
     { href: "/wages", label: "Muster Roll & Wages", module: "wages" },
     { href: "/workers", label: "Workers & Staff Master", module: "workers" },
-    { href: "/dpr", label: "Daily Progress Report (DPR)", module: "dpr" },
-    { href: "/boq", label: "BOQ Master", module: "dpr" },
-    { href: "/expenses", label: "Expenses & Petty Cash", module: "money" },
-    { href: "/stock", label: "Material Stock & Inventory", module: "stock" },
+  ] },
+  { label: "Materials & Procurement", items: [
     { href: "/procure", label: "Indent & Purchase", module: "indent" },
+    { href: "/stock", label: "Material Stock & Inventory", module: "stock" },
     { href: "/vendors", label: "Vendor Master", module: "indent" },
     { href: "/assets", label: "Tools & Assets", module: "assets" },
   ] },
+  { label: "Site Execution", items: [
+    { href: "/dpr", label: "Daily Progress Report (DPR)", module: "dpr" },
+    { href: "/expenses", label: "Expenses & Petty Cash", module: "money" },
+  ] },
   { label: "Commercial / Billing", items: [
+    { href: "/boq", label: "BOQ Master", module: "dpr" },
     { href: "/billing", label: "RA Billing", module: null },
     { href: "/tally", label: "Tally Export", module: null },
   ] },
