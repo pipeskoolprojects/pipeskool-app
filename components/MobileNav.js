@@ -3,27 +3,30 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { logoutAuth, getSession } from "@/lib/auth";
+import { LANGS, getLang, setLang, t } from "@/lib/i18n";
 
 const primaryBase = [
-  { href: "/m", ico: "⏱", label: "Punch" },
-  { href: "/m/muster", ico: "👥", label: "Muster" },
-  { href: "/m/dpr", ico: "📋", label: "DPR" },
-  { href: "/m/stock", ico: "📦", label: "Stock" },
+  { href: "/m", ico: "⏱", key: "nav_punch" },
+  { href: "/m/muster", ico: "👥", key: "nav_muster" },
+  { href: "/m/dpr", ico: "📋", key: "nav_dpr" },
+  { href: "/m/stock", ico: "📦", key: "nav_stock" },
 ];
 const more = [
-  { href: "/m/report", label: "Site report", ico: "📊" },
-  { href: "/m/indent", ico: "🧾", label: "Material indent" },
-  { href: "/m/assets", ico: "🔧", label: "Tools & assets" },
-  { href: "/m/money", ico: "₹", label: "Money / expenses" },
-  { href: "/m/verify", ico: "✔", label: "Verify attendance" },
-  { href: "/m/add", ico: "＋", label: "Add worker" },
+  { href: "/m/report", ico: "📊", key: "m_report" },
+  { href: "/m/indent", ico: "🧾", key: "m_indent" },
+  { href: "/m/assets", ico: "🔧", key: "m_assets" },
+  { href: "/m/money", ico: "₹", key: "m_money" },
+  { href: "/m/verify", ico: "✔", key: "m_verify" },
+  { href: "/m/add", ico: "＋", key: "m_add" },
 ];
 
 export default function MobileNav() {
   const [role, setRole] = useState(null);
-  useEffect(() => { setRole(getSession()?.role || null); }, []);
+  const [lang, setLangState] = useState("en");
+  useEffect(() => { setRole(getSession()?.role || null); setLangState(getLang()); }, []);
+  const pickLang = l => { setLang(l); window.location.reload(); };
   const primary = role === "director"
-    ? [{ href: "/m/report", ico: "📊", label: "Report" }, ...primaryBase.slice(1)]
+    ? [{ href: "/m/report", ico: "📊", key: "nav_report" }, ...primaryBase.slice(1)]
     : primaryBase;
   const path = usePathname();
   const router = useRouter();
@@ -47,24 +50,34 @@ export default function MobileNav() {
             {more.map(m => (
               <Link key={m.href} href={m.href} onClick={() => setOpen(false)}
                     style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", fontSize: 14, borderBottom: "1px solid var(--border)", color: path === m.href ? "var(--blue)" : "var(--text)" }}>
-                <span style={{ fontSize: 18 }}>{m.ico}</span>{m.label}
+                <span style={{ fontSize: 18 }}>{m.ico}</span>{t(lang, m.key)}
               </Link>
             ))}
+            <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "12px 14px", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
+              <span style={{ fontSize: 18 }}>🌐</span>
+              {LANGS.map(([code, label]) => (
+                <button key={code} onClick={() => pickLang(code)}
+                  style={{ fontSize: 12, padding: "3px 10px", borderRadius: 12, border: "1px solid var(--border)",
+                    background: lang === code ? "var(--copper)" : "#fff", color: lang === code ? "#fff" : "var(--text)" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
             <a onClick={logout}
                style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", fontSize: 14, color: "var(--red)", cursor: "pointer" }}>
-              <span style={{ fontSize: 18 }}>⎋</span>Log out
+              <span style={{ fontSize: 18 }}>⎋</span>{t(lang, "m_logout")}
             </a>
           </div>
         </div>
       )}
       <nav className="m-nav">
-        {primary.map(t => (
-          <Link key={t.href} href={t.href} className={path === t.href ? "active" : ""}>
-            <span className="ico">{t.ico}</span>{t.label}
+        {primary.map(tab => (
+          <Link key={tab.href} href={tab.href} className={path === tab.href ? "active" : ""}>
+            <span className="ico">{tab.ico}</span>{t(lang, tab.key)}
           </Link>
         ))}
         <a onClick={() => setOpen(o => !o)} className={inMore ? "active" : ""} style={{ cursor: "pointer" }}>
-          <span className="ico">⋯</span>More
+          <span className="ico">⋯</span>{t(lang, "nav_more")}
         </a>
       </nav>
     </>
