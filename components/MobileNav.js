@@ -50,7 +50,7 @@ export default function MobileNav() {
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", zIndex: 40 }}>
           <div onClick={e => e.stopPropagation()}
                style={{ position: "fixed", bottom: 58, left: "50%", transform: "translateX(-50%)", width: "min(430px, 100%)", background: "#fff", borderRadius: "14px 14px 0 0", padding: 10, zIndex: 50, boxShadow: "0 -4px 20px rgba(0,0,0,0.15)" }}>
-            {more.map(m => (
+            {(workerOnly ? [] : more).map(m => (
               <Link key={m.href} href={m.href} onClick={() => setOpen(false)}
                     style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", fontSize: 14, borderBottom: "1px solid var(--border)", color: path === m.href ? "var(--blue)" : "var(--text)" }}>
                 <span style={{ fontSize: 18 }}>{m.ico}</span>{t(lang, m.key)}
