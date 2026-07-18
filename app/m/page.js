@@ -5,6 +5,7 @@ import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { getLocalWorker, setLocalWorker, findWorkerByMobile, createStaffPunchProfile, getPosition, distanceMeters, getTodayPunch, punch } from "@/lib/mobile";
 import { getSession, refreshSessionMobile } from "@/lib/auth";
+import { getLang, t } from "@/lib/i18n";
 import Logo from "@/components/Logo";
 
 export default function PunchScreen() {
@@ -12,6 +13,8 @@ export default function PunchScreen() {
   const [worker, setWorker] = useState(null);
   const [pos, setPos] = useState(null);
   const [noProfile, setNoProfile] = useState(false);
+  const [lang, setLangState] = useState("en");
+  useEffect(() => { setLangState(getLang()); }, []);
   const [dist, setDist] = useState(null);
   const [today, setToday] = useState({});
   const [busy, setBusy] = useState(false);
@@ -85,8 +88,8 @@ export default function PunchScreen() {
     const fresh = await getTodayPunch(worker.id);
     setToday(fresh);
     setMsg(phase === "in"
-      ? "Punched in — selfie & GPS saved."
-      : `Punched out — ${fresh.status === "present" ? "Full day" : fresh.status === "half_day" ? "Half day" : "Recorded"}${fresh.ot_hours > 0 ? " · OT " + fresh.ot_hours + "h sent for approval" : ""}.`);
+      ? t(lang, "punched_in")
+      : `${fresh.status === "present" ? t(lang, "full_day") : fresh.status === "half_day" ? t(lang, "half_day") : t(lang, "recorded")}${fresh.ot_hours > 0 ? " · OT " + fresh.ot_hours + "h " + t(lang, "ot_sent") : ""}.`);
     e.target.value = "";
   }
 
@@ -107,11 +110,11 @@ export default function PunchScreen() {
 
         <div style={{ margin: "10px 0" }}>
           {dist === null ? (
-            <span className="geo-chip geo-wait">Checking your location…</span>
+            <span className="geo-chip geo-wait">{t(lang, "checking_loc")}</span>
           ) : insideFence ? (
-            <span className="geo-chip geo-ok">📍 You are inside the site</span>
+            <span className="geo-chip geo-ok">{t(lang, "inside_site")}</span>
           ) : (
-            <span className="geo-chip geo-bad">📍 {dist} m from site — ask supervisor to mark you</span>
+            <span className="geo-chip geo-bad">📍 {dist} {t(lang, "outside_site")}</span>
           )}
         </div>
 
@@ -122,7 +125,7 @@ export default function PunchScreen() {
           style={{ opacity: insideFence || phase === "done" ? 1 : 0.5 }}
         >
           <span style={{ fontSize: 30 }}>{phase === "done" ? "✓" : "☝"}</span>
-          {busy ? "Saving…" : phase === "in" ? "Punch in" : phase === "out" ? "Punch out" : "Done for today"}
+          {busy ? t(lang, "saving") : phase === "in" ? t(lang, "punch_in") : phase === "out" ? t(lang, "punch_out") : t(lang, "done_today")}
         </button>
         <div className="sub">📷 Selfie is captured with every punch</div>
 
