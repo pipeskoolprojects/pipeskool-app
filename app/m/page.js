@@ -71,7 +71,7 @@ export default function PunchScreen() {
 
   const insideFence = dist !== null && dist <= (worker.geofence_radius_m || 200);
   const phase = !today.punch_in ? "in" : !today.punch_out ? "out" : "done";
-  const t = ts => ts ? new Date(ts).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—";
+  const fmtTime = ts => ts ? new Date(ts).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—";
 
   function startPunch() {
     if (!insideFence || phase === "done" || busy) return;
@@ -135,8 +135,8 @@ export default function PunchScreen() {
         {msg && <div className="note green" style={{ textAlign: "left" }}>{msg}</div>}
 
         <div className="stat-row">
-          <div className="stat-box"><div className="k">In</div><div className="v">{t(today.punch_in)}</div></div>
-          <div className="stat-box"><div className="k">Out</div><div className="v">{t(today.punch_out)}</div></div>
+          <div className="stat-box"><div className="k">In</div><div className="v">{fmtTime(today.punch_in)}</div></div>
+          <div className="stat-box"><div className="k">Out</div><div className="v">{fmtTime(today.punch_out)}</div></div>
           <div className="stat-box"><div className="k">Hours</div><div className="v">{today.hours_worked ?? "0.0"}</div></div>
         </div>
 

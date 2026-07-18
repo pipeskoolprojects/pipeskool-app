@@ -9,6 +9,7 @@ import {
 } from "@/lib/money";
 
 export default function MoneyScreen() {
+  if (typeof window !== "undefined" && !getSession()) { window.location.replace("/m"); return null; }
   const [mode, setMode] = useState("none");     // none | advance | expense
   const [petty, setPetty] = useState(0);
   const [recent, setRecent] = useState([]);

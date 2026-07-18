@@ -1,4 +1,5 @@
 "use client";
+import { getSession as __gs } from "@/lib/auth";
 import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
@@ -8,6 +9,7 @@ import { searchWorkItems } from "@/lib/boq";
 import { getSitesList } from "@/lib/mobile";
 
 export default function DPRScreen() {
+  if (typeof window !== "undefined" && !__gs()) { window.location.replace("/m"); return null; }
   const [siteId, setSiteId] = useState(1);
   const [sites, setSites] = useState([]);
   const [manpower, setManpower] = useState(0);

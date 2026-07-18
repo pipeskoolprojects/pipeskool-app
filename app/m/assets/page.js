@@ -1,4 +1,5 @@
 "use client";
+import { getSession as __gs } from "@/lib/auth";
 import { useEffect, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
@@ -9,6 +10,7 @@ import {
 import { getSitesList } from "@/lib/mobile";
 
 export default function AssetsScreen() {
+  if (typeof window !== "undefined" && !__gs()) { window.location.replace("/m"); return null; }
   const [tab, setTab] = useState("mine");   // mine | repair | add
   const [siteId, setSiteId] = useState(1);
   const [sites, setSites] = useState([]);

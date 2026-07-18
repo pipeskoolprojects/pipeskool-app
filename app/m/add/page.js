@@ -1,10 +1,12 @@
 "use client";
+import { getSession as __gs } from "@/lib/auth";
 import { useEffect, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { addWorker, getContractors, getSitesList } from "@/lib/mobile";
 
 export default function AddWorkerScreen() {
+  if (typeof window !== "undefined" && !__gs()) { window.location.replace("/m"); return null; }
   const [f, setF] = useState({
     full_name: "", mobile: "", category: "plumber", labour_type: "own",
     contractor_id: "", daily_wage: "", site_id: "",

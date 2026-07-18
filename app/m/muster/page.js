@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { getMuster, proxyPunch, proxyPunchOut, getSiteGeo, getPosition, distanceMeters } from "@/lib/mobile";
-import { getSession, setCurrentSite } from "@/lib/auth";
+import { getSession, setCurrentSite, can } from "@/lib/auth";
 
 const initials = n => n.split(" ").map(x => x[0]).slice(0, 2).join("");
 
@@ -15,6 +15,8 @@ export default function MusterScreen() {
   const [geo, setGeo] = useState(null);      // { dist, inside, unset }
   const fileRef = useRef(null);
   const sess = typeof window !== "undefined" ? getSession() : null;
+  useEffect(() => { if (typeof window !== "undefined" && !getSession()) window.location.replace("/m"); }, []);
+  const canProxy = sess && (sess.role === "director" || can(sess, "attendance", "edit", siteId));
   const siteId = sess?.currentSite || sess?.sites?.[0]?.id || 1;
   const siteName = sess?.sites?.find(x => x.id === siteId)?.name || "";
   const markedBy = sess?.name || "Supervisor";
@@ -35,7 +37,11 @@ export default function MusterScreen() {
     return () => { alive = false; };
   }, [siteId]);
 
-  function startProxy(r, m) {
+  function startProxy(...args) {
+    if (!canProxy) { alert("Only the site supervisor / incharge can mark on behalf."); return; }
+    return startProxyInner(...args);
+  }
+  function startProxyInner(r, m) {
     setTarget(r); setMode(m); setMsg("");
     fileRef.current?.click();
   }
@@ -105,13 +111,13 @@ export default function MusterScreen() {
              r.in && !r.out ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
                 <span className="badge gray">On site</span>
-                <button style={{ fontSize: 11, padding: "5px 9px" }} onClick={() => startProxy(r, "out")}>Mark out</button>
+                {canProxy ? <button style={{ fontSize: 11, padding: "5px 9px" }} onClick={() => startProxy(r, "out")}>Mark out</button> : null}
               </div>
-             ) : r.in && r.out ? <span className="badge gray">Out {r.out}</span> : (
+             ) : r.in && r.out ? <span className="badge gray">Out {r.out}</span> : canProxy ? (
               <button style={{ fontSize: 11.5, padding: "6px 10px" }} onClick={() => startProxy(r, "in")}>
                 Mark on behalf
               </button>
-            )}
+            ) : null}
           </div>
         ))}
 

@@ -11,6 +11,7 @@ import { getVendors } from "@/lib/vendors";
 import { getSession } from "@/lib/auth";
 
 export default function StockScreen() {
+  if (typeof window !== "undefined" && !getSession()) { window.location.replace("/m"); return null; }
   const [tab, setTab] = useState("stock");   // stock | grn | issue | settle | return
   const [siteId, setSiteId] = useState(1);
   const [sites, setSites] = useState([]);

@@ -9,6 +9,7 @@ const COL = { present: "#1a7f4f", half: "#e0a400", onsite: "#8a96a0", proxy: "#F
 const DL = { pending: "Awaiting", confirmed: "Confirmed", delayed: "Delayed", dispatched: "Out for delivery" };
 
 export default function MobileReport() {
+  if (typeof window !== "undefined" && !getSession()) { window.location.replace("/m"); return null; }
   const [days, setDays] = useState(7);
   const [siteId, setSiteId] = useState("all");
   const [r, setR] = useState(null);

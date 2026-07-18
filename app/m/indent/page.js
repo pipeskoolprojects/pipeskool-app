@@ -20,6 +20,7 @@ const DELIV = {
 };
 
 export default function IndentScreen() {
+  if (typeof window !== "undefined" && !getSession()) { window.location.replace("/m"); return null; }
   const [tab, setTab] = useState("track");   // track | new
   const [siteId, setSiteId] = useState(1);
   const [sites, setSites] = useState([]);
