@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { logoutAuth, getSession } from "@/lib/auth";
+import { getLocalWorker } from "@/lib/mobile";
 import { LANGS, getLang, setLang, t } from "@/lib/i18n";
 
 const primaryBase = [
@@ -22,10 +23,12 @@ const more = [
 
 export default function MobileNav() {
   const [role, setRole] = useState(null);
+  const [workerOnly, setWorkerOnly] = useState(false);
   const [lang, setLangState] = useState("en");
-  useEffect(() => { setRole(getSession()?.role || null); setLangState(getLang()); }, []);
+  useEffect(() => { const st = getSession(); setRole(st?.role || null); setWorkerOnly(!st && !!getLocalWorker()); setLangState(getLang()); }, []);
   const pickLang = l => { setLang(l); window.location.reload(); };
-  const primary = role === "director"
+  const workerPrimary = [{ href: "/m", ico: "⏱", key: "nav_punch" }];
+  const primary = workerOnly ? workerPrimary : role === "director"
     ? [{ href: "/m/report", ico: "📊", key: "nav_report" }, ...primaryBase.slice(1)]
     : primaryBase;
   const path = usePathname();
