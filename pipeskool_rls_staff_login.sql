@@ -7,6 +7,9 @@
 -- table itself stays fully locked. Safe to run before or after RLS enable.
 -- RUN ONCE in Supabase SQL Editor, together with deploying update95.
 -- ============================================================
+-- prerequisite from update74 (harmless if already present)
+alter table app_users add column if not exists auth_version int not null default 1;
+
 create or replace function fn_staff_login_lookup(p_mobile text)
 returns table (id bigint, full_name text, mobile text, role text, site_id bigint,
                auth_id uuid, auth_email text, auth_version int)
