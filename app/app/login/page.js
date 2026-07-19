@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { isDemo } from "@/lib/supabase";
-import { checkLoginState, loginByMobilePassword, createPasswordAndLogin } from "@/lib/auth";
+import { checkLoginState, loginByMobilePassword, createPasswordAndLogin, requestPasswordReset } from "@/lib/auth";
 import Logo from "@/components/Logo";
 
 export default function Login() {
@@ -11,6 +11,7 @@ export default function Login() {
   const [confirm, setConfirm] = useState("");
   const [mode, setMode] = useState("start");   // start | password | set
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
   const router = useRouter();
 
@@ -46,7 +47,23 @@ export default function Login() {
     router.push(window.innerWidth <= 820 ? home : "/dashboard");
   }
 
-  const back = () => { setMode("start"); setPassword(""); setConfirm(""); setError(""); };
+  async function handleForgot() {
+    setError(""); setInfo("");
+    setBusy(true);
+    const res = await requestPasswordReset(mobile);
+    setBusy(false);
+    if (!res.ok) { setError(res.error); return; }
+    if (res.status === "no_password") {
+      setMode("set"); setPassword(""); setConfirm("");
+      setInfo("Your password was already reset — create a new one below.");
+      return;
+    }
+    setInfo(res.status === "already_pending"
+      ? "Your reset request is already with the Director. Once approved, enter your number again and you'll be asked to create a new password."
+      : "Reset request sent to the Director. Once approved, enter your number again and you'll be asked to create a new password.");
+  }
+
+  const back = () => { setMode("start"); setPassword(""); setConfirm(""); setError(""); setInfo(""); };
 
   return (
     <div className="login-wrap">
@@ -79,12 +96,20 @@ export default function Login() {
         )}
 
         {error && <div className="error">{error}</div>}
+        {info && <div className="note amber" style={{ margin: "8px 0", fontSize: 12.5 }}>{info}</div>}
         <button className="primary" type="submit" disabled={busy}>
           {busy ? "Please wait…" : mode === "start" ? "Next" : mode === "set" ? "Create password & sign in" : "Sign in"}
         </button>
         {mode !== "start" && <button type="button" onClick={back} style={{ marginTop: 8 }}>← Different number</button>}
+        {mode === "password" && (
+          <button type="button" onClick={handleForgot} disabled={busy} style={{ marginTop: 8, fontSize: 12.5 }}>
+            Forgot password? Request a reset
+          </button>
+        )}
         <p style={{ marginTop: 14, fontSize: 11.5, color: "var(--muted)" }}>
-          Forgot your password? Ask the Director to reset it.
+          {mode === "password"
+            ? "A reset request goes to the Director — once approved, you sign in again and create a new password."
+            : "Forgot your password? Enter your number, tap Next, then request a reset — the Director approves it."}
         </p>
       </form>
     </div>
