@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import MobileNav from "@/components/MobileNav";
 import { getDirectorReport, inr } from "@/lib/reports";
 import { getSession } from "@/lib/auth";
+import { getResetRequests, approveResetRequest, declineResetRequest } from "@/lib/access";
 
 const COL = { present: "#1a7f4f", half: "#e0a400", onsite: "#8a96a0", proxy: "#FF7A1A" };
 const DL = { pending: "Awaiting", confirmed: "Confirmed", delayed: "Delayed", dispatched: "Out for delivery" };
@@ -15,14 +16,35 @@ export default function MobileReport() {
   const [r, setR] = useState(null);
   const [open, setOpen] = useState({});   // siteId -> expanded
   const [loading, setLoading] = useState(true);
+  const [resetReqs, setResetReqs] = useState([]);   // pending password reset requests (Director only)
+  const [rrBusy, setRrBusy] = useState(false);
+  const [rrMsg, setRrMsg] = useState("");
   const router = useRouter();
   const sess = typeof window !== "undefined" ? getSession() : null;
+
+  const loadResets = () => { if (sess?.role === "director") getResetRequests().then(setResetReqs); };
 
   useEffect(() => {
     if (!sess) { router.push("/login"); return; }
     setLoading(true);
     getDirectorReport(days).then(d => { setR(d); setLoading(false); });
   }, [days]);
+  useEffect(() => { loadResets(); }, []);
+
+  async function decideReset(req, approve) {
+    const q = approve
+      ? `Approve password reset for ${req.full_name} (${req.mobile})?\n\nTheir current password stops working, and on their next login they create a new one.`
+      : `Decline ${req.full_name}'s password reset request?\n\nTheir current password keeps working.`;
+    if (!confirm(q)) return;
+    setRrBusy(true); setRrMsg("");
+    const res = approve ? await approveResetRequest(req, sess?.id) : await declineResetRequest(req.id, sess?.id);
+    setRrBusy(false);
+    if (!res.ok) { alert(res.error || "Could not update the request — try again."); return; }
+    setRrMsg(approve
+      ? `${req.full_name} — reset approved. On their next sign-in they'll create a new password.`
+      : `${req.full_name} — request declined. Their current password still works.`);
+    loadResets();
+  }
 
   const mySiteIds = sess?.role === "director" ? null : (sess?.sites || []).map(s => String(s.id));
   const allowed = (r?.sites || []).filter(s => !mySiteIds || mySiteIds.includes(String(s.id)));
@@ -72,6 +94,25 @@ export default function MobileReport() {
       </div>
 
       <div style={{ padding: "12px 14px 80px" }}>
+        {sess?.role === "director" && resetReqs.length > 0 && (
+          <div style={{ ...card, borderLeft: "4px solid var(--copper)" }}>
+            <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 2 }}>🔑 Password reset requests ({resetReqs.length})</div>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>Requested from the login screen. Approving makes the old password useless — they create a new one on their next sign-in.</div>
+            {resetReqs.map(req => (
+              <div key={req.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderTop: "1px solid var(--border)" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12.5 }}>{req.full_name || "Staff #" + req.user_id}</div>
+                  <div className="muted" style={{ fontSize: 11 }}>
+                    {req.mobile}{req.requested_at ? " · " + new Date(req.requested_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}
+                  </div>
+                </div>
+                <button className="primary" style={{ fontSize: 11.5, whiteSpace: "nowrap" }} disabled={rrBusy} onClick={() => decideReset(req, true)}>✓ Approve</button>
+                <button style={{ fontSize: 11.5 }} disabled={rrBusy} onClick={() => decideReset(req, false)}>✕ Decline</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {rrMsg && <div style={{ ...card, borderLeft: "4px solid #1a7f4f", fontSize: 12.5 }}>{rrMsg}</div>}
         {loading ? <div className="muted">Loading…</div> : !view ? <div className="muted">No data.</div> : (
           <>
             {/* attention strip */}
