@@ -34,6 +34,7 @@ export default function PunchScreen() {
           // every staff member (except Directors) must punch — enrol them automatically
           const made = await createStaffPunchProfile({ ...sess, mobile: mob });
           if (made.ok) wk = await findWorkerByMobile(mob);
+          else { setNoProfile(made.error || true); return; }
         }
         if (wk) { setLocalWorker(wk); window.location.reload(); }
         else if (sess.role === "director") { router.push("/m/report"); }
@@ -58,6 +59,8 @@ export default function PunchScreen() {
       <div className="note amber" style={{ marginTop: 30 }}>
         {noProfile === "director"
           ? <>You are signed in as <b>Director</b> — Directors are exempt from punch in/out. Everyone else punches automatically from this tab.</>
+          : typeof noProfile === "string"
+          ? <>Punch profile setup failed: <b>{noProfile}</b> — show this message to the Director.</>
           : <>Your punch profile could not be set up automatically. Ask the Director to check your mobile number and site in Workers &amp; Staff Master, then try again.</>}
       </div>
       <button className="primary btn-block" style={{ marginTop: 14 }} onClick={() => window.location.href = "/m/muster"}>Go to Daily muster</button>

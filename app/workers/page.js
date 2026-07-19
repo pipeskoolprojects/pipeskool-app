@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { getWorkers, saveWorker, uploadAadhaarDoc, inr } from "@/lib/data";
 import { getContractors, getSitesList } from "@/lib/mobile";
-import { getStaff, addStaff, updateStaff, getRoles, addRole, resetStaffPassword, getUserSites, assignSite, removeSite, getResetRequests, approveResetRequest, declineResetRequest } from "@/lib/access";
+import { getStaff, addStaff, updateStaff, getRoles, addRole, resetStaffPassword, getUserSites, assignSite, removeSite } from "@/lib/access";
 import { getSession } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
 
@@ -22,7 +22,6 @@ export default function WorkersPage() {
   const [roleModal, setRoleModal] = useState(false);
   const [newRole, setNewRole] = useState("");
   const [staff, setStaff] = useState(null);
-  const [resetReqs, setResetReqs] = useState([]);   // pending password reset requests
   const [smodal, setSmodal] = useState(null);    // staff add/edit modal
   const [modal, setModal] = useState(null);     // { id?, ...form }  null = closed
   const [busy, setBusy] = useState(false);
@@ -30,7 +29,7 @@ export default function WorkersPage() {
 
   const sess = typeof window !== "undefined" ? getSession() : null;
   const isDirector = sess?.role === "director";
-  const load = () => { getWorkers().then(setRows); getStaff().then(setStaff); getRoles().then(setRoles); getResetRequests().then(setResetReqs); };
+  const load = () => { getWorkers().then(setRows); getStaff().then(setStaff); getRoles().then(setRoles); };
   const roleLabel = r => (roles.find(x => x.code === r) || { label: r }).label;
   useEffect(() => { load(); getSitesList().then(setSites); getContractors().then(setContractors); }, []);
 
@@ -63,21 +62,6 @@ export default function WorkersPage() {
     if (!res.ok) { setErr(res.error); return; }
     setMsg(smodal.full_name + " — password reset. On their next sign-in they'll create a new password. (If they're removed from the company, also untick Active.)");
     setSmodal(null); load();
-  }
-
-  async function decideReset(req, approve) {
-    const q = approve
-      ? `Approve password reset for ${req.full_name} (${req.mobile})?\n\nTheir current password stops working, and on their next login they create a new one.`
-      : `Decline ${req.full_name}'s password reset request?\n\nTheir current password keeps working.`;
-    if (!confirm(q)) return;
-    setBusy(true); setErr("");
-    const res = approve ? await approveResetRequest(req, sess?.id) : await declineResetRequest(req.id, sess?.id);
-    setBusy(false);
-    if (!res.ok) { setErr(res.error); return; }
-    setMsg(approve
-      ? req.full_name + " — password reset approved. On their next sign-in they'll create a new password."
-      : req.full_name + "'s reset request declined — their current password still works.");
-    load();
   }
 
   async function saveStaff() {
@@ -126,9 +110,7 @@ export default function WorkersPage() {
         </div>
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           <button className={tab === "workers" ? "primary" : ""} onClick={() => setTab("workers")}>Workers (labour)</button>
-          <button className={tab === "staff" ? "primary" : ""} onClick={() => setTab("staff")}>
-            Staff (login users){isDirector && resetReqs.length > 0 ? ` · 🔑 ${resetReqs.length}` : ""}
-          </button>
+          <button className={tab === "staff" ? "primary" : ""} onClick={() => setTab("staff")}>Staff (login users)</button>
         </div>
         {isDemo && <div className="demo-banner">Demo mode — sample worker master shown.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
@@ -141,28 +123,6 @@ export default function WorkersPage() {
           <div className="panel">
             {!rows ? <div className="muted">Loading…</div> :
               <DataTable columns={columns} rows={rows} exportName="workers" />}
-          </div>
-        )}
-        {tab === "staff" && isDirector && resetReqs.length > 0 && (
-          <div className="panel" style={{ marginBottom: 14, borderLeft: "3px solid var(--copper)" }}>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>🔑 Password reset requests</div>
-            <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Requested from the login screen. Approving makes the old password useless — they create a new one on their next sign-in.</div>
-            <table>
-              <thead><tr><th>Name</th><th>Mobile</th><th>Requested</th><th></th></tr></thead>
-              <tbody>
-                {resetReqs.map(r => (
-                  <tr key={r.id}>
-                    <td style={{ fontWeight: 600 }}>{r.full_name} <span className="muted" style={{ fontWeight: 400, fontSize: 11 }}>({roleLabel(r.role)})</span></td>
-                    <td className="muted">{r.mobile}</td>
-                    <td className="muted">{r.requested_at ? new Date(r.requested_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</td>
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button className="primary" style={{ fontSize: 11.5 }} disabled={busy} onClick={() => decideReset(r, true)}>✓ Approve reset</button>{" "}
-                      <button style={{ fontSize: 11.5 }} disabled={busy} onClick={() => decideReset(r, false)}>✕ Decline</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         )}
         {tab === "staff" && (
