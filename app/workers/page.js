@@ -137,7 +137,7 @@ export default function WorkersPage() {
                       <td style={{ fontWeight: 600 }}>{u.full_name}</td>
                       <td className="muted">{u.mobile}</td>
                       <td>{roleLabel(u.role)}</td>
-                      <td style={{ textAlign: "right" }}>{isDirector && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const us = await getUserSites(u.id); const ids = us.map(x => Number(x.id)); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible, annual_paid_leaves: u.annual_paid_leaves || "", siteIds: ids, origSiteIds: [...ids] }); }}>✎ Edit</button>}</td>
+                      <td style={{ textAlign: "right" }}>{isDirector && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const us = await getUserSites(u.id); const ids = us.map(x => Number(x.id)); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible, annual_paid_leaves: u.annual_paid_leaves || "", joining_date: u.joining_date || "", siteIds: ids, origSiteIds: [...ids] }); }}>✎ Edit</button>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -235,6 +235,8 @@ export default function WorkersPage() {
                   <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
                   <div style={{ flex: 1 }}><label className="muted">Monthly salary ₹ <span style={{ fontWeight: 400 }}>(for Staff Salary sheet; 0 = not on staff payroll)</span></label>
                     <input style={{ width: "100%" }} inputMode="numeric" value={smodal.monthly_salary ?? ""} onChange={e => sset("monthly_salary", e.target.value)} /></div>
+                  <div style={{ width: 140 }}><label className="muted">Joining date</label>
+                    <input type="date" style={{ width: "100%" }} value={smodal.joining_date || ""} onChange={e => sset("joining_date", e.target.value)} /></div>
                   <div style={{ width: 120 }}><label className="muted">Paid leaves / yr</label>
                     <input style={{ width: "100%" }} inputMode="numeric" value={smodal.annual_paid_leaves ?? ""} onChange={e => sset("annual_paid_leaves", e.target.value)} /></div>
                   <label style={{ display: "inline-flex", gap: 7, alignItems: "center", fontSize: 13, cursor: "pointer", paddingBottom: 8 }}>

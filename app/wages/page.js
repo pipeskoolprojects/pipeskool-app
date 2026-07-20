@@ -167,7 +167,7 @@ export default function WagesPage() {
               }}>⬇ Export Excel</button>
             </div>
             <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-              Per-day = salary ÷ 30 (fixed) · Sundays paid · absences use the paid-leave balance first, only the rest deduct · OT only for staff marked <b>OT eligible</b> (approved hours, per-day ÷ 8) · approved salary advances auto-deducted · approved/paid rows never change.
+              Per-day = salary ÷ 30 (fixed) · Sundays paid · leave year Apr–Mar · max 50% of leaves usable Apr–Sep · max 10 leaves at a stretch · absences beyond these limits deduct <b>OT eligible</b> (approved hours, per-day ÷ 8) · approved salary advances auto-deducted · approved/paid rows never change.
             </div>
             {!srows ? <div className="muted">Loading…</div> : srows.length === 0 ? (
               <div className="muted">No staff salary rows for {month}. Set <b>Monthly salary</b> on staff (Workers & Staff Master → Edit) and click Generate.</div>
