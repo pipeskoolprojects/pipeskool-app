@@ -78,12 +78,13 @@ export default function SiteMasterPage() {
         {add && (
           <div className="panel">
             <h2>Add site / office location</h2>
-            <div className="muted" style={{ marginBottom: 10, fontSize: 12.5 }}>Use this for project sites AND your Head Office — office staff punch against the office location the same way site staff punch at site.</div>
+            <div className="muted" style={{ marginBottom: 10, fontSize: 12.5 }}>Use this for project sites AND your Head Office — office staff punch against the office location the same way site staff punch at site. Location: on Google Maps, right-click the gate → click the coordinates to copy → paste below.</div>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
               <div><label className="muted">Name *</label><input style={{ width: 240 }} value={add.name} onChange={e => setAdd(a => ({ ...a, name: e.target.value }))} placeholder="e.g. Head Office, Ahmedabad" /></div>
               <div><label className="muted">Short code</label><input style={{ width: 110 }} value={add.code} onChange={e => setAdd(a => ({ ...a, code: e.target.value }))} placeholder="HO" /></div>
               <div><label className="muted">Shift start</label><input type="time" value={add.shift_start} onChange={e => setAdd(a => ({ ...a, shift_start: e.target.value }))} /></div>
               <div><label className="muted">Shift end</label><input type="time" value={add.shift_end} onChange={e => setAdd(a => ({ ...a, shift_end: e.target.value }))} /></div>
+              <div><label className="muted">Location (paste from Google Maps)</label><input style={{ width: 220 }} placeholder="23.0225, 72.5714" value={add.coords || ""} onChange={e => setAdd(a => ({ ...a, coords: e.target.value }))} /></div>
               <div><label className="muted">Radius (m)</label><input style={{ width: 90 }} value={add.radius} onChange={e => setAdd(a => ({ ...a, radius: e.target.value }))} /></div>
               <button className="primary" disabled={adding} onClick={saveNewSite}>{adding ? "Adding…" : "Add"}</button>
               <button onClick={() => setAdd(null)}>Cancel</button>
