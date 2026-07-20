@@ -17,7 +17,7 @@ export default function MusterScreen() {
   const sess = typeof window !== "undefined" ? getSession() : null;
   useEffect(() => { if (typeof window !== "undefined" && !getSession()) window.location.replace("/m"); }, []);
   const siteId = sess?.currentSite || sess?.sites?.[0]?.id || 1;
-  const canProxy = sess && (sess.role === "director" || can(sess, "attendance", "edit", siteId));
+  const canProxy = sess && (sess.role === "director" || can(sess, "attendance", "create", siteId));
   const siteName = sess?.sites?.find(x => x.id === siteId)?.name || "";
   const markedBy = sess?.name || "Supervisor";
 
