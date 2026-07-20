@@ -214,7 +214,7 @@ export default function WorkersPage() {
         )}
         {smodal && (
           <div onClick={() => setSmodal(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}>
-            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 440, width: "100%", padding: 22 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 460, width: "100%", padding: 22, maxHeight: "88vh", overflowY: "auto" }}>
               <h2 style={{ marginBottom: 12 }}>{smodal.id ? "Edit staff member" : "Add staff member"}</h2>
               <div style={{ display: "grid", gap: 10 }}>
                 <div><label className="muted">Full name *</label><input style={{ width: "100%" }} value={smodal.full_name} onChange={e => sset("full_name", e.target.value)} /></div>
@@ -232,17 +232,21 @@ export default function WorkersPage() {
                     </select></div>
                 )}
                 {smodal.id && (<>
-                  <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
-                  <div style={{ flex: 1 }}><label className="muted">Monthly salary ₹ <span style={{ fontWeight: 400 }}>(for Staff Salary sheet; 0 = not on staff payroll)</span></label>
-                    <input style={{ width: "100%" }} inputMode="numeric" value={smodal.monthly_salary ?? ""} onChange={e => sset("monthly_salary", e.target.value)} /></div>
-                  <div style={{ width: 140 }}><label className="muted">Joining date</label>
-                    <input type="date" style={{ width: "100%" }} value={smodal.joining_date || ""} onChange={e => sset("joining_date", e.target.value)} /></div>
-                  <div style={{ width: 120 }}><label className="muted">Paid leaves / yr</label>
-                    <input style={{ width: "100%" }} inputMode="numeric" value={smodal.annual_paid_leaves ?? ""} onChange={e => sset("annual_paid_leaves", e.target.value)} /></div>
-                  <label style={{ display: "inline-flex", gap: 7, alignItems: "center", fontSize: 13, cursor: "pointer", paddingBottom: 8 }}>
-                    <input type="checkbox" checked={!!smodal.ot_eligible} onChange={e => sset("ot_eligible", e.target.checked)} style={{ accentColor: "var(--copper)" }} />
-                    OT eligible
-                  </label>
+                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 6 }}>Salary & leaves</div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+                    <div style={{ width: 130 }}><label className="muted">Monthly salary ₹</label>
+                      <input style={{ width: "100%" }} inputMode="numeric" value={smodal.monthly_salary ?? ""} onChange={e => sset("monthly_salary", e.target.value)} /></div>
+                    <div style={{ width: 145 }}><label className="muted">Joining date</label>
+                      <input type="date" style={{ width: "100%" }} value={smodal.joining_date || ""} onChange={e => sset("joining_date", e.target.value)} /></div>
+                    <div style={{ width: 105 }}><label className="muted">Paid leaves / yr</label>
+                      <input style={{ width: "100%" }} inputMode="numeric" value={smodal.annual_paid_leaves ?? ""} onChange={e => sset("annual_paid_leaves", e.target.value)} /></div>
+                    <label style={{ display: "inline-flex", gap: 7, alignItems: "center", fontSize: 13, cursor: "pointer", paddingBottom: 8 }}>
+                      <input type="checkbox" checked={!!smodal.ot_eligible} onChange={e => sset("ot_eligible", e.target.checked)} style={{ accentColor: "var(--copper)" }} />
+                      OT eligible
+                    </label>
+                  </div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Salary 0 = not on the Staff Salary sheet · joining date only for staff who joined after 1 April · leaves e.g. 20.</div>
                 </div>
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
                     <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 6 }}>Sites assigned <span className="muted" style={{ fontWeight: 400 }}>(tick all that apply — multi-site staff see a site switcher on mobile)</span></div>
