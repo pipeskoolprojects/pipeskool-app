@@ -137,7 +137,7 @@ export default function WorkersPage() {
                       <td style={{ fontWeight: 600 }}>{u.full_name}</td>
                       <td className="muted">{u.mobile}</td>
                       <td>{roleLabel(u.role)}</td>
-                      <td style={{ textAlign: "right" }}>{isDirector && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const us = await getUserSites(u.id); const ids = us.map(x => Number(x.id)); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, siteIds: ids, origSiteIds: [...ids] }); }}>✎ Edit</button>}</td>
+                      <td style={{ textAlign: "right" }}>{isDirector && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const us = await getUserSites(u.id); const ids = us.map(x => Number(x.id)); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible, annual_paid_leaves: u.annual_paid_leaves || "", siteIds: ids, origSiteIds: [...ids] }); }}>✎ Edit</button>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -231,8 +231,18 @@ export default function WorkersPage() {
                       {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select></div>
                 )}
-                {smodal.id && (
-                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                {smodal.id && (<>
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+                  <div style={{ flex: 1 }}><label className="muted">Monthly salary ₹ <span style={{ fontWeight: 400 }}>(for Staff Salary sheet; 0 = not on staff payroll)</span></label>
+                    <input style={{ width: "100%" }} inputMode="numeric" value={smodal.monthly_salary ?? ""} onChange={e => sset("monthly_salary", e.target.value)} /></div>
+                  <div style={{ width: 120 }}><label className="muted">Paid leaves / yr</label>
+                    <input style={{ width: "100%" }} inputMode="numeric" value={smodal.annual_paid_leaves ?? ""} onChange={e => sset("annual_paid_leaves", e.target.value)} /></div>
+                  <label style={{ display: "inline-flex", gap: 7, alignItems: "center", fontSize: 13, cursor: "pointer", paddingBottom: 8 }}>
+                    <input type="checkbox" checked={!!smodal.ot_eligible} onChange={e => sset("ot_eligible", e.target.checked)} style={{ accentColor: "var(--copper)" }} />
+                    OT eligible
+                  </label>
+                </div>
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
                     <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 6 }}>Sites assigned <span className="muted" style={{ fontWeight: 400 }}>(tick all that apply — multi-site staff see a site switcher on mobile)</span></div>
                     <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                       {sites.map(st => (
@@ -248,7 +258,7 @@ export default function WorkersPage() {
                     </div>
                     <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>New sites get the role's default rights — fine-tune per site in Admin → Access Rights.</div>
                   </div>
-                )}
+                </>)}
                 {smodal.id && (
                   <label style={{ display: "inline-flex", gap: 7, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
                     <input type="checkbox" checked={smodal.is_active !== false} onChange={e => sset("is_active", e.target.checked)} style={{ accentColor: "var(--copper)" }} />

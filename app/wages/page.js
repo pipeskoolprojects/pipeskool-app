@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { getSites, inr } from "@/lib/data";
 import { generatePayouts, getPayouts, setPayoutAdvance, setPayoutMode, approvePayouts, markPayoutsPaid } from "@/lib/payroll";
+import { generateStaffPayouts, getStaffPayouts, approveStaffPayouts, markStaffPayoutsPaid } from "@/lib/staffpay";
 import { getSession } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
 import * as XLSX from "xlsx";
@@ -14,12 +15,14 @@ export default function WagesPage() {
   const [site, setSite] = useState("all");
   const [sites, setSites] = useState([]);
   const [rows, setRows] = useState(null);
+  const [tab, setTab] = useState("labour");           // labour | staff
+  const [srows, setSrows] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
   const sess = typeof window !== "undefined" ? getSession() : null;
   const canApprove = sess && (sess.role === "director" || sess.role === "ho_admin");
 
-  const load = () => getPayouts(month, site).then(setRows);
+  const load = () => { getPayouts(month, site).then(setRows); getStaffPayouts(month).then(setSrows); };
   useEffect(() => { getSites().then(setSites); }, []);
   useEffect(() => { setRows(null); load(); setMsg(""); setErr(""); }, [month, site]);
 
@@ -77,11 +80,15 @@ export default function WagesPage() {
             </select>
           </div>
         </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <button className={tab === "labour" ? "primary" : ""} onClick={() => setTab("labour")}>👷 Labour payroll</button>
+          <button className={tab === "staff" ? "primary" : ""} onClick={() => setTab("staff")}>🧑‍💼 Staff salary</button>
+        </div>
         {isDemo && <div className="demo-banner">Demo mode — payroll needs a live database.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
         {err && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
 
-        <div className="panel">
+        {tab === "labour" && <div className="panel">
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
             <button className="primary" disabled={busy || site === "all"} onClick={generate}
               title={site === "all" ? "Pick a site first" : ""}>⚙ Generate / refresh from attendance</button>
@@ -142,7 +149,60 @@ export default function WagesPage() {
               </table>
             </div>
           )}
-        </div>
+        </div>}
+
+        {tab === "staff" && (
+          <div className="panel">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+              <button className="primary" disabled={busy} onClick={() => run(() => generateStaffPayouts(month),
+                r => `Staff salary generated: ${r.created} new, ${r.updated} draft(s) refreshed` + (r.skippedFinal ? `, ${r.skippedFinal} approved/paid untouched` : "") + ".")}>⚙ Generate from attendance</button>
+              {canApprove && <button disabled={busy || !(srows || []).some(r => r.status === "draft")} onClick={() => run(() => approveStaffPayouts(month, sess?.id), r => r.count + " approved.")}>✓ Approve drafts</button>}
+              {canApprove && <button disabled={busy || !(srows || []).some(r => r.status === "approved")} onClick={() => run(() => markStaffPayoutsPaid(month), r => r.count + " marked PAID.")}>₹ Mark PAID</button>}
+              <button disabled={!srows?.length} onClick={() => {
+                const data = (srows || []).map(r => ({ Staff: r.name, Role: r.role, "Salary ₹": r.salary, "Working days": r.working,
+                  "Present": r.present, "Absent": r.absent, "Paid leaves used": r.leaves, "Leave balance": r.leaveBal, "Deduction ₹": r.deduction, "OT h": r.ot, "OT ₹": r.otAmt,
+                  "Advances ₹": r.adv, "Net ₹": r.net, Status: r.status }));
+                const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Staff " + month); XLSX.writeFile(wb, `Pipeskool_staff_salary_${month}.xlsx`);
+              }}>⬇ Export Excel</button>
+            </div>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+              Per-day = salary ÷ 30 (fixed) · Sundays paid · absences use the paid-leave balance first, only the rest deduct · OT only for staff marked <b>OT eligible</b> (approved hours, per-day ÷ 8) · approved salary advances auto-deducted · approved/paid rows never change.
+            </div>
+            {!srows ? <div className="muted">Loading…</div> : srows.length === 0 ? (
+              <div className="muted">No staff salary rows for {month}. Set <b>Monthly salary</b> on staff (Workers & Staff Master → Edit) and click Generate.</div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table className="dt-compact">
+                  <thead><tr><th>Staff</th><th>Role</th><th className="num">Salary</th><th className="num">Present / Working</th><th className="num">Absent</th><th className="num">Paid leave (bal)</th><th className="num">Deduction</th><th className="num">OT h</th><th className="num">OT ₹</th><th className="num">Advances</th><th className="num">Net</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {srows.map(r => { const [lbl, cls] = STATUS[r.status] || [r.status, "gray"]; return (
+                      <tr key={r.id}>
+                        <td style={{ fontWeight: 600 }}>{r.name}</td><td className="muted">{r.role}</td>
+                        <td className="num">{inr(r.salary)}</td>
+                        <td className="num">{r.present} / {r.working}</td>
+                        <td className="num" style={{ color: r.absent > 0 ? "var(--red)" : "inherit" }}>{r.absent}</td>
+                        <td className="num">{r.leaves ? r.leaves : "—"} <span className="muted" style={{ fontSize: 10.5 }}>({r.leaveBal} left)</span></td>
+                        <td className="num">{inr(r.deduction)}</td>
+                        <td className="num">{r.ot ? r.ot.toFixed(1) : "—"}</td>
+                        <td className="num">{inr(r.otAmt)}</td>
+                        <td className="num">{inr(r.adv)}</td>
+                        <td className="num" style={{ fontWeight: 700 }}>{inr(r.net)}</td>
+                        <td><span className={"badge " + cls}>{lbl}</span></td>
+                      </tr> ); })}
+                  </tbody>
+                  <tfoot><tr style={{ fontWeight: 800, borderTop: "2px solid var(--text)" }}>
+                    <td colSpan={6}>TOTAL — {srows.length} staff</td>
+                    <td className="num">{inr(srows.reduce((t, r) => t + r.deduction, 0))}</td><td></td>
+                    <td className="num">{inr(srows.reduce((t, r) => t + r.otAmt, 0))}</td>
+                    <td className="num">{inr(srows.reduce((t, r) => t + r.adv, 0))}</td>
+                    <td className="num">{inr(srows.reduce((t, r) => t + r.net, 0))}</td><td></td>
+                  </tr></tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );
