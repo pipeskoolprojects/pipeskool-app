@@ -250,7 +250,7 @@ export default function BillingPage() {
                       <tr key={l.boq_item_id}>
                         <td style={{ fontWeight: 600 }}>{l.item_code}</td>
                         <td style={{ whiteSpace: "normal", wordBreak: "break-word", verticalAlign: "top" }} title={l.description}>
-                          <span style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontSize: 12, lineHeight: 1.35 }}>{l.description}</span>
+                          <span style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontSize: 12, lineHeight: 1.35 }}>{l.display || l.description}</span>
                           <span className="muted" style={{ fontSize: 11 }}>({l.unit})</span>
                         </td>
                         <td className="num">{l.boq_qty}</td>

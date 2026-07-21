@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
-import { getBoqItems, saveBoqItem, bulkImportBoq, BOQ_TEMPLATE_HEADERS, inr } from "@/lib/boq";
+import { getBoqItems, saveBoqItem, bulkImportBoq, autoShortenBoq, BOQ_TEMPLATE_HEADERS, inr } from "@/lib/boq";
 import * as XLSX from "xlsx";
 
 const blank = { item_code: "", description: "", unit: "Rmt", boq_qty: "", rate: "", section: "" };
@@ -63,7 +63,8 @@ export default function BoqPage() {
 
   const columns = [
     { key: "item_code", label: "Code", width: 72, filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.item_code || "—"}</span> },
-    { key: "description", label: "Description", filter: "search", wrap: true },
+    { key: "display", label: "Item", filter: "search", wrap: true,
+      render: r => <span title={r.description}>{r.display}{r.short_name ? <span className="muted" style={{ fontSize: 10.5 }}> ✎</span> : null}</span> },
     { key: "section", label: "Section", width: 150, wrap: true, filter: "select" },
     { key: "unit", label: "Unit", width: 58 },
     { key: "boq_qty", label: "BOQ qty", type: "num", render: r => r.boq_qty.toLocaleString("en-IN"), exportValue: r => r.boq_qty },
@@ -87,6 +88,7 @@ export default function BoqPage() {
               {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             <button onClick={() => { setForm({ ...blank }); setMsg(""); }}>＋ Add line</button>
+            <button onClick={async () => { setErr(""); const r = await autoShortenBoq(site); if (!r.ok) { setErr(r.error); return; } setMsg(r.count + " line(s) given short names — edit any line to refine."); load(); }}>✂ Auto-shorten names</button>
             <button onClick={() => fileRef.current?.click()}>⬆ Import BOQ (CSV / Excel)</button>
             <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={onFile} />
           </div>
@@ -111,7 +113,8 @@ export default function BoqPage() {
             <h2>{form.id ? "Edit BOQ line" : "Add BOQ line"}</h2>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10 }}>
               <div><label className="muted">Item code</label><input style={{ width: "100%" }} value={form.item_code} onChange={e => set("item_code", e.target.value)} /></div>
-              <div style={{ gridColumn: "span 2" }}><label className="muted">Description *</label><input style={{ width: "100%" }} value={form.description} onChange={e => set("description", e.target.value)} /></div>
+              <div style={{ gridColumn: "span 2" }}><label className="muted">Full description * <span style={{ fontWeight: 400 }}>(prints on the client abstract — keep as per work order)</span></label><input style={{ width: "100%" }} value={form.description} onChange={e => set("description", e.target.value)} /></div>
+              <div style={{ gridColumn: "span 2" }}><label className="muted">Short name <span style={{ fontWeight: 400 }}>(shown in app tables, billing worksheet & DPR — concise)</span></label><input style={{ width: "100%" }} value={form.short_name || ""} onChange={e => set("short_name", e.target.value)} placeholder="e.g. Handicap toilet set — EWC + basin + rails" /></div>
               <div><label className="muted">Section</label><input style={{ width: "100%" }} value={form.section} onChange={e => set("section", e.target.value)} /></div>
               <div><label className="muted">Unit</label><input style={{ width: "100%" }} value={form.unit} onChange={e => set("unit", e.target.value)} /></div>
               <div><label className="muted">BOQ qty</label><input style={{ width: "100%" }} value={form.boq_qty} onChange={e => set("boq_qty", e.target.value)} /></div>
