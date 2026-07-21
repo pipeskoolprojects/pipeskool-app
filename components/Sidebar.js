@@ -20,6 +20,7 @@ const GROUPS = [
     ] },
     { label: "Site Execution", items: [
       { href: "/dpr", label: "Daily Progress Report (DPR)", module: "dpr" },
+      { href: "/rentals", label: "Machines & Rooms (Rent)", module: "rentals" },
       { href: "/expenses", label: "Expenses & Petty Cash", module: "money" },
     ] },
   ] },

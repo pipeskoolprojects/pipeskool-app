@@ -16,6 +16,7 @@ const more = [
   { href: "/m/report", ico: "📊", key: "m_report" },
   { href: "/m/indent", ico: "🧾", key: "m_indent" },
   { href: "/m/assets", ico: "🔧", key: "m_assets" },
+  { href: "/m/rentals", ico: "🚜", key: "m_rentals" },
   { href: "/m/money", ico: "₹", key: "m_money" },
   { href: "/m/verify", ico: "✔", key: "m_verify" },
   { href: "/m/add", ico: "＋", key: "m_add" },
