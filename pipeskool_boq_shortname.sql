@@ -9,7 +9,9 @@ alter table boq_items add column if not exists short_name text;
 select 'BOQ short names installed' as done;
 
 -- rebuild the progress view to expose short_name
-create or replace view v_boq_progress as
+-- (drop first: CREATE OR REPLACE cannot insert a column mid-list)
+drop view if exists v_boq_progress;
+create view v_boq_progress as
 select b.id, b.site_id, s.name as site_name, s.code as site_code,
   b.item_code, b.description, b.short_name, b.unit, b.section,
   b.boq_qty, b.done_qty,
