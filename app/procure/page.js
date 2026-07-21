@@ -8,6 +8,8 @@ import {
   DELIVERY_STATUS, updatePODelivery,
 } from "@/lib/procure";
 import { getVendors } from "@/lib/vendors";
+import { createIndent } from "@/lib/stock";
+import { getSites } from "@/lib/data";
 
 export default function ProcurePage() {
   const [session, setSession] = useState(null);
@@ -28,6 +30,26 @@ export default function ProcurePage() {
   const [itemSplits, setItemSplits] = useState({}); // {itemId: [{vendor, qty}]} when qty-split is on
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+  const [sites, setSites] = useState([]);
+  const [ni, setNi] = useState(null);                    // new-indent modal state
+  useEffect(() => { getSites().then(setSites); }, []);
+  const blankLine = () => ({ item_name: "", qty: "", unit: "" });
+  const openNewIndent = () => setNi({ site_id: "", required_by: "", urgency: "normal", note: "", lines: [blankLine()] });
+  async function submitNewIndent() {
+    setErr("");
+    if (!ni.site_id) { setErr("Pick a site."); return; }
+    const lines = ni.lines.filter(l => l.item_name.trim() && Number(l.qty) > 0);
+    if (!lines.length) { setErr("Add at least one item with a quantity."); return; }
+    setBusy(true);
+    const res = await createIndent(
+      { site_id: Number(ni.site_id), raised_by: session?.id || null, required_by: ni.required_by || null,
+        urgency: ni.urgency, note: ni.note || null },
+      lines.map(l => ({ item_name: l.item_name.trim(), qty: Number(l.qty), unit: l.unit || null })));
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setNi(null); setMsg("Indent " + res.indent_no + " raised.");
+    getOpenIndents().then(setIndents);
+  }
   const [masterVendors, setMasterVendors] = useState([]);
 
   const load = () => { getOpenIndents("all").then(setIndents); getPOs("all").then(setPos); };
@@ -226,7 +248,44 @@ export default function ProcurePage() {
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
 
         <div className="panel">
-          <h2>Open material requests {open.length > 0 && <span className="badge warn">{open.length}</span>}</h2>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h2>Open material requests {open.length > 0 && <span className="badge warn">{open.length}</span>}</h2>
+            <button className="primary" onClick={openNewIndent}>＋ New indent</button>
+          </div>
+          {ni && (
+            <div style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 14, margin: "10px 0", background: "#FAFBFC" }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>Raise material indent</div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 8 }}>
+                <div><label className="muted">Site *</label><br />
+                  <select value={ni.site_id} onChange={e => setNi(n => ({ ...n, site_id: e.target.value }))}>
+                    <option value="">— pick —</option>
+                    {sites.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
+                  </select></div>
+                <div><label className="muted">Need by</label><br />
+                  <input type="date" value={ni.required_by} onChange={e => setNi(n => ({ ...n, required_by: e.target.value }))} /></div>
+                <label style={{ display: "inline-flex", gap: 6, alignItems: "center", cursor: "pointer", paddingBottom: 6 }}>
+                  <input type="checkbox" checked={ni.urgency === "urgent"} onChange={e => setNi(n => ({ ...n, urgency: e.target.checked ? "urgent" : "normal" }))} style={{ accentColor: "var(--copper)" }} /> URGENT
+                </label>
+                <input style={{ flex: 1, minWidth: 180 }} placeholder="Note (optional)" value={ni.note} onChange={e => setNi(n => ({ ...n, note: e.target.value }))} />
+              </div>
+              {ni.lines.map((l, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                  <input style={{ flex: 2 }} placeholder="Item / material name *" value={l.item_name}
+                         onChange={e => setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], item_name: e.target.value }; return { ...n, lines: ls }; })} />
+                  <input style={{ width: 90 }} inputMode="numeric" placeholder="Qty *" value={l.qty}
+                         onChange={e => setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], qty: e.target.value }; return { ...n, lines: ls }; })} />
+                  <input style={{ width: 90 }} placeholder="Unit" value={l.unit}
+                         onChange={e => setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], unit: e.target.value }; return { ...n, lines: ls }; })} />
+                  {ni.lines.length > 1 && <button onClick={() => setNi(n => ({ ...n, lines: n.lines.filter((_, j) => j !== i) }))}>✕</button>}
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button onClick={() => setNi(n => ({ ...n, lines: [...n.lines, blankLine()] }))}>＋ Add item</button>
+                <button className="primary" disabled={busy} onClick={submitNewIndent}>Raise indent</button>
+                <button onClick={() => setNi(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
           {!indents ? <div className="muted">Loading…</div> : open.length === 0 ? <span className="muted">No open indents. Site staff raise them from Material stock → Raise material request.</span> : (
             open.map(ind => (
               <div key={ind.id} style={{ border: "1px solid var(--border)", borderRadius: 10, marginBottom: 10 }}>
