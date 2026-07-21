@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { getSession, can } from "@/lib/auth";
 import { getSites } from "@/lib/data";
-import { getRentals, addRental, endRental, getRentalDocs, uploadRentalDoc, inr } from "@/lib/rentals";
+import { getRentals, addRental, endRental, getRentalDocs, uploadRentalDoc, getMachineTypes, addMachineType, inr } from "@/lib/rentals";
 
 export default function RentalsPage() {
   const [sess, setSess] = useState(null);
@@ -15,6 +15,17 @@ export default function RentalsPage() {
   const [docsFor, setDocsFor] = useState(null);   // rental row whose docs are open
   const [docs, setDocs] = useState([]);
   const [docName, setDocName] = useState("");
+  const [types, setTypes] = useState([]);
+  const [newType, setNewType] = useState(null);   // null = hidden, "" = open input
+  useEffect(() => { getMachineTypes().then(setTypes); }, []);
+  async function saveNewType() {
+    const r = await addMachineType(newType);
+    if (!r.ok) { setErr(r.error); return; }
+    setTypes(await getMachineTypes());
+    setForm(f => ({ ...f, name: r.type.name }));
+    setNewType(null);
+    if (r.existed) setMsg(`"${r.type.name}" already exists — selected it.`);
+  }
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
 
   useEffect(() => { setSess(getSession()); getSites().then(setSites); }, []);
@@ -63,7 +74,23 @@ export default function RentalsPage() {
             <div style={{ fontWeight: 700, marginBottom: 8 }}>Add {kind} on rent</div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
               <div><label className="muted">{kind === "machine" ? "Machine type *" : "Room name/label *"}</label><br />
-                <input placeholder={kind === "machine" ? "JCB / Boom lift / …" : "Labour room, Gota"} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+                {kind === "machine" ? (
+                  <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                    <select value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}>
+                      <option value="">— pick type —</option>
+                      {types.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                    </select>
+                    {newType === null
+                      ? <button style={{ fontSize: 12 }} onClick={() => setNewType("")}>＋ New type</button>
+                      : <>
+                          <input style={{ width: 130 }} placeholder="e.g. Excavator" value={newType} onChange={e => setNewType(e.target.value)} />
+                          <button className="primary" style={{ fontSize: 12 }} onClick={saveNewType}>Add</button>
+                          <button style={{ fontSize: 12 }} onClick={() => setNewType(null)}>✕</button>
+                        </>}
+                  </span>
+                ) : (
+                  <input placeholder="Labour room, Gota" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                )}</div>
               <div><label className="muted">Site *</label><br />
                 <select value={form.site_id} onChange={e => setForm(f => ({ ...f, site_id: e.target.value }))}>
                   <option value="">— pick —</option>

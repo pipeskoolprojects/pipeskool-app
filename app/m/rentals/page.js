@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { getSession, can } from "@/lib/auth";
-import { getRentals, addRental, getRentalDocs, uploadRentalDoc, inr } from "@/lib/rentals";
+import { getRentals, addRental, getRentalDocs, uploadRentalDoc, getMachineTypes, addMachineType, inr } from "@/lib/rentals";
 
 export default function MRentals() {
   const sess = typeof window !== "undefined" ? getSession() : null;
@@ -14,6 +14,16 @@ export default function MRentals() {
   const [docName, setDocName] = useState("");
   const [form, setForm] = useState(null);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+  const [types, setTypes] = useState([]);
+  const [newType, setNewType] = useState(null);
+  useEffect(() => { getMachineTypes().then(setTypes); }, []);
+  async function saveNewType() {
+    const r = await addMachineType(newType);
+    if (!r.ok) { setErr(r.error); return; }
+    setTypes(await getMachineTypes());
+    setForm(f => ({ ...f, name: r.type.name }));
+    setNewType(null);
+  }
   const canCreate = sess && (sess.role === "director" || can(sess, "rentals", "create", siteId));
 
   const load = () => siteId && getRentals(siteId).then(setRows);
@@ -51,7 +61,22 @@ export default function MRentals() {
         {form && (
           <div className="m-card" style={{ marginBottom: 10 }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>Add {form.kind}</div>
-            <input placeholder={form.kind === "machine" ? "Machine type (JCB…)" : "Room name"} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={{ width: "100%", marginBottom: 6 }} />
+            {form.kind === "machine" ? (
+              <div style={{ marginBottom: 6 }}>
+                <select value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={{ width: "100%" }}>
+                  <option value="">— pick machine type —</option>
+                  {types.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                </select>
+                {newType === null
+                  ? <button style={{ fontSize: 12, marginTop: 4 }} onClick={() => setNewType("")}>＋ New type</button>
+                  : <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                      <input style={{ flex: 1 }} placeholder="e.g. Excavator" value={newType} onChange={e => setNewType(e.target.value)} />
+                      <button className="primary" style={{ fontSize: 12 }} onClick={saveNewType}>Add</button>
+                    </div>}
+              </div>
+            ) : (
+              <input placeholder="Room name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={{ width: "100%", marginBottom: 6 }} />
+            )}
             <input placeholder={form.kind === "machine" ? "Supplier name" : "Owner name"} value={form.supplier_name} onChange={e => setForm(f => ({ ...f, supplier_name: e.target.value }))} style={{ width: "100%", marginBottom: 6 }} />
             <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
               <input type="date" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value, rent_due_day: f.rent_due_day || (e.target.value ? String(Number(e.target.value.slice(8, 10))) : "") }))} style={{ flex: 1 }} />
