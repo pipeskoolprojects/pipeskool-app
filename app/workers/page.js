@@ -206,6 +206,15 @@ export default function WorkersPage() {
               </div>
               {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
               <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                {modal.id && isDirector && (
+                  <button style={{ color: "var(--red)", borderColor: "var(--red)" }} disabled={busy}
+                    onClick={async () => {
+                      if (!confirm("Delete this worker permanently? Only possible if they have no attendance/wage history.")) return;
+                      const r = await deleteWorker(modal.id);
+                      if (r.ok) { setModal(null); setMsg("Worker deleted."); }
+                      else setErr(r.error);
+                    }}>🗑 Delete</button>
+                )}
                 <button className="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : modal.id ? "Save changes" : "Add worker"}</button>
                 <button onClick={() => setModal(null)}>Cancel</button>
               </div>
@@ -280,6 +289,15 @@ export default function WorkersPage() {
               </div>
               {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
               <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                {smodal.id && isDirector && smodal.id !== sess?.id && (
+                  <button style={{ color: "var(--red)", borderColor: "var(--red)" }} disabled={busy}
+                    onClick={async () => {
+                      if (!confirm("Delete this staff member permanently? Only possible if they have no approvals/records in their name. For leavers with history, untick Active instead.")) return;
+                      const r = await deleteStaff(smodal.id);
+                      if (r.ok) { setSmodal(null); setMsg("Staff member deleted."); }
+                      else setErr(r.error);
+                    }}>🗑 Delete</button>
+                )}
                 <button className="primary" disabled={busy} onClick={saveStaff}>{busy ? "Saving…" : smodal.id ? "Save changes" : "Add staff"}</button>
                 <button onClick={() => setSmodal(null)}>Cancel</button>
               </div>
