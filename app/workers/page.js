@@ -216,6 +216,7 @@ export default function WorkersPage() {
                     }}>🗑 Delete</button>
                 )}
                 <button className="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : modal.id ? "Save changes" : "Add worker"}</button>
+                {err && <div className="note red" style={{ width: "100%", marginTop: 8 }}>{err}</div>}
                 <button onClick={() => setModal(null)}>Cancel</button>
               </div>
             </div>
@@ -299,6 +300,7 @@ export default function WorkersPage() {
                     }}>🗑 Delete</button>
                 )}
                 <button className="primary" disabled={busy} onClick={saveStaff}>{busy ? "Saving…" : smodal.id ? "Save changes" : "Add staff"}</button>
+                {err && <div className="note red" style={{ width: "100%", marginTop: 8 }}>{err}</div>}
                 <button onClick={() => setSmodal(null)}>Cancel</button>
               </div>
             </div>
