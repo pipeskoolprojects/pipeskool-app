@@ -32,6 +32,7 @@ export default function PunchScreen() {
       (async () => {
         const mob = sess.mobile || await refreshSessionMobile(sess);
         let wk = mob ? await findWorkerByMobile(mob) : null;
+        if (sess.requires_punch === false) { setNoProfile("nopunch"); return; }
         if (!wk && sess.role !== "director" && mob) {
           // every staff member (except Directors) must punch — enrol them automatically
           const made = await createStaffPunchProfile({ ...sess, mobile: mob });
@@ -78,7 +79,9 @@ export default function PunchScreen() {
   if (noProfile) return (
     <div className="m-wrap" style={{ padding: 20 }}>
       <div className="note amber" style={{ marginTop: 30 }}>
-        {noProfile === "director"
+        {noProfile === "nopunch"
+          ? <>Attendance punch is not enabled for your role. Use <b>Muster</b>, <b>DPR</b> and the other tabs — or ask the Director to enable punching for you in Workers &amp; Staff Master.</>
+          : noProfile === "director"
           ? <>You are signed in as <b>Director</b> — Directors are exempt from punch in/out. Everyone else punches automatically from this tab.</>
           : typeof noProfile === "string"
           ? <>Punch profile setup failed: <b>{noProfile}</b> — show this message to the Director.</>

@@ -137,7 +137,7 @@ export default function WorkersPage() {
                       <td style={{ fontWeight: 600 }}>{u.full_name}</td>
                       <td className="muted">{u.mobile}</td>
                       <td>{roleLabel(u.role)}</td>
-                      <td style={{ textAlign: "right" }}>{isDirector && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const us = await getUserSites(u.id); const ids = us.map(x => Number(x.id)); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible, annual_paid_leaves: u.annual_paid_leaves || "", joining_date: u.joining_date || "", siteIds: ids, origSiteIds: [...ids] }); }}>✎ Edit</button>}</td>
+                      <td style={{ textAlign: "right" }}>{isDirector && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const us = await getUserSites(u.id); const ids = us.map(x => Number(x.id)); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible, annual_paid_leaves: u.annual_paid_leaves || "", joining_date: u.joining_date || "", requires_punch: u.requires_punch !== false, siteIds: ids, origSiteIds: [...ids] }); }}>✎ Edit</button>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -257,6 +257,10 @@ export default function WorkersPage() {
                     </label>
                   </div>
                   <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Salary 0 = not on the Staff Salary sheet · joining date only for staff who joined after 1 April · leaves e.g. 20.</div>
+                  <label style={{ display: "inline-flex", gap: 7, alignItems: "center", fontSize: 13, cursor: "pointer", marginTop: 8 }}>
+                    <input type="checkbox" checked={smodal.requires_punch !== false} onChange={e => sset("requires_punch", e.target.checked)} style={{ accentColor: "var(--copper)" }} />
+                    Marks attendance (punch) — untick for pure office/billing staff; no worker profile will be created
+                  </label>
                 </div>
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
                     <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 6 }}>Sites assigned <span className="muted" style={{ fontWeight: 400 }}>(tick all that apply — multi-site staff see a site switcher on mobile)</span></div>
