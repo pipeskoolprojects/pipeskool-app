@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { getLocalWorker, setLocalWorker, findWorkerByMobile, createStaffPunchProfile, getPosition, distanceMeters, getTodayPunch, punch } from "@/lib/mobile";
-import { getSession, refreshSessionMobile } from "@/lib/auth";
+import { getSession, refreshSessionMobile, setCurrentSite } from "@/lib/auth";
 import { siteForPunch } from "@/lib/mobile";
 import { getLang, t } from "@/lib/i18n";
 import Logo from "@/components/Logo";
@@ -15,6 +15,19 @@ export default function PunchScreen() {
   const [pos, setPos] = useState(null);
   const [noProfile, setNoProfile] = useState(false);
   const [staffRole, setStaffRole] = useState(null);
+  const [staffSites, setStaffSites] = useState([]);
+  async function switchPunchSite(id) {
+    setCurrentSite(id);
+    const ov = await siteForPunch(id);
+    if (!ov) return;
+    setWorker(w => { const nw = { ...w, ...ov }; setLocalWorker(nw); return nw; });
+    setDist(null);
+    getPosition().then(p => {
+      setPos(p);
+      if (p && ov.geofence_lat != null) setDist(distanceMeters(p.lat, p.lng, ov.geofence_lat, ov.geofence_lng));
+      else setDist(0);
+    });
+  }
   const [lang, setLangState] = useState("en");
   useEffect(() => { setLangState(getLang()); }, []);
   const [dist, setDist] = useState(null);
@@ -57,6 +70,7 @@ export default function PunchScreen() {
       const sess = getSession();
       if (sess) {
         setStaffRole(String(sess.role || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()));
+        setStaffSites(sess.sites || []);
         const target = sess.currentSite || sess.sites?.[0]?.id;
         if (target && Number(target) !== Number(w.site_id)) {
           const ov = await siteForPunch(target);
@@ -125,7 +139,15 @@ export default function PunchScreen() {
       <div className="m-head">
         <div>
           <div className="title">{worker.full_name}</div>
-          <div className="sub">{staffRole || worker.category} · {worker.site_name}</div>
+          <div className="sub" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span>{staffRole || worker.category} ·</span>
+            {staffSites.length > 1 ? (
+              <select value={worker.site_id} onChange={e => switchPunchSite(e.target.value)}
+                style={{ background: "transparent", color: "inherit", border: "1px solid rgba(255,255,255,.35)", borderRadius: 8, padding: "2px 6px", fontSize: 12 }}>
+                {staffSites.map(st => <option key={st.id} value={st.id} style={{ color: "#0F1419" }}>{st.name}</option>)}
+              </select>
+            ) : <span>{worker.site_name}</span>}
+          </div>
         </div>
         <div className="sub">{new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</div>
       </div>
