@@ -5,6 +5,7 @@ import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { getLocalWorker, setLocalWorker, findWorkerByMobile, createStaffPunchProfile, getPosition, distanceMeters, getTodayPunch, punch } from "@/lib/mobile";
 import { getSession, refreshSessionMobile } from "@/lib/auth";
+import { siteForPunch } from "@/lib/mobile";
 import { getLang, t } from "@/lib/i18n";
 import Logo from "@/components/Logo";
 
@@ -13,6 +14,7 @@ export default function PunchScreen() {
   const [worker, setWorker] = useState(null);
   const [pos, setPos] = useState(null);
   const [noProfile, setNoProfile] = useState(false);
+  const [staffRole, setStaffRole] = useState(null);
   const [lang, setLangState] = useState("en");
   useEffect(() => { setLangState(getLang()); }, []);
   const [dist, setDist] = useState(null);
@@ -36,22 +38,41 @@ export default function PunchScreen() {
           if (made.ok) wk = await findWorkerByMobile(mob);
           else { setNoProfile(made.error || true); return; }
         }
-        if (wk) { setLocalWorker(wk); window.location.reload(); }
+        if (wk) {
+          const target = sess.currentSite || sess.sites?.[0]?.id;
+          if (target && Number(target) !== Number(wk.site_id)) {
+            const ov = await siteForPunch(target);
+            if (ov) wk = { ...wk, ...ov };
+          }
+          setLocalWorker(wk); window.location.reload();
+        }
         else if (sess.role === "director") { router.push("/m/report"); }
         else setNoProfile(true);
       })();
       return;
     }
-    setWorker(w);
-    getTodayPunch(w.id).then(setToday);
-    getPosition().then(p => {
-      setPos(p);
-      if (p && w.geofence_lat != null) {
-        setDist(distanceMeters(p.lat, p.lng, w.geofence_lat, w.geofence_lng));
-      } else {
-        setDist(0); // demo / geofence not set yet → allow
+    (async () => {
+      let wv = w;
+      const sess = getSession();
+      if (sess) {
+        setStaffRole(String(sess.role || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()));
+        const target = sess.currentSite || sess.sites?.[0]?.id;
+        if (target && Number(target) !== Number(w.site_id)) {
+          const ov = await siteForPunch(target);
+          if (ov) { wv = { ...w, ...ov }; setLocalWorker(wv); }
+        }
       }
-    });
+      setWorker(wv);
+      getTodayPunch(wv.id).then(setToday);
+      getPosition().then(p => {
+        setPos(p);
+        if (p && wv.geofence_lat != null) {
+          setDist(distanceMeters(p.lat, p.lng, wv.geofence_lat, wv.geofence_lng));
+        } else {
+          setDist(0); // demo / geofence not set yet → allow
+        }
+      });
+    })();
   }, [router]);
 
   if (noProfile) return (
@@ -101,7 +122,7 @@ export default function PunchScreen() {
       <div className="m-head">
         <div>
           <div className="title">{worker.full_name}</div>
-          <div className="sub">{worker.category} · {worker.site_name}</div>
+          <div className="sub">{staffRole || worker.category} · {worker.site_name}</div>
         </div>
         <div className="sub">{new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</div>
       </div>
