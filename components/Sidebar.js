@@ -15,6 +15,7 @@ const GROUPS = [
     { label: "Material & Procurement", items: [
       { href: "/procure", label: "Indent & Purchase", module: "indent" },
       { href: "/stock", label: "Material Stock & Inventory", module: "stock" },
+      { href: "/items", label: "Item / Material Master", module: "stock" },
       { href: "/vendors", label: "Vendor Master", module: "indent" },
       { href: "/assets", label: "Tools & Assets", module: "assets" },
     ] },
