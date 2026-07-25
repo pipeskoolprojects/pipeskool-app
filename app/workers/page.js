@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
-import { getWorkers, saveWorker, uploadAadhaarDoc, inr } from "@/lib/data";
+import { getWorkers, saveWorker, uploadAadhaarDoc, inr, deleteWorker, deleteStaff } from "@/lib/data";
 import { getContractors, getSitesList } from "@/lib/mobile";
 import { getStaff, addStaff, updateStaff, getRoles, addRole, resetStaffPassword, getUserSites, assignSite, removeSite } from "@/lib/access";
 import { getSession } from "@/lib/auth";
@@ -130,14 +130,19 @@ export default function WorkersPage() {
             <div className="muted" style={{ marginBottom: 10, fontSize: 12.5 }}>Staff sign in with mobile + password (created on first login). Module permissions per site are managed in <b>Admin → Access Rights</b>.</div>
             {!staff ? <div className="muted">Loading…</div> : (
               <table>
-                <thead><tr><th>Name</th><th>Mobile (login)</th><th>Role</th><th></th></tr></thead>
+                <thead><tr><th>Name</th><th>Mobile (login)</th><th>Role</th><th>Bank</th><th></th></tr></thead>
                 <tbody>
                   {staff.map(u => (
                     <tr key={u.id}>
                       <td style={{ fontWeight: 600 }}>{u.full_name}</td>
                       <td className="muted">{u.mobile}</td>
                       <td>{roleLabel(u.role)}</td>
-                      <td style={{ textAlign: "right" }}>{isDirector && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const us = await getUserSites(u.id); const ids = us.map(x => Number(x.id)); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible, annual_paid_leaves: u.annual_paid_leaves || "", joining_date: u.joining_date || "", requires_punch: u.requires_punch !== false, siteIds: ids, origSiteIds: [...ids] }); }}>✎ Edit</button>}</td>
+                      <td>{u.bank_account_no && u.bank_ifsc
+                        ? <span className="badge p">✓</span>
+                        : Number(u.monthly_salary) > 0
+                          ? <span className="badge warn">Pending</span>
+                          : <span className="muted">—</span>}</td>
+                      <td style={{ textAlign: "right" }}>{isDirector && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const us = await getUserSites(u.id); const ids = us.map(x => Number(x.id)); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible, annual_paid_leaves: u.annual_paid_leaves || "", joining_date: u.joining_date || "", requires_punch: u.requires_punch !== false, bank_account_no: u.bank_account_no || "", bank_ifsc: u.bank_ifsc || "", pan_no: u.pan_no || "", siteIds: ids, origSiteIds: [...ids] }); }}>✎ Edit</button>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -261,6 +266,17 @@ export default function WorkersPage() {
                     <input type="checkbox" checked={smodal.requires_punch !== false} onChange={e => sset("requires_punch", e.target.checked)} style={{ accentColor: "var(--copper)" }} />
                     Marks attendance (punch) — untick for pure office/billing staff; no worker profile will be created
                   </label>
+                </div>
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 6 }}>Bank &amp; KYC <span className="muted" style={{ fontWeight: 400 }}>(goes on the Staff Salary Excel bank sheet)</span></div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <div style={{ flex: 1.4, minWidth: 150 }}><label className="muted">Bank account no</label>
+                      <input style={{ width: "100%" }} inputMode="numeric" value={smodal.bank_account_no || ""} onChange={e => sset("bank_account_no", e.target.value)} /></div>
+                    <div style={{ flex: 1, minWidth: 120 }}><label className="muted">IFSC</label>
+                      <input style={{ width: "100%" }} value={smodal.bank_ifsc || ""} onChange={e => sset("bank_ifsc", e.target.value.toUpperCase())} placeholder="e.g. SBIN0001234" /></div>
+                    <div style={{ flex: 1, minWidth: 110 }}><label className="muted">PAN</label>
+                      <input style={{ width: "100%" }} value={smodal.pan_no || ""} onChange={e => sset("pan_no", e.target.value.toUpperCase())} placeholder="ABCDE1234F" /></div>
+                  </div>
                 </div>
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
                     <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 6 }}>Sites assigned <span className="muted" style={{ fontWeight: 400 }}>(tick all that apply — multi-site staff see a site switcher on mobile)</span></div>

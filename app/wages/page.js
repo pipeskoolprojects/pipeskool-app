@@ -56,7 +56,7 @@ export default function WagesPage() {
     const data = rows.map(r => ({ Worker: r.worker, Category: r.category, Site: r.site,
       "Full days": r.daysFull, "Half days": r.daysHalf, "Days total": r.days,
       "OT hrs (approved)": r.ot, "Daily rate": r.rate, "OT rate/hr": r.otRate,
-      Gross: r.gross, "Advance deducted": r.adv, Net: r.net, "Pay mode": r.mode, Status: r.status }));
+      Gross: r.gross, "Advance deducted": r.adv, Net: r.net, "Bank a/c": r.bankAc || "", IFSC: r.ifsc || "", "Pay mode": r.mode, Status: r.status }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Wages " + month);
     XLSX.writeFile(wb, `Pipeskool_wages_${month}${site !== "all" ? "_site" + site : ""}.xlsx`);
@@ -161,7 +161,7 @@ export default function WagesPage() {
               <button disabled={!srows?.length} onClick={() => {
                 const data = (srows || []).map(r => ({ Staff: r.name, Role: r.role, "Salary ₹": r.salary, "Working days": r.working,
                   "Present": r.present, "Absent": r.absent, "Paid leaves used": r.leaves, "Leave balance": r.leaveBal, "Deduction ₹": r.deduction, "OT h": r.ot, "OT ₹": r.otAmt,
-                  "Advances ₹": r.adv, "Net ₹": r.net, Status: r.status }));
+                  "Advances ₹": r.adv, "Net ₹": r.net, "Bank a/c": r.bankAc || "", IFSC: r.ifsc || "", PAN: r.pan || "", Status: r.status }));
                 const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, ws, "Staff " + month); XLSX.writeFile(wb, `Pipeskool_staff_salary_${month}.xlsx`);
               }}>⬇ Export Excel</button>
