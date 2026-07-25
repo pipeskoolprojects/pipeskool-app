@@ -2,13 +2,14 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { isDemo } from "@/lib/supabase";
-import { getSession } from "@/lib/auth";
+import { getSession, can } from "@/lib/auth";
 import {
   getOpenIndents, saveQuotes, getQuotes, buildComparison, createPO, getPOs, cancelPO, inr,
   DELIVERY_STATUS, updatePODelivery,
 } from "@/lib/procure";
 import { getVendors } from "@/lib/vendors";
-import { createIndent } from "@/lib/stock";
+import { createIndent, quickAddItem } from "@/lib/stock";
+import { searchIndentCatalog } from "@/lib/boq";
 import { getSites } from "@/lib/data";
 
 export default function ProcurePage() {
@@ -33,7 +34,25 @@ export default function ProcurePage() {
   const [sites, setSites] = useState([]);
   const [ni, setNi] = useState(null);                    // new-indent modal state
   useEffect(() => { getSites().then(setSites); }, []);
-  const blankLine = () => ({ item_name: "", qty: "", unit: "" });
+  const blankLine = () => ({ item_name: "", qty: "", unit: "", item_id: null });
+  const [sug, setSug] = useState(null);            // { i, q, list }
+  const canAddMaster = session && (session.role === "director" || can(session, "stock", "manage", ni?.site_id));
+  async function onItemType(i, val) {
+    setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], item_name: val, item_id: null }; return { ...n, lines: ls }; });
+    if (val.trim().length >= 2) setSug({ i, q: val, list: await searchIndentCatalog(ni.site_id, val.trim()) });
+    else setSug(null);
+  }
+  function pickSug(i, opt) {
+    setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], item_name: opt.label, unit: opt.unit || ls[i].unit, item_id: opt.item_id || null }; return { ...n, lines: ls }; });
+    setSug(null);
+  }
+  async function addToMaster(i) {
+    const line = ni.lines[i];
+    const r = await quickAddItem(sug?.q || line.item_name, line.unit);
+    if (!r.ok) { setErr(r.error); return; }
+    pickSug(i, { label: r.item.display_name, unit: r.item.unit, item_id: r.item.id });
+    setMsg(`"${r.item.display_name}" added to Item Master.`);
+  }
   const openNewIndent = () => setNi({ site_id: "", required_by: "", urgency: "normal", note: "", lines: [blankLine()] });
   async function submitNewIndent() {
     setErr("");
@@ -270,8 +289,29 @@ export default function ProcurePage() {
               </div>
               {ni.lines.map((l, i) => (
                 <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-                  <input style={{ flex: 2 }} placeholder="Item / material name *" value={l.item_name}
-                         onChange={e => setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], item_name: e.target.value }; return { ...n, lines: ls }; })} />
+                  <div style={{ flex: 2, position: "relative" }}>
+                    <input style={{ width: "100%" }} placeholder="Item / material name * (type 2+ letters to search)" value={l.item_name}
+                           onChange={e => onItemType(i, e.target.value)} />
+                    {sug && sug.i === i && (
+                      <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 40, background: "#fff",
+                                    border: "1px solid var(--border)", borderRadius: 8, boxShadow: "0 8px 20px rgba(0,0,0,.12)", maxHeight: 220, overflowY: "auto" }}>
+                        {sug.list.map((o, j) => (
+                          <div key={j} onClick={() => pickSug(i, o)}
+                               style={{ padding: "7px 10px", cursor: "pointer", fontSize: 13, display: "flex", justifyContent: "space-between", gap: 8 }}>
+                            <span>{o.label}</span>
+                            <span className="muted" style={{ fontSize: 11 }}>{o.kind === "boq" ? "BOQ" : "Item"}{o.unit ? " · " + o.unit : ""}</span>
+                          </div>
+                        ))}
+                        {sug.list.length === 0 && <div className="muted" style={{ padding: "7px 10px", fontSize: 12.5 }}>No match in Item or BOQ master.</div>}
+                        {canAddMaster && (
+                          <div onClick={() => addToMaster(i)}
+                               style={{ padding: "7px 10px", cursor: "pointer", fontSize: 12.5, color: "var(--copper)", fontWeight: 700, borderTop: "1px solid var(--border)" }}>
+                            ＋ Add "{sug.q}" to Item Master
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <input style={{ width: 90 }} inputMode="numeric" placeholder="Qty *" value={l.qty}
                          onChange={e => setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], qty: e.target.value }; return { ...n, lines: ls }; })} />
                   <input style={{ width: 90 }} placeholder="Unit" value={l.unit}
