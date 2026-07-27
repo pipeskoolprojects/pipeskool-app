@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
-import { ITEM_TYPES, getAllItems, addItem, updateItem, toggleItemActive } from "@/lib/stock";
+import { ITEM_TYPES, getAllItems, addItem, updateItem, toggleItemActive, deleteItem } from "@/lib/stock";
 import { getSession, can } from "@/lib/auth";
 
 const UNITS = ["Nos", "Rmt", "Mtr", "Kg", "Set", "Box", "Litre", "Bag"];
@@ -20,7 +20,15 @@ export default function ItemsPage() {
   useEffect(load, []);
 
   const canManage = session && (session.role === "director" || can(session, "stock", "manage"));
+  const isDirector = session?.role === "director";
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  async function remove(it) {
+    if (!confirm(`Delete "${it.display_name}" permanently?\n\nOnly possible if it was never used in any indent, GRN or stock record. Used items must be deactivated instead.`)) return;
+    const r = await deleteItem(it.id);
+    if (!r.ok) { setMsg(""); setErr(r.error); return; }
+    setErr(""); setMsg("Item deleted."); load();
+  }
 
   async function save() {
     setErr("");
@@ -55,7 +63,8 @@ export default function ItemsPage() {
     { key: "_action", label: "Action", sortable: false, render: r => canManage ? (
       <span style={{ whiteSpace: "nowrap" }}>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => { setForm({ ...r, min_stock: r.min_stock || "", sub_type: r.sub_type || "", size: r.size || "", item_class: r.item_class || "", make: r.make || "", hsn_code: r.hsn_code || "" }); setMsg(""); setErr(""); }}>Edit</button>
-        <button style={{ fontSize: 11.5 }} onClick={() => toggle(r)}>{r.is_active ? "Deactivate" : "Activate"}</button>
+        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => toggle(r)}>{r.is_active ? "Deactivate" : "Activate"}</button>
+        {isDirector && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => remove(r)}>🗑</button>}
       </span>) : <span className="muted">—</span>, exportValue: () => "" },
   ];
 
@@ -72,6 +81,7 @@ export default function ItemsPage() {
         </div>
         {isDemo && <div className="demo-banner">Demo mode — sample items.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
+        {err && !form && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
         {generalCount > 0 && (
           <div className="demo-banner">
             {generalCount} item{generalCount > 1 ? "s were" : " was"} quick-added from an indent and carry the temporary type <b>GENERAL</b> — open Edit and set the proper Type/Size to tidy the name.

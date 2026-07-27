@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
-import { getVendors, saveVendor, toggleVendorActive } from "@/lib/vendors";
+import { getVendors, saveVendor, toggleVendorActive, deleteVendor } from "@/lib/vendors";
+import { getSession } from "@/lib/auth";
 
 const blank = { name: "", gstin: "", contact: "", phone: "", email: "", address: "", payment_terms: "", categories: "", is_active: true };
 
@@ -11,6 +12,9 @@ export default function VendorsPage() {
   const [rows, setRows] = useState(null);
   const [form, setForm] = useState(null);   // null = closed; object = add/edit
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+  const [session, setSession] = useState(null);
+  useEffect(() => { setSession(getSession()); }, []);
+  const isDirector = session?.role === "director";
 
   const load = () => getVendors(true).then(setRows);
   useEffect(load, []);
@@ -25,6 +29,12 @@ export default function VendorsPage() {
     setMsg(form.id ? "Vendor updated." : "Vendor added."); setForm(null); load();
   }
   async function toggle(v) { await toggleVendorActive(v.id, !v.is_active); load(); }
+  async function remove(v) {
+    if (!confirm(`Delete "${v.name}" permanently?\n\nOnly possible if this vendor has no purchase orders or records. Vendors with history must be deactivated instead.`)) return;
+    const r = await deleteVendor(v.id);
+    if (!r.ok) { setMsg(""); setErr(r.error); return; }
+    setErr(""); setMsg("Vendor deleted."); load();
+  }
 
   const columns = [
     { key: "name", label: "Vendor", filter: "search", render: v => <span style={{ fontWeight: 600 }}>{v.name}</span> },
@@ -37,7 +47,8 @@ export default function VendorsPage() {
     { key: "_action", label: "Action", sortable: false, render: v => (
       <span style={{ whiteSpace: "nowrap" }}>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => { setForm(v); setMsg(""); setErr(""); }}>Edit</button>
-        <button style={{ fontSize: 11.5 }} onClick={() => toggle(v)}>{v.is_active ? "Deactivate" : "Activate"}</button>
+        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => toggle(v)}>{v.is_active ? "Deactivate" : "Activate"}</button>
+        {isDirector && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => remove(v)}>🗑</button>}
       </span>) },
   ];
 
@@ -51,6 +62,7 @@ export default function VendorsPage() {
         </div>
         {isDemo && <div className="demo-banner">Demo mode — sample vendors.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
+        {err && !form && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
 
         {form && (
           <div className="panel">
