@@ -17,7 +17,7 @@ export default function ItemsPage() {
 
   useEffect(() => { setSession(getSession()); }, []);
   const load = () => getAllItems().then(setRows);
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
 
   const canManage = canAnySite(session, "stock", "manage");   // Manage tick on any site (or Director)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));

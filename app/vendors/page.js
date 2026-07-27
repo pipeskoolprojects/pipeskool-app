@@ -17,7 +17,7 @@ export default function VendorsPage() {
   const canDelete = canAnySite(session, "indent", "manage");   // Manage tick on Indent & Purchase (or Director)
 
   const load = () => getVendors(true).then(setRows);
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 

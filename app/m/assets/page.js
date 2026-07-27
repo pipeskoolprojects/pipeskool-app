@@ -24,7 +24,7 @@ export default function AssetsScreen() {
 
   const load = () => getAssets(siteId).then(setAssets);
   useEffect(() => { getSitesList().then(setSites); getStaffNames().then(setStaff); }, []);
-  useEffect(load, [siteId, msg]);
+  useEffect(() => { load(); }, [siteId, msg]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const onSite = a => a.status !== "under_repair";          // physically present
