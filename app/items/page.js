@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import { ITEM_TYPES, getAllItems, addItem, updateItem, toggleItemActive, deleteItem } from "@/lib/stock";
-import { getSession, can } from "@/lib/auth";
+import { getSession, canAnySite } from "@/lib/auth";
 
 const UNITS = ["Nos", "Rmt", "Mtr", "Kg", "Set", "Box", "Litre", "Bag"];
 const BLANK = { item_type: "Pipe", material: "", sub_type: "", size: "", item_class: "", make: "", unit: "Rmt", hsn_code: "", min_stock: "", is_active: true };
@@ -19,8 +19,7 @@ export default function ItemsPage() {
   const load = () => getAllItems().then(setRows);
   useEffect(load, []);
 
-  const canManage = session && (session.role === "director" || can(session, "stock", "manage"));
-  const isDirector = session?.role === "director";
+  const canManage = canAnySite(session, "stock", "manage");   // Manage tick on any site (or Director)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   async function remove(it) {
@@ -64,7 +63,7 @@ export default function ItemsPage() {
       <span style={{ whiteSpace: "nowrap" }}>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => { setForm({ ...r, min_stock: r.min_stock || "", sub_type: r.sub_type || "", size: r.size || "", item_class: r.item_class || "", make: r.make || "", hsn_code: r.hsn_code || "" }); setMsg(""); setErr(""); }}>Edit</button>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => toggle(r)}>{r.is_active ? "Deactivate" : "Activate"}</button>
-        {isDirector && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => remove(r)}>🗑</button>}
+        {canManage && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => remove(r)}>🗑</button>}
       </span>) : <span className="muted">—</span>, exportValue: () => "" },
   ];
 

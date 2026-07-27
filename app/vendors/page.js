@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import { getVendors, saveVendor, toggleVendorActive, deleteVendor } from "@/lib/vendors";
-import { getSession } from "@/lib/auth";
+import { getSession, canAnySite } from "@/lib/auth";
 
 const blank = { name: "", gstin: "", contact: "", phone: "", email: "", address: "", payment_terms: "", categories: "", is_active: true };
 
@@ -14,7 +14,7 @@ export default function VendorsPage() {
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [session, setSession] = useState(null);
   useEffect(() => { setSession(getSession()); }, []);
-  const isDirector = session?.role === "director";
+  const canDelete = canAnySite(session, "indent", "manage");   // Manage tick on Indent & Purchase (or Director)
 
   const load = () => getVendors(true).then(setRows);
   useEffect(load, []);
@@ -48,7 +48,7 @@ export default function VendorsPage() {
       <span style={{ whiteSpace: "nowrap" }}>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => { setForm(v); setMsg(""); setErr(""); }}>Edit</button>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => toggle(v)}>{v.is_active ? "Deactivate" : "Activate"}</button>
-        {isDirector && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => remove(v)}>🗑</button>}
+        {canDelete && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => remove(v)}>🗑</button>}
       </span>) },
   ];
 
