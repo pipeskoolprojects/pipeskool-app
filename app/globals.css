@@ -137,3 +137,18 @@ th.num { text-align: right; font-family: var(--font); }
 
 /* DPR clickable summary cards (update37) */
 .dpr-card:hover { border-color: var(--copper, #FF7A1A); box-shadow: 0 4px 16px rgba(255,122,26,0.12); }
+
+/* --- sidebar hide/show (update124) --- */
+.sidebar { position: relative; }
+.sidebar-hide {
+  position: absolute; top: 14px; right: -1px; z-index: 20;
+  background: rgba(255,255,255,0.08); color: #c6c6bc; border: none;
+  border-radius: 8px 0 0 8px; padding: 6px 9px; font-size: 13px; cursor: pointer;
+}
+.sidebar-hide:hover { background: rgba(255,122,26,0.25); color: #fff; }
+.sidebar-show {
+  position: fixed; top: 12px; left: 12px; z-index: 60;
+  background: var(--deep); color: #fff; border: none; border-radius: 9px;
+  padding: 9px 12px; font-size: 15px; cursor: pointer; box-shadow: 0 2px 10px rgba(15,20,25,0.35);
+}
+.sidebar-show:hover { background: var(--copper); }
