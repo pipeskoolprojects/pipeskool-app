@@ -38,6 +38,9 @@ export default function Sidebar() {
   const router = useRouter();
   const [session, setSession] = useState(null);
   const [open, setOpen] = useState({});
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => { try { setHidden(localStorage.getItem("psk_sidebar_hidden") === "1"); } catch {} }, []);
+  const toggleHidden = (v) => { setHidden(v); try { localStorage.setItem("psk_sidebar_hidden", v ? "1" : "0"); } catch {} };
 
   useEffect(() => {
     const s = getSession();
@@ -93,8 +96,13 @@ export default function Sidebar() {
     );
   }
 
+  if (hidden) return (
+    <button className="sidebar-show" title="Show menu" onClick={() => toggleHidden(false)}>☰</button>
+  );
+
   return (
     <aside className="sidebar">
+      <button className="sidebar-hide" title="Hide menu (more screen space)" onClick={() => toggleHidden(true)}>⟨</button>
       <div className="brand">
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <Logo height={22} color="#FF7A1A" wordColor="#ffffff" />

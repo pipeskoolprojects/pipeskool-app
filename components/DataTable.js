@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /*
   Reusable filterable / sortable / exportable table.
@@ -9,13 +9,15 @@ import { useMemo, useState } from "react";
     title, exportName
     dateField: key used by the from/to date-range picker (optional)
 */
-export default function DataTable({ columns, rows, exportName = "export", dateField, rightExtra, fixed }) {
+export default function DataTable({ columns, rows, exportName = "export", dateField, rightExtra, fixed, pageSize = 25 }) {
   const [search, setSearch] = useState("");
   const [selects, setSelects] = useState({});      // {colKey: value}
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
+  const [page, setPage] = useState(0);
+  useEffect(() => { setPage(0); }, [search, selects, from, to, rows]);
 
   // build select options from data
   const selectCols = columns.filter(c => c.filter === "select");
@@ -82,6 +84,14 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
   const clearAll = () => { setSearch(""); setSelects({}); setFrom(""); setTo(""); setSortKey(null); };
   const hasFilters = search || from || to || Object.values(selects).some(Boolean);
 
+  // pagination — display only; export always covers the full filtered set
+  const paged = pageSize > 0;
+  const pageCount = paged ? Math.max(1, Math.ceil(filtered.length / pageSize)) : 1;
+  const curPage = Math.min(page, pageCount - 1);
+  const shown = paged ? filtered.slice(curPage * pageSize, (curPage + 1) * pageSize) : filtered;
+  const rangeFrom = filtered.length === 0 ? 0 : curPage * pageSize + 1;
+  const rangeTo = paged ? Math.min((curPage + 1) * pageSize, filtered.length) : filtered.length;
+
   return (
     <div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
@@ -124,7 +134,7 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
         <tbody>
           {filtered.length === 0 ? (
             <tr><td colSpan={columns.length} className="muted">No matching records.</td></tr>
-          ) : filtered.map((r, i) => (
+          ) : shown.map((r, i) => (
             <tr key={r.id ?? i}>
               {columns.map(c => (
                 <td key={c.key} className={c.type === "num" ? "num" : ""}
@@ -137,7 +147,22 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
         </tbody>
       </table>
       </div>
-      <div className="muted" style={{ marginTop: 8 }}>{filtered.length} of {(rows||[]).length} records · click a column heading to sort · scroll sideways to see all columns</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
+        <span className="muted">
+          {paged && filtered.length > pageSize
+            ? `Showing ${rangeFrom}–${rangeTo} of ${filtered.length}` : `${filtered.length} of ${(rows||[]).length} records`}
+          {" · click a column heading to sort"}
+        </span>
+        {paged && pageCount > 1 && (
+          <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
+            <button style={{ fontSize: 12 }} disabled={curPage === 0} onClick={() => setPage(0)}>«</button>
+            <button style={{ fontSize: 12 }} disabled={curPage === 0} onClick={() => setPage(curPage - 1)}>‹ Prev</button>
+            <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>Page {curPage + 1} / {pageCount}</span>
+            <button style={{ fontSize: 12 }} disabled={curPage >= pageCount - 1} onClick={() => setPage(curPage + 1)}>Next ›</button>
+            <button style={{ fontSize: 12 }} disabled={curPage >= pageCount - 1} onClick={() => setPage(pageCount - 1)}>»</button>
+          </span>
+        )}
+      </div>
     </div>
   );
 }
