@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { getSession, can } from "@/lib/auth";
 import { getSites } from "@/lib/data";
-import { getRentals, addRental, endRental, getRentalDocs, uploadRentalDoc, getMachineTypes, addMachineType, inr } from "@/lib/rentals";
+import { getRentals, addRental, updateRental, endRental, getRentalDocs, uploadRentalDoc, getMachineTypes, addMachineType, inr } from "@/lib/rentals";
 
 export default function RentalsPage() {
   const [sess, setSess] = useState(null);
@@ -12,6 +12,7 @@ export default function RentalsPage() {
   const [kind, setKind] = useState("machine");
   const [rows, setRows] = useState(null);
   const [form, setForm] = useState(null);
+  const [editId, setEditId] = useState(null);   // rental id being edited (null = adding)
   const [docsFor, setDocsFor] = useState(null);   // rental row whose docs are open
   const [docs, setDocs] = useState([]);
   const [docName, setDocName] = useState("");
@@ -46,17 +47,20 @@ export default function RentalsPage() {
     setErr("");
     if (!form.name?.trim() || !form.site_id || !form.start_date) { setErr("Name/type, site and start date are mandatory."); return; }
     setBusy(true);
-    const res = await addRental({ ...form, kind, created_by: sess?.id });
+    const res = editId
+      ? await updateRental(editId, form)
+      : await addRental({ ...form, kind, created_by: sess?.id });
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setForm(null); setMsg((kind === "machine" ? "Machine" : "Room") + " added.");
+    setForm(null); setEditId(null);
+    setMsg((kind === "machine" ? "Machine" : "Room") + (editId ? " updated." : " added."));
   }
 
   return (
     <div style={{ display: "flex" }}>
       <Sidebar />
-      <main className="content">
-        <h1>Machines & Rooms on Rent</h1>
+      <main className="main">
+        <div className="page-head"><h1>Machines & Rooms on Rent</h1></div>
         {msg && <div className="note green" style={{ marginBottom: 10 }}>{msg}</div>}
         {err && <div className="note red" style={{ marginBottom: 10 }}>{err}</div>}
         <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
@@ -66,12 +70,12 @@ export default function RentalsPage() {
             <option value="all">All sites</option>
             {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          {canCreate && <button className="primary" onClick={() => setForm({ site_id: site === "all" ? "" : site, start_date: "", rent_due_day: "", rent_amount: "", deposit_amount: "", name: "", supplier_name: "", note: "" })}>＋ Add {kind === "machine" ? "machine" : "room"}</button>}
+          {canCreate && <button className="primary" onClick={() => { setEditId(null); setForm({ site_id: site === "all" ? "" : site, start_date: "", rent_due_day: "", rent_amount: "", deposit_amount: "", name: "", supplier_name: "", note: "" }); }}>＋ Add {kind === "machine" ? "machine" : "room"}</button>}
         </div>
 
         {form && (
           <div className="panel" style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Add {kind} on rent</div>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>{editId ? "Edit" : "Add"} {kind} on rent</div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
               <div><label className="muted">{kind === "machine" ? "Machine type *" : "Room name/label *"}</label><br />
                 {kind === "machine" ? (
@@ -79,6 +83,7 @@ export default function RentalsPage() {
                     <select value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}>
                       <option value="">— pick type —</option>
                       {types.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                      {form.name && !types.some(t => t.name === form.name) && <option value={form.name}>{form.name}</option>}
                     </select>
                     {newType === null
                       ? <button style={{ fontSize: 12 }} onClick={() => setNewType("")}>＋ New type</button>
@@ -110,7 +115,7 @@ export default function RentalsPage() {
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               <button className="primary" disabled={busy} onClick={submit}>Save</button>
-              <button onClick={() => setForm(null)}>Cancel</button>
+              <button onClick={() => { setForm(null); setEditId(null); }}>Cancel</button>
             </div>
           </div>
         )}
@@ -119,7 +124,7 @@ export default function RentalsPage() {
           {!rows ? <div className="muted">Loading…</div> : list.length === 0 ? (
             <div className="muted">No {kind === "machine" ? "machines" : "rooms"} on rent{site !== "all" ? " for this site" : ""} yet.</div>
           ) : (
-            <table className="dt-compact" style={{ width: "100%" }}>
+            <div className="dt-scroll"><table className="dt-compact" style={{ width: "100%" }}>
               <thead><tr><th>{kind === "machine" ? "Machine" : "Room"}</th><th>Site</th><th>{kind === "machine" ? "Supplier" : "Owner"}</th>
                 <th className="num">Rent/mo</th><th className="num">Deposit</th><th>From</th><th>Next rent due</th><th>Docs</th><th></th></tr></thead>
               <tbody>
@@ -136,13 +141,14 @@ export default function RentalsPage() {
                         {r.due.date}{r.due.days <= 0 ? " · DUE" : ` · in ${r.due.days}d`}
                       </span>) : "—"}</td>
                     <td><button style={{ fontSize: 11.5 }} onClick={() => openDocs(r)}>📄 {r.docs}</button></td>
-                    <td style={{ textAlign: "right" }}>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      {r.is_active && canCreate && <button style={{ fontSize: 11.5, marginRight: 6 }} onClick={() => { setEditId(r.id); setForm({ site_id: r.site_id, start_date: r.start_date, rent_due_day: String(r.rent_due_day || ""), rent_amount: String(r.rent_amount || ""), deposit_amount: String(r.deposit_amount || ""), name: r.name, supplier_name: r.supplier_name || "", note: r.note || "" }); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Edit</button>}
                       {r.is_active && canCreate && <button style={{ fontSize: 11.5 }} onClick={async () => { if (confirm("End this rental? Deposit return is handled outside the app.")) { const x = await endRental(r.id); x.ok ? setMsg("Rental ended.") : setErr(x.error); } }}>End</button>}
                     </td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
 

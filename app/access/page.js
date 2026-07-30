@@ -16,6 +16,44 @@ const FALLBACK_ROLES = [
 let ROLES = FALLBACK_ROLES;
 const roleLabel = r => (ROLES.find(x => x[0] === r) || ["", r])[1];
 
+// Plain-language meaning of each tick column
+const ACTION_HELP = {
+  view:    "Open the page and see records. No tick here = the module is invisible to them.",
+  create:  "Add new entries — punch attendance, write DPR, raise indent, enter GRN, claim expense.",
+  approve: "Approve or reject things others raised (indents, expenses, advances).",
+  verify:  "Second/EOD check — e.g. verifying the day's attendance.",
+  manage:  "Full control — edit & delete records, masters, exports. Give sparingly.",
+};
+
+// One-line description of what each module's ticks unlock
+const MODULE_HELP = {
+  attendance: "Punching, muster register, EOD verify",
+  dpr:        "Daily progress reports & site photos",
+  money:      "Advances, site expenses, petty cash",
+  wages:      "Payroll runs & wage approval",
+  stock:      "GRN, issue to workers, settle, balances",
+  indent:     "Material indents, quotes, purchase orders",
+  assets:     "Tools & assets issue / return",
+  rentals:    "Rented machines & rooms, rent due dates",
+  workers:    "Worker profiles, KYC, deactivation",
+};
+
+// One-click templates — apply, then fine-tune ticks if needed
+const PRESETS = [
+  ["site_engineer", "Site Engineer", "Raises everything at site, approves nothing",
+    { attendance:["view","create"], dpr:["view","create"], stock:["view","create"], indent:["view","create"], assets:["view","create"], rentals:["view","create"], workers:["view","create"] }],
+  ["site_incharge", "Site Incharge / Supervisor", "Runs the site: raises + approves site-level work",
+    { attendance:["view","create","approve","verify"], dpr:["view","create","approve"], money:["view","create"], wages:["view"], stock:["view","create","approve"], indent:["view","create","approve"], assets:["view","create"], rentals:["view","create"], workers:["view","create","manage"] }],
+  ["storekeeper", "Storekeeper", "Owns the store: GRN, issue, settle",
+    { attendance:["view"], stock:["view","create","manage"], indent:["view","create"], assets:["view","create"], workers:["view"] }],
+  ["billing_engineer", "Billing Engineer", "Reads site data for RA bills, writes DPR",
+    { attendance:["view"], dpr:["view","create"], wages:["view"], stock:["view"], indent:["view"] }],
+  ["accountant", "Accountant / HO", "Money & payroll authority, read-only on site ops",
+    { attendance:["view"], money:["view","approve","verify","manage"], wages:["view","approve","manage"], stock:["view"], indent:["view"], rentals:["view"] }],
+  ["it_admin", "IT Executive (data admin)", "Sees + cleans data everywhere, approves nothing",
+    Object.fromEntries(["attendance","dpr","money","wages","stock","indent","assets","rentals","workers"].map(m => [m, ["view","manage"]]))],
+];
+
 export default function AccessPage() {
   const [session, setSession] = useState(null);
   const [staff, setStaff] = useState([]);
@@ -25,6 +63,8 @@ export default function AccessPage() {
   const [perms, setPerms] = useState({});
   const [msg, setMsg] = useState("");
   const [adding, setAdding] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [nf, setNf] = useState({ full_name: "", mobile: "", role: "supervisor", site_id: "" });
 
   useEffect(() => { getRoles().then(rs => { if (rs?.length) ROLES = rs.map(r => [r.code, r.label]); }); }, []);
@@ -66,6 +106,23 @@ export default function AccessPage() {
     if (!confirm(`Reset ${sel.full_name}'s rights on this site to the ${roleLabel(sel.role)} default?`)) return;
     await resetSiteToRole(sel.id, activeSite, sel.role);
     setPerms(await getSitePermissions(sel.id, activeSite)); setMsg("Reset to role default for this site.");
+  }
+  async function applyPreset(key) {
+    const preset = PRESETS.find(p => p[0] === key);
+    if (!preset) return;
+    if (!confirm(`Apply the "${preset[1]}" template on this site?\nIt replaces the current ticks — you can still adjust any tick afterwards.`)) return;
+    setApplying(true);
+    const target = preset[3];
+    for (const [m] of MODULES) {
+      for (const [a] of ACTIONS) {
+        const want = (target[m] || []).includes(a);
+        const have = (perms[m] || []).includes(a);
+        if (want !== have) await setSitePermission(sel.id, activeSite, m, a, want);
+      }
+    }
+    setPerms(await getSitePermissions(sel.id, activeSite));
+    setApplying(false);
+    setMsg(`Applied "${preset[1]}" template on this site.`);
   }
   async function copyFrom(fromSite) {
     if (!fromSite) return;
@@ -146,6 +203,33 @@ export default function AccessPage() {
                   <p className="muted">No site assigned yet. Use “＋ Assign site” above.</p>
                 ) : (
                   <>
+                    <div className="panel" style={{ background: "var(--copper-soft)", padding: "10px 12px", marginBottom: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <b style={{ fontSize: 13 }}>Not sure what to tick?</b>
+                        <span className="muted" style={{ fontSize: 12 }}>Pick a ready template, then adjust:</span>
+                        <select id="psk-preset" defaultValue="" style={{ fontSize: 12 }} disabled={applying}>
+                          <option value="">— choose template —</option>
+                          {PRESETS.map(p => <option key={p[0]} value={p[0]}>{p[1]} — {p[2]}</option>)}
+                        </select>
+                        <button className="primary" style={{ fontSize: 12 }} disabled={applying}
+                          onClick={() => { const v = document.getElementById("psk-preset").value; if (v) applyPreset(v); }}>
+                          {applying ? "Applying…" : "Apply template"}</button>
+                        <button style={{ fontSize: 12, marginLeft: "auto" }} onClick={() => setShowGuide(g => !g)}>{showGuide ? "Hide guide ▴" : "❓ What do the ticks mean?"}</button>
+                      </div>
+                      {showGuide && (
+                        <div style={{ marginTop: 10, fontSize: 12.5, lineHeight: 1.55 }}>
+                          <div style={{ marginBottom: 6 }}><b>How this page works:</b> ① pick the staff member on the left → ② pick the site tab → ③ tick what they may do <i>on that site</i>. Ticks save instantly and can differ site to site.</div>
+                          <table className="dt-compact" style={{ background: "#fff", borderRadius: 8 }}>
+                            <tbody>
+                              {ACTIONS.map(a => (
+                                <tr key={a[0]}><td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{a[1]}</td><td>{ACTION_HELP[a[0]]}</td></tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          <div className="muted" style={{ marginTop: 6 }}>Rule of thumb: everyone who works there gets <b>View + Create</b>; the person responsible for checking gets <b>Approve/Verify</b>; only office admins get <b>Manage</b>.</div>
+                        </div>
+                      )}
+                    </div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
                       <div className="muted">Rights for <b>{userSites.find(s => s.id === activeSite)?.name}</b> — tick what they can do here.</div>
                       <div style={{ display: "flex", gap: 6 }}>
@@ -160,11 +244,11 @@ export default function AccessPage() {
                       </div>
                     </div>
                     <table>
-                      <thead><tr><th>Module</th>{ACTIONS.map(a => <th key={a[0]} style={{ textAlign: "center" }}>{a[1]}</th>)}</tr></thead>
+                      <thead><tr><th>Module</th>{ACTIONS.map(a => <th key={a[0]} title={ACTION_HELP[a[0]]} style={{ textAlign: "center", cursor: "help" }}>{a[1]} ⓘ</th>)}</tr></thead>
                       <tbody>
                         {MODULES.map(m => (
                           <tr key={m[0]}>
-                            <td style={{ fontWeight: 600 }}>{m[1]}</td>
+                            <td><div style={{ fontWeight: 600 }}>{m[1]}</div><div className="muted" style={{ fontSize: 11 }}>{MODULE_HELP[m[0]]}</div></td>
                             {ACTIONS.map(a => (
                               <td key={a[0]} style={{ textAlign: "center" }}>
                                 <input type="checkbox" checked={has(m[0], a[0])} onChange={() => toggle(m[0], a[0])}
