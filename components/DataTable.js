@@ -117,7 +117,7 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
         </div>
       </div>
 
-      <div style={{ overflowX: "auto", width: "100%" }}>
+      <div className="dt-scroll">
       <table style={fixed ? { width: "100%", tableLayout: "fixed" } : { minWidth: "100%" }} className="dt-compact">
         {fixed && <colgroup>{columns.map(c => <col key={c.key} style={c.width ? { width: c.width } : {}} />)}</colgroup>}
         <thead>

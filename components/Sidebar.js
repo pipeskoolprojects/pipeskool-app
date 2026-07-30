@@ -39,8 +39,8 @@ export default function Sidebar() {
   const [session, setSession] = useState(null);
   const [open, setOpen] = useState({});
   const [hidden, setHidden] = useState(false);
-  useEffect(() => { try { setHidden(localStorage.getItem("psk_sidebar_hidden") === "1"); } catch {} }, []);
-  const toggleHidden = (v) => { setHidden(v); try { localStorage.setItem("psk_sidebar_hidden", v ? "1" : "0"); } catch {} };
+  useEffect(() => { try { const v = localStorage.getItem("psk_sidebar_hidden") === "1"; setHidden(v); document.documentElement.classList.toggle("psk-nosb", v); } catch {} }, []);
+  const toggleHidden = (v) => { setHidden(v); try { localStorage.setItem("psk_sidebar_hidden", v ? "1" : "0"); document.documentElement.classList.toggle("psk-nosb", v); } catch {} };
 
   useEffect(() => {
     const s = getSession();
