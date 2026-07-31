@@ -8,10 +8,13 @@ import { getSession, refreshSessionMobile, setCurrentSite } from "@/lib/auth";
 import { siteForPunch } from "@/lib/mobile";
 import { getLang, t } from "@/lib/i18n";
 import Logo from "@/components/Logo";
+import { getTodayQuote } from "@/lib/notices";
 
 export default function PunchScreen() {
   const router = useRouter();
   const [worker, setWorker] = useState(null);
+  const [mQuote, setMQuote] = useState(null);
+  useEffect(() => { getTodayQuote().then(setMQuote); }, []);
   const [pos, setPos] = useState(null);
   const [noProfile, setNoProfile] = useState(false);
   const [staffRole, setStaffRole] = useState(null);
@@ -155,6 +158,7 @@ export default function PunchScreen() {
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
           <Logo height={20} color="#FF7A1A" wordColor="#0F1419" align="center" />
         </div>
+        {mQuote && <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 8px 8px", fontStyle: "italic" }}>💡 {mQuote}</div>}
         {isDemo && <div className="note amber">Demo mode — punches save on this phone only.</div>}
 
         <div style={{ margin: "10px 0" }}>

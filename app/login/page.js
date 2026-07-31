@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { getTodayQuote } from "@/lib/notices";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { isDemo } from "@/lib/supabase";
 import { checkLoginState, loginByMobilePassword, createPasswordAndLogin } from "@/lib/auth";
@@ -7,6 +8,8 @@ import Logo from "@/components/Logo";
 
 export default function Login() {
   const [mobile, setMobile] = useState("");
+  const [lQuote, setLQuote] = useState(null);
+  useEffect(() => { getTodayQuote().then(setLQuote); }, []);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [mode, setMode] = useState("start");   // start | password | set
@@ -54,6 +57,7 @@ export default function Login() {
         <div style={{ marginBottom: 18 }}>
           <Logo height={30} color="#FF7A1A" wordColor="#0F1419" />
           <p style={{ margin: "10px 0 0", color: "var(--muted)", fontSize: 13 }}>Site Management — staff login</p>
+          {lQuote && <p style={{ margin: "8px 0 0", color: "var(--muted)", fontSize: 12, fontStyle: "italic" }}>💡 {lQuote}</p>}
         </div>
         {isDemo && <div className="demo-banner">Demo mode — enter any number to sign in as Director (demo).</div>}
 

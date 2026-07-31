@@ -36,6 +36,7 @@ const MODULE_HELP = {
   assets:     "Tools & assets issue / return",
   rentals:    "Rented machines & rooms, rent due dates",
   workers:    "Worker profiles, KYC, deactivation",
+  notices:    "Company notice board — post & manage notices",
 };
 
 // One-click templates — apply, then fine-tune ticks if needed
