@@ -157,6 +157,11 @@ create policy "act"    on leave_approvals for insert to authenticated with check
 create policy "read"   on leave_approval_config for select to authenticated using (true);
 create policy "write"  on leave_approval_config for all to authenticated using (fn_is_director()) with check (fn_is_director());
 
--- verification
-select fn_is_director() as i_am_director;
-select array_length(fn_list_tables(), 1) as tables_visible_for_backup;
+-- verification (safe to run from the SQL Editor)
+select count(*) as security_functions_installed
+from pg_proc where proname in ('fn_current_staff_id','fn_is_director','fn_has_perm','fn_list_tables','fn_restore_table');
+select count(*) as policies_on_new_tables
+from pg_policies where schemaname = 'public' and tablename in
+ ('notifications','module_audit_log','company_holidays','notices','notice_targets','notice_attachments',
+  'notice_reads','notice_acks','notice_comments','daily_quotes','app_settings','support_tickets',
+  'leave_requests','leave_approvals','leave_approval_config');
