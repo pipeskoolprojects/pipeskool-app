@@ -137,7 +137,7 @@ export default function Sidebar() {
 
       {GROUPS.map(g => <Group key={g.label} label={g.label} items={g.items} subs={g.subs} />)}
 
-      {showAccess && <Group label="Admin" items={[{ href: "/access", label: "Access Rights", module: null }, { href: "/sitemaster", label: "Site Master (timings)", module: null }]} />}
+      {showAccess && <Group label="Admin" items={[{ href: "/access", label: "Access Rights", module: null }, { href: "/sitemaster", label: "Site Master (timings)", module: null }, { href: "/backup", label: "Backup & Restore", module: null }]} />}
 
       <nav style={{ marginTop: 20 }}>
         <a onClick={logout} style={{ cursor: "pointer" }}>Log out</a>
