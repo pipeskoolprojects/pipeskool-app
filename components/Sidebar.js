@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
+import { getUnreadNoticeCount } from "@/lib/notices";
 import { getSession, clearSession, logoutAuth, canSeeModuleAnySite, setCurrentSite } from "@/lib/auth";
 
 const GROUPS = [
@@ -25,6 +26,9 @@ const GROUPS = [
       { href: "/expenses", label: "Expenses & Petty Cash", module: "money" },
     ] },
   ] },
+  { label: "Communication", items: [
+    { href: "/notices", label: "Notice Board", module: "notices" },
+  ] },
   { label: "Commercial / Billing", items: [
     { href: "/boq", label: "BOQ Master", module: "dpr" },
     { href: "/billing", label: "RA Billing", module: null },
@@ -38,7 +42,9 @@ export default function Sidebar() {
   const router = useRouter();
   const [session, setSession] = useState(null);
   const [open, setOpen] = useState({});
+  const [unreadNotices, setUnreadNotices] = useState(0);
   const [hidden, setHidden] = useState(false);
+  useEffect(() => { if (session) getUnreadNoticeCount(session).then(setUnreadNotices); }, [session, path]);
   useEffect(() => { try { const v = localStorage.getItem("psk_sidebar_hidden") === "1"; setHidden(v); document.documentElement.classList.toggle("psk-nosb", v); } catch {} }, []);
   const toggleHidden = (v) => { setHidden(v); try { localStorage.setItem("psk_sidebar_hidden", v ? "1" : "0"); document.documentElement.classList.toggle("psk-nosb", v); } catch {} };
 
@@ -88,7 +94,7 @@ export default function Sidebar() {
         ) : (
           <nav className="nav-sub" style={{ marginTop: 0, paddingLeft: depth ? 6 : 0 }}>
             {items.filter(it => canSee(it.module)).map(l => (
-              <Link key={l.href} href={l.href} className={path === l.href ? "active" : ""}>{l.label}</Link>
+              <Link key={l.href} href={l.href} className={path === l.href ? "active" : ""}>{l.label}{l.href === "/notices" && unreadNotices > 0 && <span style={{ background: "var(--copper)", color: "#fff", borderRadius: 9, fontSize: 10, padding: "1px 6px", marginLeft: 6 }}>{unreadNotices}</span>}</Link>
             ))}
           </nav>
         ))}
