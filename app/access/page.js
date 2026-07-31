@@ -37,6 +37,7 @@ const MODULE_HELP = {
   rentals:    "Rented machines & rooms, rent due dates",
   workers:    "Worker profiles, KYC, deactivation",
   notices:    "Company notice board — post & manage notices",
+  leave:      "Leave requests — View own is automatic; Approve = act on team requests",
 };
 
 // One-click templates — apply, then fine-tune ticks if needed
@@ -44,15 +45,15 @@ const PRESETS = [
   ["site_engineer", "Site Engineer", "Raises everything at site, approves nothing",
     { attendance:["view","create"], dpr:["view","create"], stock:["view","create"], indent:["view","create"], assets:["view","create"], rentals:["view","create"], workers:["view","create"] }],
   ["site_incharge", "Site Incharge / Supervisor", "Runs the site: raises + approves site-level work",
-    { attendance:["view","create","approve","verify"], dpr:["view","create","approve"], money:["view","create"], wages:["view"], stock:["view","create","approve"], indent:["view","create","approve"], assets:["view","create"], rentals:["view","create"], workers:["view","create","manage"] }],
+    { attendance:["view","create","approve","verify"], dpr:["view","create","approve"], money:["view","create"], wages:["view"], stock:["view","create","approve"], indent:["view","create","approve"], assets:["view","create"], rentals:["view","create"], workers:["view","create","manage"], leave:["view","approve"] }],
   ["storekeeper", "Storekeeper", "Owns the store: GRN, issue, settle",
     { attendance:["view"], stock:["view","create","manage"], indent:["view","create"], assets:["view","create"], workers:["view"] }],
   ["billing_engineer", "Billing Engineer", "Reads site data for RA bills, writes DPR",
     { attendance:["view"], dpr:["view","create"], wages:["view"], stock:["view"], indent:["view"] }],
   ["accountant", "Accountant / HO", "Money & payroll authority, read-only on site ops",
-    { attendance:["view"], money:["view","approve","verify","manage"], wages:["view","approve","manage"], stock:["view"], indent:["view"], rentals:["view"] }],
+    { attendance:["view"], money:["view","approve","verify","manage"], wages:["view","approve","manage"], stock:["view"], indent:["view"], rentals:["view"], leave:["view","approve"] }],
   ["it_admin", "IT Executive (data admin)", "Sees + cleans data everywhere, approves nothing",
-    Object.fromEntries(["attendance","dpr","money","wages","stock","indent","assets","rentals","workers"].map(m => [m, ["view","manage"]]))],
+    Object.fromEntries(["attendance","dpr","money","wages","stock","indent","assets","rentals","workers","notices","leave"].map(m => [m, ["view","manage"]]))],
 ];
 
 export default function AccessPage() {
