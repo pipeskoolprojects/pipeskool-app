@@ -38,6 +38,7 @@ const MODULE_HELP = {
   workers:    "Worker profiles, KYC, deactivation",
   notices:    "Company notice board — post & manage notices",
   leave:      "Leave requests — View own is automatic; Approve = act on team requests",
+  billing:    "BOQ master, RA bills, Tally export — writes need these ticks",
 };
 
 // One-click templates — apply, then fine-tune ticks if needed
