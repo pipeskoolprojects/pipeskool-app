@@ -49,7 +49,7 @@ export default function AttendancePage() {
         const dev = r.otApproved && r.otApprovedHours != null && r.otApprovedHours !== r.ot;
         return (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-            {r.otApproved ? <b>{r.otApprovedHours}h</b> : (r.ot > 0 ? r.ot + "h" : "—")}
+            {r.otApproved && Number(r.otApprovedHours) > 0 ? <b>{r.otApprovedHours}h</b> : (r.ot > 0 ? r.ot + "h" : "—")}
             {r.otApproved && <span className="badge p" title="Approved">✓</span>}
             {dev && <span className="badge warn" title={`Punch shows ${r.ot}h`}>⚠ {r.ot}h</span>}
             <button style={{ fontSize: 11, padding: "1px 6px" }}

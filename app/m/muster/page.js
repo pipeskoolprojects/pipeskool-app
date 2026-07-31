@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
+import CameraCapture from "@/components/CameraCapture";
 import { isDemo } from "@/lib/supabase";
 import { getMuster, proxyPunch, proxyPunchOut, getSiteGeo, getPosition, distanceMeters } from "@/lib/mobile";
 import { getSession, setCurrentSite, can } from "@/lib/auth";
@@ -13,7 +14,7 @@ export default function MusterScreen() {
   const [mode, setMode] = useState("in");   // in | out
   const [msg, setMsg] = useState("");
   const [geo, setGeo] = useState(null);      // { dist, inside, unset }
-  const fileRef = useRef(null);
+
   const sess = typeof window !== "undefined" ? getSession() : null;
   useEffect(() => { if (typeof window !== "undefined" && !getSession()) window.location.replace("/m"); }, []);
   const siteId = sess?.currentSite || sess?.sites?.[0]?.id || 1;
@@ -41,20 +42,21 @@ export default function MusterScreen() {
     if (!canProxy) { alert("Only the site supervisor / incharge can mark on behalf."); return; }
     return startProxyInner(...args);
   }
+  const [showCam, setShowCam] = useState(false);
   function startProxyInner(r, m) {
     setTarget(r); setMode(m); setMsg("");
-    fileRef.current?.click();
+    setShowCam(true);   // live camera only — no file picker
   }
 
-  async function onPhoto(e) {
-    const file = e.target.files?.[0];
+  async function onPhoto(file) {
+    setShowCam(false);
     if (!file || !target) return;
     const res = mode === "out"
       ? await proxyPunchOut(target.id, siteId, file)
       : await proxyPunch(target.id, siteId, file, markedBy);
     if (!res.ok) { setMsg(res.error); return; }
     setMsg(`Proxy punch-${mode} saved for ${target.name} — photo attached, flagged in records.`);
-    setTarget(null); e.target.value = "";
+    setTarget(null);
     load();
   }
 
@@ -121,8 +123,7 @@ export default function MusterScreen() {
           </div>
         ))}
 
-        <input ref={fileRef} type="file" accept="image/*" capture="environment"
-               style={{ display: "none" }} onChange={onPhoto} />
+        {showCam && <CameraCapture facing="environment" title={`Live photo of ${target?.name || "worker"} at site`} onCapture={onPhoto} onCancel={() => { setShowCam(false); setTarget(null); }} />}
         <div className="note amber" style={{ marginTop: 14 }}>
           "Mark on behalf" requires a live photo of the worker at site — the camera opens directly,
           gallery photos are not accepted. Every proxy entry is permanently flagged.

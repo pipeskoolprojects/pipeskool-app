@@ -8,6 +8,7 @@ import { getSession, refreshSessionMobile, setCurrentSite } from "@/lib/auth";
 import { siteForPunch } from "@/lib/mobile";
 import { getLang, t } from "@/lib/i18n";
 import Logo from "@/components/Logo";
+import CameraCapture from "@/components/CameraCapture";
 import { getTodayQuote } from "@/lib/notices";
 
 export default function PunchScreen() {
@@ -37,7 +38,7 @@ export default function PunchScreen() {
   const [today, setToday] = useState({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  const fileRef = useRef(null);
+
 
   useEffect(() => {
     const w = getLocalWorker();
@@ -117,13 +118,14 @@ export default function PunchScreen() {
   const phase = !today.punch_in ? "in" : !today.punch_out ? "out" : "done";
   const fmtTime = ts => ts ? new Date(ts).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—";
 
+  const [showCam, setShowCam] = useState(false);
   function startPunch() {
     if (!insideFence || phase === "done" || busy) return;
-    fileRef.current?.click(); // selfie first, punch on capture
+    setShowCam(true); // live selfie first, punch on capture — no file picker
   }
 
-  async function onSelfie(e) {
-    const file = e.target.files?.[0];
+  async function onSelfie(file) {
+    setShowCam(false);
     if (!file) return;
     setBusy(true); setMsg("");
     const res = await punch(worker, pos, file);
@@ -182,8 +184,7 @@ export default function PunchScreen() {
         </button>
         <div className="sub">📷 Selfie is captured with every punch</div>
 
-        <input ref={fileRef} type="file" accept="image/*" capture="user"
-               style={{ display: "none" }} onChange={onSelfie} />
+        {showCam && <CameraCapture facing="user" title="Live selfie for punch" onCapture={onSelfie} onCancel={() => setShowCam(false)} />}
 
         {msg && <div className="note green" style={{ textAlign: "left" }}>{msg}</div>}
 
