@@ -27,12 +27,25 @@ export default function Login() {
     setMode(st.mode);   // 'password' (has one) or 'set' (first time)
   }
 
+  function lockState() {
+    try { const j = JSON.parse(localStorage.getItem("psk_login_lock") || "{}");
+      return { fails: j.fails || 0, until: j.until || 0 }; } catch { return { fails: 0, until: 0 }; }
+  }
+  function noteFail() {
+    const s = lockState(); const fails = s.fails + 1;
+    const until = fails >= 5 ? Date.now() + 5 * 60 * 1000 : 0;
+    localStorage.setItem("psk_login_lock", JSON.stringify({ fails: fails >= 5 ? 0 : fails, until }));
+  }
+  function clearFails() { localStorage.removeItem("psk_login_lock"); }
   async function handleLogin(e) {
     e.preventDefault(); setError("");
     setBusy(true);
+    const ls = lockState();
+    if (ls.until > Date.now()) { setError("Too many wrong attempts. Try again in " + Math.ceil((ls.until - Date.now()) / 60000) + " min."); return; }
     const res = await loginByMobilePassword(mobile, password);
     setBusy(false);
-    if (!res.ok) { setError(res.error); return; }
+    if (!res.ok) { noteFail(); setError(res.error); return; }
+    clearFails();
     const home = res.session?.role === "director" ? "/m/report" : "/m/muster";
     router.push(window.innerWidth <= 820 ? home : "/dashboard");
   }
