@@ -12,6 +12,7 @@ const GROUPS = [
       { href: "/attendance", label: "Attendance & Labour", module: "attendance" },
       { href: "/wages", label: "Muster Roll & Wages", module: "wages" },
       { href: "/workers", label: "Workers & Staff Master", module: "workers" },
+      { href: "/leave", label: "Leave Requests", module: null },
     ] },
     { label: "Material & Procurement", items: [
       { href: "/procure", label: "Indent & Purchase", module: "indent" },
