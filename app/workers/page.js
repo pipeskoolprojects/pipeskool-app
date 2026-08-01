@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { getWorkers, saveWorker, uploadAadhaarDoc, inr, deleteWorker, deleteStaff } from "@/lib/data";
 import { getContractors, getSitesList } from "@/lib/mobile";
-import { getStaff, addStaff, updateStaff, getRoles, addRole, resetStaffPassword, getUserSites, assignSite, removeSite } from "@/lib/access";
+import { getStaff, addStaff, updateStaff, getRoles, addRole, renameRole, deleteRole, resetStaffPassword, getUserSites, assignSite, removeSite } from "@/lib/access";
 import { getSession } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
 
@@ -332,7 +332,28 @@ export default function WorkersPage() {
               <h2 style={{ marginBottom: 4 }}>Role master</h2>
               <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>Roles are labels for staff. A new role starts with <b>no rights</b> — after assigning it, open Admin → Access Rights and tick what that person can do per site.</div>
               <div style={{ marginBottom: 12 }}>
-                {roles.map(r => <div key={r.code} style={{ padding: "7px 0", borderBottom: "1px solid var(--border)", fontSize: 13.5 }}>{r.label} <span className="muted" style={{ fontSize: 11 }}>({r.code})</span></div>)}
+                {roles.map(r => (
+                  <div key={r.code} style={{ padding: "7px 0", borderBottom: "1px solid var(--border)", fontSize: 13.5, display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ flex: 1 }}>{r.label} <span className="muted" style={{ fontSize: 11 }}>({r.code})</span></span>
+                    <button style={{ fontSize: 11 }} title="Rename"
+                      onClick={async () => {
+                        const nl = prompt("New display name for this role:", r.label);
+                        if (nl === null || !nl.trim() || nl.trim() === r.label) return;
+                        const x = await renameRole(r.code, nl);
+                        if (!x.ok) { setErr(x.error); return; }
+                        setErr(""); getRoles().then(setRoles); load();
+                      }}>✎</button>
+                    {r.code !== "director" && (
+                      <button style={{ fontSize: 11, color: "var(--red)" }} title="Delete (only if no staff has it)"
+                        onClick={async () => {
+                          if (!confirm(`Delete role "${r.label}"? Only possible if no staff member has it.`)) return;
+                          const x = await deleteRole(r.code);
+                          if (!x.ok) { setErr(x.error); return; }
+                          setErr(""); getRoles().then(setRoles);
+                        }}>🗑</button>
+                    )}
+                  </div>
+                ))}
               </div>
               <label className="muted">New role name</label>
               <div style={{ display: "flex", gap: 8 }}>
