@@ -13,8 +13,8 @@
 }
 body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; }
 a { color: inherit; text-decoration: none; }
-.layout { display: flex; min-height: 100vh; }
-.sidebar { width: 220px; background: var(--deep); color: #c6c6bc; padding: 18px 0; flex-shrink: 0; }
+.layout { display: flex; height: 100vh; overflow: hidden; }
+.sidebar { width: 220px; background: var(--deep); color: #c6c6bc; padding: 18px 0; flex-shrink: 0; height: 100vh; overflow-y: auto; }
 .sidebar .brand { font-size: 16px; font-weight: 700; color: #fff; padding: 0 18px 16px; border-bottom: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 9px; }
 .sidebar .brand img { width: 26px; height: 26px; border-radius: 6px; }
 .sidebar .brand span { display: block; font-size: 10px; font-weight: 400; color: #6E7780; margin-top: 2px; letter-spacing: 0.02em; }
@@ -28,7 +28,10 @@ a { color: inherit; text-decoration: none; }
 .sidebar .nav-group.has-active { color: var(--copper); }
 .sidebar .nav-group .chev { font-size: 9px; color: #6E7780; transition: transform .15s; }
 .sidebar .nav-sub a { padding-left: 32px; font-size: 12.5px; }
-.main { flex: 1; padding: 24px 28px; min-width: 0; }
+.main { flex: 1; padding: 24px 28px; min-width: 0; height: 100vh; overflow-y: auto; }
+/* update134: locked frame — the title/action bar stays pinned while content scrolls */
+.page-head { position: sticky; top: -24px; z-index: 30; background: var(--bg);
+  padding: 24px 0 10px; margin: -24px 0 4px; }
 .page-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
 .page-head h1 { font-size: 21px; font-weight: 700; letter-spacing: -0.01em; }
 .filters { display: flex; gap: 8px; flex-wrap: wrap; }
