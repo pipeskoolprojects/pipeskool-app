@@ -37,6 +37,7 @@ export default function PunchScreen() {
   const [dist, setDist] = useState(null);
   const [today, setToday] = useState({});
   const [busy, setBusy] = useState(false);
+  const [showCam, setShowCam] = useState(false);
   const [msg, setMsg] = useState("");
 
 
@@ -118,7 +119,6 @@ export default function PunchScreen() {
   const phase = !today.punch_in ? "in" : !today.punch_out ? "out" : "done";
   const fmtTime = ts => ts ? new Date(ts).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—";
 
-  const [showCam, setShowCam] = useState(false);
   function startPunch() {
     if (!insideFence || phase === "done" || busy) return;
     setShowCam(true); // live selfie first, punch on capture — no file picker

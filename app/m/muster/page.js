@@ -14,6 +14,7 @@ export default function MusterScreen() {
   const [mode, setMode] = useState("in");   // in | out
   const [msg, setMsg] = useState("");
   const [geo, setGeo] = useState(null);      // { dist, inside, unset }
+  const [showCam, setShowCam] = useState(false);
 
   const sess = typeof window !== "undefined" ? getSession() : null;
   useEffect(() => { if (typeof window !== "undefined" && !getSession()) window.location.replace("/m"); }, []);
@@ -42,7 +43,6 @@ export default function MusterScreen() {
     if (!canProxy) { alert("Only the site supervisor / incharge can mark on behalf."); return; }
     return startProxyInner(...args);
   }
-  const [showCam, setShowCam] = useState(false);
   function startProxyInner(r, m) {
     setTarget(r); setMode(m); setMsg("");
     setShowCam(true);   // live camera only — no file picker
