@@ -15,6 +15,14 @@
 -- ============================================================
 
 -- ---------- A1. staff login lookup (pre-auth) ----------
+-- older versions of these functions may exist with different signatures;
+-- drop first (create-or-replace cannot change a return type)
+drop function if exists fn_staff_login_lookup(text);
+drop function if exists fn_link_staff_auth(text, text);
+drop function if exists fn_worker_lookup(text);
+drop function if exists fn_worker_today(bigint);
+drop function if exists fn_worker_punch(bigint, double precision, double precision, text);
+
 create or replace function fn_staff_login_lookup(p_mobile text)
 returns table (id bigint, full_name text, mobile text, role text, site_id bigint,
                auth_id uuid, auth_email text, auth_version int)
