@@ -3,40 +3,45 @@ import Assistant from "@/components/Assistant";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { logoutAuth, getSession } from "@/lib/auth";
+import { logoutAuth, getSession, canSeeModuleAnySite, canAnySite } from "@/lib/auth";
 import { getLocalWorker } from "@/lib/mobile";
 import { LANGS, getLang, setLang, t } from "@/lib/i18n";
 
+// Every tab / More item is mapped to Access Rights, same as the web sidebar.
+// show(sess) must be true for the item to appear; Directors pass everything
+// (canSeeModuleAnySite / canAnySite return true for director).
 const primaryBase = [
-  { href: "/m", ico: "⏱", key: "nav_punch" },
-  { href: "/m/muster", ico: "👥", key: "nav_muster" },
-  { href: "/m/dpr", ico: "📋", key: "nav_dpr" },
-  { href: "/m/stock", ico: "📦", key: "nav_stock" },
+  { href: "/m", ico: "⏱", key: "nav_punch", show: () => true },
+  { href: "/m/muster", ico: "👥", key: "nav_muster", show: s => canSeeModuleAnySite(s, "attendance") },
+  { href: "/m/dpr", ico: "📋", key: "nav_dpr", show: s => canSeeModuleAnySite(s, "dpr") },
+  { href: "/m/stock", ico: "📦", key: "nav_stock", show: s => canSeeModuleAnySite(s, "stock") },
 ];
 const more = [
-  { href: "/m/report", ico: "📊", key: "m_report" },
-  { href: "/m/indent", ico: "🧾", key: "m_indent" },
-  { href: "/m/assets", ico: "🔧", key: "m_assets" },
-  { href: "/m/rentals", ico: "🚜", key: "m_rentals" },
-  { href: "/m/money", ico: "₹", key: "m_money" },
-  { href: "/m/verify", ico: "✔", key: "m_verify" },
-  { href: "/m/add", ico: "＋", key: "m_add" },
+  { href: "/m/report", ico: "📊", key: "m_report", show: s => canSeeModuleAnySite(s, "dpr") || canSeeModuleAnySite(s, "attendance") },
+  { href: "/m/indent", ico: "🧾", key: "m_indent", show: s => canSeeModuleAnySite(s, "indent") },
+  { href: "/m/assets", ico: "🔧", key: "m_assets", show: s => canSeeModuleAnySite(s, "assets") },
+  { href: "/m/rentals", ico: "🚜", key: "m_rentals", show: s => canSeeModuleAnySite(s, "rentals") },
+  { href: "/m/money", ico: "₹", key: "m_money", show: s => canSeeModuleAnySite(s, "money") },
+  { href: "/m/verify", ico: "✔", key: "m_verify", show: s => canAnySite(s, "attendance", "verify") || canAnySite(s, "attendance", "manage") },
+  { href: "/m/add", ico: "＋", key: "m_add", show: s => canAnySite(s, "workers", "create") || canAnySite(s, "workers", "manage") },
 ];
 
 export default function MobileNav() {
-  const [role, setRole] = useState(null);
+  const [sess, setSess] = useState(null);
   const [workerOnly, setWorkerOnly] = useState(false);
   const [lang, setLangState] = useState("en");
-  useEffect(() => { const st = getSession(); setRole(st?.role || null); setWorkerOnly(!st && !!getLocalWorker()); setLangState(getLang()); }, []);
+  useEffect(() => { const st = getSession(); setSess(st || null); setWorkerOnly(!st && !!getLocalWorker()); setLangState(getLang()); }, []);
   const pickLang = l => { setLang(l); window.location.reload(); };
+  const role = sess?.role || null;
   const workerPrimary = [{ href: "/m", ico: "⏱", key: "nav_punch" }];
   const primary = workerOnly ? workerPrimary : role === "director"
     ? [{ href: "/m/report", ico: "📊", key: "nav_report" }, ...primaryBase.slice(1)]
-    : primaryBase;
+    : primaryBase.filter(tab => tab.show(sess));
+  const moreVisible = (workerOnly || !sess) ? [] : more.filter(m => m.show(sess));
   const path = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const inMore = more.some(m => m.href === path);
+  const inMore = moreVisible.some(m => m.href === path);
 
   async function logout() {
     try { localStorage.removeItem("psk_worker"); } catch {}   // worker punch profile
@@ -52,7 +57,7 @@ export default function MobileNav() {
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", zIndex: 40 }}>
           <div onClick={e => e.stopPropagation()}
                style={{ position: "fixed", bottom: 58, left: "50%", transform: "translateX(-50%)", width: "min(430px, 100%)", background: "#fff", borderRadius: "14px 14px 0 0", padding: 10, zIndex: 50, boxShadow: "0 -4px 20px rgba(0,0,0,0.15)" }}>
-            {(workerOnly ? [] : more).map(m => (
+            {moreVisible.map(m => (
               <Link key={m.href} href={m.href} onClick={() => setOpen(false)}
                     style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", fontSize: 14, borderBottom: "1px solid var(--border)", color: path === m.href ? "var(--blue)" : "var(--text)" }}>
                 <span style={{ fontSize: 18 }}>{m.ico}</span>{t(lang, m.key)}
