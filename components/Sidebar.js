@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 import { getUnreadNoticeCount } from "@/lib/notices";
+import Assistant from "@/components/Assistant";
 import { getSession, clearSession, logoutAuth, canSeeModuleAnySite, setCurrentSite } from "@/lib/auth";
 
 const GROUPS = [
@@ -104,11 +105,11 @@ export default function Sidebar() {
   }
 
   if (hidden) return (
-    <button className="sidebar-show" title="Show menu" onClick={() => toggleHidden(false)}>☰</button>
+    <><button className="sidebar-show" title="Show menu" onClick={() => toggleHidden(false)}>☰</button><Assistant /></>
   );
 
   return (
-    <aside className="sidebar">
+    <><aside className="sidebar">
       <button className="sidebar-hide" title="Hide menu (more screen space)" onClick={() => toggleHidden(true)}>⟨</button>
       <div className="brand">
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -138,11 +139,11 @@ export default function Sidebar() {
 
       {GROUPS.map(g => <Group key={g.label} label={g.label} items={g.items} subs={g.subs} />)}
 
-      {showAccess && <Group label="Admin" items={[{ href: "/access", label: "Access Rights", module: null }, { href: "/sitemaster", label: "Site Master (timings)", module: null }, { href: "/backup", label: "Backup & Restore", module: null }]} />}
+      {showAccess && <Group label="Admin" items={[{ href: "/access", label: "Access Rights", module: null }, { href: "/sitemaster", label: "Site Master (timings)", module: null }, { href: "/backup", label: "Backup & Restore", module: null }, { href: "/tickets", label: "Support Tickets", module: null }]} />}
 
       <nav style={{ marginTop: 20 }}>
         <a onClick={logout} style={{ cursor: "pointer" }}>Log out</a>
       </nav>
-    </aside>
+    </aside><Assistant /></>
   );
 }
