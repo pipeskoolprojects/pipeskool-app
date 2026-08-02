@@ -32,9 +32,9 @@ const GROUPS = [
     { href: "/notices", label: "Notice Board", module: "notices" },
   ] },
   { label: "Commercial / Billing", items: [
-    { href: "/boq", label: "BOQ Master", module: "dpr" },
-    { href: "/billing", label: "RA Billing", module: null },
-    { href: "/tally", label: "Tally Export", module: null },
+    { href: "/boq", label: "BOQ Master", module: "billing" },
+    { href: "/billing", label: "RA Billing", module: "billing" },
+    { href: "/tally", label: "Tally Export", module: "billing" },
   ] },
 ];
 const groupItems = g => g.items || (g.subs || []).flatMap(x => x.items);
