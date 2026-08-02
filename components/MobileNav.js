@@ -3,7 +3,7 @@ import Assistant from "@/components/Assistant";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { logoutAuth, getSession, canSeeModuleAnySite, canAnySite } from "@/lib/auth";
+import { logoutAuth, getSession, refreshSessionRights, canSeeModuleAnySite, canAnySite } from "@/lib/auth";
 import { getLocalWorker } from "@/lib/mobile";
 import { LANGS, getLang, setLang, t } from "@/lib/i18n";
 
@@ -30,7 +30,11 @@ export default function MobileNav() {
   const [sess, setSess] = useState(null);
   const [workerOnly, setWorkerOnly] = useState(false);
   const [lang, setLangState] = useState("en");
-  useEffect(() => { const st = getSession(); setSess(st || null); setWorkerOnly(!st && !!getLocalWorker()); setLangState(getLang()); }, []);
+  useEffect(() => {
+    const st = getSession(); setSess(st || null); setWorkerOnly(!st && !!getLocalWorker()); setLangState(getLang());
+    // live rights: re-pull from DB so Access Rights changes apply without re-login
+    if (st?.id) refreshSessionRights().then(ns => { if (ns) setSess(ns); else window.location.href = "/m/login"; });
+  }, []);
   const pickLang = l => { setLang(l); window.location.reload(); };
   const role = sess?.role || null;
   const workerPrimary = [{ href: "/m", ico: "⏱", key: "nav_punch" }];

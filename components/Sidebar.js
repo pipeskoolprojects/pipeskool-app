@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 import { getUnreadNoticeCount } from "@/lib/notices";
 import Assistant from "@/components/Assistant";
-import { getSession, clearSession, logoutAuth, canSeeModuleAnySite, setCurrentSite } from "@/lib/auth";
+import { getSession, clearSession, logoutAuth, refreshSessionRights, canSeeModuleAnySite, setCurrentSite } from "@/lib/auth";
 
 const GROUPS = [
   { label: "Core Site Operations", subs: [
@@ -54,6 +54,8 @@ export default function Sidebar() {
     const s = getSession();
     if (!s) { router.push("/login"); return; }
     setSession(s);
+    // live rights: re-pull from DB so Access Rights changes apply without re-login
+    refreshSessionRights().then(ns => { if (ns) setSession(ns); else router.push("/login"); });
   }, [router]);
 
   // auto-expand the group that holds the current page
