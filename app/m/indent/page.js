@@ -5,7 +5,7 @@ import { isDemo } from "@/lib/supabase";
 import { createIndent, editIndent, getIndents } from "@/lib/stock";
 import { searchItems } from "@/lib/stock";
 import { getSitesList } from "@/lib/mobile";
-import { getSession } from "@/lib/auth";
+import { getSession, setCurrentSite } from "@/lib/auth";
 
 const STATUS = {
   open: ["Open", "gray"], quoting: ["Getting quotes", "h"], pending: ["Pending", "gray"],
@@ -22,7 +22,8 @@ const DELIV = {
 export default function IndentScreen() {
   if (typeof window !== "undefined" && !getSession()) { window.location.replace("/m"); return null; }
   const [tab, setTab] = useState("track");   // track | new
-  const [siteId, setSiteId] = useState(1);
+  const [siteId, setSiteId] = useState(() => { const s0 = getSession(); return Number(s0?.currentSite || s0?.sites?.[0]?.id || 1); });  // shared site (update140)
+  const pickSite = id => { const n = Number(id); setSiteId(n); setCurrentSite(n); };   // one selection drives ALL pages
   const [sites, setSites] = useState([]);
   const [indents, setIndents] = useState([]);
   const [cart, setCart] = useState([]);       // {item_id, name, unit, qty}
@@ -70,7 +71,7 @@ export default function IndentScreen() {
     <div className="m-wrap">
       <div className="m-head">
         <div><div className="title">Material indent</div><div className="sub">Raise &amp; track</div></div>
-        <select value={siteId} onChange={e => setSiteId(Number(e.target.value))} style={{ fontSize: 11, width: "auto" }}>
+        <select value={siteId} onChange={e => pickSite(e.target.value)} style={{ fontSize: 11, width: "auto" }}>
           {sites.map(s => <option key={s.id} value={s.id}>{s.name.split(",")[0]}</option>)}
         </select>
       </div>

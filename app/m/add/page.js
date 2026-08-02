@@ -20,7 +20,10 @@ export default function AddWorkerScreen() {
 
   useEffect(() => {
     getContractors().then(setContractors);
-    getSitesList().then(s => { setSites(s); if (s[0]) set("site_id", s[0].id); });
+    getSitesList().then(s => { setSites(s);
+      const cur = Number(__gs()?.currentSite);   // default to the shared session site (update140)
+      const pick = s.find(x => Number(x.id) === cur) || s[0];
+      if (pick) set("site_id", pick.id); });
   }, []);
 
   const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));

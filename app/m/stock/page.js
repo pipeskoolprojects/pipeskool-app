@@ -8,12 +8,13 @@ import {
 } from "@/lib/stock";
 import { getSitesList } from "@/lib/mobile";
 import { getVendors } from "@/lib/vendors";
-import { getSession } from "@/lib/auth";
+import { getSession, setCurrentSite } from "@/lib/auth";
 
 export default function StockScreen() {
   if (typeof window !== "undefined" && !getSession()) { window.location.replace("/m"); return null; }
   const [tab, setTab] = useState("stock");   // stock | grn | issue | settle | return
-  const [siteId, setSiteId] = useState(1);
+  const [siteId, setSiteId] = useState(() => { const s0 = getSession(); return Number(s0?.currentSite || s0?.sites?.[0]?.id || 1); });  // shared site (update140)
+  const pickSite = id => { const n = Number(id); setSiteId(n); setCurrentSite(n); };   // one selection drives ALL pages
   const [sites, setSites] = useState([]);
   const [balances, setBalances] = useState([]);
   const [holdings, setHoldings] = useState([]);
@@ -114,7 +115,7 @@ export default function StockScreen() {
     <div className="m-wrap">
       <div className="m-head">
         <div><div className="title">Material stock</div><div className="sub">Store &amp; site</div></div>
-        <select value={siteId} onChange={e => { setSiteId(Number(e.target.value)); reset(); }} style={{ fontSize: 11, width: "auto" }}>
+        <select value={siteId} onChange={e => { pickSite(e.target.value); reset(); }} style={{ fontSize: 11, width: "auto" }}>
           {sites.map(s => <option key={s.id} value={s.id}>{s.name.split(",")[0]}</option>)}
         </select>
       </div>

@@ -1,5 +1,5 @@
 "use client";
-import { getSession as __gs } from "@/lib/auth";
+import { getSession as __gs, setCurrentSite } from "@/lib/auth";
 import { useEffect, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
@@ -12,7 +12,8 @@ import { getSitesList } from "@/lib/mobile";
 export default function AssetsScreen() {
   if (typeof window !== "undefined" && !__gs()) { window.location.replace("/m"); return null; }
   const [tab, setTab] = useState("mine");   // mine | repair | add
-  const [siteId, setSiteId] = useState(1);
+  const [siteId, setSiteId] = useState(() => { const s0 = __gs(); return Number(s0?.currentSite || s0?.sites?.[0]?.id || 1); });  // shared site (update140)
+  const pickSite = id => { const n = Number(id); setSiteId(n); setCurrentSite(n); };   // one selection drives ALL pages
   const [sites, setSites] = useState([]);
   const [assets, setAssets] = useState([]);
   const [staff, setStaff] = useState([]);
@@ -80,7 +81,7 @@ export default function AssetsScreen() {
     <div className="m-wrap">
       <div className="m-head">
         <div><div className="title">Tools &amp; assets</div><div className="sub">Site equipment</div></div>
-        <select value={siteId} onChange={e => setSiteId(Number(e.target.value))} style={{ fontSize: 11, width: "auto" }}>
+        <select value={siteId} onChange={e => pickSite(e.target.value)} style={{ fontSize: 11, width: "auto" }}>
           {sites.map(s => <option key={s.id} value={s.id}>{s.name.split(",")[0]}</option>)}
         </select>
       </div>

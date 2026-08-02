@@ -1,5 +1,5 @@
 "use client";
-import { getSession as __gs } from "@/lib/auth";
+import { getSession as __gs, setCurrentSite } from "@/lib/auth";
 import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
@@ -10,7 +10,8 @@ import { getSitesList } from "@/lib/mobile";
 
 export default function DPRScreen() {
   if (typeof window !== "undefined" && !__gs()) { window.location.replace("/m"); return null; }
-  const [siteId, setSiteId] = useState(1);
+  const [siteId, setSiteId] = useState(() => { const s0 = __gs(); return Number(s0?.currentSite || s0?.sites?.[0]?.id || 1); });  // shared site (update140)
+  const pickSite = id => { const n = Number(id); setSiteId(n); setCurrentSite(n); };   // one selection drives ALL pages
   const [sites, setSites] = useState([]);
   const [manpower, setManpower] = useState(0);
   const [work, setWork] = useState([]);          // {kind, boq_item_id|item_id|activity_text, label, unit, qty, loc, boq_qty, done_qty}
@@ -154,7 +155,7 @@ export default function DPRScreen() {
 
         {/* Site selector — always visible, drives both Entry and History */}
         <div className="m-field" style={{ marginBottom: 10 }}><label>Site</label>
-          <select value={siteId} onChange={e => setSiteId(Number(e.target.value))}>
+          <select value={siteId} onChange={e => pickSite(e.target.value)}>
             {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select></div>
 
