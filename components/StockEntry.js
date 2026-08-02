@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ITEM_TYPES, searchItems, addItem, recordTxn, logConsumption, recordMultiGRN, recordReturn, issueToWorker, getWorkerList, getHoldings, settleHolding, bulkImport, BULK_TEMPLATE_HEADERS } from "@/lib/stock";
+import { ITEM_TYPES, searchItems, addItem, recordTxn, logConsumption, recordMultiGRN, recordReturn, issueToWorker, issueMultiToWorker, getWorkerList, getHoldings, settleHolding, bulkImport, BULK_TEMPLATE_HEADERS } from "@/lib/stock";
 import { getSession } from "@/lib/auth";
 import { getVendors } from "@/lib/vendors";
 
@@ -54,7 +54,7 @@ export default function StockEntry({ siteId, userId, onDone }) {
   const [bulkRows, setBulkRows] = useState([]); const [bulkResult, setBulkResult] = useState(null);
   const fileRef = useRef(null);
 
-  const reset = () => { setMsg(""); setErr(""); setMv({ qty: "", purpose: "" }); setRetKind("return_store"); setRetReason(""); setRetVendor(""); setPicked(null); setGrnLines([]); setGrnHead({ vendor: "", challan_no: "", challan_date: "" }); setBulkRows([]); setBulkResult(null); };
+  const reset = () => { setMsg(""); setErr(""); setMv({ qty: "", purpose: "" }); setRetKind("return_store"); setRetReason(""); setRetVendor(""); setPicked(null); setGrnLines([]); setGrnHead({ vendor: "", challan_no: "", challan_date: "" }); setIssLines([]); setBulkRows([]); setBulkResult(null); };
 
   async function saveItem() {
     setErr(""); if (!it.material) { setErr("Material is required."); return; }
@@ -69,6 +69,14 @@ export default function StockEntry({ siteId, userId, onDone }) {
   }
   function setLine(i, k, v) { setGrnLines(ls => ls.map((l, idx) => idx === i ? { ...l, [k]: v } : l)); }
   function removeLine(i) { setGrnLines(ls => ls.filter((_, idx) => idx !== i)); }
+  // multi-item issue lines (update141) — same pattern as GRN
+  const [issLines, setIssLines] = useState([]);
+  function addIssLine(item) {
+    if (issLines.some(l => l.item_id === item.id)) return;   // one row per item
+    setIssLines(ls => [...ls, { item_id: item.id, item_name: item.display_name, unit: item.unit, qty: "", remarks: "" }]);
+  }
+  function setIssLine(i, k, v) { setIssLines(ls => ls.map((l, idx) => idx === i ? { ...l, [k]: v } : l)); }
+  function removeIssLine(i) { setIssLines(ls => ls.filter((_, idx) => idx !== i)); }
 
   async function saveGRN() {
     setErr("");
@@ -111,17 +119,19 @@ export default function StockEntry({ siteId, userId, onDone }) {
   }
 
   async function saveIssue() {
-    setErr(""); if (!picked) { setErr("Pick an item first."); return; }
+    setErr("");
     if (!issWorker) { setErr("Select the worker."); return; }
-    if (!mv.qty) { setErr("Quantity required."); return; }
+    if (issLines.length === 0) { setErr("Add at least one item line."); return; }
+    const bad = issLines.find(l => !l.qty || isNaN(Number(l.qty)) || Number(l.qty) <= 0);
+    if (bad) { setErr("Enter a valid quantity for " + bad.item_name + "."); return; }
     const w = workers.find(x => String(x.id) === String(issWorker));
     setBusy(true);
-    const res = await issueToWorker({ site_id: chosenSite, item_id: picked.id, qty: Number(mv.qty),
-      worker_id: w?.id, worker_name: w?.name || "", purpose: mv.purpose, done_by: userId });
+    const res = await issueMultiToWorker({ site_id: chosenSite, worker_id: w?.id,
+      worker_name: w?.name || "", lines: issLines, done_by: userId });
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg("Issued " + mv.qty + " of " + picked.display_name + " to " + (w?.name || "worker"));
-    setPicked(null); setIssWorker(""); setMv({ qty: "", purpose: "" }); refreshHoldings(); onDone?.();
+    setMsg("Issued " + res.count + " item" + (res.count === 1 ? "" : "s") + " to " + (w?.name || "worker") + " — Issue ID " + res.issue_ref);
+    setIssLines([]); setIssWorker(""); refreshHoldings(); onDone?.();
   }
 
   async function saveSettle() {
@@ -253,26 +263,40 @@ export default function StockEntry({ siteId, userId, onDone }) {
         </div>
       )}
 
-      {/* ---------- ISSUE TO WORKER ---------- */}
+      {/* ---------- ISSUE TO WORKER (multi-item, update141) ---------- */}
       {open === "issue" && (
         <div style={{ marginTop: 14 }}>
-          {!picked ? (
-            <div style={{ maxWidth: 360 }}><label className="muted">Search item</label><ItemPicker onPick={setPicked} /></div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10 }}>
-              <div style={{ gridColumn: "1 / -1" }}><b>{picked.display_name}</b> <button style={{ fontSize: 11, marginLeft: 8 }} onClick={() => setPicked(null)}>change</button></div>
-              <div><label className="muted">Issue to worker *</label>
-                <select style={{ width: "100%" }} value={issWorker} onChange={e => setIssWorker(e.target.value)}>
-                  <option value="">Select worker…</option>
-                  {workers.map(w => <option key={w.id} value={w.id}>{w.name}{w.contractor && w.contractor !== "—" ? " (" + w.contractor + ")" : ""}</option>)}
-                </select>
-              </div>
-              <div><label className="muted">Quantity *</label><input style={{ width: "100%" }} value={mv.qty} onChange={e => setMv(p => ({ ...p, qty: e.target.value }))} /></div>
-              <div><label className="muted">Purpose / location</label><input style={{ width: "100%" }} value={mv.purpose} onChange={e => setMv(p => ({ ...p, purpose: e.target.value }))} /></div>
-              <div style={{ display: "flex", alignItems: "flex-end" }}><button className="primary" disabled={busy} onClick={saveIssue} style={{ width: "100%" }}>Issue</button></div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10, marginBottom: 12 }}>
+            <div><label className="muted">Issue to worker *</label>
+              <select style={{ width: "100%" }} value={issWorker} onChange={e => setIssWorker(e.target.value)}>
+                <option value="">Select worker…</option>
+                {workers.map(w => <option key={w.id} value={w.id}>{w.name}{w.contractor && w.contractor !== "—" ? " (" + w.contractor + ")" : ""}</option>)}
+              </select>
+            </div>
+          </div>
+          <label className="muted">Add items to this issue</label>
+          <div style={{ maxWidth: 360, marginBottom: 10 }}><ItemPicker onPick={addIssLine} placeholder="Search material master…" /></div>
+
+          {issLines.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <table className="dt-compact">
+                <thead><tr><th>Item</th><th>Unit</th><th className="num">Quantity *</th><th>Remarks / purpose</th><th></th></tr></thead>
+                <tbody>
+                  {issLines.map((l, i) => (
+                    <tr key={i}>
+                      <td style={{ fontWeight: 600 }}>{l.item_name}</td>
+                      <td className="muted">{l.unit}</td>
+                      <td className="num"><input style={{ width: 80 }} value={l.qty} onChange={e => setIssLine(i, "qty", e.target.value)} /></td>
+                      <td><input style={{ width: "100%", minWidth: 140 }} value={l.remarks} onChange={e => setIssLine(i, "remarks", e.target.value)} placeholder="e.g. Bay-5 riser work" /></td>
+                      <td><button style={{ fontSize: 11 }} onClick={() => removeIssLine(i)}>✕</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
-          <div className="muted" style={{ marginTop: 8 }}>Material leaves the store and is held by the worker until settled (used + returned).</div>
+          <div className="muted" style={{ margin: "8px 0" }}>All lines are saved together under ONE Issue ID. Material leaves the store and is held by the worker until settled (used + returned).</div>
+          <button className="primary" disabled={busy} onClick={saveIssue}>{busy ? "Saving…" : `Issue (${issLines.length} item${issLines.length === 1 ? "" : "s"})`}</button>
         </div>
       )}
 
