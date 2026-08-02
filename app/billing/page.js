@@ -2,17 +2,20 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { isDemo } from "@/lib/supabase";
+import { getSites } from "@/lib/data";
 import {
   BILL_STATUS, inr, lineCum, linePrev,
   getRaSettings, saveRaSettings, getRaBills, createRaBill, getRaBill, saveRaBill, deleteRaBill, getRaBillTotals,
   getPaymentGroups, savePaymentGroup, assignGroupByCodes,
 } from "@/lib/billing";
 
-const SITES = [{ id: 1, name: "KEI Sanand" }, { id: 2, name: "SOUL Campus" }, { id: 3, name: "The Creek" }];
+
 const STATUS_FLOW = ["draft", "submitted", "certified", "paid"];
 
 export default function BillingPage() {
   const [site, setSite] = useState(2);
+  const [SITES, setSITES] = useState([]);
+  useEffect(() => { getSites().then(list => { const L = (list || []).map(x => ({ id: x.id, name: x.name })); setSITES(L); if (L[0] && !L.find(x => x.id === site)) setSite(L[0].id); }); }, []);
   const [settings, setSettings] = useState(null);
   const [bills, setBills] = useState([]);
   const [billTotals, setBillTotals] = useState({});

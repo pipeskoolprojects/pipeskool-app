@@ -4,9 +4,10 @@ import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
+import { getSites } from "@/lib/data";
 import { getAssets, getCalibrationDue, getRepairHistory, idleAssets, statusInfo, inr, addAsset, bulkImportAssets, ASSET_TEMPLATE_HEADERS, CATEGORIES, resolveSite, getStaffNames, transferAsset, flagNeedsRepair, sendForRepair, cancelRepair, repairDone, reportLost } from "@/lib/assets";
 
-const SITE_NAMES = { 1: "KEI Sanand", 2: "SOUL Campus", 3: "The Creek" };
+
 const blankAsset = { asset_code: "", name: "", category: "", make_model: "", purchase_cost: "", calib: false, calib_due: "" };
 
 export default function AssetsPage() {
@@ -52,7 +53,8 @@ export default function AssetsPage() {
     if (!res.ok) { setErr(res.error); return; }
     closeModal(); setMsg(a.code + " — updated.");
   }
-  const SITES = [{ id: 1, name: "KEI Sanand" }, { id: 2, name: "SOUL Campus" }, { id: 3, name: "The Creek" }];
+  const [SITES, setSITES] = useState([]);
+  useEffect(() => { getSites().then(list => setSITES((list || []).map(x => ({ id: x.id, name: x.name })))); }, []);
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
   async function saveOne() {
@@ -64,7 +66,7 @@ export default function AssetsPage() {
       current_site_id: addSite, calibration_required: !!form.calib, calibration_due: form.calib_due || null });
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg("Asset " + form.asset_code + " added to " + (SITE_NAMES[addSite] || "site") + "."); setForm(null);
+    setMsg("Asset " + form.asset_code + " added to " + ((SITES.find(x => Number(x.id) === Number(addSite)) || {}).name || "site") + "."); setForm(null);
   }
   function downloadExcel() {
     const a = document.createElement("a");
@@ -108,9 +110,7 @@ export default function AssetsPage() {
           <div className="filters">
             <select value={site} onChange={e => setSite(e.target.value)}>
               <option value="all">All sites</option>
-              <option value="1">KEI Sanand</option>
-              <option value="2">SOUL Campus</option>
-              <option value="3">The Creek</option>
+              {SITES.map(x => <option key={x.id} value={String(x.id)}>{x.name}</option>)}
             </select>
             <button onClick={downloadExcel} title="Download the Excel template (with Site & Category dropdowns)">⬇ Excel template</button>
             <button onClick={() => { setForm({ ...blankAsset }); setMsg(""); setErr(""); }}>＋ Add asset</button>
@@ -163,7 +163,7 @@ export default function AssetsPage() {
                     return (
                       <tr key={i}>
                         <td style={{ fontWeight: 600 }}>{r.asset_code}</td><td>{r.name}</td><td>{r.category}</td>
-                        <td>{sid ? <span className="badge gray">{SITE_NAMES[sid]}</span> : <span style={{ color: "var(--red)" }}>{r.site || "(blank)"} ✕</span>}</td>
+                        <td>{sid ? <span className="badge gray">{(SITES.find(x => Number(x.id) === Number(sid)) || {}).name || ("Site " + sid)}</span> : <span style={{ color: "var(--red)" }}>{r.site || "(blank)"} ✕</span>}</td>
                         <td className="muted">{r.make_model}</td><td className="num">{r.purchase_cost}</td><td>{r.calibration_required}</td>
                       </tr>
                     );
