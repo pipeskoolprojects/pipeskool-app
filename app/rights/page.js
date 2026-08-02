@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import { isDemo } from "@/lib/supabase";
-import { getSession, ROLE_LABELS, can } from "@/lib/auth";
+import { getSession, can } from "@/lib/auth";
+const ROLE_LABELS = {};  // legacy page (superseded by /access) — label falls back to role code
 import { getCatalog, getStaffList, getUserPermissions, setPermission } from "@/lib/rights";
 
 export default function RightsPage() {
