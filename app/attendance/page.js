@@ -41,6 +41,7 @@ export default function AttendancePage() {
     { key: "worker", label: "Worker", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.worker}</span> },
     { key: "category", label: "Category", filter: "select" },
     { key: "contractor", label: "Labour", filter: "select", render: r => <span className="muted">{r.contractor}</span> },
+    { key: "site", label: "Site", filter: "select", render: r => <span className="muted">{r.site}</span> },
     { key: "in", label: "In", type: "num" },
     { key: "out", label: "Out", type: "num" },
     { key: "hours", label: "Hrs", type: "num", render: r => r.hours ?? "—" },
