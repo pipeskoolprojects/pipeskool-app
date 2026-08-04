@@ -129,7 +129,11 @@ export default function StockPage() {
 
         <div className="panel">
           <h2>Consumption vs BOQ norm</h2>
-          {(() => {
+          {(!norms || norms.length === 0) ? (
+            <div className="muted" style={{ padding: "12px 0" }}>
+              Consumption tracking will activate once BOQ norms are mapped to stock items (planned with the Client Receivables work). Until then, actual consumption is visible per item in the stock position above (Consumed column).
+            </div>
+          ) : (() => {
             const THRESHOLD = 15; // % over expected before flagged red
             const rows = norms.map((n, i) => {
               const expected = Math.round(n.boqQty * n.workPct / 100);
