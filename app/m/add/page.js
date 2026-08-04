@@ -76,6 +76,8 @@ export default function AddWorkerScreen() {
               <option value="plumber">Plumber</option><option value="fitter">Fitter</option>
               <option value="helper">Helper</option><option value="welder">Welder</option>
               <option value="supervisor">Supervisor</option><option value="operator">Operator</option>
+              <option value="electrician">Electrician</option><option value="mason">Mason</option>
+              <option value="other">Other</option>
             </select></div>
           <div className="m-field"><label>Daily wage ₹ *</label>
             <input inputMode="numeric" value={f.daily_wage} onChange={e => set("daily_wage", e.target.value)} placeholder="800" /></div>

@@ -28,8 +28,9 @@ export default function PunchScreen() {
     setDist(null);
     getPosition().then(p => {
       setPos(p);
-      if (p && ov.geofence_lat != null) setDist(distanceMeters(p.lat, p.lng, ov.geofence_lat, ov.geofence_lng));
-      else setDist(0);
+      if (ov.geofence_lat == null) setDist(0);                    // no geofence configured -> nothing to enforce
+      else if (p) setDist(distanceMeters(p.lat, p.lng, ov.geofence_lat, ov.geofence_lng));
+      else setDist(null);                                          // geofence set but no GPS -> stay locked (update144)
     });
   }
   const [lang, setLangState] = useState("en");
@@ -86,11 +87,9 @@ export default function PunchScreen() {
       getTodayPunch(wv.id).then(setToday);
       getPosition().then(p => {
         setPos(p);
-        if (p && wv.geofence_lat != null) {
-          setDist(distanceMeters(p.lat, p.lng, wv.geofence_lat, wv.geofence_lng));
-        } else {
-          setDist(0); // demo / geofence not set yet → allow
-        }
+        if (wv.geofence_lat == null) setDist(0);                   // no geofence configured -> nothing to enforce
+        else if (p) setDist(distanceMeters(p.lat, p.lng, wv.geofence_lat, wv.geofence_lng));
+        else setDist(null);                                        // geofence set but no GPS -> stay locked (update144)
       });
     })();
   }, [router]);
