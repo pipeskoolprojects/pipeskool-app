@@ -18,12 +18,13 @@ export default function AttendancePage() {
   const [site, setSite] = useState("all");
   const [sites, setSites] = useState([]);
   const [rows, setRows] = useState(null);
+  const [loadErr, setLoadErr] = useState("");
   const [lightbox, setLightbox] = useState(null);
   const [otEdit, setOtEdit] = useState(null);   // { id, worker, computed, value }
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { getSites().then(setSites); }, []);
-  const load = () => getAttendance(date, site).then(setRows);
+  const load = () => getAttendance(date, site).then(res => { setRows(res.rows || []); setLoadErr(res.error || ""); });
   useEffect(() => { load(); }, [date, site]);
 
   async function saveOt() {
@@ -89,6 +90,8 @@ export default function AttendancePage() {
               {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
+        {loadErr && <div className="demo-banner" style={{ background: "#fdecea", color: "var(--red)" }}>
+          ⚠ Could not load attendance from the database: {loadErr} — your data is NOT deleted. Screenshot this and send it.</div>}
         </div>
         {isDemo && <div className="demo-banner">Demo mode — sample register shown.</div>}
         <div className="panel">
