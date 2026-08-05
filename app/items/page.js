@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
-import { ITEM_TYPES, getAllItems, addItem, updateItem, toggleItemActive, deleteItem } from "@/lib/stock";
+import { ITEM_TYPES, getAllItems, addItem, updateItem, toggleItemActive, deleteItem, approveItem } from "@/lib/stock";
 import { getSession, canAnySite } from "@/lib/auth";
 
 const UNITS = ["Nos", "Rmt", "Mtr", "Kg", "Set", "Box", "Litre", "Bag"];
@@ -49,7 +49,14 @@ export default function ItemsPage() {
     load();
   }
 
-  const generalCount = (rows || []).filter(r => r.is_active && r.item_type === "GENERAL").length;
+  const pending = (rows || []).filter(r => r.is_active && r.pending_review);
+  async function doApprove(r) {
+    const res = await approveItem(r.id);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg("\u201c" + r.display_name + "\u201d approved into the master \u2014 it now appears in item searches.");
+    load();
+  }
+  const openEditRow = r => { setForm({ ...r, min_stock: r.min_stock || "", sub_type: r.sub_type || "", size: r.size || "", item_class: r.item_class || "", make: r.make || "", hsn_code: r.hsn_code || "" }); setMsg(""); setErr(""); };
 
   const columns = [
     { key: "display_name", label: "Item", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.display_name}</span> },
@@ -81,9 +88,27 @@ export default function ItemsPage() {
         {isDemo && <div className="demo-banner">Demo mode — sample items.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
         {err && !form && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
-        {generalCount > 0 && (
-          <div className="demo-banner">
-            {generalCount} item{generalCount > 1 ? "s were" : " was"} quick-added from an indent and carry the temporary type <b>GENERAL</b> — open Edit and set the proper Type/Size to tidy the name.
+        {pending.length > 0 && (
+          <div className="panel" style={{ borderLeft: "4px solid var(--copper)" }}>
+            <h2>Pending review — quick-added from indents ({pending.length})</h2>
+            <div className="muted" style={{ marginBottom: 8 }}>
+              These items were typed on indents and are NOT yet in the master. They stay hidden from item searches until approved. Open Edit to set the proper Type / Size / HSN (the name recomposes), then Approve.
+            </div>
+            <table className="dt-compact"><thead><tr><th>Item (as typed)</th><th>Unit</th><th></th></tr></thead>
+              <tbody>
+                {pending.map(r => (
+                  <tr key={r.id}>
+                    <td style={{ fontWeight: 600 }}>{r.display_name}</td>
+                    <td className="muted">{r.unit || "\u2014"}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <button style={{ fontSize: 11.5, marginRight: 6 }} onClick={() => openEditRow(r)}>Edit</button>
+                      <button className="primary" style={{ fontSize: 11.5, marginRight: 6 }} onClick={() => doApprove(r)}>Approve &amp; add</button>
+                      <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => toggle(r)}>Reject</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
