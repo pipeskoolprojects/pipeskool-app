@@ -5,9 +5,10 @@ import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import {
   getAdvanceQueue, reviewAdvance, getExpenseClaimQueue, reviewExpenseClaim,
+  getBeneficiaries, raiseAdvanceSalary,
   getPettyReconciliation, catLabel, inr, markAdvancePosted, markExpensePosted,
 } from "@/lib/money";
-import { getSession } from "@/lib/auth";
+import { getSession, canAnySite } from "@/lib/auth";
 
 export default function ExpensesPage() {
   const [adv, setAdv] = useState(null);
@@ -15,13 +16,36 @@ export default function ExpensesPage() {
   const [petty, setPetty] = useState([]);
   const [msg, setMsg] = useState("");
   const [session, setSession] = useState(null);
+  const [bens, setBens] = useState([]);
+  const [advForm, setAdvForm] = useState({ beneficiary: "", amount: "", reason: "" });
+  const [advErr, setAdvErr] = useState("");
+  const [advBusy, setAdvBusy] = useState(false);
+  async function submitWebAdvance() {
+    setAdvErr("");
+    if (!advForm.beneficiary || !advForm.amount) { setAdvErr("Select a person and enter the amount."); return; }
+    const b = bens.find(x => `${x.kind}:${x.id}` === advForm.beneficiary);
+    setAdvBusy(true);
+    const res = await raiseAdvanceSalary({
+      site_id: b.site_id || session?.currentSite || null, beneficiary_id: b.id, beneficiary_kind: b.kind,
+      beneficiary_name: b.name, amount: Number(advForm.amount), reason: advForm.reason,
+      bank_on_file: b.bank, raised_by: session?.id,
+    });
+    setAdvBusy(false);
+    if (!res.ok) { setAdvErr(res.error); return; }
+    setMsg(`Advance salary request sent for ${b.name}.`);
+    setAdvForm({ beneficiary: "", amount: "", reason: "" });
+    getAdvanceQueue().then(setAdv);
+  }
 
   const load = () => {
     getAdvanceQueue().then(setAdv);
     getExpenseClaimQueue().then(setClaims);
     getPettyReconciliation().then(setPetty);
   };
-  useEffect(() => { setSession(getSession()); load(); }, []);
+  useEffect(() => {
+    const st = getSession(); setSession(st); load();
+    if (st?.id) getBeneficiaries(st.id).then(setBens);
+  }, []);
 
   async function actAdv(id, status) {
     let note = null;
@@ -105,6 +129,29 @@ export default function ExpensesPage() {
         <div className="page-head"><h1>Money &amp; expenses</h1></div>
         {isDemo && <div className="demo-banner">Demo mode — sample data.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
+
+        {session && canAnySite(session, "money", "create") && (
+          <div className="panel">
+            <h2>Raise advance salary</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
+              <div><label className="muted">For whom * (staff &amp; labour of your sites)</label>
+                <select style={{ width: "100%" }} value={advForm.beneficiary}
+                        onChange={e => setAdvForm(f => ({ ...f, beneficiary: e.target.value }))}>
+                  <option value="">Select person…</option>
+                  {bens.map(b => <option key={`${b.kind}:${b.id}`} value={`${b.kind}:${b.id}`}>{b.label}{!b.bank ? " · ⚠ no bank" : ""}</option>)}
+                </select></div>
+              <div><label className="muted">Amount ₹ *</label>
+                <input style={{ width: "100%" }} inputMode="numeric" value={advForm.amount}
+                       onChange={e => setAdvForm(f => ({ ...f, amount: e.target.value }))} /></div>
+              <div><label className="muted">Reason</label>
+                <input style={{ width: "100%" }} value={advForm.reason} placeholder="e.g. medical / festival advance"
+                       onChange={e => setAdvForm(f => ({ ...f, reason: e.target.value }))} /></div>
+              <div style={{ display: "flex", alignItems: "flex-end" }}>
+                <button className="primary" disabled={advBusy} onClick={submitWebAdvance}>{advBusy ? "Sending…" : "Send request"}</button></div>
+            </div>
+            {advErr && <div className="note red" style={{ marginTop: 8 }}>{advErr}</div>}
+          </div>
+        )}
 
         <div className="panel">
           <h2>Advance salary requests</h2>

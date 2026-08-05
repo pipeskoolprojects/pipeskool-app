@@ -29,10 +29,10 @@ export default function MoneyScreen() {
   const [replyPhoto, setReplyPhoto] = useState(null);
   const sess = typeof window !== "undefined" ? getSession() : null;
   const userId = sess?.id || 1;
-  const siteId = sess?.siteIds?.[0] || 1;
+  const siteId = Number(sess?.currentSite || sess?.sites?.[0]?.id || 1);   // update146: was sess.siteIds (never existed) -> always site 1
 
   const load = () => { getPettyBalance(userId).then(setPetty); getMyRecentMoney(userId).then(setRecent); };
-  useEffect(() => { load(); getBeneficiaries(userId, [siteId]).then(setBens); }, []);
+  useEffect(() => { load(); getBeneficiaries(userId).then(setBens); }, []);
 
   async function submitAdvance() {
     setErr(""); setMsg("");
@@ -40,7 +40,7 @@ export default function MoneyScreen() {
     const b = bens.find(x => `${x.kind}:${x.id}` === a.beneficiary);
     setBusy(true);
     const res = await raiseAdvanceSalary({
-      site_id: siteId, beneficiary_id: b.id, beneficiary_kind: b.kind,
+      site_id: b.site_id || siteId, beneficiary_id: b.id, beneficiary_kind: b.kind,   // labour -> their site
       beneficiary_name: b.name, amount: Number(a.amount), reason: a.reason,
       bank_on_file: b.bank, raised_by: userId,
     });
@@ -119,7 +119,7 @@ export default function MoneyScreen() {
               <select value={a.beneficiary} onChange={ev => setA(p => ({ ...p, beneficiary: ev.target.value }))}>
                 <option value="">Select person…</option>
                 {bens.map(b => <option key={`${b.kind}:${b.id}`} value={`${b.kind}:${b.id}`}>
-                  {b.name} {b.kind === "labour" ? "· Labour" : "· Staff"}{!b.bank ? " · ⚠ no bank" : ""}
+                  {b.label}{!b.bank ? " · ⚠ no bank" : ""}
                 </option>)}
               </select></div>
             <div className="m-field"><label>Amount ₹ *</label>
