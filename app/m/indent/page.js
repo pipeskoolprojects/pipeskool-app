@@ -45,7 +45,7 @@ export default function IndentScreen() {
   function cancelEdit() { setEditId(null); setEditNo(""); setCart([]); setMeta({ required_by: "", urgency: "normal", purpose: "" }); setTab("track"); }
 
   function addToCart(it) {
-    if (!cart.find(c => c.item_id === it.id))
+    if (!cart.find(c => c.item_id != null && c.item_id === it.id))
       setCart(c => [...c, { item_id: it.id, name: it.display_name, unit: it.unit, qty: "", spec: "" }]);
     setQ("");
   }
@@ -106,7 +106,7 @@ export default function IndentScreen() {
                   </div>
                 );
               })}
-              {d.canEdit && (
+              {d.canEdit && d.raised_by_id === (getSession()?.id ?? null) && (
                 <button style={{ fontSize: 11, marginTop: 8 }} onClick={() => startEdit(d)}>✎ Edit indent</button>
               )}
             </div>
@@ -117,7 +117,7 @@ export default function IndentScreen() {
           <>
             {editId && <div className="note amber" style={{ marginBottom: 10 }}>Editing <b>{editNo}</b> — changes save in real time and the indent is flagged as edited. <a onClick={cancelEdit} style={{ color: "var(--copper)", cursor: "pointer", textDecoration: "underline" }}>Cancel</a></div>}
             <div className="m-field">
-              <label>Add items from master</label>
+              <label>{editId ? "Add more items (search master)" : "Add items from master"}</label>
               <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search (e.g. MS 350NB)" />
               {q && (
                 <div style={{ border: "1px solid var(--border)", borderRadius: 8, marginTop: 4, maxHeight: 160, overflowY: "auto" }}>
@@ -130,21 +130,23 @@ export default function IndentScreen() {
               )}
             </div>
             {cart.map((c, i) => (
-              <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-                <div style={{ flex: 1, fontSize: 12.5 }}>{c.name}</div>
-                <input placeholder="Specification (optional)" value={c.spec || ""}
+              <div key={i} style={{ borderBottom: "1px solid var(--border)", padding: "6px 0", marginBottom: 6 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ flex: 1, fontSize: 12.5 }}>{c.name}</div>
+                  <input inputMode="decimal" placeholder={c.unit} value={c.qty}
+                         onChange={e => setQty(i, e.target.value)} style={{ width: 80 }} />
+                  <button style={{ fontSize: 11 }} onClick={() => removeItem(i)}>✕</button>
+                </div>
+                <input placeholder="Specification (optional, e.g. ASTM A106 Gr B)" value={c.spec || ""}
                        onChange={e => setCart(cc => cc.map((r, j) => j === i ? { ...r, spec: e.target.value } : r))}
-                       style={{ width: "100%", marginBottom: 4 }} />
-                <input inputMode="decimal" placeholder={c.unit} value={c.qty}
-                       onChange={e => setQty(i, e.target.value)} style={{ width: 80 }} />
-                <button style={{ fontSize: 11 }} onClick={() => removeItem(i)}>✕</button>
+                       style={{ width: "100%", marginTop: 4 }} />
               </div>
             ))}
             <div className="m-grid2">
               <div className="m-field"><label>Required by</label><input type="date" value={meta.required_by} onChange={e => setMeta(m => ({ ...m, required_by: e.target.value }))} /></div>
               <div className="m-field"><label>Urgency</label><select value={meta.urgency} onChange={e => setMeta(m => ({ ...m, urgency: e.target.value }))}><option value="normal">Normal</option><option value="urgent">Urgent</option></select></div>
             </div>
-            <div className="m-field"><label>Purpose / work area</label><input value={meta.purpose} onChange={e => setMeta(m => ({ ...m, purpose: e.target.value }))} placeholder="e.g. Bay-5 erection" /></div>
+            <div className="m-field"><label>Note / purpose (optional)</label><input value={meta.purpose} onChange={e => setMeta(m => ({ ...m, purpose: e.target.value }))} placeholder="e.g. Bay-5 erection" /></div>
             <button className="primary btn-block" disabled={busy} onClick={submit}>{busy ? "Saving…" : editId ? "Update indent" : "Raise indent"}</button>
           </>
         )}

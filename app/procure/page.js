@@ -8,7 +8,7 @@ import {
   DELIVERY_STATUS, updatePODelivery,
 } from "@/lib/procure";
 import { getVendors } from "@/lib/vendors";
-import { createIndent, quickAddItem } from "@/lib/stock";
+import { createIndent, editIndent, deleteIndent, quickAddItem } from "@/lib/stock";
 import { searchIndentCatalog } from "@/lib/boq";
 import { getSites } from "@/lib/data";
 
@@ -60,16 +60,34 @@ export default function ProcurePage() {
     const lines = ni.lines.filter(l => l.item_name.trim() && Number(l.qty) > 0);
     if (!lines.length) { setErr("Add at least one item with a quantity."); return; }
     setBusy(true);
-    const res = await createIndent(
-      { site_id: Number(ni.site_id), raised_by: session?.id || null, required_by: ni.required_by || null,
-        urgency: ni.urgency, note: ni.note || null },
-      lines.map(l => ({ item_name: l.item_name.trim(), qty: Number(l.qty), unit: l.unit, spec: (l.spec || "").trim() || null || null })));
+    const header = { site_id: Number(ni.site_id), raised_by: session?.id || null, required_by: ni.required_by || null,
+      urgency: ni.urgency, note: ni.note || null };
+    const outLines = lines.map(l => ({ item_id: l.item_id || null, item_name: l.item_name.trim(), qty: Number(l.qty), unit: l.unit, spec: (l.spec || "").trim() || null }));
+    const res = editingId ? await editIndent(editingId, header, outLines) : await createIndent(header, outLines);
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setNi(null); setMsg("Indent " + res.indent_no + " raised.");
+    setNi(null); setMsg(editingId ? "Indent " + editingNo + " updated — quotes were cleared, status back to open." : "Indent " + res.indent_no + " raised.");
+    setEditingId(null); setEditingNo("");
     getOpenIndents().then(setIndents);
   }
   const [masterVendors, setMasterVendors] = useState([]);
+  const [editingId, setEditingId] = useState(null);
+  const [editingNo, setEditingNo] = useState("");
+  const CAN_DELETE_ROLES = ["director", "it_executive", "accountant"];
+  function startWebEdit(ind) {
+    setNi({ site_id: String(ind.site_id || ""), required_by: ind.required_by || "", urgency: ind.urgency || "normal",
+      note: ind.note || "", lines: (ind.items || []).map(it => ({ item_id: it.item_id || null, item_name: it.item_name,
+        qty: String(it.qty), unit: it.unit || "", spec: it.spec || "" })) });
+    setEditingId(ind.id); setEditingNo(ind.indent_no); setMsg(""); setErr("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  async function delIndent(ind) {
+    if (!window.confirm("Delete " + ind.indent_no + " permanently? This cannot be undone.")) return;
+    const res = await deleteIndent(ind.id);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg("Indent " + ind.indent_no + " deleted.");
+    getOpenIndents().then(setIndents);
+  }
 
   const load = () => { getOpenIndents("all").then(setIndents); getPOs("all").then(setPos); };
   useEffect(() => { setSession(getSession()); load(); getVendors(false).then(setMasterVendors); }, []);
@@ -338,7 +356,13 @@ export default function ProcurePage() {
                     {ind.edited_at && <span className="badge h" style={{ marginLeft: 8 }}>⚠ Edited by site</span>}
                     <div className="muted">{ind.site} · {ind.item_count} items · by {ind.raised_by || "—"} · {ind.date}{ind.required_by ? " · need by " + ind.required_by : ""}</div>
                   </div>
-                  <span className="badge gray">{ind.status}</span>
+                  <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    {(ind.status === "open" || ind.status === "quoting") && session?.id === ind.raised_by_id && (
+                      <button style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); startWebEdit(ind); }}>✎ Edit</button>)}
+                    {CAN_DELETE_ROLES.includes(session?.role) && (
+                      <button style={{ fontSize: 11, color: "var(--red)" }} onClick={e => { e.stopPropagation(); delIndent(ind); }}>🗑 Delete</button>)}
+                    <span className="badge gray">{ind.status}</span>
+                  </span>
                 </div>
 
                 {openId === ind.id && (
