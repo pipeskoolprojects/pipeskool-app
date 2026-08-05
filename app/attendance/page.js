@@ -38,10 +38,14 @@ export default function AttendancePage() {
   ) : null;
 
   const columns = [
+    { key: "date", label: "Date", render: () => <span className="muted">{date}</span>, exportValue: () => date },
     { key: "worker", label: "Worker", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.worker}</span> },
     { key: "category", label: "Category", filter: "select" },
     { key: "contractor", label: "Labour", filter: "select", render: r => <span className="muted">{r.contractor}</span> },
-    { key: "site", label: "Site", filter: "select", render: r => <span className="muted">{r.site}</span> },
+    { key: "site", label: "Site", filter: "select", render: r => <span className="muted">{r.site}{r.out_site_id && String(r.out_site_id) !== String(r.site_id || "") ? " → out @ other site" : ""}</span> },
+    { key: "in_dist", label: "GPS", render: r => r.in_dist == null && r.out_dist == null ? <span className="muted">—</span>
+        : <span className="muted" style={{ fontSize: 12 }}>{r.in_dist != null ? "in " + r.in_dist + "m" : ""}{r.out_dist != null ? (r.in_dist != null ? " · " : "") + "out " + r.out_dist + "m" : ""}</span>,
+      exportValue: r => (r.in_dist != null ? "in " + r.in_dist + "m" : "") + (r.out_dist != null ? " out " + r.out_dist + "m" : "") },
     { key: "in", label: "In", type: "num" },
     { key: "out", label: "Out", type: "num" },
     { key: "hours", label: "Hrs", type: "num", render: r => r.hours ?? "—" },

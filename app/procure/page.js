@@ -34,7 +34,7 @@ export default function ProcurePage() {
   const [sites, setSites] = useState([]);
   const [ni, setNi] = useState(null);                    // new-indent modal state
   useEffect(() => { getSites().then(setSites); }, []);
-  const blankLine = () => ({ item_name: "", qty: "", unit: "", item_id: null });
+  const blankLine = () => ({ item_name: "", qty: "", unit: "", item_id: null, spec: "" });
   const [sug, setSug] = useState(null);            // { i, q, list }
   const canAddMaster = session && (session.role === "director" || can(session, "stock", "manage", ni?.site_id));
   async function onItemType(i, val) {
@@ -63,7 +63,7 @@ export default function ProcurePage() {
     const res = await createIndent(
       { site_id: Number(ni.site_id), raised_by: session?.id || null, required_by: ni.required_by || null,
         urgency: ni.urgency, note: ni.note || null },
-      lines.map(l => ({ item_name: l.item_name.trim(), qty: Number(l.qty), unit: l.unit || null })));
+      lines.map(l => ({ item_name: l.item_name.trim(), qty: Number(l.qty), unit: l.unit, spec: (l.spec || "").trim() || null || null })));
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
     setNi(null); setMsg("Indent " + res.indent_no + " raised.");
@@ -148,7 +148,7 @@ export default function ProcurePage() {
       ["Project", ind.site || ""], ["Indent ref", ind.indent_no], ["Required by", ind.required_by || ""], [],
       ["#", "Category", "Description", "Qty", "Unit", "List Rate", "Disc %", "Net Rate"],
     ];
-    const rows = chosen.map((it, i) => [i + 1, it.category, it.item_name, Number(it.qty), it.unit, "", "", ""]);
+    const rows = chosen.map((it, i) => [i + 1, it.category, it.item_name + (it.spec ? " — " + it.spec : ""), Number(it.qty), it.unit, "", "", ""]);
     const ws = XLSX.utils.aoa_to_sheet([...head, ...rows]);
     ws["!cols"] = [{ wch: 4 }, { wch: 14 }, { wch: 46 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 8 }, { wch: 12 }];
     const wb = XLSX.utils.book_new();
@@ -206,7 +206,7 @@ export default function ProcurePage() {
     const isLowest = cmp?.bestWhole?.vendor === awardVendor;
     if (!isLowest && !reason.trim()) { setErr("This vendor is not the lowest total — please enter the reason."); return; }
     const lines = ind.items.map(it => ({ indent_item_id: it.id, item_id: it.item_id, item_name: it.item_name,
-      qty: it.qty, unit: it.unit, rate: Number(rates[it.id]?.[awardVendor] || 0) }));
+      spec: it.spec || null, qty: it.qty, unit: it.unit, rate: Number(rates[it.id]?.[awardVendor] || 0) }));
     if (lines.some(l => !l.rate)) { setErr("This vendor hasn't quoted every item."); return; }
     setBusy(true);
     const res = await createPO({ indent_id: ind.id, site_id: ind.site_id || 1, vendor_name: awardVendor,
@@ -240,7 +240,7 @@ export default function ProcurePage() {
         if (!v) { setErr("Choose a vendor for every item (or split it by quantity)."); return; }
         if (!rates[it.id]?.[v]) { setErr(`No rate from ${v} for ${it.item_name}.`); return; }
         (byVendor[v] = byVendor[v] || []).push({ indent_item_id: it.id, item_id: it.item_id,
-          item_name: it.item_name, qty: Number(it.qty), unit: it.unit, rate: Number(rates[it.id][v]) });
+          item_name: it.item_name, spec: it.spec || null, qty: Number(it.qty), unit: it.unit, rate: Number(rates[it.id][v]) });
       }
     }
     setBusy(true);
@@ -316,6 +316,8 @@ export default function ProcurePage() {
                          onChange={e => setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], qty: e.target.value }; return { ...n, lines: ls }; })} />
                   <input style={{ width: 90 }} placeholder="Unit" value={l.unit}
                          onChange={e => setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], unit: e.target.value }; return { ...n, lines: ls }; })} />
+                  <input style={{ width: 220 }} placeholder="Specification (e.g. ASTM A106 Gr B, Sch 40, ISI)" value={l.spec || ""}
+                         onChange={e => setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], spec: e.target.value }; return { ...n, lines: ls }; })} />
                   {ni.lines.length > 1 && <button onClick={() => setNi(n => ({ ...n, lines: n.lines.filter((_, j) => j !== i) }))}>✕</button>}
                 </div>
               ))}

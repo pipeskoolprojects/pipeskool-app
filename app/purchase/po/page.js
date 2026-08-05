@@ -75,7 +75,7 @@ function POView() {
           {items.map((it, i) => (
             <tr key={i}>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{i + 1}</td>
-              <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.item_name}</td>
+              <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.item_name}{it.spec ? " — " + it.spec : ""}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{it.qty}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.unit}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(it.rate)}</td>

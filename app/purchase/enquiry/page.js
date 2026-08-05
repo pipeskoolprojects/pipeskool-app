@@ -69,7 +69,7 @@ function EnquiryView() {
             <tr key={it.id} style={{ borderBottom: "1px solid #ddd" }}>
               <td style={{ padding: "8px 6px" }}>{idx + 1}</td>
               <td style={{ padding: "8px 6px" }}>{it.category}</td>
-              <td style={{ padding: "8px 6px", fontWeight: 600 }}>{it.item_name}{it.purpose ? <span style={{ color: "#777", fontWeight: 400 }}> — {it.purpose}</span> : ""}</td>
+              <td style={{ padding: "8px 6px", fontWeight: 600 }}>{it.item_name}{it.spec ? <span style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}{it.purpose ? <span style={{ color: "#777", fontWeight: 400 }}> — {it.purpose}</span> : ""}</td>
               <td style={{ padding: "8px 6px", textAlign: "right" }}>{it.qty}</td>
               <td style={{ padding: "8px 6px" }}>{it.unit}</td>
               <td style={{ padding: "8px 6px" }}></td>

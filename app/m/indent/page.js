@@ -38,7 +38,7 @@ export default function IndentScreen() {
   useEffect(() => { if (q) searchItems(q).then(setItems); else setItems([]); }, [q]);
 
   function startEdit(d) {
-    setCart(d.items.map(it => ({ item_id: it.item_id, name: it.item_name, unit: it.unit, qty: String(it.qty) })));
+    setCart(d.items.map(it => ({ item_id: it.item_id, name: it.item_name, unit: it.unit, qty: String(it.qty), spec: it.spec || "" })));
     setMeta({ required_by: d.required_by || "", urgency: d.urgency || "normal", purpose: d.note || "" });
     setEditId(d.id); setEditNo(d.indent_no); setTab("new"); setMsg(""); setErr("");
   }
@@ -46,7 +46,7 @@ export default function IndentScreen() {
 
   function addToCart(it) {
     if (!cart.find(c => c.item_id === it.id))
-      setCart(c => [...c, { item_id: it.id, name: it.display_name, unit: it.unit, qty: "" }]);
+      setCart(c => [...c, { item_id: it.id, name: it.display_name, unit: it.unit, qty: "", spec: "" }]);
     setQ("");
   }
   const setQty = (i, v) => setCart(c => c.map((r, j) => j === i ? { ...r, qty: v } : r));
@@ -59,7 +59,7 @@ export default function IndentScreen() {
     setBusy(true);
     const sess = getSession();
     const header = { site_id: siteId, required_by: meta.required_by || null, urgency: meta.urgency, note: meta.purpose, raised_by: sess?.id || null };
-    const lines = valid.map(c => ({ item_id: c.item_id, item_name: c.name, qty: Number(c.qty), unit: c.unit, purpose: meta.purpose }));
+    const lines = valid.map(c => ({ item_id: c.item_id, item_name: c.name, qty: Number(c.qty), unit: c.unit, purpose: meta.purpose, spec: (c.spec || "").trim() || null }));
     const res = editId ? await editIndent(editId, header, lines) : await createIndent(header, lines);
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
@@ -132,6 +132,9 @@ export default function IndentScreen() {
             {cart.map((c, i) => (
               <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
                 <div style={{ flex: 1, fontSize: 12.5 }}>{c.name}</div>
+                <input placeholder="Specification (optional)" value={c.spec || ""}
+                       onChange={e => setCart(cc => cc.map((r, j) => j === i ? { ...r, spec: e.target.value } : r))}
+                       style={{ width: "100%", marginBottom: 4 }} />
                 <input inputMode="decimal" placeholder={c.unit} value={c.qty}
                        onChange={e => setQty(i, e.target.value)} style={{ width: 80 }} />
                 <button style={{ fontSize: 11 }} onClick={() => removeItem(i)}>✕</button>
