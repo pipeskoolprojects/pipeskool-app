@@ -84,7 +84,14 @@ export default function ProcurePage() {
   async function delIndent(ind) {
     if (!window.confirm("Delete " + ind.indent_no + " permanently? This cannot be undone.")) return;
     const res = await deleteIndent(ind.id);
-    if (!res.ok) { setErr(res.error); return; }
+    if (!res.ok) {
+      setErr(res.error);
+      window.alert("Could not delete " + ind.indent_no + ":\n\n" + res.error +
+        (/(function|fn_delete_indent|schema cache|does not exist)/i.test(res.error || "")
+          ? "\n\nThis usually means the update148 SQL (pipeskool_indent_delete.sql) has not been run in Supabase yet."
+          : ""));
+      return;
+    }
     setMsg("Indent " + ind.indent_no + " deleted.");
     getOpenIndents().then(setIndents);
   }
@@ -281,6 +288,8 @@ export default function ProcurePage() {
       <Sidebar />
       <main className="main">
         <div className="page-head"><h1>Procurement — indents &amp; POs</h1></div>
+        {err && <div className="demo-banner" style={{ background: "#fdecea", color: "var(--red)" }}>⚠ {err}</div>}
+        {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
         {isDemo && <div className="demo-banner">Demo mode — sample data.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
 
