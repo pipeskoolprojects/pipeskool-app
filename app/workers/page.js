@@ -2,13 +2,14 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
+import { getWorkerCategories, addWorkerCategory } from "@/lib/data";
 import { getWorkers, saveWorker, uploadAadhaarDoc, inr, deleteWorker, deleteStaff } from "@/lib/data";
 import { getContractors, getSitesList } from "@/lib/mobile";
 import { getStaff, addStaff, updateStaff, getRoles, addRole, renameRole, deleteRole, resetStaffPassword, getUserSites, assignSite, removeSite } from "@/lib/access";
 import { getSession } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
 
-const CATEGORIES = ["plumber", "fitter", "helper", "welder", "supervisor", "operator", "electrician", "mason", "other"];
+const ADD_NEW = "__add_new__";
 const EMPTY = { full_name: "", mobile: "", category: "plumber", labour_type: "own", contractor_id: "", site_id: "", daily_wage: "", is_active: true };
 // roles load dynamically from the Role Master (staff_roles table)
 const S_EMPTY = { full_name: "", mobile: "", role: "supervisor", site_id: "", is_active: true };
@@ -23,7 +24,18 @@ export default function WorkersPage() {
   const [newRole, setNewRole] = useState("");
   const [staff, setStaff] = useState(null);
   const [smodal, setSmodal] = useState(null);    // staff add/edit modal
-  const [modal, setModal] = useState(null);     // { id?, ...form }  null = closed
+  const [modal, setModal] = useState(null);
+  const [cats, setCats] = useState([]);
+  useEffect(() => { getWorkerCategories().then(setCats); }, []);
+  async function pickCategory(v) {
+    if (v !== ADD_NEW) { set("category", v); return; }
+    const name = window.prompt("New category name (e.g. Carpenter):");
+    if (!name) return;
+    const res = await addWorkerCategory(name);
+    if (!res.ok) { window.alert("Could not add category: " + res.error + "\n(Only Directors can add categories.)"); return; }
+    const list = await getWorkerCategories(); setCats(list);
+    set("category", res.code);
+  }     // { id?, ...form }  null = closed
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
 
@@ -161,8 +173,10 @@ export default function WorkersPage() {
                 <div><label className="muted">Mobile *</label><input style={{ width: "100%" }} inputMode="numeric" value={modal.mobile} onChange={e => set("mobile", e.target.value)} /></div>
                 <div style={{ display: "flex", gap: 10 }}>
                   <div style={{ flex: 1 }}><label className="muted">Category</label>
-                    <select style={{ width: "100%" }} value={modal.category} onChange={e => set("category", e.target.value)}>
-                      {CATEGORIES.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+                    <select style={{ width: "100%" }} value={modal.category} onChange={e => pickCategory(e.target.value)}>
+                      {cats.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+                      {!cats.some(c => c.code === modal.category) && modal.category ? <option value={modal.category}>{modal.category}</option> : null}
+                      <option value={ADD_NEW}>➕ Add new category…</option>
                     </select></div>
                   <div style={{ flex: 1 }}><label className="muted">Daily wage ₹ *</label><input style={{ width: "100%" }} inputMode="numeric" value={modal.daily_wage} onChange={e => set("daily_wage", e.target.value)} /></div>
                 </div>

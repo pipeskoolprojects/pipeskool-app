@@ -14,12 +14,14 @@ export default function AddWorkerScreen() {
   });
   const [contractors, setContractors] = useState([]);
   const [sites, setSites] = useState([]);
+  const [cats, setCats] = useState([]);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     getContractors().then(setContractors);
+    getWorkerCategories().then(setCats);
     getSitesList().then(s => { setSites(s);
       const cur = Number(__gs()?.currentSite);   // default to the shared session site (update140)
       const pick = s.find(x => Number(x.id) === cur) || s[0];
@@ -73,11 +75,7 @@ export default function AddWorkerScreen() {
         <div className="m-grid2">
           <div className="m-field"><label>Category</label>
             <select value={f.category} onChange={e => set("category", e.target.value)}>
-              <option value="plumber">Plumber</option><option value="fitter">Fitter</option>
-              <option value="helper">Helper</option><option value="welder">Welder</option>
-              <option value="supervisor">Supervisor</option><option value="operator">Operator</option>
-              <option value="electrician">Electrician</option><option value="mason">Mason</option>
-              <option value="other">Other</option>
+              {cats.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
             </select></div>
           <div className="m-field"><label>Daily wage ₹ *</label>
             <input inputMode="numeric" value={f.daily_wage} onChange={e => set("daily_wage", e.target.value)} placeholder="800" /></div>
