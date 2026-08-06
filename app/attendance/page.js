@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
-import { getAttendance, getSites, approveOt } from "@/lib/data";
-import { getSession } from "@/lib/auth";
+import { getAttendance, getSites, approveOt, verifyAttendanceRow } from "@/lib/data";
+import { getSession, canAnySite } from "@/lib/auth";
 import { todayLocal } from "@/lib/today";
 import { isDemo } from "@/lib/supabase";
 
@@ -19,6 +19,13 @@ export default function AttendancePage() {
   const [sites, setSites] = useState([]);
   const [rows, setRows] = useState(null);
   const [loadErr, setLoadErr] = useState("");
+  const sess0 = getSession();
+  const canVerify = !!sess0 && (canAnySite(sess0, "attendance", "verify") || canAnySite(sess0, "attendance", "manage"));
+  async function doVerify(r) {
+    const res = await verifyAttendanceRow(r.id);
+    if (!res.ok) { window.alert("Could not verify: " + res.error); return; }
+    load();
+  }
   const [lightbox, setLightbox] = useState(null);
   const [otEdit, setOtEdit] = useState(null);   // { id, worker, computed, value }
   const [busy, setBusy] = useState(false);
@@ -74,7 +81,9 @@ export default function AttendancePage() {
       ) },
     { key: "verify", label: "Verification", filter: "select",
       render: r => r.verify === "verified" ? <span className="badge p">Verified</span> :
-        r.verify === "corrected" ? <span className="badge info">Corrected</span> : <span className="badge warn">Pending</span> },
+        r.verify === "corrected" ? <span className="badge info">Corrected</span> :
+        canVerify ? <button style={{ fontSize: 11.5 }} title="Mark this punch as verified"
+          onClick={() => doVerify(r)}>✓ Verify</button> : <span className="badge warn">Pending</span> },
   ];
 
   return (
