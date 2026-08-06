@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { addWorker, getContractors, getSitesList } from "@/lib/mobile";
+import { getWorkerCategories } from "@/lib/data";
 
 export default function AddWorkerScreen() {
   if (typeof window !== "undefined" && !__gs()) { window.location.replace("/m"); return null; }
