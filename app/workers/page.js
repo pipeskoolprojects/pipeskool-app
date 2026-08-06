@@ -32,7 +32,7 @@ export default function WorkersPage() {
     const name = window.prompt("New category name (e.g. Carpenter):");
     if (!name) return;
     const res = await addWorkerCategory(name);
-    if (!res.ok) { window.alert("Could not add category: " + res.error + "\n(Only Directors can add categories.)"); return; }
+    if (!res.ok) { window.alert("Could not add category: " + res.error + "\n(Needs the \"Manage worker categories\" admin right \u2014 Access Rights \u2192 Admin capabilities.)"); return; }
     const list = await getWorkerCategories(); setCats(list);
     set("category", res.code);
   }     // { id?, ...form }  null = closed

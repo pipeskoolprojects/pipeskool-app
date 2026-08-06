@@ -7,7 +7,7 @@ import {
   getStaff, getUserSites, getSitePermissions, setSitePermission, assignSite, removeSite,
   resetSiteToRole, copySitePermissions, addStaff, MODULES, ACTIONS, ALL_SITES,
 } from "@/lib/access";
-import { getRoles } from "@/lib/access";
+import { getRoles, ADMIN_CAPS, getAdminRights, setAdminRight } from "@/lib/access";
 
 const FALLBACK_ROLES = [
   ["director", "Director"], ["ho_admin", "Accountant"], ["supervisor", "Site Incharge"],
@@ -61,6 +61,13 @@ export default function AccessPage() {
   const [session, setSession] = useState(null);
   const [staff, setStaff] = useState([]);
   const [sel, setSel] = useState(null);
+  const [adminCaps, setAdminCaps] = useState([]);
+  useEffect(() => { if (sel?.id && sel.role !== "director") getAdminRights(sel.id).then(setAdminCaps); else setAdminCaps([]); }, [sel?.id]);
+  async function toggleAdminCap(code, on) {
+    const res = await setAdminRight(sel.id, code, on, session?.id);
+    if (!res.ok) { window.alert("Could not save: " + res.error); return; }
+    setAdminCaps(c => on ? [...c, code] : c.filter(x => x !== code));
+  }
   const [userSites, setUserSites] = useState([]);
   const [activeSite, setActiveSite] = useState(null);
   const [perms, setPerms] = useState({});
@@ -206,6 +213,20 @@ export default function AccessPage() {
                   <p className="muted">No site assigned yet. Use “＋ Assign site” above.</p>
                 ) : (
                   <>
+                    <div className="panel" style={{ borderLeft: "4px solid var(--copper)", marginBottom: 10 }}>
+                      <h2 style={{ marginTop: 0 }}>Admin capabilities — company-wide</h2>
+                      <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                        These are NOT per-site. They unlock specific admin tasks for this person everywhere. Directors hold all of them automatically. Enforced by the database, not just hidden buttons.
+                      </div>
+                      {ADMIN_CAPS.map(c => (
+                        <label key={c.code} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "7px 0", borderBottom: "1px solid var(--border)", cursor: "pointer" }}>
+                          <input type="checkbox" checked={adminCaps.includes(c.code)}
+                                 onChange={e => toggleAdminCap(c.code, e.target.checked)} style={{ marginTop: 3 }} />
+                          <span><b style={{ fontSize: 13 }}>{c.label}</b>
+                            <span className="muted" style={{ display: "block", fontSize: 12 }}>{c.desc}</span></span>
+                        </label>
+                      ))}
+                    </div>
                     <div className="panel" style={{ background: "var(--copper-soft)", padding: "10px 12px", marginBottom: 10 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <b style={{ fontSize: 13 }}>Not sure what to tick?</b>
