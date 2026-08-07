@@ -7,7 +7,8 @@ import {
   getStaff, getUserSites, getSitePermissions, setSitePermission, assignSite, removeSite,
   resetSiteToRole, copySitePermissions, addStaff, MODULES, ACTIONS, ALL_SITES,
 } from "@/lib/access";
-import { getRoles, ADMIN_CAPS, getAdminRights, setAdminRight } from "@/lib/access";
+import { getRoles, ADMIN_CAPS, getAdminRights, setAdminRight, getNotifyRoutes, setNotifyRoute } from "@/lib/access";
+import { NOTIFY_KINDS } from "@/lib/notify";
 
 const FALLBACK_ROLES = [
   ["director", "Director"], ["ho_admin", "Accountant"], ["supervisor", "Site Incharge"],
@@ -63,6 +64,13 @@ export default function AccessPage() {
   const [sel, setSel] = useState(null);
   const [adminCaps, setAdminCaps] = useState([]);
   useEffect(() => { if (sel?.id && sel.role !== "director") getAdminRights(sel.id).then(setAdminCaps); else setAdminCaps([]); }, [sel?.id]);
+  const [notifRoutes, setNotifRoutes] = useState([]);
+  useEffect(() => { if (sel?.id) getNotifyRoutes(sel.id).then(setNotifRoutes); else setNotifRoutes([]); }, [sel?.id]);
+  async function toggleNotifRoute(code, on) {
+    const res = await setNotifyRoute(sel.id, code, on);
+    if (!res.ok) { window.alert("Could not save: " + res.error); return; }
+    setNotifRoutes(c => on ? [...c, code] : c.filter(x => x !== code));
+  }
   async function toggleAdminCap(code, on) {
     const res = await setAdminRight(sel.id, code, on, session?.id);
     if (!res.ok) { window.alert("Could not save: " + res.error); return; }
@@ -224,6 +232,19 @@ export default function AccessPage() {
                                  onChange={e => toggleAdminCap(c.code, e.target.checked)} style={{ marginTop: 3 }} />
                           <span><b style={{ fontSize: 13 }}>{c.label}</b>
                             <span className="muted" style={{ display: "block", fontSize: 12 }}>{c.desc}</span></span>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="panel" style={{ borderLeft: "4px solid #2b6cb0", marginBottom: 10 }}>
+                      <h2 style={{ marginTop: 0 }}>Notifications this person receives</h2>
+                      <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                        New requests of the ticked kinds appear in their 🔔 bell — only for THEIR assigned sites. Approval/rejection results always reach the requester automatically, regardless of these ticks. Directors receive everything by default.
+                      </div>
+                      {NOTIFY_KINDS.map(k => (
+                        <label key={k.code} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)", cursor: "pointer" }}>
+                          <input type="checkbox" checked={notifRoutes.includes(k.code)}
+                                 onChange={e => toggleNotifRoute(k.code, e.target.checked)} />
+                          <span style={{ fontSize: 13 }}>{k.label}</span>
                         </label>
                       ))}
                     </div>
