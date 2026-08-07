@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
+import NotifyBell from "@/components/NotifyBell";
 import { getUnreadNoticeCount } from "@/lib/notices";
 import Assistant from "@/components/Assistant";
 import { getSession, clearSession, logoutAuth, refreshSessionRights, canSeeModuleAnySite, setCurrentSite } from "@/lib/auth";
@@ -123,6 +124,7 @@ export default function Sidebar() {
         <div style={{ padding: "10px 18px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           <div style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{session.name}</div>
           <div style={{ color: "#6E7780", fontSize: 11, textTransform: "capitalize", marginBottom: 6 }}>{(session.role || "").replace("_", " ")}</div>
+          <div style={{ marginBottom: 6 }}><NotifyBell /></div>
           {session.sites?.length > 1 && (
             <select defaultValue={session.currentSite} onChange={e => { setCurrentSite(e.target.value); window.location.reload(); }}
               style={{ width: "100%", fontSize: 11.5, background: "rgba(255,255,255,0.08)", color: "#fff", borderColor: "rgba(255,255,255,0.15)" }}>

@@ -1,5 +1,6 @@
 "use client";
 import Assistant from "@/components/Assistant";
+import NotifyBell from "@/components/NotifyBell";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -94,6 +95,7 @@ export default function MobileNav() {
           <span className="ico">⋯</span>{t(lang, "nav_more")}
         </a>
       </nav>
+      {sess?.id ? <NotifyBell mobile /> : null}
       <Assistant />
     </>
   );
