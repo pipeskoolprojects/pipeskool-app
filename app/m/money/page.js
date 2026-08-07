@@ -5,8 +5,7 @@ import { isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import {
   EXPENSE_CATEGORIES, inr, getBeneficiaries, raiseAdvanceSalary,
-  claimExpense, getMyRecentMoney, getPettyBalance, respondAdvance, respondExpense,
-} from "@/lib/money";
+  claimExpense, getMyRecentMoney, getPettyBalance, respondAdvance, respondExpense, requestPettyCash } from "@/lib/money";
 
 export default function MoneyScreen() {
   if (typeof window !== "undefined" && !getSession()) { window.location.replace("/m"); return null; }
@@ -14,6 +13,19 @@ export default function MoneyScreen() {
   const [petty, setPetty] = useState(0);
   const [recent, setRecent] = useState([]);
   const [bens, setBens] = useState([]);
+  const [pettyF, setPettyF] = useState(null);   // null = card closed
+  const [pettyBusy, setPettyBusy] = useState(false);
+  const [pettyErr, setPettyErr] = useState("");
+  async function sendPetty() {
+    setPettyErr("");
+    if (!pettyF.amount || !pettyF.purpose) { setPettyErr("Amount and purpose are required."); return; }
+    setPettyBusy(true);
+    const res = await requestPettyCash({ site_id: siteId, user_id: userId, requester_name: sess?.name,
+      amount: pettyF.amount, purpose: pettyF.purpose, required_date: pettyF.required_date || null, remarks: pettyF.remarks || null });
+    setPettyBusy(false);
+    if (!res.ok) { setPettyErr(res.error); return; }
+    setPettyF(null); load();
+  }
   // advance form
   const [a, setA] = useState({ beneficiary: "", amount: "", reason: "" });
   // expense form
@@ -58,7 +70,7 @@ export default function MoneyScreen() {
     const res = await claimExpense({
       site_id: siteId, user_id: userId, category: e.category, amount: Number(e.amount),
       paid_to: e.paid_to, funding_source: e.funding_source, note: e.note,
-      photoFile: photo, bank_on_file: true,
+      billFiles: photo || [], bank_on_file: true,
     });
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
@@ -153,8 +165,8 @@ export default function MoneyScreen() {
               <input value={e.paid_to} onChange={ev => setE(p => ({ ...p, paid_to: ev.target.value }))} placeholder="Shop / person" /></div>
             <div className="m-field"><label>Note</label>
               <input value={e.note} onChange={ev => setE(p => ({ ...p, note: ev.target.value }))} placeholder="What was it for" /></div>
-            <button style={{ fontSize: 12.5 }} onClick={() => fileRef.current?.click()}>📷 {photo ? "Proof attached ✓" : "Attach bill photo (proof)"}</button>
-            <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={ev => setPhoto(ev.target.files?.[0] || null)} />
+            <button style={{ fontSize: 12.5 }} onClick={() => fileRef.current?.click()}>📷 {photo?.length ? photo.length + " bill" + (photo.length > 1 ? "s" : "") + " attached ✓" : "Attach bill(s) — photo or PDF"}</button>
+            <input ref={fileRef} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }} onChange={ev => setPhoto(ev.target.files?.length ? Array.from(ev.target.files) : null)} />
             {err && <div className="note red">{err}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               <button className="primary" style={{ flex: 1 }} disabled={busy} onClick={submitExpense}>{busy ? "Saving…" : "Submit claim"}</button>
@@ -165,7 +177,33 @@ export default function MoneyScreen() {
 
         {msg && <div className="note green">{msg}</div>}
 
-        <h3 style={{ fontSize: 14, margin: "14px 0 6px" }}>My recent requests</h3>
+        <h3 style={{ fontSize: 14, margin: "14px 0 6px" }}>{!pettyF ? (
+        <button className="primary" style={{ width: "100%", marginBottom: 12 }} onClick={() => setPettyF({ amount: "", purpose: "", required_date: "", remarks: "" })}>
+          ➕ Request petty cash (before spending)
+        </button>
+      ) : (
+        <div className="panel" style={{ marginBottom: 12 }}>
+          <h2>Advance petty cash request</h2>
+          <label className="muted">Amount ₹ *</label>
+          <input inputMode="numeric" style={{ width: "100%", marginBottom: 8 }} value={pettyF.amount}
+                 onChange={e => setPettyF(f => ({ ...f, amount: e.target.value }))} />
+          <label className="muted">Purpose / reason *</label>
+          <input style={{ width: "100%", marginBottom: 8 }} value={pettyF.purpose} placeholder="e.g. site consumables for Bay-5"
+                 onChange={e => setPettyF(f => ({ ...f, purpose: e.target.value }))} />
+          <label className="muted">Required by</label>
+          <input type="date" style={{ width: "100%", marginBottom: 8 }} value={pettyF.required_date}
+                 onChange={e => setPettyF(f => ({ ...f, required_date: e.target.value }))} />
+          <label className="muted">Remarks (optional)</label>
+          <input style={{ width: "100%", marginBottom: 8 }} value={pettyF.remarks}
+                 onChange={e => setPettyF(f => ({ ...f, remarks: e.target.value }))} />
+          {pettyErr && <div className="note red" style={{ marginBottom: 8 }}>{pettyErr}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="primary" disabled={pettyBusy} onClick={sendPetty} style={{ flex: 1 }}>{pettyBusy ? "Sending…" : "Send request"}</button>
+            <button onClick={() => setPettyF(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      My recent requests</h3>
         {recent.length === 0 ? <div className="muted">Nothing yet.</div> : recent.map((r, i) => (
           <div className="m-row" key={i} onClick={() => { if (r.status === "queried") { setReply(r); setReplyAmount(String(r.amount)); setReplyText(""); setMsg(""); setErr(""); } }} style={{ cursor: r.status === "queried" ? "pointer" : "default" }}>
             <div className="info">

@@ -2,16 +2,35 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
+import { billUrl, isPdf } from "@/lib/bills";
 import { isDemo } from "@/lib/supabase";
 import {
   getAdvanceQueue, reviewAdvance, getExpenseClaimQueue, reviewExpenseClaim,
   getBeneficiaries, raiseAdvanceSalary,
   getPettyReconciliation, catLabel, inr, markAdvancePosted, markExpensePosted,
-} from "@/lib/money";
+  getPettyRequestQueue, reviewPettyRequest, requestPettyCash } from "@/lib/money";
 import { getSession, canAnySite } from "@/lib/auth";
 
 export default function ExpensesPage() {
   const [adv, setAdv] = useState(null);
+  const [pettyReqs, setPettyReqs] = useState(null);
+  const [pettyForm, setPettyForm] = useState({ amount: "", purpose: "", required_date: "", remarks: "" });
+  const [pettyMsg, setPettyMsg] = useState("");
+  async function actPetty(id, status) {
+    const note = status === "rejected" ? (window.prompt("Reason (sent to the requester):") || "") : "";
+    const res = await reviewPettyRequest(id, status, note);
+    if (!res.ok) { window.alert("Could not review: " + res.error); return; }
+    getPettyRequestQueue().then(setPettyReqs);
+  }
+  async function sendWebPetty() {
+    setPettyMsg("");
+    if (!pettyForm.amount || !pettyForm.purpose) { setPettyMsg("Amount and purpose are required."); return; }
+    const res = await requestPettyCash({ site_id: session?.currentSite, user_id: session?.id, requester_name: session?.name,
+      amount: pettyForm.amount, purpose: pettyForm.purpose, required_date: pettyForm.required_date || null, remarks: pettyForm.remarks || null });
+    if (!res.ok) { setPettyMsg(res.error); return; }
+    setPettyForm({ amount: "", purpose: "", required_date: "", remarks: "" });
+    setPettyMsg("Request sent."); getPettyRequestQueue().then(setPettyReqs);
+  }
   const [claims, setClaims] = useState(null);
   const [petty, setPetty] = useState([]);
   const [msg, setMsg] = useState("");
@@ -45,6 +64,7 @@ export default function ExpensesPage() {
   useEffect(() => {
     const st = getSession(); setSession(st); load();
     if (st?.id) getBeneficiaries(st.id).then(setBens);
+    getPettyRequestQueue().then(setPettyReqs);
   }, []);
 
   async function actAdv(id, status) {
@@ -95,7 +115,16 @@ export default function ExpensesPage() {
     { key: "paid_to", label: "Paid to", filter: "search", render: r => <span>{r.paid_to}{r.response && <div className="muted" style={{ color: "var(--green)" }}>↩ {r.response}</div>}{r.status === "queried" && r.query && <div className="muted" style={{ color: "var(--amber)" }}>❓ {r.query}</div>}</span> },
     { key: "funding_source", label: "Source", filter: "select", optionLabel: o => o === "petty_cash" ? "Petty cash" : "Own pocket", render: r => r.funding_source === "petty_cash" ? <span className="badge info">Petty cash</span> : <span className="badge gray">Own pocket</span> },
     { key: "amount", label: "Amount", type: "num", render: r => inr(r.amount), exportValue: r => r.amount },
-    { key: "photo", label: "Proof", render: r => r.photo ? <span className="badge p">📎 Bill</span> : <span className="badge warn">No proof</span>, exportValue: r => r.photo ? "Yes" : "No" },
+    { key: "photo", label: "Proof", render: r => (r.bills || []).length === 0
+        ? <span className="badge warn">No proof</span>
+        : <span>{r.bills.map((b, i) => (
+            <span key={i} style={{ whiteSpace: "nowrap", marginRight: 6 }}>
+              <a href={billUrl(b)} target="_blank" rel="noreferrer" style={{ fontSize: 11.5 }}
+                 title={isPdf(b) ? "Preview PDF" : "Preview image"}>📎 Bill {r.bills.length > 1 ? i + 1 : ""}</a>
+              <a href={billUrl(b, true)} download style={{ fontSize: 11.5, marginLeft: 3 }} title="Download">⬇</a>
+            </span>))}
+          </span>,
+      exportValue: r => (r.bills || []).length + " file(s)" },
     { key: "status", label: "Status", filter: "select", render: r => r.status === "approved" ? <span className="badge p">Approved</span> : r.status === "rejected" ? <span className="badge a">Rejected</span> : r.status === "queried" ? <span className="badge h">Queried</span> : <span className="badge gray">Pending</span> },
     { key: "approved_on", label: "Appr. date", render: r => <span className="muted">{r.approved_on || "—"}</span> },
     { key: "approved_by", label: "Appr. by", filter: "select", render: r => <span className="muted">{r.approved_by || "—"}</span> },
@@ -152,6 +181,56 @@ export default function ExpensesPage() {
             {advErr && <div className="note red" style={{ marginTop: 8 }}>{advErr}</div>}
           </div>
         )}
+
+        <div className="panel">
+          <h2>Petty cash requests</h2>
+          {session && canAnySite(session, "money", "create") && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginBottom: 12, alignItems: "end" }}>
+              <div><label className="muted">Amount ₹ *</label>
+                <input style={{ width: "100%" }} inputMode="numeric" value={pettyForm.amount}
+                       onChange={e => setPettyForm(f => ({ ...f, amount: e.target.value }))} /></div>
+              <div><label className="muted">Purpose *</label>
+                <input style={{ width: "100%" }} value={pettyForm.purpose}
+                       onChange={e => setPettyForm(f => ({ ...f, purpose: e.target.value }))} /></div>
+              <div><label className="muted">Required by</label>
+                <input type="date" style={{ width: "100%" }} value={pettyForm.required_date}
+                       onChange={e => setPettyForm(f => ({ ...f, required_date: e.target.value }))} /></div>
+              <div><label className="muted">Remarks</label>
+                <input style={{ width: "100%" }} value={pettyForm.remarks}
+                       onChange={e => setPettyForm(f => ({ ...f, remarks: e.target.value }))} /></div>
+              <div><button className="primary" onClick={sendWebPetty} style={{ width: "100%" }}>Request petty cash</button></div>
+            </div>
+          )}
+          {pettyMsg && <div className="muted" style={{ marginBottom: 8 }}>{pettyMsg}</div>}
+          {!pettyReqs ? <div className="muted">Loading…</div> : pettyReqs.length === 0 ? <div className="muted">No petty cash requests yet.</div> : (
+            <table className="dt-compact">
+              <thead><tr><th>Date</th><th>Requester</th><th>Site</th><th className="num">Amount</th><th>Purpose</th><th>Needed by</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                {pettyReqs.map(r => (
+                  <tr key={r.id}>
+                    <td className="muted">{r.date}</td>
+                    <td style={{ fontWeight: 600 }}>{r.requester}</td>
+                    <td className="muted">{r.site}</td>
+                    <td className="num">₹{r.amount}</td>
+                    <td>{r.purpose}{r.remarks ? <span className="muted"> — {r.remarks}</span> : ""}</td>
+                    <td className="muted">{r.required_date || "—"}</td>
+                    <td>{r.status === "approved" ? <span className="badge p">Approved</span>
+                        : r.status === "rejected" ? <span className="badge a">Rejected{r.query ? " — " + r.query : ""}</span>
+                        : <span className="badge gray">Pending</span>}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      {r.status === "pending" && (
+                        <>
+                          <button className="primary" style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actPetty(r.id, "approved")}>Approve</button>
+                          <button style={{ fontSize: 11.5 }} onClick={() => actPetty(r.id, "rejected")}>Reject</button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
 
         <div className="panel">
           <h2>Advance salary requests</h2>

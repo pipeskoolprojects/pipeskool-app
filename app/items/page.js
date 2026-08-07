@@ -11,12 +11,13 @@ const BLANK = { item_type: "Pipe", material: "", sub_type: "", size: "", item_cl
 
 export default function ItemsPage() {
   const [rows, setRows] = useState(null);
+  const [loadErr, setLoadErr] = useState("");
   const [form, setForm] = useState(null);   // null = closed; {id?} = add/edit
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [session, setSession] = useState(null);
 
   useEffect(() => { setSession(getSession()); }, []);
-  const load = () => getAllItems().then(setRows);
+  const load = () => getAllItems().then(res => { setRows(res.rows || []); setLoadErr(res.error || ""); });
   useEffect(() => { load(); }, []);
 
   const canManage = canAnySite(session, "stock", "manage");   // Manage tick on any site (or Director)
@@ -82,6 +83,8 @@ export default function ItemsPage() {
           <h1>Item / Material master</h1>
           {canManage && <button className="primary" onClick={() => { setForm({ ...BLANK }); setMsg(""); setErr(""); }}>＋ Add item</button>}
         </div>
+        {loadErr && <div className="demo-banner" style={{ background: "#fdecea", color: "var(--red)" }}>
+          ⚠ Could not load the item master: {loadErr} — your items are NOT deleted. If this mentions "pending_review", run pipeskool_item_pending.sql in Supabase, then refresh.</div>}
         <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
           One catalogue for the whole company — indents, GRN, stock and Tally all pick items from here. The item name builds itself from Type + Material + Size + Class + Make, so edit those parts and the name updates everywhere. Deactivated items stop appearing in searches but old records keep them.
         </div>
