@@ -16,9 +16,10 @@ export default function ExpensesPage() {
   const [pettyReqs, setPettyReqs] = useState(null);
   const [pettyForm, setPettyForm] = useState({ amount: "", purpose: "", required_date: "", remarks: "" });
   const [pettyMsg, setPettyMsg] = useState("");
-  async function actPetty(id, status) {
+  const [pettyAmt, setPettyAmt] = useState({});   // per-request approve-amount inputs (update164)
+  async function actPetty(id, status, amount) {
     const note = status === "rejected" ? (window.prompt("Reason (sent to the requester):") || "") : "";
-    const res = await reviewPettyRequest(id, status, note);
+    const res = await reviewPettyRequest(id, status, note, amount);
     if (!res.ok) { window.alert("Could not review: " + res.error); return; }
     getPettyRequestQueue().then(setPettyReqs);
   }
@@ -211,7 +212,9 @@ export default function ExpensesPage() {
                     <td className="muted">{r.date}</td>
                     <td style={{ fontWeight: 600 }}>{r.requester}</td>
                     <td className="muted">{r.site}</td>
-                    <td className="num">₹{r.amount}</td>
+                    <td className="num">₹{r.amount}
+                      {r.status === "approved" && r.approved_amount != null && r.approved_amount !== r.amount
+                        ? <div style={{ fontSize: 11, color: "var(--green)" }}>approved ₹{r.approved_amount}</div> : null}</td>
                     <td>{r.purpose}{r.remarks ? <span className="muted"> — {r.remarks}</span> : ""}</td>
                     <td className="muted">{r.required_date || "—"}</td>
                     <td>{r.status === "approved" ? <span className="badge p">Approved</span>
@@ -220,9 +223,25 @@ export default function ExpensesPage() {
                     <td style={{ whiteSpace: "nowrap" }}>
                       {r.status === "pending" && (
                         <>
-                          <button className="primary" style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actPetty(r.id, "approved")}>Approve</button>
+                          <input inputMode="numeric" style={{ width: 70, fontSize: 11.5, marginRight: 4 }}
+                                 value={pettyAmt[r.id] ?? String(r.amount)} title="Amount to approve (can differ from asked)"
+                                 onChange={e => setPettyAmt(a => ({ ...a, [r.id]: e.target.value }))} />
+                          <button className="primary" style={{ fontSize: 11.5, marginRight: 4 }}
+                                  onClick={() => actPetty(r.id, "approved", pettyAmt[r.id] ?? r.amount)}>Approve</button>
                           <button style={{ fontSize: 11.5 }} onClick={() => actPetty(r.id, "rejected")}>Reject</button>
                         </>
+                      )}
+                      {r.status === "approved" && (
+                        <>
+                          <button style={{ fontSize: 11.5, marginRight: 4 }} title="Approve a different amount"
+                                  onClick={() => { const v = window.prompt("Revised approved amount \u20b9 (asked \u20b9" + r.amount + "):", String(r.approved_amount ?? r.amount)); if (v != null && v !== "") actPetty(r.id, "approved", v); }}>✎ Change amount</button>
+                          <button style={{ fontSize: 11.5, color: "var(--red)" }} title="Remove the granted amount and mark rejected"
+                                  onClick={() => { if (window.confirm("Withdraw this approval? \u20b9" + (r.approved_amount ?? r.amount) + " will be removed from " + r.requester + "'s petty balance.")) actPetty(r.id, "rejected"); }}>Undo approval</button>
+                        </>
+                      )}
+                      {r.status === "rejected" && (
+                        <button style={{ fontSize: 11.5 }} title="Approve after all"
+                                onClick={() => { const v = window.prompt("Approve amount \u20b9 (asked \u20b9" + r.amount + "):", String(r.amount)); if (v != null && v !== "") actPetty(r.id, "approved", v); }}>Approve…</button>
                       )}
                     </td>
                   </tr>
