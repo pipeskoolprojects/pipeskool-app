@@ -3,9 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
+import { billUrl } from "@/lib/bills";
 import {
   EXPENSE_CATEGORIES, inr, getBeneficiaries, raiseAdvanceSalary,
-  claimExpense, getMyRecentMoney, getPettyBalance, respondAdvance, respondExpense, requestPettyCash } from "@/lib/money";
+  claimExpense, getMyRecentMoney, getPettyBalance, respondAdvance, respondExpense, requestPettyCash,
+  getPettyOverview, getPettyLedger, requestPettyReturn } from "@/lib/money";
 
 export default function MoneyScreen() {
   if (typeof window !== "undefined" && !getSession()) { window.location.replace("/m"); return null; }
@@ -46,7 +48,21 @@ export default function MoneyScreen() {
   const [claimSite, setClaimSite] = useState(siteId);
   const [pettySite, setPettySite] = useState(siteId);
 
-  const load = () => { getPettyBalance(userId).then(setPetty); getMyRecentMoney(userId).then(setRecent); };
+  const load = () => { getPettyOverview(userId).then(setOv); getMyRecentMoney(userId).then(setRecent); };
+  const [ov, setOv] = useState(null);
+  const [ledger, setLedger] = useState(null);      // null = closed
+  const [ret, setRet] = useState(null);            // { amount, note } when the return form is open
+  const [retErr, setRetErr] = useState("");
+  async function openLedger() { setLedger(await getPettyLedger(userId)); }
+  async function sendReturn() {
+    setRetErr("");
+    if (!ret.amount || Number(ret.amount) <= 0) { setRetErr("Enter the amount you are returning."); return; }
+    if (ov && Number(ret.amount) > Number(ov.balance)) { setRetErr("You only hold " + inr(ov.balance) + "."); return; }
+    const res = await requestPettyReturn({ user_id: userId, name: sess?.name, site_id: Number(pettySite), amount: ret.amount, note: ret.note });
+    if (!res.ok) { setRetErr(res.error); return; }
+    setRet(null); setMsg("Return recorded — awaiting Director/Accountant confirmation. Balance reduces once confirmed.");
+    load(); if (ledger) openLedger();
+  }
   useEffect(() => { load(); getBeneficiaries(userId).then(setBens); }, []);
 
   async function submitAdvance() {
@@ -111,7 +127,53 @@ export default function MoneyScreen() {
         {isDemo && <div className="note amber">Demo mode — sample data, resets on refresh.</div>}
 
         <div className="stat-row" style={{ gridTemplateColumns: "1fr" }}>
-          <div className="stat-box"><div className="k">Petty cash held by me</div><div className="v">{inr(petty)}</div></div>
+          <div className="panel" style={{ padding: "10px 12px" }}>
+            <div style={{ display: "flex", gap: 8, textAlign: "center" }}>
+              <div style={{ flex: 1 }}><div className="muted" style={{ fontSize: 11 }}>ADVANCE</div><b>{inr(ov?.granted || 0)}</b></div>
+              <div style={{ flex: 1 }}><div className="muted" style={{ fontSize: 11 }}>USED</div><b>{inr(ov?.spent || 0)}</b></div>
+              <div style={{ flex: 1 }}><div className="muted" style={{ fontSize: 11 }}>BALANCE</div><b style={{ color: "var(--copper)" }}>{inr(ov?.balance || 0)}</b></div>
+            </div>
+            {(ov?.returned || 0) > 0 && <div className="muted" style={{ fontSize: 11.5, textAlign: "center", marginTop: 4 }}>returned so far {inr(ov.returned)}</div>}
+            {(ov?.pendingSpend || 0) > 0 && <div className="muted" style={{ fontSize: 11.5, textAlign: "center" }}>{inr(ov.pendingSpend)} spend awaiting approval (not yet deducted)</div>}
+            {(ov?.pendingReturns || 0) > 0 && <div className="muted" style={{ fontSize: 11.5, textAlign: "center" }}>{inr(ov.pendingReturns)} return awaiting confirmation</div>}
+            {ov?.settled && <div style={{ textAlign: "center", marginTop: 6 }}><span className="badge p">✔ ADVANCE SETTLED</span></div>}
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button style={{ flex: 1, fontSize: 12.5 }} onClick={() => ledger ? setLedger(null) : openLedger()}>{ledger ? "Hide ledger" : "📒 My petty ledger"}</button>
+              {(ov?.balance || 0) > 0 && <button style={{ flex: 1, fontSize: 12.5 }} onClick={() => { setRet({ amount: "", note: "" }); setRetErr(""); }}>↩ Return cash</button>}
+            </div>
+          </div>
+          {ret && (
+            <div className="panel" style={{ padding: "10px 12px", marginTop: 8 }}>
+              <label className="muted">Amount returning ₹ * (you hold {inr(ov?.balance || 0)})</label>
+              <input inputMode="numeric" style={{ width: "100%", marginBottom: 6 }} value={ret.amount}
+                     onChange={e => setRet(f => ({ ...f, amount: e.target.value }))} />
+              <label className="muted">Note</label>
+              <input style={{ width: "100%", marginBottom: 8 }} value={ret.note} placeholder="e.g. unused after SOUL work"
+                     onChange={e => setRet(f => ({ ...f, note: e.target.value }))} />
+              {retErr && <div className="note red" style={{ marginBottom: 6 }}>{retErr}</div>}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="primary" style={{ flex: 1 }} onClick={sendReturn}>Record return</button>
+                <button style={{ flex: 1 }} onClick={() => setRet(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
+          {ledger && (
+            <div className="panel" style={{ padding: "8px 10px", marginTop: 8 }}>
+              {ledger.length === 0 ? <div className="muted">No petty transactions yet.</div> : ledger.map((l, i) => (
+                <div key={i} style={{ borderBottom: "1px solid var(--border)", padding: "7px 0", fontSize: 13 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <b>{l.kind}</b>
+                    <b style={{ color: l.sign > 0 ? "var(--green)" : l.sign < 0 ? "var(--red)" : "var(--muted)" }}>
+                      {l.sign > 0 ? "+" : l.sign < 0 ? "\u2212" : ""}{inr(l.amount)}</b>
+                  </div>
+                  <div className="muted" style={{ fontSize: 11.5 }}>
+                    {l.date} \u00b7 {l.site}{l.category ? " \u00b7 " + l.category : ""}{l.label ? " \u00b7 " + l.label : ""}
+                    {l.bills.map((b, j) => <a key={j} href={billUrl(b)} target="_blank" rel="noreferrer" style={{ marginLeft: 6 }}>📎</a>)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {mode === "none" && (
@@ -218,7 +280,7 @@ export default function MoneyScreen() {
         {recent.length === 0 ? <div className="muted">Nothing yet.</div> : recent.map((r, i) => (
           <div className="m-row" key={i} onClick={() => { if (r.status === "queried") { setReply(r); setReplyAmount(String(r.amount)); setReplyText(""); setMsg(""); setErr(""); } }} style={{ cursor: r.status === "queried" ? "pointer" : "default" }}>
             <div className="info">
-              <div className="nm">{inr(r.amount)} — {r.name}</div>
+              <div className="nm">{inr(r.amount)}{r.asked ? <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}> (asked {inr(r.asked)})</span> : null} — {r.name}</div>
               <div className="dt">{r.type} · {r.date}</div>
               {r.status === "queried" && r.query && <div className="flag">❓ Query: {r.query} — tap to reply</div>}
             </div>

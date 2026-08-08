@@ -7,6 +7,7 @@ import { isDemo } from "@/lib/supabase";
 import {
   getAdvanceQueue, reviewAdvance, getExpenseClaimQueue, reviewExpenseClaim,
   getBeneficiaries, raiseAdvanceSalary,
+  getPettyReturnQueue, confirmPettyReturn, getPettyLedger,
   getPettyReconciliation, catLabel, inr, markAdvancePosted, markExpensePosted,
   getPettyRequestQueue, reviewPettyRequest, requestPettyCash } from "@/lib/money";
 import { getSession, canAnySite } from "@/lib/auth";
@@ -144,12 +145,39 @@ export default function ExpensesPage() {
       </span>) : <span className="muted" style={{ fontSize: 11.5 }}>Done</span> },
   ];
 
+  // returns queue + person ledger (update167)
+  const [pettyReturns, setPettyReturns] = useState([]);
+  const [ledgerFor, setLedgerFor] = useState("");        // "userId|name"
+  const [ledgerRows, setLedgerRows] = useState(null);
+  const [lf, setLf] = useState({ site: "all", from: "", to: "", category: "all", type: "all" });
+  useEffect(() => { getPettyReturnQueue().then(setPettyReturns); }, []);
+  useEffect(() => {
+    const id = ledgerFor.split("|")[0];
+    if (id) getPettyLedger(Number(id)).then(setLedgerRows); else setLedgerRows(null);
+  }, [ledgerFor]);
+  async function actReturn(id, action) {
+    const note = action === "cancelled" ? window.prompt("Reason (sent to the holder):") : null;
+    const res = await confirmPettyReturn(id, action, note);
+    if (!res.ok) { window.alert("Could not save: " + res.error); return; }
+    setMsg(action === "confirmed" ? "Cash return confirmed — balance updated." : "Return not accepted.");
+    getPettyReturnQueue().then(setPettyReturns); load();
+    if (ledgerFor) { const id2 = ledgerFor.split("|")[0]; getPettyLedger(Number(id2)).then(setLedgerRows); }
+  }
+  const ledgerView = (ledgerRows || []).filter(l =>
+    (lf.site === "all" || l.site === lf.site)
+    && (lf.category === "all" || l.category === lf.category)
+    && (lf.type === "all" || l.kind === lf.type)
+    && (!lf.from || l.date >= lf.from) && (!lf.to || l.date <= lf.to));
+
   const pettyCols = [
     { key: "holder", label: "Holder", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.holder}</span> },
     { key: "site", label: "Site", filter: "select" },
     { key: "granted", label: "Granted", type: "num", render: r => inr(r.granted), exportValue: r => r.granted },
     { key: "spent", label: "Spent", type: "num", render: r => inr(r.spent), exportValue: r => r.spent },
+    { key: "returned", label: "Returned", type: "num", render: r => inr(r.returned || 0), exportValue: r => r.returned || 0 },
     { key: "balance", label: "Balance", type: "num", render: r => <b>{inr(r.balance)}</b>, exportValue: r => r.balance },
+    { key: "settled", label: "", render: r => r.settled ? <span className="badge p">✔ SETTLED</span>
+        : <button style={{ fontSize: 11 }} onClick={() => setLedgerFor(r.user_id + "|" + r.holder)}>📒 Ledger</button> },
   ];
 
   return (
@@ -262,6 +290,70 @@ export default function ExpensesPage() {
           {!claims ? <div className="muted">Loading…</div> :
             <DataTable columns={claimCols} rows={claims} exportName="expense_claims" dateField="date" />}
         </div>
+
+        {pettyReturns.length > 0 && (
+          <div className="panel" style={{ borderLeft: "4px solid var(--copper)" }}>
+            <h2>Cash returns awaiting confirmation ({pettyReturns.length})</h2>
+            <table className="dt-compact"><thead><tr><th>Date</th><th>Holder</th><th>Site</th><th className="num">Amount</th><th>Note</th><th></th></tr></thead>
+              <tbody>{pettyReturns.map(r => (
+                <tr key={r.id}>
+                  <td className="muted">{r.date}</td><td style={{ fontWeight: 600 }}>{r.holder}</td>
+                  <td className="muted">{r.site}</td><td className="num">{inr(r.amount)}</td>
+                  <td className="muted">{r.note || "—"}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button className="primary" style={{ fontSize: 11.5, marginRight: 4 }}
+                            onClick={() => { if (window.confirm("Confirm you RECEIVED " + inr(r.amount) + " cash from " + r.holder + "? Their balance reduces by this amount.")) actReturn(r.id, "confirmed"); }}>✔ Received</button>
+                    <button style={{ fontSize: 11.5 }} onClick={() => actReturn(r.id, "cancelled")}>Not received</button>
+                  </td>
+                </tr>))}
+              </tbody></table>
+          </div>
+        )}
+
+        {ledgerFor && (
+          <div className="panel" style={{ borderLeft: "4px solid #2b6cb0" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2 style={{ margin: 0 }}>Petty ledger — {ledgerFor.split("|")[1]}</h2>
+              <button style={{ fontSize: 11.5 }} onClick={() => setLedgerFor("")}>Close</button>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "10px 0" }}>
+              <select value={lf.site} onChange={e => setLf(f => ({ ...f, site: e.target.value }))}>
+                <option value="all">Site: all</option>
+                {[...new Set((ledgerRows || []).map(l => l.site).filter(Boolean))].map(x => <option key={x} value={x}>{x}</option>)}
+              </select>
+              <select value={lf.category} onChange={e => setLf(f => ({ ...f, category: e.target.value }))}>
+                <option value="all">Category: all</option>
+                {[...new Set((ledgerRows || []).map(l => l.category).filter(Boolean))].map(x => <option key={x} value={x}>{x}</option>)}
+              </select>
+              <select value={lf.type} onChange={e => setLf(f => ({ ...f, type: e.target.value }))}>
+                <option value="all">Type: all</option>
+                {[...new Set((ledgerRows || []).map(l => l.kind))].map(x => <option key={x} value={x}>{x}</option>)}
+              </select>
+              <input type="date" value={lf.from} onChange={e => setLf(f => ({ ...f, from: e.target.value }))} />
+              <input type="date" value={lf.to} onChange={e => setLf(f => ({ ...f, to: e.target.value }))} />
+            </div>
+            {!ledgerRows ? <div className="muted">Loading…</div> : (
+              <table className="dt-compact">
+                <thead><tr><th>Date</th><th>Type</th><th>Site</th><th>Category</th><th>Detail</th><th className="num">Amount</th><th>Bills</th></tr></thead>
+                <tbody>{ledgerView.map((l, i) => (
+                  <tr key={i}>
+                    <td className="muted">{l.date}</td>
+                    <td>{l.kind}{l.status === "pending" ? <span className="badge gray" style={{ marginLeft: 4 }}>pending</span> : null}</td>
+                    <td className="muted">{l.site}</td><td className="muted">{l.category || "—"}</td>
+                    <td>{l.label || "—"}</td>
+                    <td className="num" style={{ color: l.sign > 0 ? "var(--green)" : l.sign < 0 ? "var(--red)" : "inherit", fontWeight: 600 }}>
+                      {l.sign > 0 ? "+" : l.sign < 0 ? "−" : ""}{inr(l.amount)}</td>
+                    <td>{l.bills.map((b, j) => (
+                      <span key={j} style={{ marginRight: 6 }}>
+                        <a href={billUrl(b)} target="_blank" rel="noreferrer">📎</a>
+                        <a href={billUrl(b, true)} style={{ marginLeft: 2 }}>⬇</a>
+                      </span>))}</td>
+                  </tr>))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
 
         <div className="panel">
           <h2>Petty cash — balance held by person</h2>
