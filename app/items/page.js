@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
-import { ITEM_TYPES, getAllItems, addItem, updateItem, toggleItemActive, deleteItem, approveItem } from "@/lib/stock";
+import { ITEM_TYPES, getItemTypes, addItemType, getAllItems, addItem, updateItem, toggleItemActive, deleteItem, approveItem } from "@/lib/stock";
 import { getSession, canAnySite } from "@/lib/auth";
 
 const UNITS = ["Nos", "Rmt", "Mtr", "Kg", "Set", "Box", "Litre", "Bag"];
@@ -12,6 +12,17 @@ const BLANK = { item_type: "Pipe", material: "", sub_type: "", size: "", item_cl
 export default function ItemsPage() {
   const [rows, setRows] = useState(null);
   const [loadErr, setLoadErr] = useState("");
+  const [types, setTypes] = useState(ITEM_TYPES);
+  useEffect(() => { getItemTypes().then(setTypes); }, []);
+  async function pickType(v) {
+    if (v !== "__add_new__") { set("item_type", v); return; }
+    const name = window.prompt("New material type (e.g. Hardware):");
+    if (!name) return;
+    const res = await addItemType(name);
+    if (!res.ok) { window.alert("Could not add type: " + res.error + "\n(Needs the \"Manage item types\" admin right \u2014 Access Rights \u2192 Admin capabilities. Directors always have it.)"); return; }
+    getItemTypes().then(setTypes);
+    set("item_type", res.label);
+  }
   const [form, setForm] = useState(null);   // null = closed; {id?} = add/edit
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [session, setSession] = useState(null);
@@ -120,8 +131,9 @@ export default function ItemsPage() {
             <h2>{form.id ? "Edit item" : "Add item"}</h2>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12 }}>
               <div><label className="muted">Type</label>
-                <select style={{ width: "100%" }} value={form.item_type} onChange={e => set("item_type", e.target.value)}>
-                  {[...ITEM_TYPES, ...(ITEM_TYPES.includes(form.item_type) ? [] : [form.item_type])].map(t => <option key={t}>{t}</option>)}
+                <select style={{ width: "100%" }} value={form.item_type} onChange={e => pickType(e.target.value)}>
+                  {[...types, ...(types.includes(form.item_type) ? [] : [form.item_type])].map(t => <option key={t}>{t}</option>)}
+                  <option value="__add_new__">➕ Add new type…</option>
                 </select></div>
               <div><label className="muted">Material / name *</label><input style={{ width: "100%" }} value={form.material} onChange={e => set("material", e.target.value)} placeholder="e.g. CPVC or MS 350NB" /></div>
               <div><label className="muted">Sub-type</label><input style={{ width: "100%" }} value={form.sub_type} onChange={e => set("sub_type", e.target.value)} placeholder="Elbow / Tee / Gate valve" /></div>
