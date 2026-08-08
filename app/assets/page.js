@@ -3,9 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
-import { getSession } from "@/lib/auth";
+import { getSession, canAnySite } from "@/lib/auth";
 import { getSites } from "@/lib/data";
-import { getAssets, getCalibrationDue, getRepairHistory, idleAssets, statusInfo, inr, addAsset, bulkImportAssets, ASSET_TEMPLATE_HEADERS, CATEGORIES, resolveSite, getStaffNames, transferAsset, flagNeedsRepair, sendForRepair, cancelRepair, repairDone, reportLost } from "@/lib/assets";
+import { getAssets, getCalibrationDue, getRepairHistory, idleAssets, statusInfo, inr, addAsset, bulkImportAssets, ASSET_TEMPLATE_HEADERS, CATEGORIES, resolveSite, getStaffNames, transferAsset, flagNeedsRepair, sendForRepair, cancelRepair, repairDone, reportLost, updateAssetFull, getAssetEditLog } from "@/lib/assets";
 
 
 const blankAsset = { asset_code: "", name: "", category: "", make_model: "", purchase_cost: "", calib: false, calib_due: "" };
@@ -29,6 +29,29 @@ export default function AssetsPage() {
   useEffect(() => { getCalibrationDue().then(setCalib); getRepairHistory().then(setRepairs); getStaffNames().then(setStaff); }, []);
 
   function openModal(type, asset) { setErr(""); setMsg(""); setMv({}); setModal({ type, asset }); }
+  // full asset edit (update160)
+  const [editA, setEditA] = useState(null);      // { asset, form }
+  const [editLog, setEditLog] = useState([]);
+  const sess160 = getSession();
+  const canEditAsset = !!sess160 && (sess160.role === "director" || canAnySite(sess160, "assets", "manage") || canAnySite(sess160, "assets", "create"));
+  function openEditAsset(a) {
+    setErr(""); setMsg("");
+    setEditA({ asset: a, form: {
+      name: a.name || "", category: a.category || "", make_model: a.make_model || "",
+      serial_no: a.serial_no || "", purchase_date: a.purchase_date || "", purchase_cost: a.purchase_cost ?? "",
+      current_site_id: a.current_site_id ?? "", custodian_user_id: a.custodian_user_id ?? "",
+      status: a.status || "available", calibration_required: !!a.calibration_required, calibration_due: a.calibration_due || "",
+    } });
+    getAssetEditLog(a.id).then(setEditLog);
+  }
+  async function saveEditAsset() {
+    setBusy(true);
+    const res = await updateAssetFull(editA.asset.id, editA.asset, editA.form);
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg(res.unchanged ? "No changes." : "Asset updated — change logged.");
+    setEditA(null); load();
+  }
   function closeModal() { setModal(null); setMv({}); }
   async function runModal() {
     const a = modal.asset; setErr(""); setBusy(true); let res;
@@ -258,6 +281,7 @@ export default function AssetsPage() {
                       <button className="primary" style={{ fontSize: 11, padding: "3px 7px" }} onClick={() => openModal("repair_done", a)}>Repair done</button>
                     ) : a.status === "lost" ? <span className="muted" style={{ fontSize: 11 }}>—</span> : (
                       <>
+                        {canEditAsset && <button style={{ fontSize: 11, padding: "3px 7px", fontWeight: 600 }} onClick={() => openEditAsset(a)}>✎ Edit</button>}
                         <button style={{ fontSize: 11, padding: "3px 7px" }} onClick={() => openModal("transfer", a)}>Transfer</button>
                         <button style={{ fontSize: 11, padding: "3px 7px" }} onClick={() => openModal("needs_repair", a)}>Needs repair</button>
                         <button style={{ fontSize: 11, padding: "3px 7px", color: "var(--red)" }} onClick={() => openModal("report_loss", a)}>Loss</button>
@@ -314,6 +338,65 @@ export default function AssetsPage() {
         </div>
 
         <datalist id="staff-list-web">{staff.map(n => <option key={n} value={n} />)}</datalist>
+
+        {editA && (
+
+          <div onClick={() => setEditA(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center" }}>
+
+            <div onClick={e => e.stopPropagation()} className="panel" style={{ width: "min(680px, 94vw)", maxHeight: "86vh", overflowY: "auto" }}>
+
+              <h2>Edit asset — {editA.asset.asset_code}</h2>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 10 }}>
+
+                <div><label className="muted">Asset name *</label><input style={{ width: "100%" }} value={editA.form.name} onChange={e => setEditA(x => ({ ...x, form: { ...x.form, name: e.target.value } }))} /></div>
+
+                <div><label className="muted">Category</label><select style={{ width: "100%" }} value={editA.form.category} onChange={e => setEditA(x => ({ ...x, form: { ...x.form, category: e.target.value } }))}>{CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+
+                <div><label className="muted">Make / model</label><input style={{ width: "100%" }} value={editA.form.make_model} onChange={e => setEditA(x => ({ ...x, form: { ...x.form, make_model: e.target.value } }))} /></div>
+
+                <div><label className="muted">Serial no</label><input style={{ width: "100%" }} value={editA.form.serial_no} onChange={e => setEditA(x => ({ ...x, form: { ...x.form, serial_no: e.target.value } }))} /></div>
+
+                <div><label className="muted">Purchase date</label><input type="date" style={{ width: "100%" }} value={editA.form.purchase_date || ""} onChange={e => setEditA(x => ({ ...x, form: { ...x.form, purchase_date: e.target.value } }))} /></div>
+
+                <div><label className="muted">Value ₹</label><input inputMode="numeric" style={{ width: "100%" }} value={editA.form.purchase_cost} onChange={e => setEditA(x => ({ ...x, form: { ...x.form, purchase_cost: e.target.value } }))} /></div>
+
+                <div><label className="muted">Site</label><select style={{ width: "100%" }} value={editA.form.current_site_id} onChange={e => setEditA(x => ({ ...x, form: { ...x.form, current_site_id: e.target.value } }))}><option value="">—</option>{SITES.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>
+
+                <div><label className="muted">Custodian</label><input list="staff-list" style={{ width: "100%" }} value={editA.form.custodian_user_id || ""} onChange={e => setEditA(x => ({ ...x, form: { ...x.form, custodian_user_id: e.target.value } }))} placeholder="staff id" /></div>
+
+                <div><label className="muted">Status</label><select style={{ width: "100%" }} value={editA.form.status} onChange={e => setEditA(x => ({ ...x, form: { ...x.form, status: e.target.value } }))}>{["available","in_use","under_repair","lost","scrapped"].map(v => <option key={v} value={v}>{v.replace("_"," ")}</option>)}</select></div>
+
+                <div><label className="muted">Calibration due</label><input type="date" style={{ width: "100%" }} value={editA.form.calibration_due || ""} onChange={e => setEditA(x => ({ ...x, form: { ...x.form, calibration_due: e.target.value } }))} /></div>
+
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+
+                <button className="primary" disabled={busy} onClick={saveEditAsset}>{busy ? "Saving…" : "Save changes"}</button>
+
+                <button onClick={() => setEditA(null)}>Cancel</button>
+
+              </div>
+
+              {editLog.length > 0 && (<div style={{ marginTop: 14 }}>
+
+                <label className="muted">Edit history</label>
+
+                {editLog.map((l, i) => (<div key={i} className="muted" style={{ fontSize: 12, borderBottom: "1px solid var(--border)", padding: "5px 0" }}>
+
+                  <b>{l.editor?.full_name || "—"}</b> · {new Date(l.edited_at).toLocaleString()} — {Object.entries(l.changes).map(([k, v]) => k + ": " + (v.from ?? "—") + " → " + (v.to ?? "—")).join("; ")}
+
+                </div>))}
+
+              </div>)}
+
+            </div>
+
+          </div>
+
+        )}
+
 
         {modal && (
           <div onClick={closeModal} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 90, padding: 16 }}>

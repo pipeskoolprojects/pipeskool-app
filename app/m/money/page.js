@@ -20,7 +20,7 @@ export default function MoneyScreen() {
     setPettyErr("");
     if (!pettyF.amount || !pettyF.purpose) { setPettyErr("Amount and purpose are required."); return; }
     setPettyBusy(true);
-    const res = await requestPettyCash({ site_id: siteId, user_id: userId, requester_name: sess?.name,
+    const res = await requestPettyCash({ site_id: Number(pettySite), user_id: userId, requester_name: sess?.name,
       amount: pettyF.amount, purpose: pettyF.purpose, required_date: pettyF.required_date || null, remarks: pettyF.remarks || null });
     setPettyBusy(false);
     if (!res.ok) { setPettyErr(res.error); return; }
@@ -42,6 +42,9 @@ export default function MoneyScreen() {
   const sess = typeof window !== "undefined" ? getSession() : null;
   const userId = sess?.id || 1;
   const siteId = Number(sess?.currentSite || sess?.sites?.[0]?.id || 1);   // update146: was sess.siteIds (never existed) -> always site 1
+  const mySites = sess?.sites || [];                                        // update160: assigned sites only
+  const [claimSite, setClaimSite] = useState(siteId);
+  const [pettySite, setPettySite] = useState(siteId);
 
   const load = () => { getPettyBalance(userId).then(setPetty); getMyRecentMoney(userId).then(setRecent); };
   useEffect(() => { load(); getBeneficiaries(userId).then(setBens); }, []);
@@ -68,7 +71,7 @@ export default function MoneyScreen() {
     if (e.funding_source === "own_pocket" && !photo) { setErr("Please attach a bill photo as proof for reimbursement."); return; }
     setBusy(true);
     const res = await claimExpense({
-      site_id: siteId, user_id: userId, category: e.category, amount: Number(e.amount),
+      site_id: Number(claimSite), user_id: userId, category: e.category, amount: Number(e.amount),
       paid_to: e.paid_to, funding_source: e.funding_source, note: e.note,
       billFiles: photo || [], bank_on_file: true,
     });
@@ -150,6 +153,10 @@ export default function MoneyScreen() {
         {mode === "expense" && (
           <div style={{ background: "var(--bg)", borderRadius: 12, padding: 12, margin: "12px 0" }}>
             <h3 style={{ fontSize: 14, marginBottom: 10 }}>Claim site expense</h3>
+            <div className="m-field"><label>Site *</label>
+              <select value={claimSite} onChange={e => setClaimSite(e.target.value)}>
+                {mySites.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select></div>
             <div className="m-field"><label>Paid from *</label>
               <select value={e.funding_source} onChange={ev => setE(p => ({ ...p, funding_source: ev.target.value }))}>
                 <option value="own_pocket">My own pocket (reimburse me to bank)</option>
@@ -185,6 +192,10 @@ export default function MoneyScreen() {
         <div className="panel" style={{ marginBottom: 12 }}>
           <h2>Advance petty cash request</h2>
           <label className="muted">Amount ₹ *</label>
+          <label className="muted">Site *</label>
+          <select style={{ width: "100%", marginBottom: 8 }} value={pettySite} onChange={e => setPettySite(e.target.value)}>
+            {mySites.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select>
           <input inputMode="numeric" style={{ width: "100%", marginBottom: 8 }} value={pettyF.amount}
                  onChange={e => setPettyF(f => ({ ...f, amount: e.target.value }))} />
           <label className="muted">Purpose / reason *</label>
