@@ -230,7 +230,9 @@ export default function ProcurePage() {
     if (!awardVendor) { setErr("Choose a vendor to award the PO."); return; }
     const isLowest = cmp?.bestWhole?.vendor === awardVendor;
     if (!isLowest && !reason.trim()) { setErr("This vendor is not the lowest total — please enter the reason."); return; }
-    const lines = ind.items.map(it => ({ indent_item_id: it.id, item_id: it.item_id, item_name: it.item_name,
+    const openItems = ind.items.filter(it => !it.ordered);   // update170: PO'd items are locked
+    if (openItems.length === 0) { setErr("Every item on this indent already has a PO."); return; }
+    const lines = openItems.map(it => ({ indent_item_id: it.id, item_id: it.item_id, item_name: it.item_name,
       spec: it.spec || null, qty: it.qty, unit: it.unit, rate: Number(rates[it.id]?.[awardVendor] || 0) }));
     if (lines.some(l => !l.rate)) { setErr("This vendor hasn't quoted every item."); return; }
     setBusy(true);
@@ -238,13 +240,16 @@ export default function ProcurePage() {
       is_lowest: isLowest, non_lowest_reason: isLowest ? null : reason, lines }, session?.id);
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg("PO " + res.po_no + " issued to " + awardVendor + (isLowest ? " (lowest)" : " — reason recorded")); setOpenId(null); load();
+    setMsg("PO " + res.po_no + " issued to " + awardVendor + (isLowest ? " (lowest)" : " — reason recorded")
+      + ((res.remaining ?? 0) > 0 ? " — " + res.remaining + " item(s) still open for later POs." : "")); setOpenId(null); load();
   }
 
   async function awardSplit(ind) {
     setErr("");
     const byVendor = {};
+    let leftOpen = 0;   // update170: items without a vendor stay open for later POs
     for (const it of ind.items) {
+      if (it.ordered) continue;                      // already locked under a PO
       const splits = itemSplits[it.id];
       if (splits && splits.length) {
         // quantity-split across vendors for this item
@@ -260,24 +265,29 @@ export default function ProcurePage() {
             item_name: it.item_name, qty: Number(row.qty), unit: it.unit, rate: Number(rates[it.id][row.vendor]) });
         }
       } else {
-        // whole item to one vendor
+        // whole item to one vendor — no vendor chosen = left open for a later PO (update170)
         const v = itemVendor[it.id];
-        if (!v) { setErr("Choose a vendor for every item (or split it by quantity)."); return; }
+        if (!v) { leftOpen += 1; continue; }
         if (!rates[it.id]?.[v]) { setErr(`No rate from ${v} for ${it.item_name}.`); return; }
         (byVendor[v] = byVendor[v] || []).push({ indent_item_id: it.id, item_id: it.item_id,
           item_name: it.item_name, spec: it.spec || null, qty: Number(it.qty), unit: it.unit, rate: Number(rates[it.id][v]) });
       }
     }
+    if (Object.keys(byVendor).length === 0) { setErr("Pick a vendor for at least one open item."); return; }
     setBusy(true);
     const issued = [];
+    let lastRes = null;
     for (const [vendor, lines] of Object.entries(byVendor)) {
       const res = await createPO({ indent_id: ind.id, site_id: ind.site_id || 1, vendor_name: vendor,
         is_lowest: true, split_note: "Split award — cheapest per item", lines }, session?.id);
       if (!res.ok) { setBusy(false); setErr(res.error); return; }
-      issued.push(res.po_no);
+      issued.push(res.po_no); lastRes = res;
     }
     setBusy(false);
-    setMsg("Split done — " + issued.length + " POs issued: " + issued.join(", ")); setOpenId(null); load();
+    const rem = lastRes?.remaining ?? 0;
+    setMsg(issued.length + " PO" + (issued.length > 1 ? "s" : "") + " issued: " + issued.join(", ")
+      + (rem > 0 ? " — " + rem + " item" + (rem > 1 ? "s" : "") + " still open on this indent for later POs." : " — indent fully ordered."));
+    setOpenId(null); load();
   }
 
   const open = (indents || []).filter(i => i.status === "open" || i.status === "quoting");
@@ -387,7 +397,7 @@ export default function ProcurePage() {
                           {ind.items.map((it, idx) => (
                             <tr key={it.id}>
                               <td className="muted">{idx + 1}</td>
-                              <td style={{ fontWeight: 600 }}>{it.item_name}{it.spec ? <span className="muted" style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}</td>
+                              <td style={{ fontWeight: 600, opacity: it.ordered ? 0.55 : 1 }}>{it.item_name}{it.spec ? <span className="muted" style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}{it.ordered ? <span className="badge p" style={{ marginLeft: 6, fontSize: 10.5 }}>🔒 PO issued</span> : ""}</td>
                               <td className="num">{it.qty} {it.unit}</td>
                               <td className="muted">{it.purpose || "—"}</td>
                             </tr>
@@ -501,7 +511,7 @@ export default function ProcurePage() {
                                 const best = cmp.splitChoice[it.id];
                                 return (
                                   <tr key={it.id}>
-                                    <td style={{ fontWeight: 600 }}>{it.item_name}{it.spec ? <span className="muted" style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}<div className="muted">{it.qty} {it.unit}</div></td>
+                                    <td style={{ fontWeight: 600, opacity: it.ordered ? 0.55 : 1 }}>{it.item_name}{it.spec ? <span className="muted" style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}{it.ordered ? <span className="badge p" style={{ marginLeft: 6, fontSize: 10.5 }}>🔒 PO issued</span> : ""}<div className="muted">{it.qty} {it.unit}</div></td>
                                     <td className="num">{it.qty} {it.unit}</td>
                                     {cmp.vendors.map(v => {
                                       const r = row[v]; const isBest = best && best.vendor === v;
@@ -597,16 +607,17 @@ export default function ProcurePage() {
                                   const r = v ? rates[it.id]?.[v] : "";
                                   return (
                                     <tr key={it.id}>
-                                      <td style={{ fontWeight: 600 }}>{it.item_name}</td>
+                                      <td style={{ fontWeight: 600, opacity: it.ordered ? 0.55 : 1 }}>{it.item_name}{it.ordered ? <span className="badge p" style={{ marginLeft: 6, fontSize: 10.5 }}>🔒 PO issued</span> : ""}</td>
                                       <td className="num">{it.qty} {it.unit}</td>
+                                      {it.ordered ? <td className="muted">locked — already under a PO</td> : (
                                       <td style={{ display: "flex", gap: 8, alignItems: "center" }}>
                                         <select value={v} onChange={e => setItemVendor(p => ({ ...p, [it.id]: e.target.value }))}>
                                           <option value="">Select…</option>
                                           {vendorOpts.map(vn => <option key={vn} value={vn}>{vn} (₹{rates[it.id][vn]})</option>)}
                                         </select>
                                         <button style={{ fontSize: 11 }} onClick={() => setItemSplits(p => ({ ...p, [it.id]: [{ vendor: v || "", qty: it.qty }, { vendor: "", qty: "" }] }))}>+ split qty</button>
-                                      </td>
-                                      <td className="num">{r ? inr(Number(r) * Number(it.qty)) : "—"}</td>
+                                      </td>)}
+                                      <td className="num">{it.ordered ? "—" : r ? inr(Number(r) * Number(it.qty)) : "—"}</td>
                                     </tr>
                                   );
                                 })}
