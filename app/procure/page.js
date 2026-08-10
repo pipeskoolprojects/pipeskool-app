@@ -408,12 +408,15 @@ export default function ProcurePage() {
 
                     {/* enquiry download — by category (#6) */}
                     {(() => {
-                      const byCat = ind.items.reduce((a, it) => { (a[it.category] = a[it.category] || []).push(it); return a; }, {});
-                      const chosenCount = ind.items.filter(it => enqSel[it.id]).length;
+                      const enqItems = ind.items.filter(it => !it.ordered);   // update172: PO'd items excluded
+                      const orderedCount = ind.items.length - enqItems.length;
+                      const byCat = enqItems.reduce((a, it) => { (a[it.category] = a[it.category] || []).push(it); return a; }, {});
+                      const chosenCount = enqItems.filter(it => enqSel[it.id]).length;
                       return (
                         <div style={{ border: "1px dashed var(--border)", borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
                           <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>Send enquiry to vendors</div>
                           <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Tick the items to include, then download. Do it once per vendor group — e.g. pipes &amp; fittings together, hardware separately — and send via WhatsApp / mail.</div>
+                          {orderedCount > 0 && <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>🔒 {orderedCount} item{orderedCount > 1 ? "s" : ""} already under PO — not shown here.</div>}
                           {Object.entries(byCat).map(([cat, list]) => {
                             const allOn = list.every(it => enqSel[it.id]);
                             return (
@@ -461,9 +464,11 @@ export default function ProcurePage() {
                     ) : (
                       <div style={{ overflowX: "auto" }}>
                         <table className="dt-compact">
-                          <thead><tr><th>Item</th><th className="num">Qty</th>{enqVendors.map(v => <th key={v} className="num">{v}</th>)}</tr></thead>
+                          <thead>
+                            {ind.items.some(it => it.ordered) && <tr><td colSpan={2 + enqVendors.length} className="muted" style={{ fontSize: 12, padding: "4px 8px" }}>🔒 {ind.items.filter(it => it.ordered).length} item(s) already under PO — hidden from rate entry.</td></tr>}
+                            <tr><th>Item</th><th className="num">Qty</th>{enqVendors.map(v => <th key={v} className="num">{v}</th>)}</tr></thead>
                           <tbody>
-                            {ind.items.map(it => (
+                            {ind.items.filter(it => !it.ordered).map(it => (
                               <tr key={it.id}>
                                 <td style={{ fontWeight: 600 }}>{it.item_name}{it.spec ? <span className="muted" style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}<div className="muted">{it.purpose}</div></td>
                                 <td className="num">{it.qty} {it.unit}</td>
