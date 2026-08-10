@@ -387,7 +387,7 @@ export default function ProcurePage() {
                           {ind.items.map((it, idx) => (
                             <tr key={it.id}>
                               <td className="muted">{idx + 1}</td>
-                              <td style={{ fontWeight: 600 }}>{it.item_name}</td>
+                              <td style={{ fontWeight: 600 }}>{it.item_name}{it.spec ? <span className="muted" style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}</td>
                               <td className="num">{it.qty} {it.unit}</td>
                               <td className="muted">{it.purpose || "—"}</td>
                             </tr>
@@ -416,7 +416,7 @@ export default function ProcurePage() {
                                   {list.map(it => (
                                     <label key={it.id} style={{ display: "block", fontSize: 12, cursor: "pointer", padding: "1px 0" }}>
                                       <input type="checkbox" checked={!!enqSel[it.id]} onChange={() => toggleEnqItem(it.id)} style={{ accentColor: "var(--copper)", marginRight: 6 }} />
-                                      {it.item_name} · {it.qty} {it.unit}
+                                      {it.item_name}{it.spec ? " — " + it.spec : ""} · {it.qty} {it.unit}
                                     </label>
                                   ))}
                                 </div>
@@ -455,7 +455,7 @@ export default function ProcurePage() {
                           <tbody>
                             {ind.items.map(it => (
                               <tr key={it.id}>
-                                <td style={{ fontWeight: 600 }}>{it.item_name}<div className="muted">{it.purpose}</div></td>
+                                <td style={{ fontWeight: 600 }}>{it.item_name}{it.spec ? <span className="muted" style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}<div className="muted">{it.purpose}</div></td>
                                 <td className="num">{it.qty} {it.unit}</td>
                                 {enqVendors.map(v => {
                                   const on = !!alloc[it.id]?.[v]; const net = netOf(it.id, v);
@@ -501,7 +501,7 @@ export default function ProcurePage() {
                                 const best = cmp.splitChoice[it.id];
                                 return (
                                   <tr key={it.id}>
-                                    <td style={{ fontWeight: 600 }}>{it.item_name}<div className="muted">{it.qty} {it.unit}</div></td>
+                                    <td style={{ fontWeight: 600 }}>{it.item_name}{it.spec ? <span className="muted" style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}<div className="muted">{it.qty} {it.unit}</div></td>
                                     <td className="num">{it.qty} {it.unit}</td>
                                     {cmp.vendors.map(v => {
                                       const r = row[v]; const isBest = best && best.vendor === v;
