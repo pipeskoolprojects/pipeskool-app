@@ -115,6 +115,7 @@ export default function ExpensesPage() {
     { key: "site", label: "Site", filter: "select" },
     { key: "category", label: "Category", filter: "select", render: r => catLabel(r.category), exportValue: r => catLabel(r.category) },
     { key: "paid_to", label: "Paid to", filter: "search", render: r => <span>{r.paid_to}{r.response && <div className="muted" style={{ color: "var(--green)" }}>↩ {r.response}</div>}{r.status === "queried" && r.query && <div className="muted" style={{ color: "var(--amber)" }}>❓ {r.query}</div>}</span> },
+    { key: "note", label: "Purpose / note", filter: "search", render: r => <span className="muted">{r.note || "—"}</span>, exportValue: r => r.note || "" },
     { key: "funding_source", label: "Source", filter: "select", optionLabel: o => o === "petty_cash" ? "Petty cash" : "Own pocket", render: r => r.funding_source === "petty_cash" ? <span className="badge info">Petty cash</span> : <span className="badge gray">Own pocket</span> },
     { key: "amount", label: "Amount", type: "num", render: r => inr(r.amount), exportValue: r => r.amount },
     { key: "photo", label: "Proof", render: r => (r.bills || []).length === 0
