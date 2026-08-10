@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
+import { getWorkerSiteOptions } from "@/lib/mobile";
 import { getLocalWorker, setLocalWorker, findWorkerByMobile, createStaffPunchProfile, getPosition, distanceMeters, getTodayPunch, punch } from "@/lib/mobile";
 import { getSession, refreshSessionMobile, setCurrentSite } from "@/lib/auth";
 import { siteForPunch } from "@/lib/mobile";
@@ -14,6 +15,8 @@ import { getTodayQuote } from "@/lib/notices";
 export default function PunchScreen() {
   const router = useRouter();
   const [worker, setWorker] = useState(null);
+  const [wSites, setWSites] = useState([]);   // update168: labour multi-site allotments
+  useEffect(() => { if (worker?.id) getWorkerSiteOptions(worker).then(setWSites); else setWSites([]); }, [worker?.id]);
   const [mQuote, setMQuote] = useState(null);
   useEffect(() => { getTodayQuote().then(setMQuote); }, []);
   const [pos, setPos] = useState(null);
@@ -145,10 +148,10 @@ export default function PunchScreen() {
           <div className="title">{worker.full_name}</div>
           <div className="sub" style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span>{staffRole || worker.category} ·</span>
-            {staffSites.length > 1 ? (
+            {(staffSites.length > 1 ? staffSites : wSites.length > 1 ? wSites : []).length > 1 ? (
               <select value={worker.site_id} onChange={e => switchPunchSite(e.target.value)}
                 style={{ background: "transparent", color: "inherit", border: "1px solid rgba(255,255,255,.35)", borderRadius: 8, padding: "2px 6px", fontSize: 12 }}>
-                {staffSites.map(st => <option key={st.id} value={st.id} style={{ color: "#0F1419" }}>{st.name}</option>)}
+                {(staffSites.length > 1 ? staffSites : wSites).map(st => <option key={st.id} value={st.id} style={{ color: "#0F1419" }}>{st.name}</option>)}
               </select>
             ) : <span>{worker.site_name}</span>}
           </div>
@@ -190,7 +193,7 @@ export default function PunchScreen() {
         <div className="stat-row">
           <div className="stat-box"><div className="k">In</div><div className="v">{fmtTime(today.punch_in)}</div></div>
           <div className="stat-box"><div className="k">Out</div><div className="v">{fmtTime(today.punch_out)}</div></div>
-          <div className="stat-box"><div className="k">Hours</div><div className="v">{today.hours_worked ?? "0.0"}</div></div>
+          <div className="stat-box"><div className="k">Hours</div><div className="v">{today.hours_worked != null ? Math.floor(today.hours_worked) + "h " + String(Math.round((today.hours_worked % 1) * 60)).padStart(2, "0") + "m" : "\u2014"}</div></div>
         </div>
 
         {worker.profile_complete === false && (

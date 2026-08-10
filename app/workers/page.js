@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { getWorkerCategories, addWorkerCategory } from "@/lib/data";
-import { getWorkers, saveWorker, uploadAadhaarDoc, inr, deleteWorker, deleteStaff } from "@/lib/data";
+import { getWorkers, saveWorker, uploadAadhaarDoc, inr, deleteWorker, deleteStaff, getWorkerAllotments, setWorkerAllotments } from "@/lib/data";
 import { getContractors, getSitesList } from "@/lib/mobile";
 import { getStaff, addStaff, updateStaff, getRoles, addRole, renameRole, deleteRole, resetStaffPassword, getUserSites, assignSite, removeSite } from "@/lib/access";
 import { getSession } from "@/lib/auth";
@@ -47,13 +47,21 @@ export default function WorkersPage() {
 
   const incompleteCount = (rows || []).filter(r => !r.complete).length;
   const set = (k, v) => setModal(m => ({ ...m, [k]: v }));
+  const [allot, setAllot] = useState([]);   // update168: extra sites the worker can punch at
+  useEffect(() => {
+    if (modal?.id) getWorkerAllotments(modal.id).then(setAllot); else setAllot([]);
+  }, [modal?.id]);
 
   async function save() {
     setBusy(true); setErr("");
     const res = await saveWorker(modal.id || null, modal);
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg(modal.id ? "Worker updated." : "Worker added — they can log in with their mobile and punch.");
+    if (modal.id) {
+      const ra = await setWorkerAllotments(modal.id, allot.filter(x => String(x) !== String(modal.site_id)));
+      if (!ra.ok) { setErr("Worker saved, but site allotment failed: " + ra.error); return; }
+    }
+    setMsg(modal.id ? "Worker updated." : "Worker added — they can log in with their mobile and punch. To allot extra sites, open ✎ Edit.");
     setModal(null); load();
   }
 
@@ -189,7 +197,19 @@ export default function WorkersPage() {
                     <select style={{ width: "100%" }} value={modal.site_id || ""} onChange={e => set("site_id", e.target.value)}>
                       <option value="">Select…</option>
                       {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select></div>
+                    </select>
+                    {modal.id ? (<>
+                      <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>Also allotted to (multi-site worker — can self-punch there):</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", marginTop: 2 }}>
+                        {sites.filter(x => String(x.id) !== String(modal.site_id || "")).map(x => (
+                          <label key={x.id} style={{ fontSize: 12, display: "flex", gap: 4, alignItems: "center", cursor: "pointer" }}>
+                            <input type="checkbox" checked={allot.map(String).includes(String(x.id))}
+                                   onChange={e => setAllot(a => e.target.checked ? [...a, x.id] : a.filter(v => String(v) !== String(x.id)))} />
+                            {x.name}
+                          </label>
+                        ))}
+                      </div>
+                    </>) : null}</div>
                 </div>
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
                   <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 6 }}>KYC & bank <span className="muted" style={{ fontWeight: 400 }}>(all three needed for "Complete" profile)</span></div>
