@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { todayLocal } from "@/lib/today";
-import { getTodaySummary } from "@/lib/data";
+import { getTodaySummary, getDirectorPulse, inr } from "@/lib/data";
 import { isDemo } from "@/lib/supabase";
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
@@ -23,6 +23,8 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { getTodaySummary(date).then(setS); }, [date]);
+  const [pulse, setPulse] = useState(null);
+  useEffect(() => { getDirectorPulse().then(setPulse); }, []);
 
   return (
     <div className="layout">
@@ -36,6 +38,31 @@ export default function Dashboard() {
         </div>
 
         {isDemo && <div className="demo-banner">Demo mode — showing sample data. Connect Supabase to see live site data.</div>}
+
+        {pulse && (
+          <div className="cards" style={{ marginBottom: 14 }}>
+            <Link href="/expenses" style={{ textDecoration: "none" }}><div className="card" style={pulse.moneyPending ? { borderLeft: "3px solid var(--copper)" } : {}}>
+              <div className="label">Money approvals waiting</div>
+              <div className="value" style={{ color: pulse.moneyPending ? "var(--copper)" : "var(--green)" }}>{pulse.moneyPending}</div>
+              <div className="muted" style={{ fontSize: 11 }}>advances · claims · petty{pulse.retPend ? " · " + pulse.retPend + " cash return(s)" : ""}</div>
+            </div></Link>
+            <Link href="/procure" style={{ textDecoration: "none" }}><div className="card">
+              <div className="label">Procurement</div>
+              <div className="value">{pulse.openInd}<span style={{ fontSize: 13, fontWeight: 400 }}> open</span></div>
+              <div className="muted" style={{ fontSize: 11 }}>{pulse.pos} PO(s) awaiting delivery</div>
+            </div></Link>
+            <Link href="/expenses" style={{ textDecoration: "none" }}><div className="card">
+              <div className="label">Approved spend today</div>
+              <div className="value">{inr(pulse.expToday)}</div>
+              <div className="muted" style={{ fontSize: 11 }}>site expenses, all sites</div>
+            </div></Link>
+            <Link href="/expenses" style={{ textDecoration: "none" }}><div className="card">
+              <div className="label">Petty cash in the field</div>
+              <div className="value">{inr(pulse.pettyOut)}</div>
+              <div className="muted" style={{ fontSize: 11 }}>held across all people</div>
+            </div></Link>
+          </div>
+        )}
 
         {quote && <div className="panel" style={{ marginBottom: 12, background: "var(--copper-soft)", padding: "10px 14px" }}>
           <span style={{ fontSize: 16, marginRight: 8 }}>💡</span><b style={{ fontSize: 13.5 }}>{quote}</b>

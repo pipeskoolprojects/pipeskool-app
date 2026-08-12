@@ -253,12 +253,13 @@ export default function MoneyScreen() {
       ) : (
         <div className="panel" style={{ marginBottom: 12 }}>
           <h2>Advance petty cash request</h2>
-          <label className="muted">Amount ₹ *</label>
           <label className="muted">Site *</label>
           <select style={{ width: "100%", marginBottom: 8 }} value={pettySite} onChange={e => setPettySite(e.target.value)}>
             {mySites.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
           </select>
+          <label className="muted">Amount ₹ *</label>
           <input inputMode="numeric" style={{ width: "100%", marginBottom: 8 }} value={pettyF.amount}
+                 placeholder="₹ enter amount — e.g. 5000"
                  onChange={e => setPettyF(f => ({ ...f, amount: e.target.value }))} />
           <label className="muted">Purpose / reason *</label>
           <input style={{ width: "100%", marginBottom: 8 }} value={pettyF.purpose} placeholder="e.g. site consumables for Bay-5"

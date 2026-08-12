@@ -38,18 +38,38 @@ export default function StockScreen() {
   }
   const reset = () => { setSel(null); setForm({}); setQ(""); setItems([]); setSettleSel(null); setErr(""); };
 
-  async function saveGRN() {
-    setErr(""); if (!sel) { setErr("Select an item."); return; }
+  // update176: one challan = many items + challan page uploads
+  const [grnLines, setGrnLines] = useState([]);
+  const [supDocs, setSupDocs] = useState([]);
+  const [coDocs, setCoDocs] = useState([]);
+  function addGrnLine() {
+    setErr("");
+    if (!sel) { setErr("Select an item first."); return; }
     if (!form.received) { setErr("Enter received quantity."); return; }
+    setGrnLines(l => [...l, { item_id: sel.id, item_name: sel.display_name, unit: sel.unit,
+      challan_qty: Number(form.challan_qty || form.received), received_qty: Number(form.received) }]);
+    setSel(null); setQ(""); setItems([]);
+    setForm(f => ({ ...f, challan_qty: "", received: "" }));
+  }
+  async function saveGRN() {
+    setErr("");
+    let lines = grnLines;
+    if (sel && form.received) {
+      lines = [...lines, { item_id: sel.id, item_name: sel.display_name, unit: sel.unit,
+        challan_qty: Number(form.challan_qty || form.received), received_qty: Number(form.received) }];
+    }
+    if (lines.length === 0) { setErr("Add at least one item (select item + received qty)."); return; }
     if (!form.vendor) { setErr("Select the vendor."); return; }
     setBusy(true);
     const res = await recordMultiGRN(
-      { site_id: siteId, vendor: form.vendor, challan_no: form.challan, challan_date: form.cdate, done_by: userId },
-      [{ item_id: sel.id, item_name: sel.display_name, unit: sel.unit, challan_qty: Number(form.challan_qty || form.received), received_qty: Number(form.received) }]
+      { site_id: siteId, vendor: form.vendor, challan_no: form.challan, our_challan_no: form.our_challan,
+        challan_date: form.cdate, done_by: userId },
+      lines, { supplier: supDocs, company: coDocs }
     );
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg("GRN recorded for " + sel.display_name); reset(); setTab("stock"); reload();
+    setMsg("GRN recorded — " + lines.length + " item(s)" + (res.warn ? " · " + res.warn : ""));
+    setGrnLines([]); setSupDocs([]); setCoDocs([]); reset(); setTab("stock"); reload();
   }
 
   async function saveIssue() {
@@ -153,11 +173,31 @@ export default function StockScreen() {
             </select>
           </div>
           <div className="m-field"><label>Vendor challan no</label><input value={form.challan || ""} onChange={e => setForm(f => ({ ...f, challan: e.target.value }))} /></div>
+          <div className="m-field"><label>Our challan no</label><input value={form.our_challan || ""} onChange={e => setForm(f => ({ ...f, our_challan: e.target.value }))} /></div>
           <div className="m-field"><label>Challan date</label><input type="date" value={form.cdate || ""} onChange={e => setForm(f => ({ ...f, cdate: e.target.value }))} /></div>
           <ItemSearch />
           <div className="m-field"><label>Challan qty</label><input inputMode="decimal" value={form.challan_qty || ""} onChange={e => setForm(f => ({ ...f, challan_qty: e.target.value }))} /></div>
           <div className="m-field"><label>Received qty</label><input inputMode="decimal" value={form.received || ""} onChange={e => setForm(f => ({ ...f, received: e.target.value }))} /></div>
-          <button className="primary btn-block" disabled={busy} onClick={saveGRN}>{busy ? "Saving…" : "Record GRN"}</button>
+          <button className="btn-block" style={{ marginBottom: 8 }} onClick={addGrnLine}>＋ Add this item to challan</button>
+          {grnLines.length > 0 && (
+            <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px", marginBottom: 8 }}>
+              {grnLines.map((l, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "3px 0", borderBottom: "1px solid var(--border)" }}>
+                  <span>{l.item_name}</span>
+                  <span>{l.received_qty} {l.unit} <a onClick={() => setGrnLines(x => x.filter((_, j) => j !== i))} style={{ color: "var(--red)", marginLeft: 6 }}>✕</a></span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="m-field"><label>📷 Supplier challan pages (photos/PDF — multiple)</label>
+            <input type="file" accept="image/*,.pdf" multiple onChange={e => setSupDocs(Array.from(e.target.files || []))} />
+            {supDocs.length > 0 && <div className="muted" style={{ fontSize: 11.5 }}>{supDocs.length} page(s) selected</div>}
+          </div>
+          <div className="m-field"><label>📷 Our challan pages (photos/PDF — multiple)</label>
+            <input type="file" accept="image/*,.pdf" multiple onChange={e => setCoDocs(Array.from(e.target.files || []))} />
+            {coDocs.length > 0 && <div className="muted" style={{ fontSize: 11.5 }}>{coDocs.length} page(s) selected</div>}
+          </div>
+          <button className="primary btn-block" disabled={busy} onClick={saveGRN}>{busy ? "Saving…" : grnLines.length > 1 ? `Record GRN (${grnLines.length} items)` : "Record GRN"}</button>
         </>)}
 
         {tab === "issue" && (<>

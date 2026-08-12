@@ -85,7 +85,7 @@ export default function ExpensesPage() {
 
   const advCols = [
     { key: "date", label: "Date", filter: "search" },
-    { key: "beneficiary_name", label: "Beneficiary", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.beneficiary_name}</span> },
+    { key: "beneficiary_name", label: "Beneficiary", filter: "select", render: r => <span style={{ fontWeight: 600 }}>{r.beneficiary_name}</span> },
     { key: "beneficiary_kind", label: "Type", filter: "select", optionLabel: o => o === "labour" ? "Labour" : "Staff", render: r => r.beneficiary_kind === "labour" ? "Labour" : "Staff" },
     { key: "site", label: "Site", filter: "select" },
     { key: "reason", label: "Reason", render: r => <span className="muted">{r.reason || "—"}{r.response && <div style={{ color: "var(--green)" }}>↩ {r.response}</div>}{r.status === "queried" && r.query && <div style={{ color: "var(--amber)" }}>❓ {r.query}</div>}</span> },
@@ -111,11 +111,12 @@ export default function ExpensesPage() {
 
   const claimCols = [
     { key: "date", label: "Date", filter: "search" },
-    { key: "claimant", label: "Claimant", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.claimant || "—"}</span> },
+    { key: "claimant", label: "Claimant", filter: "select", render: r => <span style={{ fontWeight: 600 }}>{r.claimant || "—"}</span> },
     { key: "site", label: "Site", filter: "select" },
     { key: "category", label: "Category", filter: "select", render: r => catLabel(r.category), exportValue: r => catLabel(r.category) },
     { key: "paid_to", label: "Paid to", filter: "search", render: r => <span>{r.paid_to}{r.response && <div className="muted" style={{ color: "var(--green)" }}>↩ {r.response}</div>}{r.status === "queried" && r.query && <div className="muted" style={{ color: "var(--amber)" }}>❓ {r.query}</div>}</span> },
     { key: "note", label: "Purpose / note", filter: "search", render: r => <span className="muted">{r.note || "—"}</span>, exportValue: r => r.note || "" },
+    { key: "bill_links", label: "Bill links (export)", hidden: true, exportValue: r => (r.bills || []).map(b => billUrl(b)).join("  |  ") },
     { key: "funding_source", label: "Source", filter: "select", optionLabel: o => o === "petty_cash" ? "Petty cash" : "Own pocket", render: r => r.funding_source === "petty_cash" ? <span className="badge info">Petty cash</span> : <span className="badge gray">Own pocket</span> },
     { key: "amount", label: "Amount", type: "num", render: r => inr(r.amount), exportValue: r => r.amount },
     { key: "photo", label: "Proof", render: r => (r.bills || []).length === 0
@@ -315,7 +316,18 @@ export default function ExpensesPage() {
           <div className="panel" style={{ borderLeft: "4px solid #2b6cb0" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h2 style={{ margin: 0 }}>Petty ledger — {ledgerFor.split("|")[1]}</h2>
-              <button style={{ fontSize: 11.5 }} onClick={() => setLedgerFor("")}>Close</button>
+              <span>
+                <button style={{ fontSize: 11.5, marginRight: 6 }} onClick={() => {
+                  const head = "Date,Type,Site,Category,Detail,Amount,Status,Bill links";
+                  const rows = ledgerView.map(l => [l.date, l.kind, l.site, l.category || "", (l.label || "").replace(/,/g, ";"),
+                    (l.sign < 0 ? -l.amount : l.amount), l.status, (l.bills || []).map(b => billUrl(b)).join(" | ")].join(","));
+                  const csv = [head, ...rows].join("\n");
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv" }));
+                  a.download = "petty_ledger_" + ledgerFor.split("|")[1].replace(/\s+/g, "_") + ".csv"; a.click();
+                }}>⬇ Excel</button>
+                <button style={{ fontSize: 11.5 }} onClick={() => setLedgerFor("")}>Close</button>
+              </span>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "10px 0" }}>
               <select value={lf.site} onChange={e => setLf(f => ({ ...f, site: e.target.value }))}>
