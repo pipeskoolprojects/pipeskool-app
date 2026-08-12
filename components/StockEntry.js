@@ -37,6 +37,8 @@ export default function StockEntry({ siteId, userId, onDone }) {
 
   // multi-line GRN
   const [grnHead, setGrnHead] = useState({ vendor: "", challan_no: "", challan_date: "" });
+  const [grnSupDocs, setGrnSupDocs] = useState([]);
+  const [grnCoDocs, setGrnCoDocs] = useState([]);
   const [grnLines, setGrnLines] = useState([]);
 
   // issue/consume single
@@ -84,9 +86,10 @@ export default function StockEntry({ siteId, userId, onDone }) {
     if (!grnHead.vendor) { setErr("Enter the vendor / supplier."); return; }
     setBusy(true);
     const res = await recordMultiGRN(
-      { site_id: chosenSite, vendor: grnHead.vendor, challan_no: grnHead.challan_no, challan_date: grnHead.challan_date, done_by: userId },
+      { site_id: chosenSite, vendor: grnHead.vendor, challan_no: grnHead.challan_no, our_challan_no: grnHead.our_challan_no, challan_date: grnHead.challan_date, done_by: userId },
       grnLines.map(l => ({ ...l, challan_qty: Number(l.challan_qty || l.received_qty || 0), received_qty: Number(l.received_qty || l.challan_qty || 0) }))
-    );
+    ,
+      { supplier: grnSupDocs, company: grnCoDocs });
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
     setMsg(`GRN ${res.grn_no} recorded — ${grnLines.length} item(s)` + (res.discrepancies ? `. ⚠ ${res.discrepancies} discrepancy issue(s) raised.` : "."));
@@ -216,7 +219,10 @@ export default function StockEntry({ siteId, userId, onDone }) {
               {vendors.length === 0 && <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>No vendors yet — add them in Vendor master.</div>}
             </div>
             <div><label className="muted">Vendor challan no</label><input style={{ width: "100%" }} value={grnHead.challan_no} onChange={e => setGrnHead(p => ({ ...p, challan_no: e.target.value }))} /></div>
+            <div><label className="muted">Our challan no</label><input style={{ width: "100%" }} value={grnHead.our_challan_no || ""} onChange={e => setGrnHead(p => ({ ...p, our_challan_no: e.target.value }))} /></div>
             <div><label className="muted">Challan date</label><input type="date" style={{ width: "100%" }} value={grnHead.challan_date} onChange={e => setGrnHead(p => ({ ...p, challan_date: e.target.value }))} /></div>
+            <div><label className="muted">📷 Supplier challan pages</label><input type="file" accept="image/*,.pdf" multiple style={{ width: "100%" }} onChange={e => setGrnSupDocs(Array.from(e.target.files || []))} /></div>
+            <div><label className="muted">📷 Our challan pages</label><input type="file" accept="image/*,.pdf" multiple style={{ width: "100%" }} onChange={e => setGrnCoDocs(Array.from(e.target.files || []))} /></div>
           </div>
           <label className="muted">Add items from this challan</label>
           <div style={{ maxWidth: 360, marginBottom: 10 }}><ItemPicker onPick={addGrnLine} placeholder="Search material master…" /></div>

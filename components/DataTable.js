@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
     dateField: key used by the from/to date-range picker (optional)
 */
 export default function DataTable({ columns, rows, exportName = "export", dateField, rightExtra, fixed, pageSize = 25 }) {
+  const visCols = columns.filter(c => !c.hidden);   // update176: hidden cols export-only
   const [search, setSearch] = useState("");
   const [selects, setSelects] = useState({});      // {colKey: value}
   const [from, setFrom] = useState("");
@@ -119,10 +120,10 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
 
       <div className="dt-scroll">
       <table style={fixed ? { width: "100%", tableLayout: "fixed" } : { minWidth: "100%" }} className="dt-compact">
-        {fixed && <colgroup>{columns.map(c => <col key={c.key} style={c.width ? { width: c.width } : {}} />)}</colgroup>}
+        {fixed && <colgroup>{visCols.map(c => <col key={c.key} style={c.width ? { width: c.width } : {}} />)}</colgroup>}
         <thead>
           <tr>
-            {columns.map(c => (
+            {visCols.map(c => (
               <th key={c.key} className={c.type === "num" ? "num" : ""}
                   onClick={() => c.sortable !== false && toggleSort(c.key)}
                   style={{ cursor: c.sortable !== false ? "pointer" : "default", userSelect: "none" }}>
@@ -136,7 +137,7 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
             <tr><td colSpan={columns.length} className="muted">No matching records.</td></tr>
           ) : shown.map((r, i) => (
             <tr key={r.id ?? i}>
-              {columns.map(c => (
+              {visCols.map(c => (
                 <td key={c.key} className={c.type === "num" ? "num" : ""}
                     style={c.wrap ? { whiteSpace: "normal", wordBreak: "break-word", verticalAlign: "top", lineHeight: 1.4, fontSize: 12.5 } : {}}>
                   {c.render ? c.render(r) : r[c.key]}
