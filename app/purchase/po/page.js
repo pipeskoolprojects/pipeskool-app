@@ -20,9 +20,12 @@ function POView() {
   if (!po) return <div style={{ padding: 40, textAlign: "center" }}>PO not found. Open this from Procurement → Purchase orders → View/Print.</div>;
 
   const items = po.items || [];
-  const gstPct = po.gst_pct || 18;
-  const subtotal = items.reduce((s, i) => s + i.qty * i.rate, 0);
-  const gst = Math.round(subtotal * gstPct / 100);
+  // update178: per-line GST — tax summarised per rate bracket
+  const items178 = po.items || [];
+  const subtotal = items178.reduce((s, i) => s + i.qty * i.rate, 0);
+  const byGst = {};
+  items178.forEach(i => { const g = Number(i.gst_pct ?? 18); byGst[g] = (byGst[g] || 0) + i.qty * i.rate; });
+  const gst = Object.entries(byGst).reduce((s, [g, base]) => s + Math.round(base * Number(g) / 100), 0);
   const total = subtotal + gst;
 
   return (
@@ -63,11 +66,14 @@ function POView() {
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
         <thead>
           <tr style={{ background: "#FEF2EC" }}>
-            <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "left" }}>#</th>
+            <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "left" }}>Sr No</th>
             <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "left" }}>Description</th>
             <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Qty</th>
             <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>Unit</th>
             <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Rate</th>
+            <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Disc %</th>
+            <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Net Rate</th>
+            <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>GST %</th>
             <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Amount</th>
           </tr>
         </thead>
@@ -78,13 +84,18 @@ function POView() {
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.item_name}{it.spec ? " — " + it.spec : ""}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{it.qty}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.unit}</td>
+              <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{it.list_rate != null ? inr(it.list_rate) : inr(it.rate)}</td>
+              <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{it.discount_pct ? it.discount_pct + "%" : "—"}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(it.rate)}</td>
+              <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{Number(it.gst_pct ?? 18)}%</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(it.qty * it.rate)}</td>
             </tr>
           ))}
-          <tr><td colSpan="5" style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Subtotal</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(subtotal)}</td></tr>
-          <tr><td colSpan="5" style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>GST @ {gstPct}%</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(gst)}</td></tr>
-          <tr style={{ background: "#FEF2EC", fontWeight: 700 }}><td colSpan="5" style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Total</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(total)}</td></tr>
+          <tr><td colSpan="8" style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Subtotal (net)</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(subtotal)}</td></tr>
+          {Object.entries(byGst).sort((a, b) => Number(a[0]) - Number(b[0])).map(([g, base]) => (
+            <tr key={g}><td colSpan="8" style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>GST @ {g}% (on {inr(base)})</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(Math.round(base * Number(g) / 100))}</td></tr>
+          ))}
+          <tr style={{ background: "#FEF2EC", fontWeight: 700 }}><td colSpan="8" style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Total</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(total)}</td></tr>
         </tbody>
       </table>
 

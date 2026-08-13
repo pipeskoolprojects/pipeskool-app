@@ -7,7 +7,7 @@ import { getWorkers, saveWorker, uploadAadhaarDoc, inr, deleteWorker, deleteStaf
 import { getContractors, getSitesList } from "@/lib/mobile";
 import { getStaff, addStaff, updateStaff, getRoles, addRole, renameRole, deleteRole, resetStaffPassword, getUserSites, assignSite, removeSite } from "@/lib/access";
 import { getSession } from "@/lib/auth";
-import { isDemo } from "@/lib/supabase";
+import { isDemo, supabase } from "@/lib/supabase";
 
 const ADD_NEW = "__add_new__";
 const EMPTY = { full_name: "", mobile: "", category: "plumber", labour_type: "own", contractor_id: "", site_id: "", daily_wage: "", is_active: true };
@@ -41,6 +41,13 @@ export default function WorkersPage() {
 
   const sess = typeof window !== "undefined" ? getSession() : null;
   const isDirector = sess?.role === "director";
+  // update178: "Manage staff" capability extends staff add/edit beyond Directors
+  const [staffAdmin, setStaffAdmin] = useState(sess?.role === "director");
+  useEffect(() => {
+    if (!sess?.id || sess.role === "director") return;
+    supabase.from("admin_rights").select("capability").eq("user_id", sess.id)
+      .then(({ data }) => { if ((data || []).some(r => r.capability === "manage_staff")) setStaffAdmin(true); });
+  }, [sess?.id]);
   const load = () => { getWorkers().then(setRows); getStaff().then(setStaff); getRoles().then(setRoles); };
   const roleLabel = r => (roles.find(x => x.code === r) || { label: r }).label;
   useEffect(() => { load(); getSitesList().then(setSites); getContractors().then(setContractors); }, []);
@@ -123,7 +130,7 @@ export default function WorkersPage() {
           <h1>Workers &amp; Staff master</h1>
           {tab === "workers"
             ? <button className="primary" onClick={() => { setErr(""); setModal({ ...EMPTY }); }}>＋ Add worker</button>
-            : isDirector && <span style={{ display: "inline-flex", gap: 8 }}>
+            : staffAdmin && <span style={{ display: "inline-flex", gap: 8 }}>
                 <button onClick={() => { setErr(""); setRoleModal(true); }}>⚙ Manage roles</button>
                 <button className="primary" onClick={() => { setErr(""); setSmodal({ ...S_EMPTY }); }}>＋ Add staff</button>
               </span>}
@@ -162,13 +169,13 @@ export default function WorkersPage() {
                         : Number(u.monthly_salary) > 0
                           ? <span className="badge warn">Pending</span>
                           : <span className="muted">—</span>}</td>
-                      <td style={{ textAlign: "right" }}>{isDirector && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const us = await getUserSites(u.id); const ids = us.map(x => Number(x.id)); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible, annual_paid_leaves: u.annual_paid_leaves || "", joining_date: u.joining_date || "", requires_punch: u.requires_punch !== false, bank_account_no: u.bank_account_no || "", bank_ifsc: u.bank_ifsc || "", pan_no: u.pan_no || "", siteIds: ids, origSiteIds: [...ids] }); }}>✎ Edit</button>}</td>
+                      <td style={{ textAlign: "right" }}>{staffAdmin && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const us = await getUserSites(u.id); const ids = us.map(x => Number(x.id)); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible, annual_paid_leaves: u.annual_paid_leaves || "", joining_date: u.joining_date || "", requires_punch: u.requires_punch !== false, bank_account_no: u.bank_account_no || "", bank_ifsc: u.bank_ifsc || "", pan_no: u.pan_no || "", siteIds: ids, origSiteIds: [...ids] }); }}>✎ Edit</button>}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
-            {!isDirector && <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>Only the Director can add or edit staff.</div>}
+            {!staffAdmin && <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>Only Directors — or staff granted "Manage staff" in Admin capabilities — can add or edit staff.</div>}
           </div>
         )}
 
@@ -362,7 +369,7 @@ export default function WorkersPage() {
         )}
         {roleModal && (
           <div onClick={() => setRoleModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}>
-            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 420, width: "100%", padding: 22 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 420, width: "100%", padding: 22, maxHeight: "85vh", overflowY: "auto" }}>
               <h2 style={{ marginBottom: 4 }}>Role master</h2>
               <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>Roles are labels for staff. A new role starts with <b>no rights</b> — after assigning it, open Admin → Access Rights and tick what that person can do per site.</div>
               <div style={{ marginBottom: 12 }}>

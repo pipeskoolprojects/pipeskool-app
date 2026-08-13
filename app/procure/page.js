@@ -16,12 +16,15 @@ export default function ProcurePage() {
   const [session, setSession] = useState(null);
   const [indents, setIndents] = useState(null);
   const [pos, setPos] = useState([]);
+  const [poFsite, setPoFsite] = useState("all");     // update178: PO list filters
+  const [poFvendor, setPoFvendor] = useState("");
   const [deliv, setDeliv] = useState(null);   // PO being edited for delivery
   const [openId, setOpenId] = useState(null);
   const [enqVendors, setEnqVendors] = useState([]);     // vendor names added to this enquiry
   const [vendorPick, setVendorPick] = useState("");      // master select before "Add"
   const [alloc, setAlloc] = useState({});                // {itemId: {vendor: true}}  which vendor quotes which item
   const [qin, setQin] = useState({});                    // {itemId: {vendor: {list, disc}}}
+  const [gstSel, setGstSel] = useState({});              // update178: per-item GST % (default 18)
   const [rates, setRates] = useState({});                // derived NET map {itemId: {vendor: net}}
   const [enqSel, setEnqSel] = useState({});              // {itemId: bool} items to include in enquiry download
   const [cmp, setCmp] = useState(null);
@@ -233,7 +236,9 @@ export default function ProcurePage() {
     const openItems = ind.items.filter(it => !it.ordered);   // update170: PO'd items are locked
     if (openItems.length === 0) { setErr("Every item on this indent already has a PO."); return; }
     const lines = openItems.map(it => ({ indent_item_id: it.id, item_id: it.item_id, item_name: it.item_name,
-      spec: it.spec || null, qty: it.qty, unit: it.unit, rate: Number(rates[it.id]?.[awardVendor] || 0) }));
+      spec: it.spec || null, qty: it.qty, unit: it.unit, rate: Number(rates[it.id]?.[awardVendor] || 0),
+      list_rate: Number(qin[it.id]?.[awardVendor]?.list) || null, discount_pct: Number(qin[it.id]?.[awardVendor]?.disc) || 0,
+      gst_pct: Number(gstSel[it.id] ?? 18) }));
     if (lines.some(l => !l.rate)) { setErr("This vendor hasn't quoted every item."); return; }
     setBusy(true);
     const res = await createPO({ indent_id: ind.id, site_id: ind.site_id || 1, vendor_name: awardVendor,
@@ -262,7 +267,9 @@ export default function ProcurePage() {
           if (!Number(row.qty)) { setErr(`Enter quantity for every split row of ${it.item_name}.`); return; }
           if (!rates[it.id]?.[row.vendor]) { setErr(`No rate from ${row.vendor} for ${it.item_name}.`); return; }
           (byVendor[row.vendor] = byVendor[row.vendor] || []).push({ indent_item_id: it.id, item_id: it.item_id,
-            item_name: it.item_name, qty: Number(row.qty), unit: it.unit, rate: Number(rates[it.id][row.vendor]) });
+            item_name: it.item_name, spec: it.spec || null, qty: Number(row.qty), unit: it.unit, rate: Number(rates[it.id][row.vendor]),
+            list_rate: Number(qin[it.id]?.[row.vendor]?.list) || null, discount_pct: Number(qin[it.id]?.[row.vendor]?.disc) || 0,
+            gst_pct: Number(gstSel[it.id] ?? 18) });
         }
       } else {
         // whole item to one vendor — no vendor chosen = left open for a later PO (update170)
@@ -270,7 +277,9 @@ export default function ProcurePage() {
         if (!v) { leftOpen += 1; continue; }
         if (!rates[it.id]?.[v]) { setErr(`No rate from ${v} for ${it.item_name}.`); return; }
         (byVendor[v] = byVendor[v] || []).push({ indent_item_id: it.id, item_id: it.item_id,
-          item_name: it.item_name, spec: it.spec || null, qty: Number(it.qty), unit: it.unit, rate: Number(rates[it.id][v]) });
+          item_name: it.item_name, spec: it.spec || null, qty: Number(it.qty), unit: it.unit, rate: Number(rates[it.id][v]),
+          list_rate: Number(qin[it.id]?.[v]?.list) || null, discount_pct: Number(qin[it.id]?.[v]?.disc) || 0,
+          gst_pct: Number(gstSel[it.id] ?? 18) });
       }
     }
     if (Object.keys(byVendor).length === 0) { setErr("Pick a vendor for at least one open item."); return; }
@@ -616,6 +625,9 @@ export default function ProcurePage() {
                                       <td className="num">{it.qty} {it.unit}</td>
                                       {it.ordered ? <td className="muted">locked — already under a PO</td> : (
                                       <td style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                        <select title="GST %" value={gstSel[it.id] ?? 18} onChange={e => setGstSel(g => ({ ...g, [it.id]: Number(e.target.value) }))} style={{ width: 70 }}>
+                                          {[0, 5, 12, 18, 28].map(x => <option key={x} value={x}>{x}% GST</option>)}
+                                        </select>
                                         <select value={v} onChange={e => setItemVendor(p => ({ ...p, [it.id]: e.target.value }))}>
                                           <option value="">Select…</option>
                                           {vendorOpts.map(vn => <option key={vn} value={vn}>{vn} (₹{rates[it.id][vn]})</option>)}
@@ -643,15 +655,23 @@ export default function ProcurePage() {
 
         <div className="panel">
           <h2>Purchase orders issued</h2>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0 10px" }}>
+            <select value={poFsite} onChange={e => setPoFsite(e.target.value)}>
+              <option value="all">Site: all</option>
+              {[...new Set(pos.map(p => p.site).filter(Boolean))].map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+            <input placeholder="🔎 Vendor…" value={poFvendor} onChange={e => setPoFvendor(e.target.value)} style={{ width: 180 }} />
+          </div>
           {pos.length === 0 ? <span className="muted">No POs yet.</span> : (
             <div style={{ overflowX: "auto" }}>
               <table className="dt-compact">
-                <thead><tr><th>PO no</th><th>Indent</th><th>Vendor</th><th className="num">Amount</th><th>Delivery</th><th>Status</th><th>Action</th></tr></thead>
+                <thead><tr><th>PO no</th><th>Indent</th><th>Site</th><th>Vendor</th><th className="num">Amount</th><th>Delivery</th><th>Status</th><th>Action</th></tr></thead>
                 <tbody>
-                  {pos.map(p => { const [dl, dc] = DELIVERY_STATUS[p.delivery_status] || DELIVERY_STATUS.pending; return (
+                  {pos.filter(p => (poFsite === "all" || p.site === poFsite) && (!poFvendor || (p.vendor || "").toLowerCase().includes(poFvendor.toLowerCase()))).map(p => { const [dl, dc] = DELIVERY_STATUS[p.delivery_status] || DELIVERY_STATUS.pending; return (
                     <tr key={p.id}>
                       <td style={{ fontWeight: 600 }}>{p.po_no}</td>
                       <td className="muted">{p.indent_no}</td>
+                      <td className="muted">{p.site || "—"}</td>
                       <td>{p.vendor}</td>
                       <td className="num">{inr(p.total)}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
