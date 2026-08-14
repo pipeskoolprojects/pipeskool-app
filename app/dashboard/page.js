@@ -56,6 +56,13 @@ export default function Dashboard() {
               <div className="value">{inr(pulse.expToday)}</div>
               <div className="muted" style={{ fontSize: 11 }}>site expenses, all sites</div>
             </div></Link>
+            {pulse.pfToday > 0 && (
+              <Link href="/attendance" style={{ textDecoration: "none" }}><div className="card" style={{ borderLeft: "3px solid var(--red)" }}>
+                <div className="label">Punch failures today</div>
+                <div className="value" style={{ color: "var(--red)" }}>{pulse.pfToday}</div>
+                <div className="muted" style={{ fontSize: 11 }}>rejected punches — see register banner</div>
+              </div></Link>
+            )}
             <Link href="/expenses" style={{ textDecoration: "none" }}><div className="card">
               <div className="label">Petty cash in the field</div>
               <div className="value">{inr(pulse.pettyOut)}</div>

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
-import { getAttendance, getSites, approveOt, verifyAttendanceRow } from "@/lib/data";
+import { getPunchFailures, getAttendance, getSites, approveOt, verifyAttendanceRow } from "@/lib/data";
 import { getSession, canAnySite } from "@/lib/auth";
 import { todayLocal } from "@/lib/today";
 import { isDemo } from "@/lib/supabase";
@@ -19,6 +19,8 @@ export default function AttendancePage() {
   const [sites, setSites] = useState([]);
   const [rows, setRows] = useState(null);
   const [loadErr, setLoadErr] = useState("");
+  const [fails, setFails] = useState([]);                     // update180: rejected punches
+  useEffect(() => { getPunchFailures(date).then(setFails); }, [date]);
   const sess0 = getSession();
   const canVerify = !!sess0 && (canAnySite(sess0, "attendance", "verify") || canAnySite(sess0, "attendance", "manage"));
   async function doVerify(r) {
@@ -101,6 +103,13 @@ export default function AttendancePage() {
           </div>
         {loadErr && <div className="demo-banner" style={{ background: "#fdecea", color: "var(--red)" }}>
           ⚠ Could not load attendance from the database: {loadErr} — your data is NOT deleted. Screenshot this and send it.</div>}
+        {fails.length > 0 && (
+          <div className="demo-banner" style={{ background: "#FFF7ED", border: "1px solid var(--copper)", color: "#7c2d12" }}>
+            ⚠ <b>{fails.length} punch attempt{fails.length > 1 ? "s" : ""} REJECTED on {date}</b> — tried but not on the register:{" "}
+            {fails.slice(0, 12).map((f, i) => <span key={i}>{f.name} ({f.site} · {f.reason}{f.dist ? " " + f.dist + "m" : ""} · {f.time}){i < Math.min(fails.length, 12) - 1 ? ", " : ""}</span>)}
+            {fails.length > 12 ? " +" + (fails.length - 12) + " more" : ""}
+          </div>
+        )}
         </div>
         {isDemo && <div className="demo-banner">Demo mode — sample register shown.</div>}
         <div className="panel">
