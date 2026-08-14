@@ -173,7 +173,6 @@ export default function ExpensesPage() {
 
   const pettyCols = [
     { key: "holder", label: "Holder", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.holder}</span> },
-    { key: "site", label: "Site", filter: "select" },
     { key: "granted", label: "Granted", type: "num", render: r => inr(r.granted), exportValue: r => r.granted },
     { key: "spent", label: "Spent", type: "num", render: r => inr(r.spent), exportValue: r => r.spent },
     { key: "returned", label: "Returned", type: "num", render: r => inr(r.returned || 0), exportValue: r => r.returned || 0 },
