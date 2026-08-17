@@ -300,8 +300,8 @@ export default function MoneyScreen() {
                 <input inputMode="numeric" value={replyAmount} onChange={e => setReplyAmount(e.target.value)} /></div>
               {reply.type === "Expense" && (
                 <>
-                  <button style={{ fontSize: 12.5 }} onClick={() => replyFileRef.current?.click()}>📷 {replyPhoto ? "New proof attached ✓" : "Attach fresh proof (optional)"}</button>
-                  <input ref={replyFileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => setReplyPhoto(e.target.files?.[0] || null)} />
+                  <button style={{ fontSize: 12.5 }} onClick={() => replyFileRef.current?.click()}>📎 {replyPhoto ? replyPhoto.length + " proof file(s) attached ✓" : "Attach proof — photo(s) or PDF (optional)"}</button>
+                  <input ref={replyFileRef} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }} onChange={e => setReplyPhoto(e.target.files?.length ? Array.from(e.target.files) : null)} />
                 </>
               )}
               {err && <div className="note red">{err}</div>}
