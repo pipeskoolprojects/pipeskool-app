@@ -9,6 +9,15 @@ import { useEffect, useMemo, useState } from "react";
     title, exportName
     dateField: key used by the from/to date-range picker (optional)
 */
+// update183: text cells WRAP by default (long "Paid to"/query/note text used to force
+// huge column widths and sideways scrolling). Numbers/dates and columns marked
+// { nowrap: true } stay single-line. Column may set maxWidth (px) to override 260.
+function wrapCell(c) {
+  if (c.nowrap) return false;
+  if (c.wrap) return true;
+  return c.type !== "num" && c.type !== "date";
+}
+
 export default function DataTable({ columns, rows, exportName = "export", dateField, rightExtra, fixed, pageSize = 25 }) {
   const visCols = columns.filter(c => !c.hidden);   // update176: hidden cols export-only
   const [search, setSearch] = useState("");
@@ -139,7 +148,7 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
             <tr key={r.id ?? i}>
               {visCols.map(c => (
                 <td key={c.key} className={c.type === "num" ? "num" : ""}
-                    style={c.wrap ? { whiteSpace: "normal", wordBreak: "break-word", verticalAlign: "top", lineHeight: 1.4, fontSize: 12.5 } : {}}>
+                    style={wrapCell(c) ? { whiteSpace: "normal", overflowWrap: "anywhere", wordBreak: "break-word", verticalAlign: "top", lineHeight: 1.4, fontSize: 12.5, maxWidth: c.maxWidth || 260 } : {}}>
                   {c.render ? c.render(r) : r[c.key]}
                 </td>
               ))}
