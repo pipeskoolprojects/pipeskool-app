@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import {
-  searchItems, getBalances, recordMultiGRN, issueToWorker, getWorkerList,
+  searchItems, getBalances, recordMultiGRN, getOpenPOs, issueToWorker, getWorkerList,
   getHoldings, settleHolding, recordReturn,
 } from "@/lib/stock";
 import { getSitesList } from "@/lib/mobile";
@@ -40,6 +40,18 @@ export default function StockScreen() {
 
   // update176: one challan = many items + challan page uploads
   const [grnLines, setGrnLines] = useState([]);
+  // update185: receive against a PO — pre-fills lines with pending qty
+  const [openPOs, setOpenPOs] = useState([]);
+  const [grnPO, setGrnPO] = useState(null);
+  useEffect(() => { if (siteId && tab === "grn") getOpenPOs(siteId).then(setOpenPOs); }, [siteId, tab]);   // eslint-disable-line react-hooks/exhaustive-deps
+  function pickPO(id) {
+    const po = openPOs.find(p => String(p.id) === String(id)) || null;
+    setGrnPO(po);
+    if (!po) { setGrnLines([]); return; }
+    setForm(f => ({ ...f, vendor: po.vendor || f.vendor }));
+    setGrnLines(po.items.filter(i => i.pending_qty > 0).map(i => ({ item_id: i.item_id, item_name: i.item_name, unit: i.unit,
+      po_item_id: i.po_item_id, pending_qty: i.pending_qty, challan_qty: i.pending_qty, received_qty: i.pending_qty })));
+  }
   const [supDocs, setSupDocs] = useState([]);
   const [coDocs, setCoDocs] = useState([]);
   function addGrnLine() {
@@ -62,14 +74,14 @@ export default function StockScreen() {
     if (!form.vendor) { setErr("Select the vendor."); return; }
     setBusy(true);
     const res = await recordMultiGRN(
-      { site_id: siteId, vendor: form.vendor, challan_no: form.challan, our_challan_no: form.our_challan,
+      { site_id: siteId, po_id: grnPO?.id || null, vendor: form.vendor, challan_no: form.challan, our_challan_no: form.our_challan,
         challan_date: form.cdate, done_by: userId },
       lines, { supplier: supDocs, company: coDocs }
     );
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg("GRN recorded — " + lines.length + " item(s)" + (res.warn ? " · " + res.warn : ""));
-    setGrnLines([]); setSupDocs([]); setCoDocs([]); reset(); setTab("stock"); reload();
+    setMsg("GRN " + (res.grn_no || "") + " recorded — " + lines.length + " item(s)" + (res.over_receipt ? " ⚠ over PO qty on " + res.over_receipt + " line(s)" : "") + (res.warn ? " · " + res.warn : ""));
+    setGrnLines([]); setGrnPO(null); setSupDocs([]); setCoDocs([]); reset(); setTab("stock"); reload();
   }
 
   async function saveIssue() {
@@ -166,6 +178,12 @@ export default function StockScreen() {
 
         {tab === "grn" && (<>
           <h3 style={{ fontSize: 14, margin: "4px 0 10px" }}>Goods receipt (no rate — counts only)</h3>
+          <div className="m-field"><label>Against PO (optional)</label>
+            <select value={grnPO?.id || ""} onChange={e => pickPO(e.target.value)}>
+              <option value="">— No PO (direct / local purchase) —</option>
+              {openPOs.map(p => <option key={p.id} value={p.id}>{p.po_no} · {p.vendor}{p.pending_items ? " · " + p.pending_items + " pending" : ""}</option>)}
+            </select>
+          </div>
           <div className="m-field"><label>Vendor</label>
             <select value={form.vendor || ""} onChange={e => setForm(f => ({ ...f, vendor: e.target.value }))}>
               <option value="">Select vendor…</option>
@@ -182,9 +200,14 @@ export default function StockScreen() {
           {grnLines.length > 0 && (
             <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px", marginBottom: 8 }}>
               {grnLines.map((l, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "3px 0", borderBottom: "1px solid var(--border)" }}>
-                  <span>{l.item_name}</span>
-                  <span>{l.received_qty} {l.unit} <a onClick={() => setGrnLines(x => x.filter((_, j) => j !== i))} style={{ color: "var(--red)", marginLeft: 6 }}>✕</a></span>
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, fontSize: 12.5, padding: "3px 0", borderBottom: "1px solid var(--border)" }}>
+                  <span>{l.item_name}{l.po_item_id ? <span className="muted"> · pending {l.pending_qty}</span> : null}</span>
+                  <span style={{ whiteSpace: "nowrap" }}>
+                    {l.po_item_id
+                      ? <input inputMode="decimal" style={{ width: 64, padding: "2px 4px", fontSize: 12.5 }} value={l.received_qty} onChange={e => setGrnLines(x => x.map((y, j) => j === i ? { ...y, received_qty: e.target.value, challan_qty: e.target.value } : y))} />
+                      : l.received_qty} {l.unit}
+                    <a onClick={() => setGrnLines(x => x.filter((_, j) => j !== i))} style={{ color: "var(--red)", marginLeft: 6 }}>✕</a>
+                  </span>
                 </div>
               ))}
             </div>

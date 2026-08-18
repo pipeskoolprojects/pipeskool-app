@@ -30,6 +30,8 @@ function ChallanView() {
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 20, fontWeight: 700 }}>Goods Received Note</div>
+          {g.status === "cancelled" && <div style={{ fontSize: 15, fontWeight: 800, color: "#c0392b", border: "2px solid #c0392b", display: "inline-block", padding: "2px 10px", marginTop: 4 }}>CANCELLED{g.cancel?.reason ? " — " + g.cancel.reason : ""}</div>}
+          {g.po_no && <div style={{ fontSize: 12.5, color: "#555" }}>Against PO: {g.po_no}</div>}
           <div style={{ fontSize: 12.5, color: "#555" }}>Printed: {today}</div>
         </div>
       </div>
@@ -39,11 +41,14 @@ function ChallanView() {
           <div><b>GRN no:</b> {g.grn_no}</div>
           <div><b>Received at:</b> {g.site}</div>
           <div><b>Received on:</b> {g.date}</div>
+          <div><b>Entered by:</b> {g.entered_by || "Not available"}{g.entered_at ? " · " + new Date(g.entered_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : ""}</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div><b>Supplier:</b> {g.vendor || "—"}</div>
           <div><b>Vendor challan no:</b> {g.challan_no || "—"}</div>
+          <div><b>Our challan no:</b> {g.our_challan_no || "—"}</div>
           <div><b>Challan date:</b> {g.challan_date || "—"}</div>
+          <div style={{ fontSize: 12, color: "#555" }}>Attached pages: supplier {g.sup_docs || 0} · ours {g.our_docs || 0}</div>
         </div>
       </div>
 

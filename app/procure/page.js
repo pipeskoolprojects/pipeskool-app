@@ -18,6 +18,22 @@ export default function ProcurePage() {
   const [pos, setPos] = useState([]);
   const [poFsite, setPoFsite] = useState("all");     // update178: PO list filters
   const [poFvendor, setPoFvendor] = useState("");
+  const [poFindent, setPoFindent] = useState("");
+  const [poFraised, setPoFraised] = useState("all");
+  const [poFvendorSel, setPoFvendorSel] = useState("all");
+  const [poFdeliv, setPoFdeliv] = useState("all");
+  const [poFstatus, setPoFstatus] = useState("all");
+  const [poFfrom, setPoFfrom] = useState("");
+  const [poFto, setPoFto] = useState("");
+  const poShown = pos.filter(p =>
+    (poFsite === "all" || p.site === poFsite) &&
+    (!poFindent || (p.indent_no || "").toLowerCase().includes(poFindent.toLowerCase()) || (p.po_no || "").toLowerCase().includes(poFindent.toLowerCase())) &&
+    (poFraised === "all" || p.raised_by === poFraised) &&
+    (poFvendorSel === "all" || p.vendor === poFvendorSel) &&
+    (!poFvendor || (p.vendor || "").toLowerCase().includes(poFvendor.toLowerCase())) &&
+    (poFdeliv === "all" || (p.delivery_status || "pending") === poFdeliv) &&
+    (poFstatus === "all" || (poFstatus === "live" ? p.status !== "cancelled" : p.status === poFstatus)) &&
+    (!poFfrom || (p.date || "") >= poFfrom) && (!poFto || (p.date || "") <= poFto));
   const [deliv, setDeliv] = useState(null);   // PO being edited for delivery
   const [openId, setOpenId] = useState(null);
   const [enqVendors, setEnqVendors] = useState([]);     // vendor names added to this enquiry
@@ -655,25 +671,53 @@ export default function ProcurePage() {
 
         <div className="panel">
           <h2>Purchase orders issued</h2>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0 10px" }}>
+          {/* update184: full PO filter bar — site / indent / raised by / vendor / delivery / status / date range */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0 10px", alignItems: "center" }}>
             <select value={poFsite} onChange={e => setPoFsite(e.target.value)}>
               <option value="all">Site: all</option>
-              {[...new Set(pos.map(p => p.site).filter(Boolean))].map(x => <option key={x} value={x}>{x}</option>)}
+              {[...new Set(pos.map(p => p.site).filter(Boolean))].sort().map(x => <option key={x} value={x}>{x}</option>)}
             </select>
-            <input placeholder="🔎 Vendor…" value={poFvendor} onChange={e => setPoFvendor(e.target.value)} style={{ width: 180 }} />
+            <input placeholder="🔎 Indent / PO no…" value={poFindent} onChange={e => setPoFindent(e.target.value)} style={{ width: 160 }} />
+            <select value={poFraised} onChange={e => setPoFraised(e.target.value)}>
+              <option value="all">Raised by: all</option>
+              {[...new Set(pos.map(p => p.raised_by).filter(Boolean))].sort().map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+            <select value={poFvendorSel} onChange={e => setPoFvendorSel(e.target.value)}>
+              <option value="all">Vendor: all</option>
+              {[...new Set(pos.map(p => p.vendor).filter(Boolean))].sort().map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+            <input placeholder="🔎 Vendor…" value={poFvendor} onChange={e => setPoFvendor(e.target.value)} style={{ width: 140 }} />
+            <select value={poFdeliv} onChange={e => setPoFdeliv(e.target.value)}>
+              <option value="all">Delivery: all</option>
+              {Object.entries(DELIVERY_STATUS).map(([k, v]) => <option key={k} value={k}>{v[0]}</option>)}
+            </select>
+            <select value={poFstatus} onChange={e => setPoFstatus(e.target.value)}>
+              <option value="all">PO status: all</option>
+              <option value="live">Live (not cancelled)</option>
+              {[...new Set(pos.map(p => p.status).filter(Boolean))].sort().map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+            <span className="muted" style={{ fontSize: 12 }}>PO date</span>
+            <input type="date" value={poFfrom} onChange={e => setPoFfrom(e.target.value)} />
+            <span className="muted" style={{ fontSize: 12 }}>to</span>
+            <input type="date" value={poFto} onChange={e => setPoFto(e.target.value)} />
+            <button style={{ fontSize: 11.5 }} onClick={() => { setPoFsite("all"); setPoFindent(""); setPoFraised("all"); setPoFvendorSel("all"); setPoFvendor(""); setPoFdeliv("all"); setPoFstatus("all"); setPoFfrom(""); setPoFto(""); }}>✕ Clear</button>
+            <span className="muted" style={{ fontSize: 12, marginLeft: "auto" }}>{poShown.length} of {pos.length} POs · {inr(poShown.reduce((s, p) => s + (p.status === "cancelled" ? 0 : Number(p.total || 0)), 0))} (excl. cancelled)</span>
           </div>
-          {pos.length === 0 ? <span className="muted">No POs yet.</span> : (
+          {pos.length === 0 ? <span className="muted">No POs yet.</span> : poShown.length === 0 ? <span className="muted">No POs match these filters.</span> : (
             <div style={{ overflowX: "auto" }}>
               <table className="dt-compact">
-                <thead><tr><th>PO no</th><th>Indent</th><th>Site</th><th>Vendor</th><th className="num">Amount</th><th>Delivery</th><th>Status</th><th>Action</th></tr></thead>
+                <thead><tr><th>PO no</th><th>Date</th><th>Indent</th><th>Raised by</th><th>Site</th><th>Vendor</th><th className="num">Amount</th><th className="num">Received</th><th>Delivery</th><th>Status</th><th>Action</th></tr></thead>
                 <tbody>
-                  {pos.filter(p => (poFsite === "all" || p.site === poFsite) && (!poFvendor || (p.vendor || "").toLowerCase().includes(poFvendor.toLowerCase()))).map(p => { const [dl, dc] = DELIVERY_STATUS[p.delivery_status] || DELIVERY_STATUS.pending; return (
+                  {poShown.map(p => { const [dl, dc] = DELIVERY_STATUS[p.delivery_status] || DELIVERY_STATUS.pending; return (
                     <tr key={p.id}>
                       <td style={{ fontWeight: 600 }}>{p.po_no}</td>
+                      <td className="muted">{p.date}</td>
                       <td className="muted">{p.indent_no}</td>
+                      <td className="muted">{p.raised_by || "—"}</td>
                       <td className="muted">{p.site || "—"}</td>
                       <td>{p.vendor}</td>
                       <td className="num">{inr(p.total)}</td>
+                      <td className="num" style={{ whiteSpace: "nowrap" }}>{p.received_pct === null || p.received_pct === undefined ? <span className="muted">—</span> : <span style={{ color: p.received_pct >= 100 ? "var(--green)" : p.received_pct > 0 ? "var(--amber)" : "var(--muted)" }}>{p.received_pct}%<span className="muted" style={{ fontSize: 10.5 }}> {p.items_complete}/{p.item_count} items</span></span>}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <span className={"badge " + dc}>{dl}</span>
                         {p.expected_delivery && <div className="muted" style={{ fontSize: 11 }}>by {p.expected_delivery}</div>}

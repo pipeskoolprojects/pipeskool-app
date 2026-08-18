@@ -7,6 +7,7 @@ import { getBalances, getBoqNorms, getRequests, deadStock, lowStock, getHoldings
 import StockEntry from "@/components/StockEntry";
 import IndentForm from "@/components/IndentForm";
 import { getSession, can } from "@/lib/auth";
+import { getSites } from "@/lib/data";
 
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN");
 
@@ -18,8 +19,9 @@ export default function StockPage() {
   const [session, setSession] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [holdings, setHoldings] = useState([]);
+  const [siteList, setSiteList] = useState([]);   // update184: real site master (was 3 hard-coded)
 
-  useEffect(() => { setSession(getSession()); }, []);
+  useEffect(() => { setSession(getSession()); getSites().then(setSiteList); }, []);
   useEffect(() => { getBalances(site).then(setBalances); }, [site, reloadKey]);
   useEffect(() => { getHoldings(site === "all" ? undefined : undefined).then(rows => setHoldings(site === "all" ? rows : rows)); }, [site, reloadKey]);
   useEffect(() => { getBoqNorms().then(setNorms); getRequests().then(setRequests); }, []);
@@ -35,11 +37,10 @@ export default function StockPage() {
         <div className="page-head">
           <h1>Material stock &amp; inventory</h1>
           <div className="filters">
+            <a href="/stock/grn"><button style={{ fontSize: 12 }}>📋 GRN Register</button></a>
             <select value={site} onChange={e => setSite(e.target.value)}>
               <option value="all">All sites</option>
-              <option value="KEI">KEI Sanand</option>
-              <option value="SOUL">SOUL Campus</option>
-              <option value="CREEK">The Creek</option>
+              {siteList.map(s => <option key={s.id} value={s.code}>{s.name}</option>)}
             </select>
           </div>
         </div>
