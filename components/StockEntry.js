@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ITEM_TYPES, searchItems, addItem, recordTxn, logConsumption, recordMultiGRN, recordReturn, issueToWorker, issueMultiToWorker, getWorkerList, getHoldings, settleHolding, bulkImport, BULK_TEMPLATE_HEADERS } from "@/lib/stock";
+import { ITEM_TYPES, searchItems, addItem, recordTxn, logConsumption, recordMultiGRN, getOpenPOs, recordReturn, issueToWorker, issueMultiToWorker, getWorkerList, getHoldings, settleHolding, bulkImport, BULK_TEMPLATE_HEADERS } from "@/lib/stock";
 import { getSession } from "@/lib/auth";
 import { getVendors } from "@/lib/vendors";
 
@@ -40,6 +40,21 @@ export default function StockEntry({ siteId, userId, onDone }) {
   const [grnSupDocs, setGrnSupDocs] = useState([]);
   const [grnCoDocs, setGrnCoDocs] = useState([]);
   const [grnLines, setGrnLines] = useState([]);
+  // update185: receive against a PO (optional) — lines pre-filled with ordered / received / pending
+  const [openPOs, setOpenPOs] = useState([]);
+  const [grnPO, setGrnPO] = useState(null);
+  const [changing, setChanging] = useState(null);   // index of the line whose material is being changed
+  useEffect(() => { if (chosenSite) getOpenPOs(chosenSite).then(setOpenPOs); else setOpenPOs([]); }, [chosenSite, msg]);
+  function pickPO(id) {
+    const po = openPOs.find(p => String(p.id) === String(id)) || null;
+    setGrnPO(po); setChanging(null);
+    if (!po) { setGrnHead(h => ({ ...h, po_id: null })); setGrnLines([]); return; }
+    setGrnHead(h => ({ ...h, po_id: po.id, vendor: po.vendor || h.vendor }));
+    setGrnLines(po.items.filter(i => i.pending_qty > 0).map(i => ({
+      item_id: i.item_id, item_name: i.item_name, unit: i.unit, po_item_id: i.po_item_id,
+      ordered_qty: i.ordered_qty, received_before: i.received_qty, pending_qty: i.pending_qty,
+      challan_qty: String(i.pending_qty), received_qty: String(i.pending_qty), change: null })));
+  }
 
   // issue/consume single
   const [picked, setPicked] = useState(null);
@@ -56,7 +71,7 @@ export default function StockEntry({ siteId, userId, onDone }) {
   const [bulkRows, setBulkRows] = useState([]); const [bulkResult, setBulkResult] = useState(null);
   const fileRef = useRef(null);
 
-  const reset = () => { setMsg(""); setErr(""); setMv({ qty: "", purpose: "" }); setRetKind("return_store"); setRetReason(""); setRetVendor(""); setPicked(null); setGrnLines([]); setGrnHead({ vendor: "", challan_no: "", challan_date: "" }); setIssLines([]); setBulkRows([]); setBulkResult(null); };
+  const reset = () => { setMsg(""); setErr(""); setMv({ qty: "", purpose: "" }); setRetKind("return_store"); setRetReason(""); setRetVendor(""); setPicked(null); setGrnLines([]); setGrnPO(null); setChanging(null); setGrnHead({ vendor: "", challan_no: "", challan_date: "" }); setIssLines([]); setBulkRows([]); setBulkResult(null); };
 
   async function saveItem() {
     setErr(""); if (!it.material) { setErr("Material is required."); return; }
@@ -67,7 +82,11 @@ export default function StockEntry({ siteId, userId, onDone }) {
 
   function addGrnLine(item) {
     if (grnLines.some(l => l.item_id === item.id)) return;
-    setGrnLines(ls => [...ls, { item_id: item.id, item_name: item.display_name, unit: item.unit, challan_qty: "", received_qty: "" }]);
+    setGrnLines(ls => [...ls, { item_id: item.id, item_name: item.display_name, unit: item.unit, challan_qty: "", received_qty: "", po_item_id: null, change: null }]);
+  }
+  function setChange(i, item) {   // material actually received differs from what was ordered
+    setGrnLines(ls => ls.map((l, idx) => idx === i ? { ...l, change: { received_item_id: item.id, received_name: item.display_name, reason: l.change?.reason || "" } } : l));
+    setChanging(null);
   }
   function setLine(i, k, v) { setGrnLines(ls => ls.map((l, idx) => idx === i ? { ...l, [k]: v } : l)); }
   function removeLine(i) { setGrnLines(ls => ls.filter((_, idx) => idx !== i)); }
@@ -84,15 +103,17 @@ export default function StockEntry({ siteId, userId, onDone }) {
     setErr("");
     if (grnLines.length === 0) { setErr("Add at least one item line."); return; }
     if (!grnHead.vendor) { setErr("Enter the vendor / supplier."); return; }
+    if (grnLines.some(l => l.change && !l.change.reason)) { setErr("Give a reason for every material change."); return; }
     setBusy(true);
     const res = await recordMultiGRN(
-      { site_id: chosenSite, vendor: grnHead.vendor, challan_no: grnHead.challan_no, our_challan_no: grnHead.our_challan_no, challan_date: grnHead.challan_date, done_by: userId },
+      { site_id: chosenSite, po_id: grnHead.po_id || null, vendor: grnHead.vendor, challan_no: grnHead.challan_no, our_challan_no: grnHead.our_challan_no, challan_date: grnHead.challan_date, done_by: userId },
       grnLines.map(l => ({ ...l, challan_qty: Number(l.challan_qty || l.received_qty || 0), received_qty: Number(l.received_qty || l.challan_qty || 0) }))
     ,
       { supplier: grnSupDocs, company: grnCoDocs });
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg(`GRN ${res.grn_no} recorded — ${grnLines.length} item(s)` + (res.discrepancies ? `. ⚠ ${res.discrepancies} discrepancy issue(s) raised.` : "."));
+    setMsg(`GRN ${res.grn_no} recorded — ${grnLines.length} item(s)` + (res.discrepancies ? `. ⚠ ${res.discrepancies} discrepancy issue(s) raised.` : ".")
+      + (res.over_receipt ? ` ⚠ ${res.over_receipt} line(s) received MORE than the PO ordered.` : "") + (res.changes ? ` ${res.changes} material change(s) logged.` : "") + (res.warn ? " · " + res.warn : ""));
     reset(); onDone?.();
   }
 
@@ -210,6 +231,15 @@ export default function StockEntry({ siteId, userId, onDone }) {
       {/* ---------- MULTI-ITEM GRN ---------- */}
       {open === "grn" && (
         <div style={{ marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 10 }}>
+            <div style={{ minWidth: 320 }}><label className="muted">Receive against PO (optional)</label>
+              <select style={{ width: "100%" }} value={grnPO?.id || ""} onChange={e => pickPO(e.target.value)}>
+                <option value="">— No PO (direct / local purchase) —</option>
+                {openPOs.map(p => <option key={p.id} value={p.id}>{p.po_no} · {p.vendor} · {p.pending_items ? p.pending_items + " item(s) pending" : (p.sql_missing ? "" : "all received")}{p.date ? " · " + p.date : ""}</option>)}
+              </select>
+            </div>
+            {grnPO && <div className="muted" style={{ fontSize: 12 }}>Lines pre-filled from the PO with pending qty. Adjust <b>Received</b>, remove lines not in this challan, or add extra items below.</div>}
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 12 }}>
             <div><label className="muted">Vendor / supplier *</label>
               <select style={{ width: "100%" }} value={grnHead.vendor} onChange={e => setGrnHead(p => ({ ...p, vendor: e.target.value }))}>
@@ -230,17 +260,29 @@ export default function StockEntry({ siteId, userId, onDone }) {
           {grnLines.length > 0 && (
             <div style={{ overflowX: "auto" }}>
               <table className="dt-compact">
-                <thead><tr><th>Item</th><th className="num">Challan qty</th><th className="num">Received qty</th><th>Status</th><th></th></tr></thead>
+                <thead><tr><th>Item</th>{grnPO && <><th className="num">Ordered</th><th className="num">Recd so far</th><th className="num">Pending</th></>}<th className="num">Challan qty</th><th className="num">Received now</th><th>Status</th><th>Material change</th><th></th></tr></thead>
                 <tbody>
                   {grnLines.map((l, i) => {
                     const c = Number(l.challan_qty || 0), r = Number(l.received_qty || 0);
                     const diff = (l.received_qty !== "" && l.challan_qty !== "") ? r - c : null;
+                    const over = l.po_item_id && r > Number(l.pending_qty || 0);
                     return (
                       <tr key={i}>
-                        <td style={{ fontWeight: 600 }}>{l.item_name}<div className="muted">{l.unit}</div></td>
+                        <td style={{ fontWeight: 600 }}>{l.item_name}<div className="muted">{l.unit}{!l.po_item_id && grnPO ? " · not in PO" : ""}</div>
+                          {l.change && <div style={{ fontSize: 12, color: "var(--amber)" }}>→ received as <b>{l.change.received_name}</b></div>}
+                        </td>
+                        {grnPO && <><td className="num muted">{l.ordered_qty ?? "—"}</td><td className="num muted">{l.received_before ?? "—"}</td><td className="num" style={{ color: "var(--amber)" }}>{l.pending_qty ?? "—"}</td></>}
                         <td className="num"><input style={{ width: 80 }} value={l.challan_qty} onChange={e => setLine(i, "challan_qty", e.target.value)} /></td>
                         <td className="num"><input style={{ width: 80 }} value={l.received_qty} onChange={e => setLine(i, "received_qty", e.target.value)} /></td>
-                        <td>{diff === null ? <span className="muted">—</span> : diff === 0 ? <span className="badge p">OK</span> : <span className="badge a">{diff > 0 ? "+" : ""}{diff}</span>}</td>
+                        <td style={{ whiteSpace: "nowrap" }}>{diff === null ? <span className="muted">—</span> : diff === 0 ? <span className="badge p">OK</span> : <span className="badge a">{diff > 0 ? "+" : ""}{diff}</span>}{over ? <span className="badge h" style={{ marginLeft: 4 }}>over PO</span> : null}</td>
+                        <td style={{ minWidth: 200 }}>
+                          {changing === i ? (
+                            <div><ItemPicker onPick={item => setChange(i, item)} placeholder="Item actually received…" /><button style={{ fontSize: 11, marginTop: 4 }} onClick={() => setChanging(null)}>Cancel</button></div>
+                          ) : l.change ? (
+                            <div><input placeholder="Reason for change *" style={{ width: "100%", fontSize: 12 }} value={l.change.reason} onChange={e => setLine(i, "change", { ...l.change, reason: e.target.value })} />
+                              <button style={{ fontSize: 11, marginTop: 3 }} onClick={() => setLine(i, "change", null)}>✕ undo change</button></div>
+                          ) : <button style={{ fontSize: 11 }} onClick={() => setChanging(i)}>≠ Different item received</button>}
+                        </td>
                         <td><button style={{ fontSize: 11 }} onClick={() => removeLine(i)}>✕</button></td>
                       </tr>
                     );
