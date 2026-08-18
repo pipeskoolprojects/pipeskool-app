@@ -12,10 +12,14 @@ import { useEffect, useMemo, useState } from "react";
 // update183: text cells WRAP by default (long "Paid to"/query/note text used to force
 // huge column widths and sideways scrolling). Numbers/dates and columns marked
 // { nowrap: true } stay single-line. Column may set maxWidth (px) to override 260.
+// v2 (same update): only free-text columns wrap (filter:"search" or wrap:true); short
+// categorical columns, badges, numbers, dates, actions stay single-line at their natural
+// width. Wrapped columns get a floor width so they never collapse to a sliver, and words
+// break only at spaces (no mid-word "Indu-stries"). Table sizes to content, scrolls if wider.
 function wrapCell(c) {
   if (c.nowrap) return false;
   if (c.wrap) return true;
-  return c.type !== "num" && c.type !== "date";
+  return c.filter === "search" && c.type !== "num" && c.type !== "date";
 }
 
 export default function DataTable({ columns, rows, exportName = "export", dateField, rightExtra, fixed, pageSize = 25 }) {
@@ -128,7 +132,7 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
       </div>
 
       <div className="dt-scroll">
-      <table style={fixed ? { width: "100%", tableLayout: "fixed" } : { minWidth: "100%" }} className="dt-compact">
+      <table style={fixed ? { width: "100%", tableLayout: "fixed" } : { width: "max-content", minWidth: "100%" }} className="dt-compact">
         {fixed && <colgroup>{visCols.map(c => <col key={c.key} style={c.width ? { width: c.width } : {}} />)}</colgroup>}
         <thead>
           <tr>
@@ -148,7 +152,7 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
             <tr key={r.id ?? i}>
               {visCols.map(c => (
                 <td key={c.key} className={c.type === "num" ? "num" : ""}
-                    style={wrapCell(c) ? { whiteSpace: "normal", overflowWrap: "anywhere", wordBreak: "break-word", verticalAlign: "top", lineHeight: 1.4, fontSize: 12.5, maxWidth: c.maxWidth || 260 } : {}}>
+                    style={wrapCell(c) ? { whiteSpace: "normal", wordBreak: "normal", overflowWrap: "normal", lineHeight: 1.4, fontSize: 12.5, minWidth: c.minWidth || 170, maxWidth: c.maxWidth || 300 } : {}}>
                   {c.render ? c.render(r) : r[c.key]}
                 </td>
               ))}
