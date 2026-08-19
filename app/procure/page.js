@@ -56,6 +56,8 @@ export default function ProcurePage() {
   const blankLine = () => ({ item_name: "", qty: "", unit: "", item_id: null, spec: "" });
   const [sug, setSug] = useState(null);            // { i, q, list }
   const canAddMaster = session && (session.role === "director" || can(session, "stock", "manage", ni?.site_id));
+  // update186: DB policy on purchase_orders = indent create/manage — mirror it in the UI instead of a raw RLS error
+  const canIssuePO = ind => session && (session.role === "director" || can(session, "indent", "create", ind?.site_id) || can(session, "indent", "manage", ind?.site_id));
   async function onItemType(i, val) {
     setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], item_name: val, item_id: null }; return { ...n, lines: ls }; });
     if (val.trim().length >= 2) setSug({ i, q: val, list: await searchIndentCatalog(ni.site_id, val.trim()) });
@@ -592,7 +594,8 @@ export default function ProcurePage() {
                             </select>
                             {awardVendor && cmp.bestWhole && awardVendor !== cmp.bestWhole.vendor &&
                               <input placeholder="Reason for not choosing lowest *" value={reason} onChange={e => setReason(e.target.value)} style={{ width: 280 }} />}
-                            <button className="primary" disabled={busy} onClick={() => award(ind)}>{busy ? "Issuing…" : "Issue PO"}</button>
+                            {canIssuePO(ind) ? <button className="primary" disabled={busy} onClick={() => award(ind)}>{busy ? "Issuing…" : "Issue PO"}</button>
+                              : <span className="muted" style={{ fontSize: 12 }}>You don't have PO-issue rights for this site (Indent &amp; Purchase → Create). Ask a Director.</span>}
                           </div>
                         ) : (
                           <div style={{ marginTop: 8 }}>
@@ -656,7 +659,8 @@ export default function ProcurePage() {
                                 })}
                               </tbody>
                             </table>
-                            <button className="primary" disabled={busy} onClick={() => awardSplit(ind)} style={{ marginTop: 10 }}>{busy ? "Issuing…" : "Issue split POs"}</button>
+                            {canIssuePO(ind) ? <button className="primary" disabled={busy} onClick={() => awardSplit(ind)} style={{ marginTop: 10 }}>{busy ? "Issuing…" : "Issue split POs"}</button>
+                              : <span className="muted" style={{ fontSize: 12 }}>You don't have PO-issue rights for this site.</span>}
                           </div>
                         )}
                       </div>
