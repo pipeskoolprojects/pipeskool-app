@@ -23,7 +23,7 @@ const more = [
   { href: "/m/assets", ico: "🔧", key: "m_assets", show: s => canSeeModuleAnySite(s, "assets") },
   { href: "/m/rentals", ico: "🚜", key: "m_rentals", show: s => canSeeModuleAnySite(s, "rentals") },
   { href: "/m/money", ico: "₹", key: "m_money", show: s => canSeeModuleAnySite(s, "money") },
-  { href: "/m/verify", ico: "✔", key: "m_verify", show: s => canAnySite(s, "attendance", "verify") || canAnySite(s, "attendance", "manage") },
+  // update186: verification moved INTO Daily Muster (per-row ✓ + Verify all) — menu entry removed
   { href: "/m/add", ico: "＋", key: "m_add", show: s => canAnySite(s, "workers", "create") || canAnySite(s, "workers", "manage") },
 ];
 
