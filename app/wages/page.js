@@ -13,6 +13,7 @@ const STATUS = { draft: ["Draft", "gray"], approved: ["Approved", "h"], paid: ["
 export default function WagesPage() {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [site, setSite] = useState("all");
+  const [wq, setWq] = useState("");   // update190: worker search
   const [sites, setSites] = useState([]);
   const [rows, setRows] = useState(null);
   const [tab, setTab] = useState("labour");           // labour | staff
@@ -21,6 +22,8 @@ export default function WagesPage() {
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
   const sess = typeof window !== "undefined" ? getSession() : null;
   const canApprove = sess && (sess.role === "director" || sess.role === "ho_admin");
+
+  const filt = rs => (rs || []).filter(r => !wq || (r.worker || r.name || "").toLowerCase().includes(wq.toLowerCase()));
 
   const load = () => { getPayouts(month, site).then(setRows); getStaffPayouts(month).then(setSrows); };
   useEffect(() => { getSites().then(setSites); }, []);
@@ -53,7 +56,7 @@ export default function WagesPage() {
 
   function exportExcel() {
     if (!rows?.length) return;
-    const data = rows.map(r => ({ Worker: r.worker, Category: r.category, Site: r.site,
+    const data = filt(rows).map(r => ({ Worker: r.worker, Category: r.category, Site: r.site,
       "Full days": r.daysFull, "Half days": r.daysHalf, "Days total": r.days,
       "OT hrs (approved)": r.ot, "Daily rate": r.rate, "OT rate/hr": r.otRate,
       Gross: r.gross, "Advance deducted": r.adv, Net: r.net, "Bank a/c": r.bankAc || "", IFSC: r.ifsc || "", "Pay mode": r.mode, Status: r.status }));
@@ -78,6 +81,7 @@ export default function WagesPage() {
               <option value="all">All sites</option>
               {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
+            <input placeholder="🔎 Worker…" value={wq} onChange={e => setWq(e.target.value)} style={{ width: 150 }} />{/* update190 */}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
@@ -107,11 +111,11 @@ export default function WagesPage() {
               <table className="dt-compact">
                 <thead><tr><th>Worker</th><th>Category</th>{site === "all" && <th>Site</th>}<th className="num">Days (F+H)</th><th className="num">OT h</th><th className="num">Rate</th><th className="num">Gross</th><th className="num">Advance</th><th className="num">Net</th><th>Mode</th><th>Status</th></tr></thead>
                 <tbody>
-                  {rows.map(r => {
+                  {filt(rows).map(r => {
                     const [lbl, cls] = STATUS[r.status] || [r.status, "gray"];
                     return (
                       <tr key={r.id}>
-                        <td style={{ fontWeight: 600 }}>{r.worker}</td>
+                        <td style={{ fontWeight: 600 }}>{r.worker_id ? <a href={"/attendance/slip?worker=" + r.worker_id + "&month=" + month} target="_blank" rel="noreferrer">{r.worker}</a> : r.worker}</td>
                         <td className="muted">{r.category}</td>
                         {site === "all" && <td className="muted">{r.site}</td>}
                         <td className="num">{r.days} <span className="muted" style={{ fontSize: 10.5 }}>({r.daysFull}+{r.daysHalf}½)</span></td>
@@ -138,7 +142,7 @@ export default function WagesPage() {
                 </tbody>
                 <tfoot>
                   <tr style={{ fontWeight: 800, borderTop: "2px solid var(--text)" }}>
-                    <td colSpan={site === "all" ? 4 : 3}>TOTAL — {rows.length} worker(s)</td>
+                    <td colSpan={site === "all" ? 4 : 3}>TOTAL — {filt(rows).length} worker(s)</td>
                     <td className="num">{t.ot.toFixed(1)}</td><td></td>
                     <td className="num">{inr(t.gross)}</td>
                     <td className="num">{inr(t.adv)}</td>
@@ -176,7 +180,7 @@ export default function WagesPage() {
                 <table className="dt-compact">
                   <thead><tr><th>Staff</th><th>Role</th><th className="num">Salary</th><th className="num">Present / Working</th><th className="num">Absent</th><th className="num">Paid leave (bal)</th><th className="num">Deduction</th><th className="num">OT h</th><th className="num">OT ₹</th><th className="num">Advances</th><th className="num">Net</th><th>Status</th></tr></thead>
                   <tbody>
-                    {srows.map(r => { const [lbl, cls] = STATUS[r.status] || [r.status, "gray"]; return (
+                    {sfilt(rows).map(r => { const [lbl, cls] = STATUS[r.status] || [r.status, "gray"]; return (
                       <tr key={r.id}>
                         <td style={{ fontWeight: 600 }}>{r.name}</td><td className="muted">{r.role}</td>
                         <td className="num">{inr(r.salary)}</td>

@@ -64,12 +64,12 @@ export default function AttendancePage() {
         const dev = r.otApproved && r.otApprovedHours != null && r.otApprovedHours !== r.ot;
         return (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-            {r.otApproved && Number(r.otApprovedHours) > 0 ? <b>{r.otApprovedHours}h</b> : (r.ot > 0 ? r.ot + "h" : "—")}
+            {r.otEligible === false ? <span className="muted" title="Not OT-eligible (Workers & Staff Master)">n/e</span> : r.otApproved && Number(r.otApprovedHours) > 0 ? <b>{r.otApprovedHours}h</b> : (r.ot > 0 ? r.ot + "h" : "—")}
             {r.otApproved && <span className="badge p" title="Approved">✓</span>}
             {dev && <span className="badge warn" title={`Punch shows ${r.ot}h`}>⚠ {r.ot}h</span>}
-            <button style={{ fontSize: 11, padding: "1px 6px" }}
-              onClick={() => setOtEdit({ id: r.id, worker: r.worker, computed: r.ot, value: r.otApprovedHours ?? r.ot })}>
-              {r.otApproved ? "edit" : "approve"}</button>
+            {r.otEligible !== false && <button style={{ fontSize: 11, padding: "1px 6px" }}
+              onClick={() => setOtEdit({ id: r.id, worker: r.worker, computed: r.ot, value: r.otApprovedHours ?? (Number(r.ot) <= 1 ? 0 : Math.round(Number(r.ot))) })}>
+              {r.otApproved ? "edit" : "approve"}</button>}
           </span>
         );
       }, exportValue: r => (r.otApproved ? r.otApprovedHours : r.ot) },

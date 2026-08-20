@@ -38,26 +38,26 @@ function Slip() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 13, margin: "12px 0" }}>
         <div><b>Worker:</b> {w.name} (ID {w.id})</div><div><b>Category:</b> {w.category} · {w.labour}</div>
         <div><b>Home site:</b> {w.site}</div><div><b>Mobile:</b> {w.mobile}</div>
-        <div><b>Daily wage:</b> {inr(w.wage)}</div><div><b>OT rate:</b> {inr(w.otRate)}/h (wage ÷ {w.stdHrs} h)</div>
+        <div><b>Daily wage:</b> {inr(w.wage)}</div>{w.otEligible ? <div><b>OT rate:</b> {inr(w.otRate)}/h (wage ÷ {w.stdHrs} h)</div> : <div><b>OT:</b> Not eligible</div>}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6, margin: "10px 0" }}>
-        {[["Present", d.present], ["Half days", d.half], ["Absent", d.absent], ["Hours", d.totalHours], ["OT hrs (approved)", d.otHours], ["Sundays", d.sundays]].map(([l, v]) => (
+        {[["Present", d.present], ["Half days", d.half], ["Absent", d.absent], ["Hours", d.totalHours], ...(w.otEligible ? [["OT hrs (approved)", d.otHours]] : []), ["Sundays", d.sundays]].map(([l, v]) => (
           <div key={l} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "6px 8px", textAlign: "center" }}><div style={{ fontSize: 10.5, color: "#666" }}>{l}</div><div style={{ fontSize: 16, fontWeight: 700 }}>{v}</div></div>
         ))}
       </div>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-        <thead><tr style={{ background: "#f2f2ee" }}>{["Date", "Site", "In", "Out", "Hours", "Status", "OT (punch)", "OT approved", "Punch", "Verified"].map(h => <th key={h} style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "left" }}>{h}</th>)}</tr></thead>
+        <thead><tr style={{ background: "#f2f2ee" }}>{["Date", "Site", "In", "Out", "Hours", "Status", ...(w.otEligible ? ["OT (approved)"] : []), "Punch", "Verified"].map(h => <th key={h} style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "left" }}>{h}</th>)}</tr></thead>
         <tbody>
           {d.days.map(x => (
-            <tr key={x.id}>{[x.date, x.site, x.in, x.out, x.hours || "—", x.status, x.ot || "—", x.otApproved || "—", x.punch, x.verify].map((v, i) => <td key={i} style={{ border: "1px solid #ddd", padding: "3px 6px" }}>{String(v)}</td>)}</tr>
+            <tr key={x.id}>{[x.date, x.site, x.in, x.out, x.hours || "—", x.status, ...(w.otEligible ? [x.otApproved || "—"] : []), x.punch, x.verify].map((v, i) => <td key={i} style={{ border: "1px solid #ddd", padding: "3px 6px" }}>{String(v)}</td>)}</tr>
           ))}
-          {d.days.length === 0 && <tr><td colSpan={10} style={{ padding: 8, color: "#777" }}>No attendance recorded this month.</td></tr>}
+          {d.days.length === 0 && <tr><td colSpan={w.otEligible ? 9 : 8} style={{ padding: 8, color: "#777" }}>No attendance recorded this month.</td></tr>}
         </tbody>
       </table>
       <table style={{ marginTop: 14, fontSize: 13, borderCollapse: "collapse", minWidth: 320 }}>
         <tbody>
           <tr><td style={{ padding: "3px 10px 3px 0" }}>Days pay ({d.present} + {d.half}×½) × {inr(w.wage)}</td><td style={{ textAlign: "right" }}>{inr(d.earned)}</td></tr>
-          <tr><td style={{ padding: "3px 10px 3px 0" }}>OT {d.otHours} h × {inr(w.otRate)}</td><td style={{ textAlign: "right" }}>{inr(d.otAmt)}</td></tr>
+          {w.otEligible && d.otHours > 0 && <tr><td style={{ padding: "3px 10px 3px 0" }}>OT {d.otHours} h × {inr(w.otRate)}</td><td style={{ textAlign: "right" }}>{inr(d.otAmt)}</td></tr>}
           <tr style={{ fontWeight: 700, borderTop: "1px solid #222" }}><td style={{ padding: "4px 10px 4px 0" }}>Gross (before advances)</td><td style={{ textAlign: "right" }}>{inr(d.gross)}</td></tr>
         </tbody>
       </table>
