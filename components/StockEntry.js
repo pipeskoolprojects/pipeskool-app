@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ITEM_TYPES, searchItems, addItem, recordTxn, logConsumption, recordMultiGRN, getOpenPOs, recordReturn, issueToWorker, issueMultiToWorker, getWorkerList, getHoldings, settleHolding, bulkImport, BULK_TEMPLATE_HEADERS } from "@/lib/stock";
+import { ITEM_TYPES, searchItems, addItem, recordTxn, logConsumption, recordMultiGRN, getOpenPOs, getReturnableGrns, recordGrnReturn, recordReturn, issueToWorker, issueMultiToWorker, getWorkerList, getHoldings, settleHolding, bulkImport, BULK_TEMPLATE_HEADERS } from "@/lib/stock";
 import { getSession } from "@/lib/auth";
 import { getVendors } from "@/lib/vendors";
 
@@ -60,17 +60,34 @@ export default function StockEntry({ siteId, userId, onDone }) {
   const [picked, setPicked] = useState(null);
   const [mv, setMv] = useState({ qty: "", purpose: "" });
   const [retKind, setRetKind] = useState("return_store");
-  const [retReason, setRetReason] = useState("");
-  const [retVendor, setRetVendor] = useState("");
-  const [workers, setWorkers] = useState([]);
-  const [issWorker, setIssWorker] = useState("");
-  const [holdings, setHoldings] = useState([]);
-  const [settleSel, setSettleSel] = useState(null);
-  const [settleVals, setSettleVals] = useState({ used: "", returned: "", purpose: "" });
-
-  const [bulkRows, setBulkRows] = useState([]); const [bulkResult, setBulkResult] = useState(null);
-  const fileRef = useRef(null);
-
+  // update191 (v2): GRN-linked vendor return (multi-item, one transaction)
+  const [retMode, setRetMode] = useState("grn");   // grn | single
+  const [retGrns, setRetGrns] = useState([]);
+  const [retGrn, setRetGrn] = useState(null);
+  const [retLines, setRetLines] = useState([]);
+  useEffect(() => { if (chosenSite) getReturnableGrns(chosenSite).then(setRetGrns); else setRetGrns([]); }, [chosenSite, msg]);   // eslint-disable-line react-hooks/exhaustive-deps
+  function pickRetGrn(no) {
+    const g = retGrns.find(x => x.grn_no === no) || null;
+    setRetGrn(g);
+    if (!g) { setRetLines([]); return; }
+    setRetVendor(g.vendor || "");
+    setRetLines(g.items.map(i => ({ ...i, sel: false, qty: "" })));
+  }
+  async function saveGrnReturn() {
+    setErr("");
+    const chosen = retLines.filter(l => l.sel);
+    if (!retGrn) { setErr("Select the GRN the material came in on."); return; }
+    if (!chosen.length) { setErr("Tick at least one item to return."); return; }
+    if (chosen.some(l => !(Number(l.qty) > 0))) { setErr("Enter a return quantity for every ticked item."); return; }
+    if (!retReason.trim()) { setErr("Reason is mandatory for a vendor return."); return; }
+    setBusy(true);
+    const res = await recordGrnReturn({ site_id: chosenSite, grn_no: retGrn.grn_no, vendor: retVendor || retGrn.vendor,
+      reason: retReason.trim(), done_by: userId, lines: chosen });
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg(`Return ${res.ref} recorded against ${retGrn.grn_no} — ${res.lines} item(s), qty ${res.total_qty}, back to ${retVendor || retGrn.vendor}. Stock reduced; GRN register shows the returned qty.`);
+    setRetGrn(null); setRetLines([]); setRetReason(""); onDone?.();
+  }
   const reset = () => { setMsg(""); setErr(""); setMv({ qty: "", purpose: "" }); setRetKind("return_store"); setRetReason(""); setRetVendor(""); setPicked(null); setGrnLines([]); setGrnPO(null); setChanging(null); setGrnHead({ vendor: "", challan_no: "", challan_date: "" }); setIssLines([]); setBulkRows([]); setBulkResult(null); };
 
   async function saveItem() {
@@ -390,7 +407,58 @@ export default function StockEntry({ siteId, userId, onDone }) {
       {/* ---------- RETURN TO VENDOR (wrong / excess received) ---------- */}
       {open === "return" && (
         <div style={{ marginTop: 14 }}>
-          {!picked ? (
+          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+            <button style={{ fontSize: 12, background: retMode === "grn" ? "var(--copper)" : "#fff", color: retMode === "grn" ? "#fff" : "var(--text)" }} onClick={() => setRetMode("grn")}>Against a GRN (recommended)</button>
+            <button style={{ fontSize: 12, background: retMode === "single" ? "var(--copper)" : "#fff", color: retMode === "single" ? "#fff" : "var(--text)" }} onClick={() => setRetMode("single")}>Single item (no GRN)</button>
+          </div>
+          {retMode === "grn" && (
+            <div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 10 }}>
+                <div style={{ minWidth: 340 }}><label className="muted">GRN (goods receipt the material came in on)</label>
+                  <select style={{ width: "100%" }} value={retGrn?.grn_no || ""} onChange={e => pickRetGrn(e.target.value)}>
+                    <option value="">Select GRN…</option>
+                    {retGrns.map(g => <option key={g.grn_no} value={g.grn_no}>{g.grn_no} · {g.vendor || "—"} · {g.date}{g.po_no ? " · " + g.po_no : ""} · {g.returnable_items} returnable</option>)}
+                  </select>
+                </div>
+                {retGrn && <div><label className="muted">Vendor</label><div style={{ fontWeight: 600, padding: "6px 0" }}>{retVendor || retGrn.vendor || "—"}</div></div>}
+              </div>
+              {retGrn && (
+                <>
+                  <div style={{ overflowX: "auto" }}>
+                    <table className="dt-compact">
+                      <thead><tr>
+                        <th><input type="checkbox" checked={retLines.length > 0 && retLines.every(l => !l.max_return || l.sel)} onChange={e => setRetLines(ls => ls.map(l => l.max_return > 0 ? { ...l, sel: e.target.checked, qty: e.target.checked && !l.qty ? String(l.max_return) : l.qty } : l))} /></th>
+                        <th>Item</th><th className="num">Received (this GRN)</th><th className="num">Already returned</th><th className="num">In store</th><th className="num">Max return</th><th className="num">Return qty</th>
+                      </tr></thead>
+                      <tbody>
+                        {retLines.map((l, i) => (
+                          <tr key={l.item_id} style={{ opacity: l.max_return > 0 ? 1 : 0.5 }}>
+                            <td><input type="checkbox" disabled={!l.max_return} checked={l.sel} onChange={e => setRetLines(ls => ls.map((x, j) => j === i ? { ...x, sel: e.target.checked, qty: e.target.checked && !x.qty ? String(x.max_return) : x.qty } : x))} /></td>
+                            <td style={{ fontWeight: 600 }}>{l.item_name}<div className="muted">{l.unit}</div></td>
+                            <td className="num">{l.received}</td>
+                            <td className="num muted">{l.already_returned || "—"}</td>
+                            <td className="num">{l.store_balance}</td>
+                            <td className="num" style={{ color: "var(--amber)" }}>{l.max_return}</td>
+                            <td className="num"><input style={{ width: 76 }} disabled={!l.sel} value={l.qty} onChange={e => setRetLines(ls => ls.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))} />
+                              {l.sel && Number(l.qty) > l.max_return && <div style={{ color: "var(--red)", fontSize: 11 }}>max {l.max_return}</div>}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10, marginTop: 10, alignItems: "end" }}>
+                    <div><label className="muted">Reason (damaged / wrong spec / excess) *</label>
+                      <input style={{ width: "100%" }} value={retReason} onChange={e => setRetReason(e.target.value)} /></div>
+                    <button className="primary" disabled={busy || !retLines.some(l => l.sel)} onClick={saveGrnReturn}>
+                      {busy ? "Saving…" : `Return ${retLines.filter(l => l.sel).length} item(s) to vendor`}</button>
+                  </div>
+                  <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>Max return = received on this GRN − already returned against it, limited by what's still in store. One transaction covers all ticked items; the GRN register shows returned quantities per line and the full return history under ↩ Returns.</div>
+                </>
+              )}
+              {retGrns.length === 0 && <div className="muted">No GRNs with material at this site — use Single item for old/non-GRN stock.</div>}
+            </div>
+          )}
+          {retMode === "single" && (!picked ? (
             <div style={{ maxWidth: 360 }}><label className="muted">Search item</label><ItemPicker onPick={setPicked} /></div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
@@ -408,8 +476,8 @@ export default function StockEntry({ siteId, userId, onDone }) {
                 <button className="primary" disabled={busy} onClick={saveReturnVendor} style={{ width: "100%" }}>Return to vendor</button>
               </div>
             </div>
-          )}
-          <div className="muted" style={{ marginTop: 8 }}>For wrong or excess material received — removes it from store stock and sends it back to the vendor.</div>
+          ))}
+          {retMode === "single" && <div className="muted" style={{ marginTop: 8 }}>For wrong or excess material received — removes it from store stock and sends it back to the vendor. Use "Against a GRN" whenever the material came in on a recorded receipt, so the return links to it.</div>}
         </div>
       )}
 
