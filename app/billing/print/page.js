@@ -5,12 +5,18 @@ import { getRaBill, lineCum, linePrev } from "@/lib/billing";
 
 const n2 = v => Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 const rup = v => "₹" + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+// update189: site names come from the live site master; this map is only an offline fallback.
 const SITES = { 1: "KEI Industries, Sanand", 2: "SOUL Campus, GIFT City", 3: "The Creek" };
 
 function AbstractView() {
   const p = useSearchParams();
   const billId = p.get("bill"); const siteId = Number(p.get("site"));
   const [d, setD] = useState(null); const [loading, setLoading] = useState(true);
+
+  const [liveSiteName, setLiveSiteName] = useState("");
+  useEffect(() => { import("@/lib/data").then(({ getSites }) => getSites().then(list => {
+    const hit = (list || []).find(x => Number(x.id) === Number(siteId)); if (hit) setLiveSiteName(hit.name);
+  })).catch(() => {}); }, [siteId]);
 
   useEffect(() => { if (!billId || !siteId) { setLoading(false); return; }
     getRaBill(Number(billId), siteId).then(x => { setD(x); setLoading(false); }); }, [billId, siteId]);
@@ -60,7 +66,7 @@ function AbstractView() {
 
       <div style={{ display: "flex", justifyContent: "space-between", margin: "10px 0", fontSize: 11.5 }}>
         <div>
-          <div><b>Project:</b> {SITES[siteId] || "Site " + siteId}</div>
+          <div><b>Project:</b> {liveSiteName || SITES[siteId] || "Site " + siteId}</div>
           <div><b>Bill date:</b> {hdr.bill_date} {hdr.period_from ? `· Period ${hdr.period_from} to ${hdr.period_to || ""}` : ""}</div>
         </div>
         <div style={{ textAlign: "right" }}>

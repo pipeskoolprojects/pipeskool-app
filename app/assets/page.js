@@ -16,6 +16,8 @@ export default function AssetsPage() {
   const [calib, setCalib] = useState([]);
   const [repairs, setRepairs] = useState([]);
   const [addSite, setAddSite] = useState(1);
+  const [siteList, setSiteList] = useState([]);
+  useEffect(() => { getSites().then(setSiteList); }, []);
   const [form, setForm] = useState(null);
   const [bulkRows, setBulkRows] = useState([]); const [bulkResult, setBulkResult] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -218,7 +220,7 @@ export default function AssetsPage() {
               <div><label className="muted">Purchase cost ₹</label><input style={{ width: "100%" }} value={form.purchase_cost} onChange={e => setF("purchase_cost", e.target.value)} /></div>
               <div><label className="muted">Add to site</label>
                 <select style={{ width: "100%" }} value={addSite} onChange={e => setAddSite(Number(e.target.value))}>
-                  <option value={1}>KEI Sanand</option><option value={2}>SOUL Campus</option><option value={3}>The Creek</option>
+                  {siteList.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}{/* update189: live site master */}
                 </select></div>
               <div><label className="muted">Calibration due (if any)</label><input type="date" style={{ width: "100%" }} value={form.calib_due} onChange={e => { setF("calib_due", e.target.value); setF("calib", !!e.target.value); }} /></div>
             </div>
