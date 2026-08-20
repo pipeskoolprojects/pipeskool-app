@@ -22,7 +22,7 @@ export default function DPRScreen() {
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
-  const [view, setView] = useState("entry");      // entry | history
+  const [view, setView] = useState(typeof window !== "undefined" && __gs()?.role === "director" ? "history" : "entry");      // entry | history — update188: directors read, not enter
   const [history, setHistory] = useState([]);
   const [allHistory, setAllHistory] = useState([]);
   const [histScope, setHistScope] = useState("all"); // all | site

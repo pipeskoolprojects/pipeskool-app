@@ -84,7 +84,8 @@ export default function ProcurePage() {
     const header = { site_id: Number(ni.site_id), raised_by: session?.id || null, required_by: ni.required_by || null,
       urgency: ni.urgency, note: ni.note || null };
     const outLines = lines.map(l => ({ item_id: l.item_id || null, item_name: l.item_name.trim(), qty: Number(l.qty), unit: l.unit, spec: (l.spec || "").trim() || null }));
-    const res = editingId ? await editIndent(editingId, header, outLines) : await createIndent(header, outLines);
+    let res = editingId ? await editIndent(editingId, header, outLines) : await createIndent(header, outLines);
+    if (!res.ok && res.duplicate && window.confirm(res.error + "\n\nRaise it anyway as a separate indent?")) res = await createIndent({ ...header, allow_duplicate: true }, outLines);
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
     setNi(null); setMsg(editingId ? "Indent " + editingNo + " updated — quotes were cleared, status back to open." : "Indent " + res.indent_no + " raised.");
@@ -110,6 +111,8 @@ export default function ProcurePage() {
       window.alert("Could not delete " + ind.indent_no + ":\n\n" + res.error +
         (/(function|fn_delete_indent|schema cache|does not exist)/i.test(res.error || "")
           ? "\n\nThis usually means the update148 SQL (pipeskool_indent_delete.sql) has not been run in Supabase yet."
+          : /po_items_indent_item_id_fkey|foreign key/i.test(res.error || "")
+          ? "\n\nCancelled PO lines still point at this indent — run pipeskool_indent_delete_fix.sql (update 187) once and retry."
           : ""));
       return;
     }
@@ -405,8 +408,10 @@ export default function ProcurePage() {
                   <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     {(ind.status === "open" || ind.status === "quoting") && session?.id === ind.raised_by_id && (
                       <button style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); startWebEdit(ind); }}>✎ Edit</button>)}
-                    {CAN_DELETE_ROLES.includes(session?.role) && (
-                      <button style={{ fontSize: 11, color: "var(--red)" }} onClick={e => { e.stopPropagation(); delIndent(ind); }}>🗑 Delete</button>)}
+                    {CAN_DELETE_ROLES.includes(session?.role) && (() => { const live = (ind.pos || []).filter(p => p.status !== "cancelled"); return (
+                      <button style={{ fontSize: 11, color: live.length ? "var(--muted)" : "var(--red)" }} disabled={live.length > 0}
+                        title={live.length ? "Cannot delete — live PO(s): " + live.map(p => p.po_no).join(", ") + ". Cancel them first." : "Delete this indent"}
+                        onClick={e => { e.stopPropagation(); delIndent(ind); }}>🗑 Delete{live.length ? " 🔒" : ""}</button>); })()}
                     <span className="badge gray">{ind.status}</span>
                   </span>
                 </div>

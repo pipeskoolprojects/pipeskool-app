@@ -41,7 +41,10 @@ export default function MobileReport() {
     const trend = r.trend.map(p => ({ date: p.date,
       total: siteId === "all" ? sites.reduce((n, s) => n + (p.bySite[s.id] || 0), 0) : (p.bySite[siteId] || 0) }));
     const alerts = [];
-    sites.forEach(s => { if (s.dpr === "missing") alerts.push(`❌ ${s.short}: DPR not filed`); });
+    // update188: sites get a whole working day to file — flag missing DPRs only after 7 PM IST
+    const hourIST = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", hour12: false }));
+    if (hourIST >= 19) sites.forEach(s => { if (s.dpr === "missing") alerts.push(`❌ ${s.short}: DPR not filed`); });
+    else { const miss = sites.filter(s => s.dpr === "missing").length; if (miss) alerts.push(`📋 ${miss} site(s) yet to file today's DPR (flagged red after 7 PM)`); }
     if (T.delayed) alerts.push(`🚚 ${T.delayed} delivery marked DELAYED`);
     if (T.aged) alerts.push(`⏳ ${T.aged} indent waiting 3+ days`);
     if (T.proxy) alerts.push(`⚠ ${T.proxy} proxy punch today`);

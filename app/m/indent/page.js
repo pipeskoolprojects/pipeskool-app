@@ -60,7 +60,8 @@ export default function IndentScreen() {
     const sess = getSession();
     const header = { site_id: siteId, required_by: meta.required_by || null, urgency: meta.urgency, note: meta.purpose, raised_by: sess?.id || null };
     const lines = valid.map(c => ({ item_id: c.item_id, item_name: c.name, qty: Number(c.qty), unit: c.unit, purpose: meta.purpose, spec: (c.spec || "").trim() || null }));
-    const res = editId ? await editIndent(editId, header, lines) : await createIndent(header, lines);
+    let res = editId ? await editIndent(editId, header, lines) : await createIndent(header, lines);
+    if (!res.ok && res.duplicate && confirm(res.error + "\n\nRaise it anyway as a separate indent?")) res = await createIndent({ ...header, allow_duplicate: true }, lines);
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
     setMsg(editId ? ("Indent " + editNo + " updated.") : ("Indent " + res.indent_no + " raised — track its status below."));
