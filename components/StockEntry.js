@@ -60,6 +60,15 @@ export default function StockEntry({ siteId, userId, onDone }) {
   const [picked, setPicked] = useState(null);
   const [mv, setMv] = useState({ qty: "", purpose: "" });
   const [retKind, setRetKind] = useState("return_store");
+  const [retReason, setRetReason] = useState("");
+  const [retVendor, setRetVendor] = useState("");
+  const [workers, setWorkers] = useState([]);
+  const [issWorker, setIssWorker] = useState("");
+  const [holdings, setHoldings] = useState([]);
+  const [settleSel, setSettleSel] = useState(null);
+  const [settleVals, setSettleVals] = useState({ used: "", returned: "", purpose: "" });
+  const [bulkRows, setBulkRows] = useState([]); const [bulkResult, setBulkResult] = useState(null);
+  const fileRef = useRef(null);
   // update191 (v2): GRN-linked vendor return (multi-item, one transaction)
   const [retMode, setRetMode] = useState("grn");   // grn | single
   const [retGrns, setRetGrns] = useState([]);
