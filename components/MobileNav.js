@@ -18,7 +18,8 @@ const primaryBase = [
   { href: "/m/stock", ico: "📦", key: "nav_stock", show: s => canSeeModuleAnySite(s, "stock") },
 ];
 const more = [
-  { href: "/m/report", ico: "📊", key: "m_report", show: s => canSeeModuleAnySite(s, "dpr") || canSeeModuleAnySite(s, "attendance") },
+  { href: "/m/report", ico: "📊", key: "m_report", show: s => s?.role !== "director" && (canSeeModuleAnySite(s, "dpr") || canSeeModuleAnySite(s, "attendance")) },
+  { href: "/m/dpr", ico: "📋", key: "nav_dpr", show: s => s?.role === "director" },   // update188: director reads DPRs from More
   { href: "/m/indent", ico: "🧾", key: "m_indent", show: s => canSeeModuleAnySite(s, "indent") },
   { href: "/m/assets", ico: "🔧", key: "m_assets", show: s => canSeeModuleAnySite(s, "assets") },
   { href: "/m/rentals", ico: "🚜", key: "m_rentals", show: s => canSeeModuleAnySite(s, "rentals") },
@@ -39,9 +40,20 @@ export default function MobileNav() {
   const pickLang = l => { setLang(l); window.location.reload(); };
   const role = sess?.role || null;
   const workerPrimary = [{ href: "/m", ico: "⏱", key: "nav_punch" }];
+  // update188: director tabs = view & approve, entry screens live one tap deeper.
   const primary = workerOnly ? workerPrimary : role === "director"
-    ? [{ href: "/m/report", ico: "📊", key: "nav_report" }, ...primaryBase.slice(1)]
+    ? [{ href: "/m/report", ico: "📊", key: "nav_report" },
+       { href: "/m/approvals", ico: "✅", key: "nav_approvals" },
+       { href: "/m/muster", ico: "👥", key: "nav_muster" },
+       { href: "/m/stock", ico: "📦", key: "nav_stock" }]
     : primaryBase.filter(tab => tab.show(sess));
+  const [pendCount, setPendCount] = useState(0);
+  useEffect(() => {
+    if (role !== "director") return;
+    let alive = true;
+    import("@/lib/data").then(({ getDirectorPulse }) => getDirectorPulse().then(p => { if (alive && p) setPendCount(p.moneyPending || 0); })).catch(() => {});
+    return () => { alive = false; };
+  }, [role]);
   const moreVisible = (workerOnly || !sess) ? [] : more.filter(m => m.show(sess));
   const path = usePathname();
   const router = useRouter();
@@ -87,8 +99,11 @@ export default function MobileNav() {
       )}
       <nav className="m-nav">
         {primary.map(tab => (
-          <Link key={tab.href} href={tab.href} className={path === tab.href ? "active" : ""}>
+          <Link key={tab.href} href={tab.href} className={path === tab.href ? "active" : ""} style={{ position: "relative" }}>
             <span className="ico">{tab.ico}</span>{t(lang, tab.key)}
+            {tab.key === "nav_approvals" && pendCount > 0 && (
+              <span style={{ position: "absolute", top: 2, right: "18%", background: "var(--red)", color: "#fff", borderRadius: 10, fontSize: 10, fontWeight: 700, padding: "1px 6px" }}>{pendCount}</span>
+            )}
           </Link>
         ))}
         <a onClick={() => setOpen(o => !o)} className={inMore ? "active" : ""} style={{ cursor: "pointer" }}>

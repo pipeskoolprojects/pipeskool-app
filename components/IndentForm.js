@@ -50,7 +50,8 @@ export default function IndentForm({ siteId, userId, onDone }) {
     if (lines.length === 0) { setErr("Add at least one item."); return; }
     if (lines.some(l => !l.qty)) { setErr("Enter quantity for every item."); return; }
     setBusy(true);
-    const res = await createIndent({ site_id: chosenSite || siteId, raised_by: userId, ...head }, lines);
+    let res = await createIndent({ site_id: chosenSite || siteId, raised_by: userId, ...head }, lines);
+    if (!res.ok && res.duplicate && window.confirm(res.error + "\n\nRaise it anyway as a separate indent?")) res = await createIndent({ site_id: chosenSite || siteId, raised_by: userId, ...head, allow_duplicate: true }, lines);
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
     setMsg("Material request " + res.indent_no + " raised with " + lines.length + " item(s). Sent to office for rate enquiry.");
