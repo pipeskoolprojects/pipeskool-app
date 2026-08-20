@@ -4,7 +4,7 @@
 // transaction rows (historical) — never recomputed from current stock.
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
-import { getGrnRegister, getGrnDocUrl, grnDocName, cancelGrn, getGrnHistory, migrateGrnDocsToPrivate, GRN_BUCKET } from "@/lib/stock";
+import { getGrnRegister, getGrnDocUrl, grnDocName, cancelGrn, getGrnHistory, migrateGrnDocsToPrivate, GRN_BUCKET, getVendorReturnHistory } from "@/lib/stock";
 import { getSites } from "@/lib/data";
 import { getSession, canSeeModuleAnySite } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
@@ -59,6 +59,10 @@ export default function GrnRegisterPage() {
   const [history, setHistory] = useState({});   // grn_no -> rows (director)
   const [migr, setMigr] = useState(null);       // migration progress text
   const [msg, setMsg] = useState("");
+  // update191: vendor-return history view
+  const [view, setView] = useState("grns");   // grns | returns
+  const [retRows, setRetRows] = useState(null);
+  useEffect(() => { if (view === "returns") { setRetRows(null); getVendorReturnHistory({ siteId: site, from, to }).then(r => setRetRows(r.rows || [])); } }, [view, site, from, to]);   // eslint-disable-line react-hooks/exhaustive-deps
   // resolve the viewer's current page URL (signed if private)
   useEffect(() => {
     if (!viewer) return;
@@ -143,7 +147,13 @@ export default function GrnRegisterPage() {
       <Sidebar />
       <main className="main">
         <div className="page-head">
-          <h1>GRN register</h1>
+          <h1>{view === "returns" ? "Vendor returns" : "GRN register"}
+            <span style={{ marginLeft: 12, fontSize: 13, fontWeight: 400 }}>
+              <a onClick={() => setView("grns")} style={{ cursor: "pointer", fontWeight: view === "grns" ? 700 : 400 }}>Receipts</a>
+              {" · "}
+              <a onClick={() => setView("returns")} style={{ cursor: "pointer", fontWeight: view === "returns" ? 700 : 400 }}>↩ Returns</a>
+            </span>
+          </h1>
           <div className="filters" style={{ flexWrap: "wrap", gap: 8 }}>
             <select value={site} onChange={e => setSite(e.target.value)}>
               <option value="all">All sites</option>
@@ -170,7 +180,34 @@ export default function GrnRegisterPage() {
           <div className="card"><div className="label">Challan pages · GRNs without any</div><div className="value">{summary.docs}<small> · {summary.nodocs}</small></div></div>
         </div>
 
-        <div className="panel">
+        {view === "returns" && (
+          <div className="panel">
+            {!retRows ? <div className="muted">Loading returns…</div> : retRows.length === 0 ? <div className="muted">No vendor returns in this period.</div> : (
+              <div style={{ overflowX: "auto" }}>
+                <table className="dt-compact">
+                  <thead><tr><th>Ref</th><th>Date</th><th>Site</th><th>Vendor</th><th>Against GRN</th><th>Items</th><th className="num">Total qty</th><th>Reason</th><th>By</th></tr></thead>
+                  <tbody>
+                    {retRows.map((r, i) => (
+                      <tr key={i}>
+                        <td style={{ fontWeight: 600 }}>{r.ref}</td>
+                        <td className="muted">{fmtDT(r.date)}</td>
+                        <td>{r.site}</td>
+                        <td>{r.vendor}</td>
+                        <td>{r.src_grn || <span className="badge gray">No GRN</span>}</td>
+                        <td>{r.lines.map((l, j) => <div key={j} style={{ fontSize: 12 }}>{l.item} — {l.qty} {l.unit}</div>)}</td>
+                        <td className="num">{qty(r.total_qty)}</td>
+                        <td className="muted" style={{ maxWidth: 220 }}>{r.reason || "—"}</td>
+                        <td>{r.by || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>Every return-to-vendor transaction, newest first — GRN-linked returns show the receipt they went back against; each also appears in the item's stock ledger.</div>
+          </div>
+        )}
+        {view === "grns" && <div className="panel">
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
             <input placeholder="🔎 GRN / challan no / vendor / item / person…" value={q} onChange={e => setQ(e.target.value)} style={{ width: 300 }} />
             <select value={vendor} onChange={e => setVendor(e.target.value)}>
@@ -233,6 +270,7 @@ export default function GrnRegisterPage() {
                         <td style={{ whiteSpace: "nowrap" }}>
                           {g.short_lines ? <span className="badge h">⚠ {g.short_lines} short/excess</span> : <span className="badge p">OK</span>}
                           {(g.changes || []).length > 0 && <span className="badge h" style={{ marginLeft: 4 }}>≠ {g.changes.length} changed</span>}
+                          {g.returned_qty > 0 && <span className="badge a" style={{ marginLeft: 4 }}>↩ {qty(g.returned_qty)} returned</span>}
                           {g.exported && <span className="badge gray" style={{ marginLeft: 4 }}>Tally</span>}
                         </td>
                         <td onClick={e => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
@@ -244,7 +282,7 @@ export default function GrnRegisterPage() {
                         <tr>
                           <td colSpan={17} style={{ background: "var(--bg)", padding: "8px 14px 14px 34px" }}>
                             <table className="dt-compact" style={{ width: "auto", minWidth: 620, background: "#fff", border: "1px solid var(--border)", borderRadius: 8 }}>
-                              <thead><tr><th>#</th><th>Material</th><th>Unit</th><th className="num">Challan qty</th><th className="num">Received</th><th className="num">Short / Excess</th><th className="num">Rate</th><th className="num">Value</th></tr></thead>
+                              <thead><tr><th>#</th><th>Material</th><th>Unit</th><th className="num">Challan qty</th><th className="num">Received</th><th className="num">↩ Returned</th><th className="num">Short / Excess</th><th className="num">Rate</th><th className="num">Value</th></tr></thead>
                               <tbody>
                                 {g.lines.map((l, i) => (
                                   <tr key={i}>
@@ -253,12 +291,13 @@ export default function GrnRegisterPage() {
                                     <td className="muted">{l.unit}</td>
                                     <td className="num">{qty(l.challan_qty)}</td>
                                     <td className="num" style={{ fontWeight: 600 }}>{qty(l.received_qty)}</td>
+                                    <td className="num" style={{ color: l.returned ? "var(--red)" : "var(--muted)" }}>{l.returned ? "−" + qty(l.returned) : "—"}</td>
                                     <td className="num" style={{ color: l.short_qty > 0 ? "var(--red)" : l.short_qty < 0 ? "var(--amber)" : "var(--muted)" }}>{l.short_qty ? (l.short_qty > 0 ? "−" + qty(l.short_qty) + " short" : "+" + qty(-l.short_qty) + " excess") : "—"}</td>
                                     <td className="num muted">{l.rate ? inr(l.rate) : "—"}</td>
                                     <td className="num">{l.value ? inr(l.value) : "—"}</td>
                                   </tr>
                                 ))}
-                                <tr style={{ fontWeight: 600 }}><td colSpan={4} style={{ textAlign: "right" }}>Total</td><td className="num">{qty(g.total_qty)}</td><td></td><td></td><td className="num">{inr(g.value)}</td></tr>
+                                <tr style={{ fontWeight: 600 }}><td colSpan={4} style={{ textAlign: "right" }}>Total</td><td className="num">{qty(g.total_qty)}</td><td className="num" style={{ color: g.returned_qty ? "var(--red)" : undefined }}>{g.returned_qty ? "−" + qty(g.returned_qty) : ""}</td><td></td><td></td><td className="num">{inr(g.value)}</td></tr>
                               </tbody>
                             </table>
                             <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
@@ -291,7 +330,7 @@ export default function GrnRegisterPage() {
               </table>
             </div>
           )}
-        </div>
+        </div>}
 
         {cancelFor && (
           <div onClick={() => setCancelFor(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 96, padding: 16 }}>
