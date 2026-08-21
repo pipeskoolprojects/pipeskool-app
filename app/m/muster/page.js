@@ -7,7 +7,7 @@ import CameraCapture from "@/components/CameraCapture";
 import { isDemo } from "@/lib/supabase";
 import { getMuster, proxyPunch, proxyPunchOut, getSiteGeo, getPosition, distanceMeters, verifyDay, verifyOne, markAbsent, unmarkAbsent, getWorkerMonth } from "@/lib/mobile";
 import { approveOt } from "@/lib/data";
-import { otRound } from "@/lib/payroll";
+import { otRound, fmtHM } from "@/lib/payroll";
 import { getSession, setCurrentSite, can } from "@/lib/auth";
 
 const initials = n => (n || "?").split(" ").map(x => x[0]).slice(0, 2).join("");
@@ -174,7 +174,7 @@ export default function MusterScreen() {
               <div className="avatar" onClick={() => setSheet({ workerId: r.id, name: r.name })} style={{ cursor: "pointer" }}>{initials(r.name)}</div>
               <div className="info" onClick={() => setSheet({ workerId: r.id, name: r.name })} style={{ cursor: "pointer" }}>
                 <div className="nm">{r.name} <span className="muted" style={{ fontWeight: 400 }}>›</span></div>
-                <div className="dt">{r.cat} · {r.lab}{r.in ? ` · In ${r.in}` : ""}{r.out ? ` — Out ${r.out}` : ""}{r.hours ? ` · ${r.hours} h` : ""}{r.otEligible === false ? "" : r.otApproved ? ` · OT ${r.otApprovedHours} h ✓` : r.ot ? ` · extra ${r.ot} h (no OT unless approved)` : ""}</div>
+                <div className="dt">{r.cat} · {r.lab}{r.in ? ` · In ${r.in}` : ""}{r.out ? ` — Out ${r.out}` : ""}{r.hours ? ` · ${fmtHM(r.hours)}` : ""}{r.otEligible === false ? "" : r.otApproved ? ` · OT ${fmtHM(r.otApprovedHours)} ✓` : r.ot ? ` · extra ${fmtHM(r.ot)} after shift (no OT unless approved)` : ""}</div>
                 {r.punch === "proxy" && <div className="flag">📷 Proxy punch — photo on file</div>}
                 {r.elsewhere && <div style={{ fontSize: 12, color: "var(--green)", marginTop: 2 }}>🟢 Present at another site<br /><span className="muted">Site: {r.elsewhere.site} | Time: {r.elsewhere.time}</span></div>}
                 {r.absentMark && !r.attId && <div style={{ fontSize: 12, color: "var(--red)", marginTop: 2 }}>Marked absent{r.absentMark.by ? ` by ${r.absentMark.by}` : ""} · {r.absentMark.at}{r.absentMark.reason ? ` · ${r.absentMark.reason}` : ""}</div>}
@@ -226,7 +226,7 @@ export default function MusterScreen() {
         <div onClick={() => setOtFor(null)} style={overlay}>
           <div onClick={e => e.stopPropagation()} style={sheetBox}>
             <div style={{ fontWeight: 700, marginBottom: 4 }}>+ OT · {otFor.name}</div>
-            <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Extra time after shift: {otFor.ot} h → suggested OT {otRound(otFor.ot)} h (rule: up to 1 h = 0, then round half-hour up). Wages use only what you approve here.</div>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Extra time after shift end: {fmtHM(otFor.ot)} → suggested OT {otRound(otFor.ot)} h (rule: up to 1 h = 0, then round half-hour up). Wages use only what you approve here.</div>
             <input type="number" inputMode="decimal" step="0.5" min="0" max="12" value={otHrs} onChange={e => setOtHrs(e.target.value)} placeholder="OT hours" style={{ width: "100%", fontSize: 18 }} autoFocus />
             <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>{[0, otRound(otFor.ot), 1, 2, 3].filter((v, i, a) => a.indexOf(v) === i).map(h => <button key={h} style={h === otRound(otFor.ot) && h > 0 ? { ...btn, borderColor: "var(--copper)", color: "var(--copper-deep)", fontWeight: 700 } : btn} onClick={() => setOtHrs(String(h))}>{h} h{h === otRound(otFor.ot) && h > 0 ? " ★" : ""}</button>)}</div>
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
@@ -274,13 +274,13 @@ export default function MusterScreen() {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
                   {[["Present", sheetData.present + (sheetData.half ? ` +${sheetData.half}½` : ""), "var(--green)", null],
                     ["Absent ▾", sheetData.absent, "var(--red)", "absent"],
-                    ...(sheetData.worker.otEligible ? [["OT hrs ✓", sheetData.otHours, "var(--brand-dark)", null]] : []),
+                    ...(sheetData.worker.otEligible ? [["OT ✓", fmtHM(sheetData.otHours), "var(--brand-dark)", null]] : []),
                     ["Earned", inr(sheetData.gross), "var(--text)", null]].map(([l, v, c, click]) => (
                     <div key={l} onClick={click === "absent" ? () => setShowAbsent(x => !x) : undefined} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "8px 6px", textAlign: "center", cursor: click ? "pointer" : "default" }}><div className="muted" style={{ fontSize: 10.5 }}>{l}</div><div style={{ fontWeight: 700, fontSize: 15, color: c }}>{v}</div></div>
                   ))}
                 </div>
                 <div className="muted" style={{ fontSize: 11.5, margin: "8px 0" }}>
-                  Absent = {sheetData.absentRows} recorded + {sheetData.noRecord} no-punch days of {sheetData.daysElapsed} (incl. {sheetData.sundays} Sundays) · Hours {sheetData.totalHours} · Daily wage {inr(sheetData.worker.wage)}{sheetData.worker.otEligible ? <> · OT rate ₹{sheetData.worker.otRate}/h (wage ÷ {sheetData.worker.stdHrs} h) · OT amount {inr(sheetData.otAmt)}</> : <> · <b>Not OT-eligible</b> (extra hours are not paid as OT)</>} · Days pay {inr(sheetData.earned)}. Final wages come from the Wages page (advances deducted).
+                  Absent = {sheetData.absentRows} recorded + {sheetData.noRecord} no-punch days of {sheetData.daysElapsed} (incl. {sheetData.sundays} Sundays) · Hours {fmtHM(sheetData.totalHours)} · Daily wage {inr(sheetData.worker.wage)}{sheetData.worker.otEligible ? <> · OT rate ₹{sheetData.worker.otRate}/h (wage ÷ {sheetData.worker.stdHrs} h) · OT amount {inr(sheetData.otAmt)}</> : <> · <b>Not OT-eligible</b> (extra hours are not paid as OT)</>} · Days pay {inr(sheetData.earned)}. Final wages come from the Wages page (advances deducted).
                 </div>
                 {showAbsent && (
                   <div style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px", marginBottom: 8 }}>
@@ -300,9 +300,9 @@ export default function MusterScreen() {
                     <tbody>
                       {sheetData.days.length === 0 ? <tr><td colSpan={sheetData.worker.otEligible ? 7 : 6} className="muted">No attendance this month.</td></tr> : sheetData.days.map(d => (
                         <tr key={d.id}>
-                          <td>{d.date.slice(8)}/{d.date.slice(5, 7)}</td><td>{d.in}</td><td>{d.out}</td><td className="num">{d.hours || "—"}</td>
+                          <td>{d.date.slice(8)}/{d.date.slice(5, 7)}</td><td>{d.in}</td><td>{d.out}</td><td className="num">{d.hours ? fmtHM(d.hours) : "—"}</td>
                           <td>{d.status === "present" ? <span className="badge p">P</span> : d.status === "half_day" ? <span className="badge h">½</span> : d.status === "absent" ? <span className="badge a">A</span> : <span className="badge gray">{d.status}</span>}{d.punch === "proxy" ? " 📷" : ""}{d.verify === "verified" ? " ✓" : ""}</td>
-                          {sheetData.worker.otEligible && <td className="num">{d.otApproved || "—"}</td>}{/* approved only (spec 11) */}
+                          {sheetData.worker.otEligible && <td className="num">{d.otApproved ? fmtHM(d.otApproved) : "—"}</td>}{/* approved only (spec 11) */}
                           <td className="muted">{d.site}</td>
                         </tr>
                       ))}

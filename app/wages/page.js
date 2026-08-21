@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { getSites, inr } from "@/lib/data";
-import { generatePayouts, getPayouts, setPayoutAdvance, setPayoutMode, approvePayouts, markPayoutsPaid } from "@/lib/payroll";
+import { generatePayouts, getPayouts, setPayoutAdvance, setPayoutMode, setPayoutStatutory, fmtHM, approvePayouts, markPayoutsPaid } from "@/lib/payroll";
 import { generateStaffPayouts, getStaffPayouts, approveStaffPayouts, markStaffPayoutsPaid } from "@/lib/staffpay";
 import { getSession } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
@@ -46,6 +46,13 @@ export default function WagesPage() {
   const paid = () => run(() => markPayoutsPaid(month, site),
     r => r.count + " payout(s) marked PAID.");
 
+  async function editStat(r) {   // update194: PF / Professional Tax — manual per payout (draft only)
+    const pf = prompt(`PF for ${r.worker} (₹):`, r.pf || 0); if (pf === null) return;
+    const pt = prompt(`Professional Tax for ${r.worker} (₹):`, r.pt || 0); if (pt === null) return;
+    const res = await setPayoutStatutory(r.id, pf, pt);
+    if (!res.ok) { setErr(res.error); return; }
+    load();
+  }
   async function editAdv(r) {
     const v = prompt(`Advance to deduct for ${r.worker} (gross ${inr(r.gross)}):`, r.adv || 0);
     if (v === null) return;
@@ -58,14 +65,14 @@ export default function WagesPage() {
     if (!rows?.length) return;
     const data = filt(rows).map(r => ({ Worker: r.worker, Category: r.category, Site: r.site,
       "Full days": r.daysFull, "Half days": r.daysHalf, "Days total": r.days,
-      "OT hrs (approved)": r.ot, "Daily rate": r.rate, "OT rate/hr": r.otRate,
-      Gross: r.gross, "Advance deducted": r.adv, Net: r.net, "Bank a/c": r.bankAc || "", IFSC: r.ifsc || "", "Pay mode": r.mode, Status: r.status }));
+      "OT (approved)": fmtHM(r.ot), "Daily rate": r.rate, "OT rate/hr": r.otRate,
+      Gross: r.gross, "Advance deducted": r.adv, "PF": r.pf || 0, "Professional Tax": r.pt || 0, Net: r.net, "Bank a/c": r.bankAc || "", IFSC: r.ifsc || "", "Pay mode": r.mode, Status: r.status }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Wages " + month);
     XLSX.writeFile(wb, `Pipeskool_wages_${month}${site !== "all" ? "_site" + site : ""}.xlsx`);
   }
 
-  const t = (rows || []).reduce((x, r) => ({ gross: x.gross + r.gross, adv: x.adv + r.adv, net: x.net + r.net, ot: x.ot + r.ot }), { gross: 0, adv: 0, net: 0, ot: 0 });
+  const t = (rows || []).reduce((x, r) => ({ gross: x.gross + r.gross, adv: x.adv + r.adv, pf: x.pf + (r.pf || 0), pt: x.pt + (r.pt || 0), net: x.net + r.net, ot: x.ot + r.ot }), { gross: 0, adv: 0, pf: 0, pt: 0, net: 0, ot: 0 });
   const drafts = (rows || []).filter(r => r.status === "draft").length;
   const approved = (rows || []).filter(r => r.status === "approved").length;
 
@@ -109,7 +116,7 @@ export default function WagesPage() {
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table className="dt-compact">
-                <thead><tr><th>Worker</th><th>Category</th>{site === "all" && <th>Site</th>}<th className="num">Days (F+H)</th><th className="num">OT h</th><th className="num">Rate</th><th className="num">Gross</th><th className="num">Advance</th><th className="num">Net</th><th>Mode</th><th>Status</th></tr></thead>
+                <thead><tr><th>Worker</th><th>Category</th>{site === "all" && <th>Site</th>}<th className="num">Days (F+H)</th><th className="num">OT</th><th className="num">Rate</th><th className="num">Gross</th><th className="num">Advance</th><th className="num">PF</th><th className="num">P.Tax</th><th className="num">Net</th><th>Mode</th><th>Status</th></tr></thead>
                 <tbody>
                   {filt(rows).map(r => {
                     const [lbl, cls] = STATUS[r.status] || [r.status, "gray"];
@@ -119,7 +126,7 @@ export default function WagesPage() {
                         <td className="muted">{r.category}</td>
                         {site === "all" && <td className="muted">{r.site}</td>}
                         <td className="num">{r.days} <span className="muted" style={{ fontSize: 10.5 }}>({r.daysFull}+{r.daysHalf}½)</span></td>
-                        <td className="num">{r.ot ? r.ot.toFixed(1) : "—"}</td>
+                        <td className="num">{r.ot ? fmtHM(r.ot) : "—"}</td>
                         <td className="num">{inr(r.rate)}</td>
                         <td className="num">{inr(r.gross)}</td>
                         <td className="num">
@@ -127,6 +134,8 @@ export default function WagesPage() {
                             ? <a style={{ cursor: "pointer", textDecoration: "underline" }} onClick={() => editAdv(r)}>{inr(r.adv)}</a>
                             : inr(r.adv)}
                         </td>
+                        <td className="num">{r.status === "draft" ? <a style={{ cursor: "pointer", textDecoration: "underline" }} onClick={() => editStat(r)}>{inr(r.pf || 0)}</a> : inr(r.pf || 0)}</td>
+                        <td className="num">{r.status === "draft" ? <a style={{ cursor: "pointer", textDecoration: "underline" }} onClick={() => editStat(r)}>{inr(r.pt || 0)}</a> : inr(r.pt || 0)}</td>
                         <td className="num" style={{ fontWeight: 700 }}>{inr(r.net)}</td>
                         <td>
                           {r.status === "draft"
@@ -143,9 +152,11 @@ export default function WagesPage() {
                 <tfoot>
                   <tr style={{ fontWeight: 800, borderTop: "2px solid var(--text)" }}>
                     <td colSpan={site === "all" ? 4 : 3}>TOTAL — {filt(rows).length} worker(s)</td>
-                    <td className="num">{t.ot.toFixed(1)}</td><td></td>
+                    <td className="num">{fmtHM(t.ot)}</td><td></td>
                     <td className="num">{inr(t.gross)}</td>
                     <td className="num">{inr(t.adv)}</td>
+                    <td className="num">{inr(t.pf)}</td>
+                    <td className="num">{inr(t.pt)}</td>
                     <td className="num">{inr(t.net)}</td>
                     <td colSpan={2}></td>
                   </tr>
@@ -164,7 +175,7 @@ export default function WagesPage() {
               {canApprove && <button disabled={busy || !(srows || []).some(r => r.status === "approved")} onClick={() => run(() => markStaffPayoutsPaid(month), r => r.count + " marked PAID.")}>₹ Mark PAID</button>}
               <button disabled={!srows?.length} onClick={() => {
                 const data = (srows || []).map(r => ({ Staff: r.name, Role: r.role, "Salary ₹": r.salary, "Working days": r.working,
-                  "Present": r.present, "Absent": r.absent, "Paid leaves used": r.leaves, "Leave balance": r.leaveBal, "Deduction ₹": r.deduction, "OT h": r.ot, "OT ₹": r.otAmt,
+                  "Present": r.present, "Absent": r.absent, "Paid leaves used": r.leaves, "Leave balance": r.leaveBal, "Deduction ₹": r.deduction, "OT": fmtHM(r.ot), "OT ₹": r.otAmt,
                   "Advances ₹": r.adv, "Net ₹": r.net, "Bank a/c": r.bankAc || "", IFSC: r.ifsc || "", PAN: r.pan || "", Status: r.status }));
                 const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, ws, "Staff " + month); XLSX.writeFile(wb, `Pipeskool_staff_salary_${month}.xlsx`);
@@ -188,7 +199,7 @@ export default function WagesPage() {
                         <td className="num" style={{ color: r.absent > 0 ? "var(--red)" : "inherit" }}>{r.absent}</td>
                         <td className="num">{r.leaves ? r.leaves : "—"} <span className="muted" style={{ fontSize: 10.5 }}>({r.leaveBal} left)</span></td>
                         <td className="num">{inr(r.deduction)}</td>
-                        <td className="num">{r.ot ? r.ot.toFixed(1) : "—"}</td>
+                        <td className="num">{r.ot ? fmtHM(r.ot) : "—"}</td>
                         <td className="num">{inr(r.otAmt)}</td>
                         <td className="num">{inr(r.adv)}</td>
                         <td className="num" style={{ fontWeight: 700 }}>{inr(r.net)}</td>

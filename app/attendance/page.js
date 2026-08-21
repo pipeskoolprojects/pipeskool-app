@@ -6,6 +6,7 @@ import { getPunchFailures, getAttendance, getSites, approveOt, verifyAttendanceR
 import { getSession, canAnySite } from "@/lib/auth";
 import { todayLocal } from "@/lib/today";
 import { isDemo } from "@/lib/supabase";
+import { fmtHM } from "@/lib/payroll";
 
 const statusBadge = s =>
   s === "present" ? <span className="badge p">P</span> :
@@ -49,7 +50,9 @@ export default function AttendancePage() {
 
   const columns = [
     { key: "date", label: "Date", render: () => <span className="muted">{date}</span>, exportValue: () => date },
-    { key: "worker", label: "Worker", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.worker}</span> },
+    { key: "worker", label: "Worker", filter: "search", render: r => r.workerId
+        ? <a href={"/attendance/slip?worker=" + r.workerId + "&month=" + String(date).slice(0, 7)} target="_blank" rel="noreferrer" style={{ fontWeight: 600 }} title="Open full profile / slip">{r.worker}</a>
+        : <span style={{ fontWeight: 600 }}>{r.worker}</span> },   // update194: click → full details
     { key: "category", label: "Category", filter: "select" },
     { key: "contractor", label: "Labour", filter: "select", render: r => <span className="muted">{r.contractor}</span> },
     { key: "site", label: "Site", filter: "select", render: r => <span className="muted">{r.site}{r.out_site_id && String(r.out_site_id) !== String(r.site_id || "") ? " → out @ other site" : ""}</span> },
@@ -58,15 +61,15 @@ export default function AttendancePage() {
       exportValue: r => (r.in_dist != null ? "in " + r.in_dist + "m" : "") + (r.out_dist != null ? " out " + r.out_dist + "m" : "") },
     { key: "in", label: "In", type: "num" },
     { key: "out", label: "Out", type: "num" },
-    { key: "hours", label: "Hrs", type: "num", render: r => r.hours ?? "—" },
+    { key: "hours", label: "Hrs", type: "num", render: r => r.hours ? fmtHM(r.hours) : "—", exportValue: r => r.hours ? fmtHM(r.hours) : "" },   // update194: exact h/m display
     { key: "status", label: "Status", filter: "select", render: r => statusBadge(r.status), exportValue: r => r.status },
     { key: "ot", label: "OT", render: r => {
         const dev = r.otApproved && r.otApprovedHours != null && r.otApprovedHours !== r.ot;
         return (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-            {r.otEligible === false ? <span className="muted" title="Not OT-eligible (Workers & Staff Master)">n/e</span> : r.otApproved && Number(r.otApprovedHours) > 0 ? <b>{r.otApprovedHours}h</b> : (r.ot > 0 ? r.ot + "h" : "—")}
+            {r.otEligible === false ? <span className="muted" title="Not OT-eligible (Workers & Staff Master)">n/e</span> : r.otApproved && Number(r.otApprovedHours) > 0 ? <b>{fmtHM(r.otApprovedHours)}</b> : (r.ot > 0 ? fmtHM(r.ot) : "—")}
             {r.otApproved && <span className="badge p" title="Approved">✓</span>}
-            {dev && <span className="badge warn" title={`Punch shows ${r.ot}h`}>⚠ {r.ot}h</span>}
+            {dev && <span className="badge warn" title={`Time after shift end: ${fmtHM(r.ot)}`}>⚠ {fmtHM(r.ot)}</span>}
             {r.otEligible !== false && <button style={{ fontSize: 11, padding: "1px 6px" }}
               onClick={() => setOtEdit({ id: r.id, worker: r.worker, computed: r.ot, value: r.otApprovedHours ?? (Number(r.ot) <= 1 ? 0 : Math.round(Number(r.ot))) })}>
               {r.otApproved ? "edit" : "approve"}</button>}

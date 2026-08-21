@@ -4,14 +4,24 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getWorkerMonth } from "@/lib/mobile";
+import { fmtHM } from "@/lib/payroll";
+import { supabase, isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
 function Slip() {
   const sp = useSearchParams();
-  const workerId = sp.get("worker"); const month = sp.get("month") || new Date().toISOString().slice(0, 7);
+  const workerId = sp.get("worker");
+  const [month, setMonth] = useState(sp.get("month") || new Date().toISOString().slice(0, 7));   // update194: month nav
   const [d, setD] = useState(null); const [err, setErr] = useState("");
+  const [pay, setPay] = useState(null);   // update194: PF / PT / net from wage payout of this month
+  const shiftMonth = k => setMonth(m => { const dt = new Date(m + "-15"); dt.setMonth(dt.getMonth() + k); return dt.toISOString().slice(0, 7); });
+  useEffect(() => {
+    if (isDemo || !workerId) return;
+    supabase.from("wage_payouts").select("gross, advances_deducted, pf_amount, pt_amount, net, status")
+      .eq("worker_id", Number(workerId)).eq("pay_month", month + "-01").maybeSingle().then(({ data }) => setPay(data || null));
+  }, [workerId, month]);
   useEffect(() => {
     if (!getSession()) { window.location.replace("/login"); return; }
     if (!workerId) { setErr("No worker given."); return; }
@@ -32,7 +42,7 @@ function Slip() {
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 16, fontWeight: 700 }}>Attendance &amp; Wage Slip</div>
           <div style={{ fontSize: 13 }}>{label}</div>
-          <button style={{ marginTop: 6, fontSize: 12 }} onClick={() => window.print()}>🖨 Print / Save PDF</button>
+          <button style={{ marginRight: 6 }} className="no-print" onClick={() => shiftMonth(-1)}>‹ Prev month</button><button style={{ marginRight: 12 }} className="no-print" onClick={() => shiftMonth(1)}>Next month ›</button>          <button style={{ marginTop: 6, fontSize: 12 }} onClick={() => window.print()}>🖨 Print / Save PDF</button>
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 13, margin: "12px 0" }}>
@@ -41,7 +51,7 @@ function Slip() {
         <div><b>Daily wage:</b> {inr(w.wage)}</div>{w.otEligible ? <div><b>OT rate:</b> {inr(w.otRate)}/h (wage ÷ {w.stdHrs} h)</div> : <div><b>OT:</b> Not eligible</div>}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6, margin: "10px 0" }}>
-        {[["Present", d.present], ["Half days", d.half], ["Absent", d.absent], ["Hours", d.totalHours], ...(w.otEligible ? [["OT hrs (approved)", d.otHours]] : []), ["Sundays", d.sundays]].map(([l, v]) => (
+        {[["Present", d.present], ["Half days", d.half], ["Absent", d.absent], ["Hours", fmtHM(d.totalHours)], ...(w.otEligible ? [["OT (approved)", fmtHM(d.otHours)]] : []), ["Sundays", d.sundays]].map(([l, v]) => (
           <div key={l} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "6px 8px", textAlign: "center" }}><div style={{ fontSize: 10.5, color: "#666" }}>{l}</div><div style={{ fontSize: 16, fontWeight: 700 }}>{v}</div></div>
         ))}
       </div>
@@ -49,7 +59,7 @@ function Slip() {
         <thead><tr style={{ background: "#f2f2ee" }}>{["Date", "Site", "In", "Out", "Hours", "Status", ...(w.otEligible ? ["OT (approved)"] : []), "Punch", "Verified"].map(h => <th key={h} style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "left" }}>{h}</th>)}</tr></thead>
         <tbody>
           {d.days.map(x => (
-            <tr key={x.id}>{[x.date, x.site, x.in, x.out, x.hours || "—", x.status, ...(w.otEligible ? [x.otApproved || "—"] : []), x.punch, x.verify].map((v, i) => <td key={i} style={{ border: "1px solid #ddd", padding: "3px 6px" }}>{String(v)}</td>)}</tr>
+            <tr key={x.id}>{[x.date, x.site, x.in, x.out, x.hours ? fmtHM(x.hours) : "—", x.status, ...(w.otEligible ? [x.otApproved ? fmtHM(x.otApproved) : "—"] : []), x.punch, x.verify].map((v, i) => <td key={i} style={{ border: "1px solid #ddd", padding: "3px 6px" }}>{String(v)}</td>)}</tr>
           ))}
           {d.days.length === 0 && <tr><td colSpan={w.otEligible ? 9 : 8} style={{ padding: 8, color: "#777" }}>No attendance recorded this month.</td></tr>}
         </tbody>
@@ -57,7 +67,13 @@ function Slip() {
       <table style={{ marginTop: 14, fontSize: 13, borderCollapse: "collapse", minWidth: 320 }}>
         <tbody>
           <tr><td style={{ padding: "3px 10px 3px 0" }}>Days pay ({d.present} + {d.half}×½) × {inr(w.wage)}</td><td style={{ textAlign: "right" }}>{inr(d.earned)}</td></tr>
-          {w.otEligible && d.otHours > 0 && <tr><td style={{ padding: "3px 10px 3px 0" }}>OT {d.otHours} h × {inr(w.otRate)}</td><td style={{ textAlign: "right" }}>{inr(d.otAmt)}</td></tr>}
+          {w.otEligible && d.otHours > 0 && <tr><td style={{ padding: "3px 10px 3px 0" }}>OT {fmtHM(d.otHours)} × {inr(w.otRate)}/h</td><td style={{ textAlign: "right" }}>{inr(d.otAmt)}</td></tr>}
+          {pay && <>
+            <tr><td style={{ padding: "3px 10px 3px 0" }}>Advances deducted</td><td style={{ textAlign: "right" }}>−{inr(pay.advances_deducted)}</td></tr>
+            <tr><td style={{ padding: "3px 10px 3px 0" }}>PF</td><td style={{ textAlign: "right" }}>−{inr(pay.pf_amount)}</td></tr>
+            <tr><td style={{ padding: "3px 10px 3px 0" }}>Professional Tax</td><td style={{ textAlign: "right" }}>−{inr(pay.pt_amount)}</td></tr>
+            <tr style={{ fontWeight: 700, borderTop: "1px solid #999" }}><td style={{ padding: "4px 10px 4px 0" }}>Net payable ({pay.status})</td><td style={{ textAlign: "right" }}>{inr(pay.net)}</td></tr>
+          </>}
           <tr style={{ fontWeight: 700, borderTop: "1px solid #222" }}><td style={{ padding: "4px 10px 4px 0" }}>Gross (before advances)</td><td style={{ textAlign: "right" }}>{inr(d.gross)}</td></tr>
         </tbody>
       </table>
