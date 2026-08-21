@@ -85,7 +85,7 @@ export default function StockEntry({ siteId, userId, onDone }) {
   async function saveGrnReturn() {
     setErr("");
     const chosen = retLines.filter(l => l.sel);
-    if (!retGrn) { setErr("Select the GRN the material came in on."); return; }
+    if (!retGrn) { setErr("Select the delivery challan the material came in against."); return; }
     if (!chosen.length) { setErr("Tick at least one item to return."); return; }
     if (chosen.some(l => !(Number(l.qty) > 0))) { setErr("Enter a return quantity for every ticked item."); return; }
     if (!retReason.trim()) { setErr("Reason is mandatory for a vendor return."); return; }
@@ -129,6 +129,8 @@ export default function StockEntry({ siteId, userId, onDone }) {
     setErr("");
     if (grnLines.length === 0) { setErr("Add at least one item line."); return; }
     if (!grnHead.vendor) { setErr("Enter the vendor / supplier."); return; }
+    if (!String(grnHead.our_challan_no || "").trim()) { setErr("Our challan no is mandatory."); return; }
+    if (!(grnCoDocs || []).length) { setErr("Upload our delivery challan pages (duly signed & stamped) — mandatory."); return; }
     if (grnLines.some(l => l.change && !l.change.reason)) { setErr("Give a reason for every material change."); return; }
     setBusy(true);
     const res = await recordMultiGRN(
@@ -275,10 +277,10 @@ export default function StockEntry({ siteId, userId, onDone }) {
               {vendors.length === 0 && <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>No vendors yet — add them in Vendor master.</div>}
             </div>
             <div><label className="muted">Vendor challan no</label><input style={{ width: "100%" }} value={grnHead.challan_no} onChange={e => setGrnHead(p => ({ ...p, challan_no: e.target.value }))} /></div>
-            <div><label className="muted">Our challan no</label><input style={{ width: "100%" }} value={grnHead.our_challan_no || ""} onChange={e => setGrnHead(p => ({ ...p, our_challan_no: e.target.value }))} /></div>
+            <div><label className="muted">Our challan no * <span style={{ fontSize: 11 }}>(duly signed &amp; stamped)</span></label><input style={{ width: "100%" }} value={grnHead.our_challan_no || ""} onChange={e => setGrnHead(p => ({ ...p, our_challan_no: e.target.value }))} /></div>
             <div><label className="muted">Challan date</label><input type="date" style={{ width: "100%" }} value={grnHead.challan_date} onChange={e => setGrnHead(p => ({ ...p, challan_date: e.target.value }))} /></div>
             <div><label className="muted">📷 Supplier challan pages</label><input type="file" accept="image/*,.pdf" multiple style={{ width: "100%" }} onChange={e => setGrnSupDocs(Array.from(e.target.files || []))} /></div>
-            <div><label className="muted">📷 Our challan pages</label><input type="file" accept="image/*,.pdf" multiple style={{ width: "100%" }} onChange={e => setGrnCoDocs(Array.from(e.target.files || []))} /></div>
+            <div><label className="muted">📷 Our challan pages * <span style={{ fontSize: 11 }}>(duly signed &amp; stamped)</span></label><input type="file" accept="image/*,.pdf" multiple style={{ width: "100%" }} onChange={e => setGrnCoDocs(Array.from(e.target.files || []))} /></div>
           </div>
           <label className="muted">Add items from this challan</label>
           <div style={{ maxWidth: 360, marginBottom: 10 }}><ItemPicker onPick={addGrnLine} placeholder="Search material master…" /></div>
@@ -417,18 +419,19 @@ export default function StockEntry({ siteId, userId, onDone }) {
       {open === "return" && (
         <div style={{ marginTop: 14 }}>
           <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-            <button style={{ fontSize: 12, background: retMode === "grn" ? "var(--copper)" : "#fff", color: retMode === "grn" ? "#fff" : "var(--text)" }} onClick={() => setRetMode("grn")}>Against a GRN (recommended)</button>
-            <button style={{ fontSize: 12, background: retMode === "single" ? "var(--copper)" : "#fff", color: retMode === "single" ? "#fff" : "var(--text)" }} onClick={() => setRetMode("single")}>Single item (no GRN)</button>
+            <button style={{ fontSize: 12, background: retMode === "grn" ? "var(--copper)" : "#fff", color: retMode === "grn" ? "#fff" : "var(--text)" }} onClick={() => setRetMode("grn")}>Against our challan (recommended)</button>
+            <button style={{ fontSize: 12, background: retMode === "single" ? "var(--copper)" : "#fff", color: retMode === "single" ? "#fff" : "var(--text)" }} onClick={() => setRetMode("single")}>Single item (no challan)</button>
           </div>
           {retMode === "grn" && (
             <div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 10 }}>
-                <div style={{ minWidth: 340 }}><label className="muted">GRN (goods receipt the material came in on)</label>
+                <div style={{ minWidth: 360 }}><label className="muted">Our challan (delivery challan the material came in against)</label>
                   <select style={{ width: "100%" }} value={retGrn?.grn_no || ""} onChange={e => pickRetGrn(e.target.value)}>
-                    <option value="">Select GRN…</option>
-                    {retGrns.map(g => <option key={g.grn_no} value={g.grn_no}>{g.grn_no} · {g.vendor || "—"} · {g.date}{g.po_no ? " · " + g.po_no : ""} · {g.returnable_items} returnable</option>)}
+                    <option value="">Select our challan…</option>
+                    {retGrns.map(g => <option key={g.grn_no} value={g.grn_no}>{g.our_challan_no || ("(no challan no — " + g.grn_no + ")")} · {g.vendor || "—"} · {g.date}{g.po_no ? " · " + g.po_no : ""} · {g.returnable_items} returnable</option>)}
                   </select>
                 </div>
+                {retGrn && <div><label className="muted">GRN</label><div className="muted" style={{ padding: "6px 0", fontSize: 12.5 }}>{retGrn.grn_no}</div></div>}
                 {retGrn && <div><label className="muted">Vendor</label><div style={{ fontWeight: 600, padding: "6px 0" }}>{retVendor || retGrn.vendor || "—"}</div></div>}
               </div>
               {retGrn && (
@@ -486,7 +489,7 @@ export default function StockEntry({ siteId, userId, onDone }) {
               </div>
             </div>
           ))}
-          {retMode === "single" && <div className="muted" style={{ marginTop: 8 }}>For wrong or excess material received — removes it from store stock and sends it back to the vendor. Use "Against a GRN" whenever the material came in on a recorded receipt, so the return links to it.</div>}
+          {retMode === "single" && <div className="muted" style={{ marginTop: 8 }}>For wrong or excess material received — removes it from store stock and sends it back to the vendor. Use "Against our challan" whenever the material came in on a recorded receipt, so the return links to it.</div>}
         </div>
       )}
 
