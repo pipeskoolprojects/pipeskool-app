@@ -13,6 +13,21 @@ import {
 import { getSession, canAnySite } from "@/lib/auth";
 
 export default function ExpensesPage() {
+
+  // update196: shared 25-per-page pager for the hand-built lists (DataTables page themselves)
+  const [pgPetty, setPgPetty] = useState(1); const [pgRet, setPgRet] = useState(1);
+  const LP = 25;
+  const pageOf = (arr, pg) => (arr || []).slice((pg - 1) * LP, pg * LP);
+  const Pager = ({ n, pg, set }) => { const pc = Math.max(Math.ceil(n / LP), 1); if (n <= LP) return null; const cur = Math.min(pg, pc); return (
+    <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end", margin: "6px 0" }}>
+      <span className="muted" style={{ fontSize: 12, marginRight: "auto" }}>Showing {(cur - 1) * LP + 1}–{Math.min(cur * LP, n)} of {n}</span>
+      <button style={{ fontSize: 12 }} disabled={cur <= 1} onClick={() => set(cur - 1)}>‹ Prev</button>
+      {Array.from({ length: pc }, (_, i) => i + 1).filter(i => i === 1 || i === pc || Math.abs(i - cur) <= 2).map((i, x, a) => (
+        <span key={i}>{x > 0 && a[x - 1] !== i - 1 && <span className="muted">…</span>}
+          <button style={{ fontSize: 12, fontWeight: i === cur ? 800 : 400, background: i === cur ? "var(--copper)" : undefined, color: i === cur ? "#fff" : undefined }} onClick={() => set(i)}>{i}</button></span>))}
+      <button style={{ fontSize: 12 }} disabled={cur >= pc} onClick={() => set(cur + 1)}>Next ›</button>
+    </div>); };
+
   const [adv, setAdv] = useState(null);
   const [pettyReqs, setPettyReqs] = useState(null);
   const [pettyForm, setPettyForm] = useState({ amount: "", purpose: "", required_date: "", remarks: "" });
@@ -232,11 +247,11 @@ export default function ExpensesPage() {
             </div>
           )}
           {pettyMsg && <div className="muted" style={{ marginBottom: 8 }}>{pettyMsg}</div>}
-          {!pettyReqs ? <div className="muted">Loading…</div> : pettyReqs.length === 0 ? <div className="muted">No petty cash requests yet.</div> : (
+          {!pettyReqs ? <div className="muted">Loading…</div> : pettyReqs.length === 0 ? <div className="muted">No petty cash requests yet.</div> : (<>
             <table className="dt-compact">
               <thead><tr><th>Date</th><th>Requester</th><th>Site</th><th className="num">Amount</th><th>Purpose</th><th>Needed by</th><th>Status</th><th></th></tr></thead>
               <tbody>
-                {pettyReqs.map(r => (
+                {pageOf(pettyReqs, pgPetty).map(r => (
                   <tr key={r.id}>
                     <td className="muted">{r.date}</td>
                     <td style={{ fontWeight: 600 }}>{r.requester}</td>
@@ -277,7 +292,8 @@ export default function ExpensesPage() {
                 ))}
               </tbody>
             </table>
-          )}
+            <Pager n={pettyReqs.length} pg={pgPetty} set={setPgPetty} />
+          </>)}
         </div>
 
         <div className="panel">
@@ -296,7 +312,7 @@ export default function ExpensesPage() {
           <div className="panel" style={{ borderLeft: "4px solid var(--copper)" }}>
             <h2>Cash returns awaiting confirmation ({pettyReturns.length})</h2>
             <table className="dt-compact"><thead><tr><th>Date</th><th>Holder</th><th>Site</th><th className="num">Amount</th><th>Note</th><th></th></tr></thead>
-              <tbody>{pettyReturns.map(r => (
+              <tbody>{pageOf(pettyReturns, pgRet).map(r => (
                 <tr key={r.id}>
                   <td className="muted">{r.date}</td><td style={{ fontWeight: 600 }}>{r.holder}</td>
                   <td className="muted">{r.site}</td><td className="num">{inr(r.amount)}</td>
@@ -308,6 +324,7 @@ export default function ExpensesPage() {
                   </td>
                 </tr>))}
               </tbody></table>
+            <Pager n={pettyReturns.length} pg={pgRet} set={setPgRet} />
           </div>
         )}
 
