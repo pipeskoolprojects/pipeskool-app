@@ -17,7 +17,7 @@ export default function ExpensesPage() {
 
   // update196: shared 25-per-page pager for the hand-built lists (DataTables page themselves)
   const [pgPetty, setPgPetty] = useState(1); const [pgRet, setPgRet] = useState(1);
-  const LP = 25;
+  const LP = 10;   // update200: max 10 records per page for long lists
   const pageOf = (arr, pg) => (arr || []).slice((pg - 1) * LP, pg * LP);
   const Pager = ({ n, pg, set }) => { const pc = Math.max(Math.ceil(n / LP), 1); if (n <= LP) return null; const cur = Math.min(pg, pc); return (
     <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end", margin: "6px 0" }}>
@@ -51,6 +51,40 @@ export default function ExpensesPage() {
   }
   const [claims, setClaims] = useState(null);
   const [petty, setPetty] = useState([]);
+  const [advTotals, setAdvTotals] = useState({ taken: 0, rec: 0, out: 0 });   // update200: fed by AdvanceLedger
+  // update200: compact overview — summary cards + collapsible module sections (nothing removed,
+  // every existing block just lives inside a section that opens on demand)
+  const [openSec, setOpenSec] = useState({});   // key -> bool
+  const toggleSec = k => setOpenSec(o => ({ ...o, [k]: !o[k] }));
+  const Section = ({ id, icon, title, sub, stats, accent, children }) => (
+    <div className="panel" style={{ padding: 0, overflow: "hidden", ...(accent ? { borderLeft: "4px solid " + accent } : {}) }}>
+      <div onClick={() => toggleSec(id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", cursor: "pointer", flexWrap: "wrap" }}>
+        <div style={{ fontSize: 20 }}>{icon}</div>
+        <div style={{ minWidth: 160 }}>
+          <div style={{ fontWeight: 700 }}>{title}</div>
+          {sub && <div className="muted" style={{ fontSize: 11.5 }}>{sub}</div>}
+        </div>
+        <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginLeft: "auto", alignItems: "center" }}>
+          {(stats || []).map(([l, v, c]) => (
+            <div key={l} style={{ textAlign: "right" }}>
+              <div className="muted" style={{ fontSize: 10.5 }}>{l}</div>
+              <div style={{ fontWeight: 700, fontSize: 13.5, color: c || "var(--text)" }}>{v}</div>
+            </div>
+          ))}
+          <button style={{ fontSize: 12 }} onClick={e => { e.stopPropagation(); toggleSec(id); }}>{openSec[id] ? "Hide ▲" : "View ▼"}</button>
+        </div>
+      </div>
+      <div style={{ display: openSec[id] ? "block" : "none", padding: "0 16px 16px" }}>{children}</div>{/* kept mounted so section totals stay live */}
+    </div>
+  );
+  const sumBy = (rows, f) => (rows || []).reduce((t, r) => t + (f(r) || 0), 0);
+  const approvedClaims = sumBy((claims || []).filter(c => c.status === "approved"), c => c.amount);
+  const pendingClaims = sumBy((claims || []).filter(c => c.status === "pending"), c => c.amount);
+  const rejectedClaims = sumBy((claims || []).filter(c => c.status === "rejected"), c => c.amount);
+  const pettyBal = sumBy(petty, h => h.balance), pettySpent = sumBy(petty, h => h.spent), pettyReturned = sumBy(petty, h => h.returned);
+  const advPending = (adv || []).filter(a => a.status === "pending");
+  const advApproved = (adv || []).filter(a => a.status === "approved");
+
   const [msg, setMsg] = useState("");
   const [session, setSession] = useState(null);
   const [bens, setBens] = useState([]);
@@ -205,6 +239,22 @@ export default function ExpensesPage() {
         {isDemo && <div className="demo-banner">Demo mode — sample data.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
 
+        {/* update200: overview cards */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, marginBottom: 14 }}>
+          {[["💳 Total expenses", inr(approvedClaims), (claims || []).length + " transactions", null],
+            ["🪙 Petty cash held", inr(pettyBal), petty.length + " holders", null],
+            ["💸 Advances (approved)", inr(sumBy(advApproved, a => a.amount)), advApproved.length + " requests", null],
+            ["✅ Recovered / deducted", inr(advTotals.rec), "through pay", "var(--green)"],
+            ["🔺 Outstanding advances", inr(advTotals.out), "to be recovered", advTotals.out > 0 ? "var(--red)" : "var(--green)"],
+            ["⏳ Advance requests pending", inr(sumBy(advPending, a => a.amount)), advPending.length + " waiting", advPending.length ? "var(--amber)" : null]].map(([l, v, sub2, c]) => (
+            <div key={l} className="panel" style={{ padding: "10px 14px", margin: 0 }}>
+              <div className="muted" style={{ fontSize: 11.5 }}>{l}</div>
+              <div style={{ fontWeight: 800, fontSize: 19, color: c || "var(--text)" }}>{v}</div>
+              <div className="muted" style={{ fontSize: 10.5 }}>{sub2}</div>
+            </div>
+          ))}
+        </div>
+
         {session && canAnySite(session, "money", "create") && (
           <div className="panel">
             <h2>Raise advance salary</h2>
@@ -228,8 +278,8 @@ export default function ExpensesPage() {
           </div>
         )}
 
-        <div className="panel">
-          <h2>Petty cash requests</h2>
+        <Section id="pettyreq" icon="🪙" title="Petty cash requests" sub="ask · approve · grant"
+          stats={[["Pending", (pettyReqs || []).filter(r => r.status === "pending").length, "var(--amber)"], ["Total", (pettyReqs || []).length]]}>
           {session && canAnySite(session, "money", "create") && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginBottom: 12, alignItems: "end" }}>
               <div><label className="muted">Amount ₹ *</label>
@@ -295,19 +345,19 @@ export default function ExpensesPage() {
             </table>
             <Pager n={pettyReqs.length} pg={pgPetty} set={setPgPetty} />
           </>)}
-        </div>
+        </Section>
 
-        <div className="panel">
-          <h2>Advance salary requests</h2>
+        <Section id="advreq" icon="📄" title="Advance salary requests" sub="approve · reject · query"
+          stats={[["Pending", inr(sumBy(advPending, a => a.amount)), advPending.length ? "var(--amber)" : undefined], ["Approved", inr(sumBy(advApproved, a => a.amount)), "var(--green)"], ["Requests", (adv || []).length]]}>
           {!adv ? <div className="muted">Loading…</div> :
-            <DataTable columns={advCols} rows={adv} exportName="advance_requests" dateField="date" />}
-        </div>
+            <DataTable columns={advCols} rows={adv} exportName="advance_requests" dateField="date" pageSize={10} />}
+        </Section>
 
-        <div className="panel">
-          <h2>Site expense claims</h2>
+        <Section id="claims" icon="💳" title="Expenses ledger" sub="all site expenses & payments"
+          stats={[["Approved", inr(approvedClaims), "var(--green)"], ["Pending", inr(pendingClaims), pendingClaims ? "var(--amber)" : undefined], ["Rejected", inr(rejectedClaims), rejectedClaims ? "var(--red)" : undefined], ["Transactions", (claims || []).length]]}>
           {!claims ? <div className="muted">Loading…</div> :
-            <DataTable columns={claimCols} rows={claims} exportName="expense_claims" dateField="date" />}
-        </div>
+            <DataTable columns={claimCols} rows={claims} exportName="expense_claims" dateField="date" pageSize={10} />}
+        </Section>
 
         {pettyReturns.length > 0 && (
           <div className="panel" style={{ borderLeft: "4px solid var(--copper)" }}>
@@ -385,13 +435,23 @@ export default function ExpensesPage() {
           </div>
         )}
 
-        <div className="panel">
-          <h2>Petty cash — balance held by person</h2>
+        <Section id="pettyled" icon="📒" title="Petty cash ledger" sub="cash balance held by persons"
+          stats={[["Balance held", inr(pettyBal)], ["Spent", inr(pettySpent)], ["Returned", inr(pettyReturned), "var(--green)"], ["Holders", petty.length]]}>
           {petty.length === 0 ? <span className="muted">No petty cash issued yet.</span> :
-            <DataTable columns={pettyCols} rows={petty} exportName="petty_cash" />}
-        </div>
+            <DataTable columns={pettyCols} rows={petty} exportName="petty_cash" pageSize={10} />}
+        </Section>
         <div id="advances" />
-        <AdvanceLedger />
+        <Section id="advled" icon="🧾" title="Advance salary ledger" sub="advances given to employees"
+          stats={[["Taken", inr(advTotals.taken)], ["Recovered", inr(advTotals.rec), "var(--green)"], ["Outstanding", inr(advTotals.out), advTotals.out > 0 ? "var(--red)" : "var(--green)"]]}>
+          <AdvanceLedger onTotals={setAdvTotals} />
+        </Section>
+        <Section id="reports" icon="📊" title="Reports" sub="exports & Tally">
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", paddingTop: 4 }}>
+            <span className="muted" style={{ fontSize: 12.5, width: "100%" }}>Every ledger above has its own ⬇ Excel export (with the filters you set). Additional:</span>
+            <a href="/tally"><button style={{ fontSize: 12.5 }}>🧾 Tally export</button></a>
+            <button style={{ fontSize: 12.5 }} onClick={() => window.print()}>🖨 Print this overview</button>
+          </div>
+        </Section>
       </main>
     </div>
   );
