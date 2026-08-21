@@ -4,7 +4,7 @@
 // transaction rows (historical) — never recomputed from current stock.
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
-import { getGrnRegister, getGrnDocUrl, grnDocName, cancelGrn, getGrnHistory, migrateGrnDocsToPrivate, GRN_BUCKET, getVendorReturnHistory } from "@/lib/stock";
+import { getGrnRegister, getGrnDocUrl, grnDocName, cancelGrn, getGrnHistory, migrateGrnDocsToPrivate, GRN_BUCKET, getVendorReturnHistory, editGrnHeader, addGrnDocs } from "@/lib/stock";
 import { getSites } from "@/lib/data";
 import { getSession, canSeeModuleAnySite } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
@@ -56,6 +56,10 @@ export default function GrnRegisterPage() {
   const [open, setOpen] = useState({});
   const [viewer, setViewer] = useState(null); // { g, docs, idx, url }
   const [cancelFor, setCancelFor] = useState(null); const [cancelReason, setCancelReason] = useState(""); const [busy, setBusy] = useState(false);
+  // update192: edit GRN header + upload pending challans
+  const [editFor, setEditFor] = useState(null);       // grn object
+  const [editVals, setEditVals] = useState({});
+  const [editSup, setEditSup] = useState([]); const [editCo, setEditCo] = useState([]);
   const [history, setHistory] = useState({});   // grn_no -> rows (director)
   const [migr, setMigr] = useState(null);       // migration progress text
   const [msg, setMsg] = useState("");
@@ -82,6 +86,22 @@ export default function GrnRegisterPage() {
     setMsg("GRN " + cancelFor.grn_no + " cancelled — " + r.reversed + " line(s) reversed. Stock updated."); setCancelFor(null); setCancelReason(""); load();
   }
   async function loadHistory(grn) { const rows = await getGrnHistory(grn); setHistory(h => ({ ...h, [grn]: rows })); }
+  const canEditGrn = g => session && (isDirector || session.role === "it_executive" || Number(session.id) === Number(g.created_by));
+  function openEdit(g) { setEditFor(g); setEditVals({ vendor: g.vendor || "", challan_no: g.challan_no || "", our_challan_no: g.our_challan_no || "", challan_date: g.challan_date || "", note: g.note || "" }); setEditSup([]); setEditCo([]); }
+  async function saveEdit() {
+    setBusy(true);
+    let ok = true, errText = "";
+    const r1 = await editGrnHeader(editFor.grn_no, editVals);
+    if (!r1.ok) { ok = false; errText = r1.error; }
+    if (ok && (editSup.length || editCo.length)) {
+      const r2 = await addGrnDocs(editFor.grn_no, editFor.site_id, { supplier: editSup, company: editCo }, session?.id);
+      if (!r2.ok) { ok = false; errText = "Header saved, but page upload failed: " + r2.error; }
+    }
+    setBusy(false);
+    if (!ok) { setErr(errText); return; }
+    setMsg(`GRN ${editFor.grn_no} updated` + (editSup.length + editCo.length ? ` — ${editSup.length + editCo.length} challan page(s) added.` : "."));
+    setEditFor(null); load();
+  }
   async function runMigration() {
     if (!confirm("Move all challan pages from the public bucket into the private grn-docs bucket? Existing links keep working through the app.")) return;
     setMigr("Starting…");
@@ -275,6 +295,7 @@ export default function GrnRegisterPage() {
                         </td>
                         <td onClick={e => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
                           <a href={"/purchase/challan?grn=" + encodeURIComponent(g.grn_no)} target="_blank" rel="noreferrer"><button style={{ fontSize: 11.5 }}>🖨 Print</button></a>
+                          {canEditGrn(g) && g.status !== "cancelled" && <button style={{ fontSize: 11.5, marginLeft: 4 }} onClick={() => openEdit(g)}>✎ Edit</button>}
                           {canCancel && g.status !== "cancelled" && <button style={{ fontSize: 11.5, marginLeft: 4, color: "var(--red)" }} onClick={() => { setCancelFor(g); setCancelReason(""); }}>Cancel</button>}
                         </td>
                       </tr>
@@ -303,6 +324,7 @@ export default function GrnRegisterPage() {
                             <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
                               Entered by <b>{g.entered_by || "Not available"}</b> on {fmtDT(g.entered_at)}{g.po_no ? <> · against <b>{g.po_no}</b> (rate = PO net rate)</> : " · Rate = item's last known rate at receipt (valuation only, not vendor billing)"}.
                               {g.docs.length === 0 && <span style={{ color: "var(--amber)" }}> · No challan pages uploaded for this GRN.</span>}
+                              {g.last_edit && <span> · Last edited by <b>{g.last_edit.by || "—"}</b> on {fmtDT(g.last_edit.at)}</span>}
                               {g.note && <div>Note: {g.note}</div>}
                             </div>
                             {g.cancel && <div className="error" style={{ marginTop: 8, fontSize: 12.5 }}>Cancelled by <b>{g.cancel.by || "—"}</b> on {fmtDT(g.cancel.at)} — reason: {g.cancel.reason}. Stock reversed; the original lines above are kept as history.</div>}
@@ -332,6 +354,28 @@ export default function GrnRegisterPage() {
           )}
         </div>}
 
+        {editFor && (
+          <div onClick={() => setEditFor(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 96, padding: 16 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 520, width: "100%", padding: 22, maxHeight: "92vh", overflowY: "auto" }}>
+              <h2 style={{ marginBottom: 2 }}>✎ Edit GRN {editFor.grn_no}</h2>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Header details only — quantities and items are corrected via vendor return or cancel. Every edit is logged with your name.</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div style={{ gridColumn: "1 / -1" }}><label className="muted">Vendor</label><input style={{ width: "100%" }} value={editVals.vendor} onChange={e => setEditVals(v => ({ ...v, vendor: e.target.value }))} /></div>
+                <div><label className="muted">Supplier challan no</label><input style={{ width: "100%" }} value={editVals.challan_no} onChange={e => setEditVals(v => ({ ...v, challan_no: e.target.value }))} /></div>
+                <div><label className="muted">Our challan no (duly signed &amp; stamped)</label><input style={{ width: "100%" }} value={editVals.our_challan_no} onChange={e => setEditVals(v => ({ ...v, our_challan_no: e.target.value }))} /></div>
+                <div><label className="muted">Challan date</label><input type="date" style={{ width: "100%" }} value={editVals.challan_date} onChange={e => setEditVals(v => ({ ...v, challan_date: e.target.value }))} /></div>
+                <div><label className="muted">Note</label><input style={{ width: "100%" }} value={editVals.note} onChange={e => setEditVals(v => ({ ...v, note: e.target.value }))} /></div>
+                <div><label className="muted">➕ Supplier challan pages ({editFor.sup_docs} on file)</label><input type="file" accept="image/*,.pdf" multiple style={{ width: "100%" }} onChange={e => setEditSup(Array.from(e.target.files || []))} /></div>
+                <div><label className="muted">➕ Our challan pages ({editFor.our_docs} on file — signed &amp; stamped)</label><input type="file" accept="image/*,.pdf" multiple style={{ width: "100%" }} onChange={e => setEditCo(Array.from(e.target.files || []))} /></div>
+              </div>
+              {(editFor.sup_docs === 0 || editFor.our_docs === 0) && <div style={{ color: "var(--amber)", fontSize: 12, marginTop: 8 }}>⚠ {editFor.sup_docs === 0 ? "Supplier challan pages pending. " : ""}{editFor.our_docs === 0 ? "Our challan pages pending — upload the signed & stamped copy." : ""}</div>}
+              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                <button className="primary" disabled={busy} onClick={saveEdit}>{busy ? "Saving…" : "Save changes"}</button>
+                <button onClick={() => setEditFor(null)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
         {cancelFor && (
           <div onClick={() => setCancelFor(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 96, padding: 16 }}>
             <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 460, width: "100%", padding: 22 }}>

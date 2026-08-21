@@ -72,6 +72,8 @@ export default function StockScreen() {
     }
     if (lines.length === 0) { setErr("Add at least one item (select item + received qty)."); return; }
     if (!form.vendor) { setErr("Select the vendor."); return; }
+    if (!String(form.our_challan || "").trim()) { setErr("Our challan no is mandatory."); return; }
+    if (!(coDocs || []).length) { setErr("Upload our challan pages (duly signed & stamped) — mandatory."); return; }
     setBusy(true);
     const res = await recordMultiGRN(
       { site_id: siteId, po_id: grnPO?.id || null, vendor: form.vendor, challan_no: form.challan, our_challan_no: form.our_challan,
@@ -114,6 +116,8 @@ export default function StockScreen() {
     setErr(""); if (!sel) { setErr("Select an item."); return; }
     if (!form.qty) { setErr("Enter quantity."); return; }
     if (!form.vendor) { setErr("Select the vendor."); return; }
+    if (!String(form.our_challan || "").trim()) { setErr("Our challan no is mandatory."); return; }
+    if (!(coDocs || []).length) { setErr("Upload our challan pages (duly signed & stamped) — mandatory."); return; }
     setBusy(true);
     const res = await recordReturn({ site_id: siteId, item_id: sel.id, qty: Number(form.qty),
       kind: "return_vendor", reason: form.reason, vendor: form.vendor, done_by: userId });
@@ -191,7 +195,7 @@ export default function StockScreen() {
             </select>
           </div>
           <div className="m-field"><label>Vendor challan no</label><input value={form.challan || ""} onChange={e => setForm(f => ({ ...f, challan: e.target.value }))} /></div>
-          <div className="m-field"><label>Our challan no</label><input value={form.our_challan || ""} onChange={e => setForm(f => ({ ...f, our_challan: e.target.value }))} /></div>
+          <div className="m-field"><label>Our challan no * (duly signed &amp; stamped)</label><input value={form.our_challan || ""} onChange={e => setForm(f => ({ ...f, our_challan: e.target.value }))} /></div>
           <div className="m-field"><label>Challan date</label><input type="date" value={form.cdate || ""} onChange={e => setForm(f => ({ ...f, cdate: e.target.value }))} /></div>
           <ItemSearch />
           <div className="m-field"><label>Challan qty</label><input inputMode="decimal" value={form.challan_qty || ""} onChange={e => setForm(f => ({ ...f, challan_qty: e.target.value }))} /></div>
@@ -216,7 +220,7 @@ export default function StockScreen() {
             <input type="file" accept="image/*,.pdf" multiple onChange={e => setSupDocs(Array.from(e.target.files || []))} />
             {supDocs.length > 0 && <div className="muted" style={{ fontSize: 11.5 }}>{supDocs.length} page(s) selected</div>}
           </div>
-          <div className="m-field"><label>📷 Our challan pages (photos/PDF — multiple)</label>
+          <div className="m-field"><label>📷 Our challan pages * (duly signed &amp; stamped — photos/PDF)</label>
             <input type="file" accept="image/*,.pdf" multiple onChange={e => setCoDocs(Array.from(e.target.files || []))} />
             {coDocs.length > 0 && <div className="muted" style={{ fontSize: 11.5 }}>{coDocs.length} page(s) selected</div>}
           </div>
