@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
+import AdvanceLedger from "@/components/AdvanceLedger";
 import { billUrl, isPdf } from "@/lib/bills";
 import { isDemo } from "@/lib/supabase";
 import {
@@ -389,6 +390,8 @@ export default function ExpensesPage() {
           {petty.length === 0 ? <span className="muted">No petty cash issued yet.</span> :
             <DataTable columns={pettyCols} rows={petty} exportName="petty_cash" />}
         </div>
+        <div id="advances" />
+        <AdvanceLedger />
       </main>
     </div>
   );
