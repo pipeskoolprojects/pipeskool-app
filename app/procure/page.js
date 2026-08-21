@@ -321,6 +321,21 @@ export default function ProcurePage() {
   }
 
   const open = (indents || []).filter(i => i.status === "open" || i.status === "quoting");
+  // update195: pagination — 10 per page, Prev/Next + page numbers
+  const [indPage, setIndPage] = useState(1);
+  const [poPage, setPoPage] = useState(1);
+  const PAGE = 10;
+  const pager = (page, setPage, total) => { const n = Math.max(Math.ceil(total / PAGE), 1); if (page > n) setPage(n); return (
+    <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end", margin: "8px 0" }}>
+      <span className="muted" style={{ fontSize: 12, marginRight: "auto" }}>Showing {(Math.min(page, n) - 1) * PAGE + (total ? 1 : 0)}–{Math.min(Math.min(page, n) * PAGE, total)} of {total}</span>
+      <button style={{ fontSize: 12 }} disabled={page <= 1} onClick={() => setPage(p2 => p2 - 1)}>‹ Prev</button>
+      {Array.from({ length: n }, (_, i) => i + 1).filter(i => i === 1 || i === n || Math.abs(i - page) <= 2).map((i, idx, arr) => (
+        <span key={i}>{idx > 0 && arr[idx - 1] !== i - 1 && <span className="muted">…</span>}
+          <button style={{ fontSize: 12, fontWeight: i === Math.min(page, n) ? 800 : 400, background: i === Math.min(page, n) ? "var(--copper)" : undefined, color: i === Math.min(page, n) ? "#fff" : undefined }} onClick={() => setPage(i)}>{i}</button></span>
+      ))}
+      <button style={{ fontSize: 12 }} disabled={page >= n} onClick={() => setPage(p2 => p2 + 1)}>Next ›</button>
+    </div>); };
+  const openPage = open.slice((indPage - 1) * PAGE, indPage * PAGE);
   async function doCancel(p) { if (!confirm("Cancel PO " + p.po_no + "?")) return; await cancelPO(p.id); load(); }
 
   return (
@@ -396,7 +411,9 @@ export default function ProcurePage() {
             </div>
           )}
           {!indents ? <div className="muted">Loading…</div> : open.length === 0 ? <span className="muted">No open indents. Site staff raise them from Material stock → Raise material request.</span> : (
-            open.map(ind => (
+            <>
+            {pager(indPage, setIndPage, open.length)}
+            {openPage.map(ind => (
               <div key={ind.id} style={{ border: "1px solid var(--border)", borderRadius: 10, marginBottom: 10 }}>
                 <div onClick={() => openIndent(ind)} style={{ padding: 12, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
@@ -674,7 +691,9 @@ export default function ProcurePage() {
                   </div>
                 )}
               </div>
-            ))
+            ))}
+            {pager(indPage, setIndPage, open.length)}
+          </>
           )}
         </div>
 
@@ -713,11 +732,12 @@ export default function ProcurePage() {
             <span className="muted" style={{ fontSize: 12, marginLeft: "auto" }}>{poShown.length} of {pos.length} POs · {inr(poShown.reduce((s, p) => s + (p.status === "cancelled" ? 0 : Number(p.total || 0)), 0))} (excl. cancelled)</span>
           </div>
           {pos.length === 0 ? <span className="muted">No POs yet.</span> : poShown.length === 0 ? <span className="muted">No POs match these filters.</span> : (
-            <div style={{ overflowX: "auto" }}>
+            <>{pager(poPage, setPoPage, poShown.length)}
+              <div style={{ overflowX: "auto" }}>
               <table className="dt-compact">
                 <thead><tr><th>PO no</th><th>Date</th><th>Indent</th><th>Raised by</th><th>Site</th><th>Vendor</th><th className="num">Amount</th><th className="num">Received</th><th>Delivery</th><th>Status</th><th>Action</th></tr></thead>
                 <tbody>
-                  {poShown.map(p => { const [dl, dc] = DELIVERY_STATUS[p.delivery_status] || DELIVERY_STATUS.pending; return (
+                  {poShown.slice((poPage - 1) * PAGE, poPage * PAGE).map(p => { const [dl, dc] = DELIVERY_STATUS[p.delivery_status] || DELIVERY_STATUS.pending; return (
                     <tr key={p.id}>
                       <td style={{ fontWeight: 600 }}>{p.po_no}</td>
                       <td className="muted">{p.date}</td>
@@ -742,6 +762,7 @@ export default function ProcurePage() {
                 </tbody>
               </table>
             </div>
+              {pager(poPage, setPoPage, poShown.length)}</>
           )}
         </div>
         {deliv && (
