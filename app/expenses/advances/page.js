@@ -43,22 +43,27 @@ export default function AdvanceLedgerPage() {
     (t, g) => ({ taken: t.taken + g.taken, rec: t.rec + g.recovered, out: t.out + g.outstanding }),
     { taken: 0, rec: 0, out: 0 }), [perPerson]);
 
+  // update197: person-wise rows like "Petty cash — balance held by person" — one row per
+  // employee with totals + 📒 Ledger; per-advance detail (date/reason/status) lives in the ledger.
+  const personRows = useMemo(() => Object.entries(perPerson).map(([k, g]) => ({
+    id: k, holder: g.name, kind: g.kind === "labour" ? "Worker" : "Staff",
+    advances: g.advances.filter(a => a.status === "approved").length,
+    taken: g.taken, recovered: g.recovered, outstanding: g.outstanding,
+    last: g.advances[0]?.date || "",
+  })).filter(r => r.taken > 0 || r.advances > 0 || r.outstanding > 0)
+    .sort((a, b) => b.outstanding - a.outstanding), [perPerson]);
+
   const cols = [
-    { key: "date", label: "Date", type: "date" },
-    { key: "employee", label: "Employee", filter: "search", wrap: true,
-      render: r => <a style={{ cursor: "pointer", fontWeight: 600 }} onClick={() => setPerson(r.pkey)}>{r.employee}</a> },
-    { key: "kind", label: "Type", filter: "select", render: r => r.kind === "labour" ? "Worker" : "Staff" },
-    { key: "site", label: "Site", filter: "select", wrap: true },
-    { key: "amount", label: "Advance ₹", type: "num", render: r => inr(r.amount) },
-    { key: "reason", label: "Reason", filter: "search", wrap: true },
-    { key: "approved_by", label: "Approved by", filter: "select" },
-    { key: "status", label: "Status", filter: "select",
-      render: r => <span className={"badge " + (STATUS_BADGE[r.status] || "gray")}>{r.status}</span> },
-    { key: "_rec", label: "Recovered (person)", type: "num", exportValue: r => perPerson[r.pkey]?.recovered ?? 0,
-      render: r => inr(perPerson[r.pkey]?.recovered || 0) },
-    { key: "_out", label: "Outstanding (person)", type: "num", exportValue: r => perPerson[r.pkey]?.outstanding ?? 0,
-      render: r => <b style={{ color: (perPerson[r.pkey]?.outstanding || 0) > 0 ? "var(--red)" : "var(--green)" }}>{inr(perPerson[r.pkey]?.outstanding || 0)}</b> },
-    { key: "_view", label: "", render: r => <button style={{ fontSize: 11.5 }} onClick={() => setPerson(r.pkey)}>👁 View</button>, exportValue: () => "" },
+    { key: "holder", label: "Employee", filter: "search", wrap: true,
+      render: r => <a style={{ cursor: "pointer", fontWeight: 600 }} onClick={() => setPerson(r.id)}>{r.holder}</a> },
+    { key: "kind", label: "Type", filter: "select" },
+    { key: "advances", label: "Advances", type: "num" },
+    { key: "last", label: "Last advance", type: "date" },
+    { key: "taken", label: "Taken", type: "num", render: r => inr(r.taken) },
+    { key: "recovered", label: "Recovered", type: "num", render: r => <span style={{ color: "var(--green)" }}>{inr(r.recovered)}</span> },
+    { key: "outstanding", label: "Outstanding", type: "num",
+      render: r => <b style={{ color: r.outstanding > 0 ? "var(--red)" : "var(--green)" }}>{inr(r.outstanding)}</b> },
+    { key: "_view", label: "", render: r => <button style={{ fontSize: 11.5 }} onClick={() => setPerson(r.id)}>📒 Ledger</button>, exportValue: () => "" },
   ];
 
   const pg = person ? perPerson[person] : null;
@@ -81,9 +86,9 @@ export default function AdvanceLedgerPage() {
         </div>
         <div className="panel">
           {!data ? <div className="muted">Loading…</div> :
-            <DataTable columns={cols} rows={rows} exportName="advance_salary_ledger" dateField="date" />}
+            <DataTable columns={cols} rows={personRows} exportName="advance_salary_ledger" dateField="last" />}
           <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            Recovery happens automatically through wage / staff payouts (advances deducted from pay). Recovered and Outstanding are per person — click a name for their full ledger. Use the date filter + Export Excel for any month; print the ledger via the browser for PDF.
+            One row per employee, like the petty-cash holder table. 📒 Ledger shows every advance (date, site, reason, status) and the month-wise recovery through pay. Recovery is automatic — advances are deducted from wage / staff payouts.
           </div>
         </div>
 
