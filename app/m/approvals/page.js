@@ -15,6 +15,7 @@ import {
 } from "@/lib/money";
 import { getApprovalQueue, actOnLeave, getApprovalChain } from "@/lib/leave";
 import { listPendingItems, approveItem, rejectPendingItem } from "@/lib/stock";
+import { getPOs, approvePO } from "@/lib/procure";
 import { billUrl } from "@/lib/bills";
 
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
@@ -27,7 +28,7 @@ const noBtn = { ...btn, borderColor: "var(--red)", color: "var(--red)" };
 
 const TYPES = [
   ["petty", "₹ Petty cash"], ["expense", "🧾 Expenses"], ["advance", "💸 Advances"],
-  ["leave", "🌴 Leave"], ["return", "↩ Returns"], ["item", "📦 New items"],
+  ["leave", "🌴 Leave"], ["return", "↩ Returns"], ["item", "📦 New items"], ["po", "📄 POs"],
 ];
 
 export default function ApprovalsScreen() {
@@ -43,19 +44,20 @@ export default function ApprovalsScreen() {
   const [viewer, setViewer] = useState(null); // { urls, idx, title }
 
   const load = async () => {
-    const [petty, expense, advance, leave, ret, items] = await Promise.all([
+    const [petty, expense, advance, leave, ret, items, pos] = await Promise.all([
       getPettyRequestQueue().then(rs => rs.filter(r => r.status === "pending")),
       getExpenseClaimQueue().then(rs => rs.filter(r => r.status === "pending")),
       getAdvanceQueue().then(rs => rs.filter(r => r.status === "pending")),
       getApprovalQueue().catch(() => []),
       getPettyReturnQueue().catch(() => []),
       listPendingItems().catch(() => []),
+      getPOs("all").then(ps => ps.filter(p => p.approval === "pending" && p.status !== "cancelled")).catch(() => []),
     ]);
-    setData({ petty, expense, advance, leave, ret, items });
+    setData({ petty, expense, advance, leave, ret, items, pos });
   };
   useEffect(() => { load(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const total = data ? data.petty.length + data.expense.length + data.advance.length + data.leave.length + data.ret.length + data.items.length : 0;
+  const total = data ? data.petty.length + data.expense.length + data.advance.length + data.leave.length + data.ret.length + data.items.length + (data.pos?.length || 0) : 0;
   const sites = useMemo(() => data ? [...new Set([...data.petty, ...data.expense, ...data.advance, ...data.ret].map(r => r.site).filter(Boolean))].sort() : [], [data]);
   const bySite = r => site === "all" || r.site === site;
   const show = k => type === "all" || type === k;
@@ -110,7 +112,7 @@ export default function ApprovalsScreen() {
         {isDemo && <div className="note amber">Demo mode.</div>}
         <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 6 }}>
           <button style={{ ...btn, background: type === "all" ? "var(--copper)" : "#fff", color: type === "all" ? "#fff" : "var(--text)" }} onClick={() => setType("all")}>All {data ? `(${total})` : ""}</button>
-          {TYPES.map(([k, l]) => { const n = data ? ({ petty: data.petty, expense: data.expense, advance: data.advance, leave: data.leave, return: data.ret, item: data.items })[k].length : 0; return n > 0 && (
+          {TYPES.map(([k, l]) => { const n = data ? ({ petty: data.petty, expense: data.expense, advance: data.advance, leave: data.leave, return: data.ret, item: data.items, po: data.pos || [] })[k].length : 0; return n > 0 && (
             <button key={k} style={{ ...btn, whiteSpace: "nowrap", background: type === k ? "var(--copper)" : "#fff", color: type === k ? "#fff" : "var(--text)" }} onClick={() => setType(type === k ? "all" : k)}>{l} ({n})</button>
           ); })}
         </div>
@@ -193,6 +195,20 @@ export default function ApprovalsScreen() {
                   <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                     <button style={okBtn} disabled={busyId === r.id} onClick={() => confirmSheet("return", r, "confirmed")}>✔ Received</button>
                     <button style={noBtn} disabled={busyId === r.id} onClick={() => confirmSheet("return", r, "rejected")}>✕ Not received</button>
+                  </div>
+                </div>
+              ))}
+            </Sec>
+            <Sec id="po" title="Purchase orders awaiting approval" count={(data.pos || []).length}>
+              {(data.pos || []).map(r => (
+                <div key={r.id} style={card}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <div><b>{r.po_no}</b> · {r.site}<div className="muted" style={{ fontSize: 12 }}>{r.vendor} · indent {r.indent_no || "—"} · by {r.raised_by || "—"} · {r.date}</div></div>
+                    <div style={{ fontWeight: 800, fontSize: 16, whiteSpace: "nowrap" }}>{inr(r.total)}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    <button style={okBtn} disabled={busyId === r.id} onClick={() => run(r.id, () => approvePO(r.id, "approved"), `${r.po_no} approved — office can issue it now.`)}>✓ Approve</button>
+                    <button style={noBtn} disabled={busyId === r.id} onClick={() => { const why = prompt(`Reason for rejecting ${r.po_no}:`); if (why !== null) run(r.id, () => approvePO(r.id, "rejected", why), `${r.po_no} rejected.`); }}>✕ Reject</button>
                   </div>
                 </div>
               ))}

@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import { isDemo } from "@/lib/supabase";
 import { getSession, can } from "@/lib/auth";
 import {
-  getOpenIndents, saveQuotes, getQuotes, buildComparison, createPO, getPOs, cancelPO, inr,
+  getOpenIndents, saveQuotes, getQuotes, buildComparison, createPO, getPOs, cancelPO, approvePO, inr,
   DELIVERY_STATUS, updatePODelivery,
 } from "@/lib/procure";
 import { getVendors } from "@/lib/vendors";
@@ -14,6 +14,7 @@ import { getSites } from "@/lib/data";
 
 export default function ProcurePage() {
   const [session, setSession] = useState(null);
+  const isDirector = session?.role === "director";
   const [indents, setIndents] = useState(null);
   const [pos, setPos] = useState([]);
   const [poFsite, setPoFsite] = useState("all");     // update178: PO list filters
@@ -735,7 +736,7 @@ export default function ProcurePage() {
             <>{pager(poPage, setPoPage, poShown.length)}
               <div style={{ overflowX: "auto" }}>
               <table className="dt-compact">
-                <thead><tr><th>PO no</th><th>Date</th><th>Indent</th><th>Raised by</th><th>Site</th><th>Vendor</th><th className="num">Amount</th><th className="num">Received</th><th>Delivery</th><th>Status</th><th>Action</th></tr></thead>
+                <thead><tr><th>PO no</th><th>Date</th><th>Indent</th><th>Raised by</th><th>Site</th><th>Vendor</th><th className="num">Amount</th><th>Approval</th><th className="num">Received</th><th>Delivery</th><th>Status</th><th>Action</th></tr></thead>
                 <tbody>
                   {poShown.slice((poPage - 1) * PAGE, poPage * PAGE).map(p => { const [dl, dc] = DELIVERY_STATUS[p.delivery_status] || DELIVERY_STATUS.pending; return (
                     <tr key={p.id}>
@@ -746,6 +747,23 @@ export default function ProcurePage() {
                       <td className="muted">{p.site || "—"}</td>
                       <td>{p.vendor}</td>
                       <td className="num">{inr(p.total)}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>{/* update198: Director approval */}
+                        {p.approval === "approved"
+                          ? <span className="badge p" title={p.approved_by ? "Approved by " + p.approved_by + (p.approved_at ? " on " + p.approved_at : "") : "Approved"}>✓ Approved</span>
+                          : p.approval === "rejected"
+                          ? <span className="badge red">✗ Rejected</span>
+                          : <span className="badge warn">⏳ Pending</span>}
+                        {p.approval === "approved" && p.approved_by && <div className="muted" style={{ fontSize: 10.5 }}>{p.approved_by}{p.approved_at ? " · " + p.approved_at : ""}</div>}
+                        {p.approval === "rejected" && p.reject_reason && <div className="muted" style={{ fontSize: 10.5, maxWidth: 140 }}>{p.reject_reason}{p.approved_by ? " — " + p.approved_by : ""}</div>}
+                        {isDirector && p.approval === "pending" && p.status !== "cancelled" && (
+                          <div style={{ marginTop: 3 }}>
+                            <button style={{ fontSize: 11, background: "var(--green)", color: "#fff", border: 0, marginRight: 4 }}
+                              onClick={async () => { if (!window.confirm("Approve " + p.po_no + " (" + inr(p.total) + " · " + p.vendor + ")?")) return; const r = await approvePO(p.id, "approved"); if (!r.ok) { setErr(r.error); return; } setMsg(p.po_no + " approved."); load(); }}>✓ Approve</button>
+                            <button style={{ fontSize: 11, color: "var(--red)" }}
+                              onClick={async () => { const why = window.prompt("Reason for rejecting " + p.po_no + ":"); if (why === null) return; const r = await approvePO(p.id, "rejected", why); if (!r.ok) { setErr(r.error); return; } setMsg(p.po_no + " rejected."); load(); }}>✗ Reject</button>
+                          </div>
+                        )}
+                      </td>
                       <td className="num" style={{ whiteSpace: "nowrap" }}>{p.received_pct === null || p.received_pct === undefined ? <span className="muted">—</span> : <span style={{ color: p.received_pct >= 100 ? "var(--green)" : p.received_pct > 0 ? "var(--amber)" : "var(--muted)" }}>{p.received_pct}%<span className="muted" style={{ fontSize: 10.5 }}> {p.items_complete}/{p.item_count} items</span></span>}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <span className={"badge " + dc}>{dl}</span>
@@ -754,7 +772,9 @@ export default function ProcurePage() {
                       <td><span className="badge gray">{p.status}</span></td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => setDeliv({ id: p.id, po_no: p.po_no, expected_delivery: p.expected_delivery || "", delivery_status: p.delivery_status || "pending", delivery_note: p.delivery_note || "" })}>📦 Delivery</button>
-                        <a href={"/purchase/po?po=" + p.id} target="_blank" rel="noreferrer"><button style={{ fontSize: 11.5, marginRight: 4 }}>Print</button></a>
+                        {p.approval === "approved"
+                          ? <a href={"/purchase/po?po=" + p.id} target="_blank" rel="noreferrer"><button style={{ fontSize: 11.5, marginRight: 4 }}>Print</button></a>
+                          : <button style={{ fontSize: 11.5, marginRight: 4, color: "var(--muted)" }} disabled title={p.approval === "rejected" ? "Rejected — cannot be issued" : "Waiting for Director approval — cannot be issued yet"}>🔒 Print</button>}
                         {p.status !== "cancelled" && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => doCancel(p)}>Cancel</button>}
                       </td>
                     </tr>

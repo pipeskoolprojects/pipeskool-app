@@ -17,6 +17,16 @@ function POView() {
   const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN");
 
   if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading PO…</div>;
+
+  if (po && po.approval && po.approval !== "approved") return (
+
+    <div style={{ maxWidth: 560, margin: "60px auto", textAlign: "center", fontFamily: "system-ui" }}>
+
+      <h2>{po.approval === "rejected" ? "❌ PO rejected" : "⏳ Waiting for Director approval"}</h2>
+
+      <p style={{ color: "#666" }}>{po.po_no} cannot be issued or downloaded {po.approval === "rejected" ? "— it was rejected" + (po.approved_by ? " by " + po.approved_by : "") + "." : "until a Director approves it. Ask a Director to open Procurement → PO list → ✓ Approve."}</p>
+
+    </div>);
   if (!po) return <div style={{ padding: 40, textAlign: "center" }}>PO not found. Open this from Procurement → Purchase orders → View/Print.</div>;
 
   const items = po.items || [];
@@ -110,6 +120,7 @@ function POView() {
 
       <div style={{ marginTop: 50, textAlign: "right", fontSize: 12.5 }}>
         For Pipeskool Projects Pvt. Ltd.
+        {po.approved_by && <div style={{ fontSize: 11, color: "#555" }}>Approved by {po.approved_by}{po.approved_at ? " on " + po.approved_at : ""}</div>}
         <div style={{ marginTop: 40, borderTop: "1px solid #999", display: "inline-block", paddingTop: 4 }}>Authorised Signatory</div>
       </div>
 
