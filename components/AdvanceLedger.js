@@ -11,7 +11,7 @@ import { getAdvanceLedger, inr } from "@/lib/money";
 
 const STATUS_BADGE = { approved: "p", pending: "warn", rejected: "red", query: "h" };
 
-export default function AdvanceLedger() {
+export default function AdvanceLedger({ onTotals }) {
   const [data, setData] = useState(null);
   const [person, setPerson] = useState(null);   // pkey of the person whose ledger is open
   useEffect(() => {
@@ -41,6 +41,7 @@ export default function AdvanceLedger() {
   const totals = useMemo(() => Object.values(perPerson).reduce(
     (t, g) => ({ taken: t.taken + g.taken, rec: t.rec + g.recovered, out: t.out + g.outstanding }),
     { taken: 0, rec: 0, out: 0 }), [perPerson]);
+  useEffect(() => { onTotals?.(totals); }, [totals]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // update197: person-wise rows like "Petty cash — balance held by person" — one row per
   // employee with totals + 📒 Ledger; per-advance detail (date/reason/status) lives in the ledger.
@@ -68,18 +69,10 @@ export default function AdvanceLedger() {
   const pg = person ? perPerson[person] : null;
 
   return (
-    <div className="panel" style={{ marginTop: 14 }}>
-      <h2>Advance salary — ledger by person</h2>
-      <div style={{ display: "flex", gap: 22, flexWrap: "wrap", margin: "4px 0 10px" }}>
-        {[["💰 Taken (approved)", totals.taken, "var(--text)"],
-          ["✅ Recovered / deducted", totals.rec, "var(--green)"],
-          ["⏳ Outstanding", totals.out, totals.out > 0 ? "var(--red)" : "var(--green)"]].map(([l, v, c]) => (
-          <div key={l}><span className="muted" style={{ fontSize: 12 }}>{l}: </span><b style={{ fontSize: 16, color: c }}>{inr(v)}</b></div>
-        ))}
-      </div>
+    <div>
       <div>
           {!data ? <div className="muted">Loading…</div> :
-            <DataTable columns={cols} rows={personRows} exportName="advance_salary_ledger" dateField="last" />}
+            <DataTable columns={cols} rows={personRows} exportName="advance_salary_ledger" dateField="last" pageSize={10} />}
           <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
             One row per employee, like the petty-cash holder table. 📒 Ledger shows every advance (date, site, reason, status) and the month-wise recovery through pay. Recovery is automatic — advances are deducted from wage / staff payouts.
           </div>
