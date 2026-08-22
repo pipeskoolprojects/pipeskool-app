@@ -70,6 +70,9 @@ function Group({ label, items, subs, depth = 0, canSee, path, open, toggle, unre
 }
 
 export default function Sidebar() {
+  // update207: inside a project tab (iframe with ?embed=1) the project page provides the shell — hide the sidebar
+  const [embedded, setEmbedded] = useState(false);
+  useEffect(() => { try { if (new URLSearchParams(window.location.search).get("embed") === "1") setEmbedded(true); } catch {} }, []);
   const path = usePathname();
   const router = useRouter();
   const [session, setSession] = useState(null);
@@ -113,6 +116,8 @@ export default function Sidebar() {
   if (hidden) return (
     <><button className="sidebar-show" title="Show menu" onClick={() => toggleHidden(false)}>☰</button><Assistant /></>
   );
+
+  if (embedded) return null;
 
   return (
     <><aside className="sidebar">
