@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import { isDemo } from "@/lib/supabase";
 import { getSession, can } from "@/lib/auth";
 import {
-  getOpenIndents, saveQuotes, getQuotes, buildComparison, createPO, getPOs, cancelPO, approvePO, inr,
+  getOpenIndents, saveQuotes, getQuotes, buildComparison, createPO, getPOs, cancelPO, approvePO, getAllIndents, inr,
   DELIVERY_STATUS, updatePODelivery,
 } from "@/lib/procure";
 import { getVendors } from "@/lib/vendors";
@@ -15,6 +15,7 @@ import { getSites } from "@/lib/data";
 export default function ProcurePage() {
   const [session, setSession] = useState(null);
   const isDirector = session?.role === "director";
+  const [allInd, setAllInd] = useState(null);   // update209: All Indents modal data (null = closed)
   const [indents, setIndents] = useState(null);
   const [pos, setPos] = useState([]);
   const [poFsite, setPoFsite] = useState("all");     // update178: PO list filters
@@ -30,7 +31,7 @@ export default function ProcurePage() {
   const [poFfrom, setPoFfrom] = useState("");
   const [poFto, setPoFto] = useState("");
   const poShown = pos.filter(p =>
-    (poFsite === "all" || p.site === poFsite) &&
+    (poFsite === "all" || p.site === poFsite || String(p.site_id) === String(poFsite)) &&
     (!poFindent || (p.indent_no || "").toLowerCase().includes(poFindent.toLowerCase()) || (p.po_no || "").toLowerCase().includes(poFindent.toLowerCase())) &&
     (poFraised === "all" || p.raised_by === poFraised) &&
     (poFvendorSel === "all" || p.vendor === poFvendorSel) &&
@@ -355,7 +356,7 @@ export default function ProcurePage() {
         <div className="panel">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h2>Open material requests {open.length > 0 && <span className="badge warn">{open.length}</span>}</h2>
-            <button className="primary" onClick={openNewIndent}>＋ New indent</button>
+            <button type="button" style={{ marginRight: 8 }} onClick={() => { setAllInd([]); getAllIndents().then(setAllInd); }}>🗂 All Indents</button><button className="primary" onClick={openNewIndent}>＋ New indent</button>
           </div>
           {ni && (
             <div style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 14, margin: "10px 0", background: "#FAFBFC" }}>
@@ -752,12 +753,13 @@ export default function ProcurePage() {
                       <td className="num">{inr(p.total)}</td>
                       <td style={{ whiteSpace: "nowrap" }}>{/* update198: Director approval */}
                         {p.approval === "approved"
-                          ? <span className="badge p" title={p.approved_by ? "Approved by " + p.approved_by + (p.approved_at ? " on " + p.approved_at : "") : "Approved"}>✓ Approved</span>
+                          ? <span className="badge p" title={p.approved_by ? "Approved by " + p.approved_by + (p.approved_at ? " on " + p.approved_at : "") : "Approved"}>✓ Approved by Director</span>
                           : p.approval === "rejected"
-                          ? <span className="badge red">✗ Rejected</span>
-                          : <span className="badge warn">⏳ Pending</span>}
+                          ? <span className="badge red">✕ Rejected</span>
+                          : <span className="badge warn">Draft · Awaiting approval</span>}
                         {p.approval === "approved" && p.approved_by && <div className="muted" style={{ fontSize: 10.5 }}>{p.approved_by}{p.approved_at ? " · " + p.approved_at : ""}</div>}
                         {p.approval === "rejected" && p.reject_reason && <div className="muted" style={{ fontSize: 10.5, maxWidth: 140 }}>{p.reject_reason}{p.approved_by ? " — " + p.approved_by : ""}</div>}
+                        {!isDirector && p.approval === "pending" && <div style={{ fontSize: 10.5, color: "var(--amber)", marginTop: 2 }}>⏳ Sent to Director — not yet active</div>}
                         {isDirector && p.approval === "pending" && p.status !== "cancelled" && (
                           <div style={{ marginTop: 3 }}>
                             <button style={{ fontSize: 11, background: "var(--green)", color: "#fff", border: 0, marginRight: 4 }}
@@ -810,6 +812,39 @@ export default function ProcurePage() {
             </div>
           </div>
         )}
+        {allInd !== null && (
+          <div onClick={() => setAllInd(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 95, padding: 14 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 860, width: "100%", padding: 20, maxHeight: "90vh", overflowY: "auto" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h2 style={{ margin: 0 }}>🗂 All indents ever raised</h2>
+                <button type="button" onClick={() => setAllInd(null)}>✕ Close</button>
+              </div>
+              <div className="muted" style={{ fontSize: 12, margin: "4px 0 10px" }}>Every indent, any status — nothing disappears just because a PO was raised from it.</div>
+              {allInd.length === 0 ? <div className="muted">Loading…</div> : (
+                <div style={{ overflowX: "auto" }}>
+                  <table className="dt-compact" style={{ width: "100%" }}>
+                    <thead><tr><th>Indent</th><th>Site</th><th>Status</th><th>POs</th><th className="num">Items</th><th>By</th><th>Date</th><th>Need by</th></tr></thead>
+                    <tbody>
+                      {allInd.map(i => { const [lbl, cls] = ({ open: ["open", "warn"], quoting: ["quoting", "h"], po_issued: ["PO Raised", "p"], closed: ["closed", "gray"], cancelled: ["cancelled", "red"] })[i.status] || [i.status, "gray"]; return (
+                        <tr key={i.id}>
+                          <td style={{ fontWeight: 600 }}>{i.indent_no}{i.urgency === "urgent" && <span className="badge red" style={{ marginLeft: 6 }}>Urgent</span>}</td>
+                          <td>{i.site}</td>
+                          <td><span className={"badge " + cls}>{lbl}{i.status === "po_issued" && i.pos.length ? " — " + i.pos.join(", ") : ""}</span></td>
+                          <td className="muted" style={{ fontSize: 11.5 }}>{i.status !== "po_issued" && i.pos.length ? i.pos.join(", ") : i.pos.length ? "" : "—"}</td>
+                          <td className="num">{i.items}</td>
+                          <td>{i.by || "—"}</td>
+                          <td className="muted">{i.date}</td>
+                          <td className="muted">{i.required_by || "—"}</td>
+                        </tr>
+                      ); })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
       </main>
     </div>
   );
