@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getMyNotifications, markNotifRead, markAllNotifRead, subscribeNotifs } from "@/lib/notify";
+import { pushSupported, pushEnabled, enablePush } from "@/lib/push";
 
 function timeAgo(ts) {
   const s = Math.max(1, Math.floor((Date.now() - new Date(ts).getTime()) / 1000));
@@ -69,6 +70,11 @@ export default function NotifyBell({ mobile }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: "1px solid var(--border)" }}>
               <b style={{ fontSize: 14 }}>Notifications</b>
               {unread > 0 && <button style={{ fontSize: 11.5 }} onClick={async () => { await markAllNotifRead(); refresh(); }}>Mark all read</button>}
+              {pushSupported() && !pushEnabled() && (
+                <button style={{ fontSize: 11.5, marginLeft: 6 }} title="Get these on your phone even when the app is closed"
+                  onClick={async () => { const sess = getSession(); const r = await enablePush(sess?.id); alert(r.ok ? "✅ Phone notifications ON for this device." : r.error); }}>
+                  🔔 Enable on this device</button>
+              )}
             </div>
             {rows.length === 0 && <div className="muted" style={{ padding: 16, fontSize: 13 }}>Nothing yet.</div>}
             {rows.map(n => (
