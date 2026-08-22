@@ -13,6 +13,9 @@ const STATUS = { draft: ["Draft", "gray"], approved: ["Approved", "h"], paid: ["
 export default function WagesPage() {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [site, setSite] = useState("all");
+  useEffect(() => {   // update206: project scoping — ?site= from a project workspace pre-filters this page
+    try { const sp = new URLSearchParams(window.location.search).get("site"); if (sp) setSite(String(sp)); } catch {}
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [wq, setWq] = useState("");   // update190: worker search
   const [sites, setSites] = useState([]);
   const [rows, setRows] = useState(null);

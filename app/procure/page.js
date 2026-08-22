@@ -18,6 +18,9 @@ export default function ProcurePage() {
   const [indents, setIndents] = useState(null);
   const [pos, setPos] = useState([]);
   const [poFsite, setPoFsite] = useState("all");     // update178: PO list filters
+  useEffect(() => {   // update206: project scoping — ?site= from a project workspace pre-filters this page
+    try { const sp = new URLSearchParams(window.location.search).get("site"); if (sp) setPoFsite(String(sp)); } catch {}
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [poFvendor, setPoFvendor] = useState("");
   const [poFindent, setPoFindent] = useState("");
   const [poFraised, setPoFraised] = useState("all");

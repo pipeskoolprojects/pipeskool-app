@@ -8,15 +8,15 @@ import Sidebar from "@/components/Sidebar";
 import { isDemo } from "@/lib/supabase";
 import { getSession, setCurrentSite } from "@/lib/auth";
 import { inr } from "@/lib/money";
-import { getProjects, stMeta, getProjectDocs, uploadProjectDoc, projectDocUrl, deleteProjectDoc, getTasks, addTask, toggleTask, getProjectActivity } from "@/lib/projects";
+import { getProjects, stMeta, getProjectDocs, uploadProjectDoc, projectDocUrl, deleteProjectDoc, getTasks, addTask, toggleTask } from "@/lib/projects";
 
-const MODULES = [
-  ["👷", "Attendance & Labour", "/attendance"], ["🛒", "Procurement / Indents", "/procure"],
-  ["📄", "Purchase Orders", "/procure"], ["📦", "Stock", "/stock"],
-  ["🧾", "GRN / Challan", "/stock/grn"], ["📋", "DPR (Daily Progress)", "/dpr"],
-  ["💳", "Expenses & Money", "/expenses"], ["💰", "Salary / Wages", "/wages"],
-  ["🧮", "Billing (BOQ / RA)", "/billing"], ["🏗", "Assets", "/assets"],
-  ["📊", "Reports", "/reports"], ["👥", "Team & Access", "/workers"],
+const MODULES = [   // update206: links carry ?site= so each module opens scoped to THIS project
+  ["👷", "Attendance & Labour", "/attendance", true], ["🛒", "Procurement / Indents", "/procure", true],
+  ["📄", "Purchase Orders", "/procure", true], ["📦", "Stock", "/stock", true],
+  ["🧾", "GRN / Challan", "/stock/grn", true], ["📋", "DPR (Daily Progress)", "/dpr", false],
+  ["💳", "Expenses & Money", "/expenses", false], ["💰", "Salary / Wages", "/wages", true],
+  ["🧮", "Billing (BOQ / RA)", "/billing", true], ["🏗", "Assets", "/assets", false],
+  ["📊", "Reports", "/reports", false], ["👥", "Team & Access", "/workers", false],
 ];
 
 export default function ProjectWorkspace() {
@@ -24,7 +24,7 @@ export default function ProjectWorkspace() {
   const siteId = Number(id);
   const [session, setSession] = useState(null);
   const [p, setP] = useState(null); const [notFound, setNotFound] = useState(false);
-  const [docs, setDocs] = useState([]); const [tasks, setTasks] = useState([]); const [acts, setActs] = useState([]);
+  const [docs, setDocs] = useState([]); const [tasks, setTasks] = useState([]);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
   const [taskTitle, setTaskTitle] = useState(""); const [taskDue, setTaskDue] = useState("");
   const fileRef = useRef(null); const [uploading, setUploading] = useState(false);
@@ -39,7 +39,6 @@ export default function ProjectWorkspace() {
     getProjects().then(r => { const row = (r.rows || []).find(x => Number(x.id) === siteId); row ? setP(row) : setNotFound(true); });
     getProjectDocs(siteId).then(setDocs);
     getTasks({ siteId }).then(setTasks);
-    getProjectActivity(siteId, 10).then(setActs);
   }, [siteId]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   async function upload(e) {
@@ -98,8 +97,8 @@ export default function ProjectWorkspace() {
           <h2 style={{ fontSize: 15 }}>Quick access — project modules</h2>
           <div className="muted" style={{ fontSize: 11.5, marginBottom: 8 }}>Opening a module from here lands it on <b>{p.name}</b> (your site selector is now set to this project).</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
-            {MODULES.map(([ic, l, href]) => (
-              <Link key={l} href={href} style={{ textDecoration: "none" }}>
+            {MODULES.map(([ic, l, href, scoped]) => (
+              <Link key={l} href={scoped ? href + "?site=" + siteId : href} style={{ textDecoration: "none" }}>
                 <div className="panel" role="button" style={{ margin: 0, padding: "12px 10px", textAlign: "center", cursor: "pointer" }}>
                   <div style={{ fontSize: 22 }}>{ic}</div>
                   <div style={{ fontSize: 12, fontWeight: 600, marginTop: 4 }}>{l}</div>
@@ -109,7 +108,7 @@ export default function ProjectWorkspace() {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
           <div className="panel" style={{ margin: 0 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h2 style={{ fontSize: 15, margin: 0 }}>📁 Documents ({docs.length})</h2>
@@ -142,11 +141,6 @@ export default function ProjectWorkspace() {
                   {t.due_date && <span className="muted" style={{ fontSize: 11 }}>{t.due_date}</span>}
                 </label>
               ))}
-          </div>
-          <div className="panel" style={{ margin: 0 }}>
-            <h2 style={{ fontSize: 15 }}>🕘 Recent activity</h2>
-            {acts.length === 0 ? <div className="muted" style={{ fontSize: 12.5 }}>Activity from POs, GRNs, DPRs and expenses will appear here.</div> :
-              acts.map((a, i) => <div key={i} style={{ fontSize: 12.5, padding: "3px 0", borderBottom: "1px solid var(--border)" }}>{a.icon} {a.text}<span className="muted" style={{ fontSize: 10.5 }}> · {a.at?.slice(0, 10)}</span></div>)}
           </div>
         </div>
       </main>

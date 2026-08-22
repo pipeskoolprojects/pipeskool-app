@@ -4,15 +4,13 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
-import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import { inr } from "@/lib/money";
-import { getProjects, saveProject, PROJECT_STATUSES, stMeta, getTasks, addTask, toggleTask, getProjectActivity } from "@/lib/projects";
+import { getProjects, saveProject, PROJECT_STATUSES, stMeta, getTasks, addTask, toggleTask } from "@/lib/projects";
 
 const EMPTY = { name: "", code: "", address: "", client_name: "", client_contact: "", manager_id: "", project_status: "active",
   start_date: "", end_date: "", expected_start: "", contract_value: "", estimated_cost: "", priority: "medium", tags: "", description: "" };
-const ago = t => { const m = Math.floor((Date.now() - new Date(t)) / 60000); return m < 60 ? m + "m ago" : m < 1440 ? Math.floor(m / 60) + "h ago" : Math.floor(m / 1440) + "d ago"; };
 
 export default function ProjectsPage() {
   const [session, setSession] = useState(null);
@@ -20,12 +18,12 @@ export default function ProjectsPage() {
   const [tab, setTab] = useState("all");
   const [modal, setModal] = useState(null);   // project form (EMPTY or existing)
   const [busy, setBusy] = useState(false); const [err, setErr] = useState(""); const [msg, setMsg] = useState("");
-  const [tasks, setTasks] = useState([]); const [acts, setActs] = useState([]);
+  const [tasks, setTasks] = useState([]);
   const [taskForm, setTaskForm] = useState({ title: "", due_date: "", priority: "medium", site_id: "", assigned_to: "" });
   const [showTask, setShowTask] = useState(false);
 
   const isDirector = session?.role === "director";
-  const load = () => { getProjects().then(r => setData(r.rows ? r : { rows: [], staff: [] })); getProjectActivity(null, 8).then(setActs); };
+  const load = () => { getProjects().then(r => setData(r.rows ? r : { rows: [], staff: [] })); };
   useEffect(() => {
     const s = getSession(); if (!s) { window.location.replace("/login"); return; }
     setSession(s); load();
@@ -47,25 +45,29 @@ export default function ProjectsPage() {
   const top5 = [...all].filter(r => r.progress !== null).sort((a, b) => b.progress - a.progress).slice(0, 5);
   const shown = tab === "all" ? all.filter(r => r.status !== "idea") : by(tab);
 
-  const cols = [
-    { key: "name", label: "Project", filter: "search", wrap: true,
-      render: r => <Link href={"/projects/" + r.id} style={{ fontWeight: 700 }}>{r.name}</Link> },
-    { key: "client_name", label: "Client", filter: "select", wrap: true, render: r => r.client_name || "—" },
-    { key: "address", label: "Location", filter: "search", wrap: true, render: r => r.address || "—" },
-    { key: "manager", label: "Manager", filter: "select", render: r => r.manager || "—" },
-    { key: "start_date", label: "Start", type: "date", render: r => r.start_date || (r.expected_start ? "exp. " + r.expected_start : "—") },
-    { key: "end_date", label: "End", type: "date", render: r => r.end_date || "—" },
-    { key: "progress", label: "Progress", type: "num",
-      render: r => r.progress === null ? <span className="muted">—</span> : (
-        <div style={{ minWidth: 90 }}>{r.progress}%<div style={{ height: 5, background: "#eee", borderRadius: 3 }}><div style={{ width: r.progress + "%", height: 5, borderRadius: 3, background: r.progress >= 60 ? "var(--green)" : r.progress >= 35 ? "var(--amber)" : "var(--red)" }} /></div></div>) },
-    { key: "status", label: "Status", filter: "select",
-      render: r => { const [, l, c] = stMeta(r.status); return <span className="badge" style={{ background: c + "22", color: c, border: "1px solid " + c }}>{l}</span>; } },
-    { key: "_act", label: "", exportValue: () => "",
-      render: r => <span style={{ whiteSpace: "nowrap" }}>
-        <Link href={"/projects/" + r.id}><button style={{ fontSize: 11.5 }}>👁 Open</button></Link>
-        {isDirector && <button style={{ fontSize: 11.5, marginLeft: 4 }} onClick={() => { setErr(""); setModal({ id: r.id, ...r, manager_id: r.manager_id || "" }); }}>✎</button>}
-      </span> },
-  ];
+  // update206: card-grid filters (replace DataTable's built-ins; same behavior)
+  const [q2, setQ2] = useState(""); const [fFrom, setFFrom] = useState(""); const [fTo, setFTo] = useState("");
+  const [fClient, setFClient] = useState("all"); const [fMgr, setFMgr] = useState("all"); const [fSt2, setFSt2] = useState("all");
+  const clients = useMemo(() => [...new Set(all.map(r => r.client_name).filter(Boolean))].sort(), [all]);
+  const mgrs2 = useMemo(() => [...new Set(all.map(r => r.manager).filter(Boolean))].sort(), [all]);
+  const filtered = useMemo(() => shown.filter(r => {
+    if (q2 && !((r.name || "") + " " + (r.client_name || "") + " " + (r.address || "") + " " + (r.manager || "") + " " + (r.tags || "")).toLowerCase().includes(q2.toLowerCase())) return false;
+    if (fClient !== "all" && r.client_name !== fClient) return false;
+    if (fMgr !== "all" && r.manager !== fMgr) return false;
+    if (fSt2 !== "all" && r.status !== fSt2) return false;
+    const d = r.start_date || r.expected_start || "";
+    if (fFrom && (!d || d < fFrom)) return false;
+    if (fTo && (!d || d > fTo)) return false;
+    return true;
+  }), [shown, q2, fClient, fMgr, fSt2, fFrom, fTo]);
+  function exportExcel() {
+    const head = ["Project", "Client", "Location", "Manager", "Status", "Start", "End", "Progress %", "Contract value", "Invoiced"];
+    const rows2 = filtered.map(r => [r.name, r.client_name || "", r.address || "", r.manager || "", stMeta(r.status)[1], r.start_date || r.expected_start || "", r.end_date || "", r.progress ?? "", r.contract_value || "", r.invoiced || ""]);
+    const csv = [head, ...rows2].map(row => row.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(",")).join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv" })); a.download = "projects.csv"; a.click();
+  }
+  const initials = n => (n || "").split(/\s+/).slice(0, 2).map(x => x[0] || "").join("").toUpperCase() || "—";
+
 
   async function save() {
     setBusy(true); setErr("");
@@ -100,6 +102,7 @@ export default function ProjectsPage() {
     <div className="layout">
       <Sidebar />
       <main className="main">
+        <style>{`.proj-card:hover { box-shadow: 0 6px 18px rgba(15,20,25,0.10); border-color: var(--copper) !important; }`}</style>
         <div className="page-head" style={{ flexWrap: "wrap", gap: 8 }}>
           <div><h1>Project dashboard</h1><div className="muted" style={{ fontSize: 12.5 }}>Overview of all company projects and their progress</div></div>
           {isDirector && <div style={{ display: "flex", gap: 8 }}>
@@ -122,7 +125,7 @@ export default function ProjectsPage() {
           ))}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12, marginBottom: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12, marginBottom: 14 }}>
           <div className="panel" style={{ margin: 0 }}>
             <h2 style={{ fontSize: 15 }}>Projects overview</h2>
             <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
@@ -159,11 +162,6 @@ export default function ProjectsPage() {
                 </div>
               ))}
           </div>
-          <div className="panel" style={{ margin: 0 }}>
-            <h2 style={{ fontSize: 15 }}>Recent activity</h2>
-            {acts.length === 0 ? <div className="muted" style={{ fontSize: 12.5 }}>No recent activity.</div> :
-              acts.map((a, i) => <div key={i} style={{ fontSize: 12.5, padding: "3px 0", borderBottom: "1px solid var(--border)" }}>{a.icon} {a.text}<div className="muted" style={{ fontSize: 10.5 }}>{a.site} · {ago(a.at)}</div></div>)}
-          </div>
         </div>
 
         <div className="panel">
@@ -174,8 +172,46 @@ export default function ProjectsPage() {
                 {t === "all" ? "All" : stMeta(t)[1]}</button>
             ))}
           </div>
-          {!data ? <div className="muted">Loading…</div> : shown.length === 0 ? <div className="muted">No projects here yet.{isDirector ? " Use ＋ New project." : ""}</div> :
-            <DataTable columns={cols} rows={shown} exportName="projects" dateField="start_date" pageSize={10} />}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+            <input placeholder="🔎 Search project / client / location / manager…" value={q2} onChange={e => setQ2(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
+            <input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)} title="Start date from" />
+            <span className="muted" style={{ fontSize: 11 }}>to</span>
+            <input type="date" value={fTo} onChange={e => setFTo(e.target.value)} title="Start date to" />
+            <select value={fClient} onChange={e => setFClient(e.target.value)}><option value="all">Client: all</option>{clients.map(c => <option key={c} value={c}>{c}</option>)}</select>
+            <select value={fMgr} onChange={e => setFMgr(e.target.value)}><option value="all">Manager: all</option>{mgrs2.map(m2 => <option key={m2} value={m2}>{m2}</option>)}</select>
+            <select value={fSt2} onChange={e => setFSt2(e.target.value)}><option value="all">Status: all</option>{PROJECT_STATUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+            <button type="button" style={{ fontSize: 12 }} onClick={exportExcel}>⬇ Export Excel</button>
+          </div>
+          {!data ? <div className="muted">Loading…</div> : filtered.length === 0 ? <div className="muted">No projects match.{isDirector ? " Use ＋ New project." : ""}</div> : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
+              {filtered.map(r => { const [, sl, sc] = stMeta(r.status); return (
+                <div key={r.id} className="panel proj-card" style={{ margin: 0, padding: "14px 14px 12px", borderRadius: 14, display: "flex", flexDirection: "column", gap: 6, transition: "box-shadow .15s, border-color .15s" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+                    <Link href={"/projects/" + r.id} style={{ fontWeight: 800, fontSize: 14.5, lineHeight: 1.25 }}>{r.name}</Link>
+                    <span className="badge" style={{ background: sc + "18", color: sc, border: "1px solid " + sc, whiteSpace: "nowrap" }}>● {sl}</span>
+                  </div>
+                  <div className="muted" style={{ fontSize: 12 }}>Client: <b style={{ color: "var(--text)" }}>{r.client_name || "—"}</b></div>
+                  <div className="muted" style={{ fontSize: 12 }}>Location: {r.address || "—"}</div>
+                  {r.progress !== null ? (
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5 }}><span className="muted">Progress</span><b>{r.progress}%</b></div>
+                      <div style={{ height: 7, background: "#eee", borderRadius: 4 }}><div style={{ width: r.progress + "%", height: 7, borderRadius: 4, background: "var(--copper)" }} /></div>
+                    </div>
+                  ) : <div className="muted" style={{ fontSize: 11.5 }}>{r.status === "upcoming" || r.status === "idea" ? "Expected: " + (r.expected_start || "TBD") : "Add contract value for progress"}</div>}
+                  {r.manager && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                      <span style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--copper)", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800 }}>{initials(r.manager)}</span>
+                      <span>{r.manager} <span className="muted">· Project Manager</span></span>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 6, marginTop: "auto", paddingTop: 4 }}>
+                    <Link href={"/projects/" + r.id} style={{ flex: 1 }}><button type="button" style={{ width: "100%", background: "#0F1419", color: "#fff", border: 0, borderRadius: 9, padding: "8px 0", fontWeight: 700, fontSize: 12.5 }}>👁 Open</button></Link>
+                    {isDirector && <button type="button" title="Edit project" style={{ fontSize: 13, borderRadius: 9 }} onClick={() => { setErr(""); setModal({ id: r.id, ...r, manager_id: r.manager_id || "" }); }}>⋯</button>}
+                  </div>
+                </div>
+              ); })}
+            </div>
+          )}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>

@@ -44,6 +44,9 @@ export default function GrnRegisterPage() {
   const [session, setSession] = useState(null);
   const [sites, setSites] = useState([]);
   const [site, setSite] = useState("all");
+  useEffect(() => {   // update206: project scoping — ?site= from a project workspace pre-filters this page
+    try { const sp = new URLSearchParams(window.location.search).get("site"); if (sp) setSite(String(sp)); } catch {}
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState("");
   const [rows, setRows] = useState([]);

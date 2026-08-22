@@ -14,6 +14,9 @@ const STATUS_FLOW = ["draft", "submitted", "certified", "paid"];
 
 export default function BillingPage() {
   const [site, setSite] = useState(2);
+  useEffect(() => {   // update206: project scoping — ?site= from a project workspace pre-filters this page
+    try { const sp = new URLSearchParams(window.location.search).get("site"); if (sp) setSite(Number(sp)); } catch {}
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [SITES, setSITES] = useState([]);
   useEffect(() => { getSites().then(list => { const L = (list || []).map(x => ({ id: x.id, name: x.name })); setSITES(L); if (L[0] && !L.find(x => x.id === site)) setSite(L[0].id); }); }, []);
   const [settings, setSettings] = useState(null);

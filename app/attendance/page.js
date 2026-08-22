@@ -17,6 +17,9 @@ const statusBadge = s =>
 export default function AttendancePage() {
   const [date, setDate] = useState(() => todayLocal());
   const [site, setSite] = useState("all");
+  useEffect(() => {   // update206: project scoping — ?site= from a project workspace pre-filters this page
+    try { const sp = new URLSearchParams(window.location.search).get("site"); if (sp) setSite(String(sp)); } catch {}
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [sites, setSites] = useState([]);
   const [rows, setRows] = useState(null);
   const [loadErr, setLoadErr] = useState("");

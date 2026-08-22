@@ -13,6 +13,9 @@ const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN");
 
 export default function StockPage() {
   const [site, setSite] = useState("all");
+  useEffect(() => {   // update206: project scoping — ?site= from a project workspace pre-filters this page
+    try { const sp = new URLSearchParams(window.location.search).get("site"); if (sp) setSite(String(sp)); } catch {}
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [balances, setBalances] = useState(null);
   const [norms, setNorms] = useState([]);
   const [requests, setRequests] = useState([]);
