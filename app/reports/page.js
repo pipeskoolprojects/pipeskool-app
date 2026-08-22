@@ -73,6 +73,9 @@ function Area({ points }) {
 export default function ReportsPage() {
   const [days, setDays] = useState(7);
   const [siteId, setSiteId] = useState("all");
+  useEffect(() => {   // update207: project scoping
+    try { const sp = new URLSearchParams(window.location.search).get("site"); if (sp) setSiteId(String(sp)); } catch {}
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [r, setR] = useState(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => { setLoading(true); getDirectorReport(days).then(d => { setR(d); setLoading(false); }); }, [days]);

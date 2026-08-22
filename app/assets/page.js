@@ -12,6 +12,9 @@ const blankAsset = { asset_code: "", name: "", category: "", make_model: "", pur
 
 export default function AssetsPage() {
   const [site, setSite] = useState("all");
+  useEffect(() => {   // update207: project scoping
+    try { const sp = new URLSearchParams(window.location.search).get("site"); if (sp) setSite(String(sp)); } catch {}
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [assets, setAssets] = useState(null);
   const [calib, setCalib] = useState([]);
   const [repairs, setRepairs] = useState([]);

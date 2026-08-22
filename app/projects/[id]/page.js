@@ -10,13 +10,20 @@ import { getSession, setCurrentSite } from "@/lib/auth";
 import { inr } from "@/lib/money";
 import { getProjects, stMeta, getProjectDocs, uploadProjectDoc, projectDocUrl, deleteProjectDoc, getTasks, addTask, toggleTask } from "@/lib/projects";
 
-const MODULES = [   // update206: links carry ?site= so each module opens scoped to THIS project
-  ["👷", "Attendance & Labour", "/attendance", true], ["🛒", "Procurement / Indents", "/procure", true],
-  ["📄", "Purchase Orders", "/procure", true], ["📦", "Stock", "/stock", true],
-  ["🧾", "GRN / Challan", "/stock/grn", true], ["📋", "DPR (Daily Progress)", "/dpr", false],
-  ["💳", "Expenses & Money", "/expenses", false], ["💰", "Salary / Wages", "/wages", true],
-  ["🧮", "Billing (BOQ / RA)", "/billing", true], ["🏗", "Assets", "/assets", false],
-  ["📊", "Reports", "/reports", false], ["👥", "Team & Access", "/workers", false],
+const MODULES = [   // update207: every module renders INSIDE this page as a tab (embedded view, ?site scoped)
+  ["overview", "🏠", "Overview", null],
+  ["attendance", "👷", "Attendance & Labour", "/attendance"],
+  ["procure", "🛒", "Procurement / Indents", "/procure"],
+  ["po", "📄", "Purchase Orders", "/procure"],
+  ["stock", "📦", "Stock", "/stock"],
+  ["grn", "🧾", "GRN / Challan", "/stock/grn"],
+  ["dpr", "📋", "DPR", "/dpr"],
+  ["expenses", "💳", "Expenses & Money", "/expenses"],
+  ["wages", "💰", "Salary / Wages", "/wages"],
+  ["billing", "🧮", "Billing", "/billing"],
+  ["assets", "🏗", "Assets", "/assets"],
+  ["reports", "📊", "Reports", "/reports"],
+  ["team", "👥", "Team & Access", "/workers"],
 ];
 
 export default function ProjectWorkspace() {
@@ -28,6 +35,11 @@ export default function ProjectWorkspace() {
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
   const [taskTitle, setTaskTitle] = useState(""); const [taskDue, setTaskDue] = useState("");
   const fileRef = useRef(null); const [uploading, setUploading] = useState(false);
+  const [tab, setTab] = useState("overview");
+  const [visited, setVisited] = useState({ overview: true });   // iframes mount lazily, then stay mounted (no reload on tab switch)
+  useEffect(() => { try { const t = new URLSearchParams(window.location.search).get("tab"); if (t && MODULES.some(m => m[0] === t)) { setTab(t); setVisited(v => ({ ...v, [t]: true })); } } catch {} }, []);
+  const openTab = t => { setTab(t); setVisited(v => ({ ...v, [t]: true }));
+    try { window.history.replaceState(null, "", "/projects/" + siteId + (t === "overview" ? "" : "?tab=" + t)); } catch {} };
   const isDirector = session?.role === "director";
 
   useEffect(() => {
@@ -93,21 +105,27 @@ export default function ProjectWorkspace() {
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
         {err && <div className="note red">{err}</div>}
 
-        <div className="panel">
-          <h2 style={{ fontSize: 15 }}>Quick access — project modules</h2>
-          <div className="muted" style={{ fontSize: 11.5, marginBottom: 8 }}>Opening a module from here lands it on <b>{p.name}</b> (your site selector is now set to this project).</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
-            {MODULES.map(([ic, l, href, scoped]) => (
-              <Link key={l} href={scoped ? href + "?site=" + siteId : href} style={{ textDecoration: "none" }}>
-                <div className="panel" role="button" style={{ margin: 0, padding: "12px 10px", textAlign: "center", cursor: "pointer" }}>
-                  <div style={{ fontSize: 22 }}>{ic}</div>
-                  <div style={{ fontSize: 12, fontWeight: 600, marginTop: 4 }}>{l}</div>
-                </div>
-              </Link>
-            ))}
-          </div>
+        <div style={{ display: "flex", gap: 2, flexWrap: "wrap", borderBottom: "2px solid var(--border)", margin: "4px 0 12px" }}>
+          {MODULES.map(([key, ic, label]) => (
+            <button key={key} type="button" onClick={() => openTab(key)}
+              style={{ border: "none", background: "none", padding: "8px 10px", fontSize: 12.5, cursor: "pointer", whiteSpace: "nowrap",
+                fontWeight: tab === key ? 800 : 500, color: tab === key ? "var(--copper)" : "var(--text)",
+                borderBottom: tab === key ? "3px solid var(--copper)" : "3px solid transparent", marginBottom: -2 }}>
+              {ic} {label}</button>
+          ))}
+        </div>
+        <div className="muted no-print" style={{ fontSize: 11.5, marginBottom: 8 }}>
+          Everything for <b>{p.name}</b> lives on this page — switching tabs never navigates away; each tab loads only this project's data (its own filters, search and exports work as usual, and the site dropdown inside can widen the view deliberately).
         </div>
 
+        {MODULES.filter(m => m[3] && visited[m[0]]).map(([key, , label, href]) => (
+          <div key={key} style={{ display: tab === key ? "block" : "none" }}>
+            <iframe title={label} src={href + "?site=" + siteId + "&embed=1"}
+              style={{ width: "100%", height: "calc(100vh - 230px)", minHeight: 480, border: "1px solid var(--border)", borderRadius: 12, background: "#fff" }} />
+          </div>
+        ))}
+
+        <div style={{ display: tab === "overview" ? "block" : "none" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
           <div className="panel" style={{ margin: 0 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -142,6 +160,7 @@ export default function ProjectWorkspace() {
                 </label>
               ))}
           </div>
+        </div>
         </div>
       </main>
     </div>
