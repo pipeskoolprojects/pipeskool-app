@@ -126,7 +126,7 @@ export default function StockScreen() {
     setMsg("Returned to vendor: " + form.qty + " of " + sel.display_name); reset(); setTab("stock"); reload();
   }
 
-  const ItemSearch = () => (
+  const itemSearch = (
     <div className="m-field">
       <label>Item</label>
       {sel ? (
@@ -197,7 +197,7 @@ export default function StockScreen() {
           <div className="m-field"><label>Vendor challan no</label><input value={form.challan || ""} onChange={e => setForm(f => ({ ...f, challan: e.target.value }))} /></div>
           <div className="m-field"><label>Our challan no * (duly signed &amp; stamped)</label><input value={form.our_challan || ""} onChange={e => setForm(f => ({ ...f, our_challan: e.target.value }))} /></div>
           <div className="m-field"><label>Challan date</label><input type="date" value={form.cdate || ""} onChange={e => setForm(f => ({ ...f, cdate: e.target.value }))} /></div>
-          <ItemSearch />
+          {itemSearch}
           <div className="m-field"><label>Challan qty</label><input inputMode="decimal" value={form.challan_qty || ""} onChange={e => setForm(f => ({ ...f, challan_qty: e.target.value }))} /></div>
           <div className="m-field"><label>Received qty</label><input inputMode="decimal" value={form.received || ""} onChange={e => setForm(f => ({ ...f, received: e.target.value }))} /></div>
           <button className="btn-block" style={{ marginBottom: 8 }} onClick={addGrnLine}>＋ Add this item to challan</button>
@@ -229,7 +229,7 @@ export default function StockScreen() {
 
         {tab === "issue" && (<>
           <h3 style={{ fontSize: 14, margin: "4px 0 10px" }}>Issue to worker</h3>
-          <ItemSearch />
+          {itemSearch}
           <div className="m-field"><label>Issue to worker</label>
             <select value={form.worker || ""} onChange={e => setForm(f => ({ ...f, worker: e.target.value }))}>
               <option value="">Select worker…</option>
@@ -264,7 +264,7 @@ export default function StockScreen() {
 
         {tab === "return" && (<>
           <h3 style={{ fontSize: 14, margin: "4px 0 10px" }}>Return to vendor (wrong / excess)</h3>
-          <ItemSearch />
+          {itemSearch}
           <div className="m-field"><label>Quantity</label><input inputMode="decimal" value={form.qty || ""} onChange={e => setForm(f => ({ ...f, qty: e.target.value }))} /></div>
           <div className="m-field"><label>Vendor</label>
             <select value={form.vendor || ""} onChange={e => setForm(f => ({ ...f, vendor: e.target.value }))}>

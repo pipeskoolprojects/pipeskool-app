@@ -57,10 +57,6 @@ export default function ExpensesPage() {
   // every existing block just lives inside a section that opens on demand)
   const [openSec, setOpenSec] = useState({});   // key -> bool
   const toggleSec = k => setOpenSec(o => ({ ...o, [k]: !o[k] }));
-  // update201: Section now delegates to the stable top-level CollapseCard (fixes dead View buttons)
-  const Section = ({ id, ...rest }) => (
-    <CollapseCard htmlId={"sec-" + id} open={!!openSec[id]} onToggle={() => toggleSec(id)} keepMounted={id === "advled"} {...rest} />
-  );
   const sumBy = (rows, f) => (rows || []).reduce((t, r) => t + (f(r) || 0), 0);
   const approvedClaims = sumBy((claims || []).filter(c => c.status === "approved"), c => c.amount);
   const pendingClaims = sumBy((claims || []).filter(c => c.status === "pending"), c => c.amount);
@@ -263,7 +259,7 @@ export default function ExpensesPage() {
           </div>
         )}
 
-        <Section id="pettyreq" icon="🪙" title="Petty cash requests" sub="ask · approve · grant"
+        <CollapseCard htmlId="sec-pettyreq" open={!!openSec["pettyreq"]} onToggle={() => toggleSec("pettyreq")} icon="🪙" title="Petty cash requests" sub="ask · approve · grant"
           stats={[["Pending", (pettyReqs || []).filter(r => r.status === "pending").length, "var(--amber)"], ["Total", (pettyReqs || []).length]]}>
           {session && canAnySite(session, "money", "create") && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginBottom: 12, alignItems: "end" }}>
@@ -328,21 +324,21 @@ export default function ExpensesPage() {
                 ))}
               </tbody>
             </table>
-            <Pager n={pettyReqs.length} pg={pgPetty} set={setPgPetty} />
+            {Pager({ n: pettyReqs.length, pg: pgPetty, set: setPgPetty })}
           </>)}
-        </Section>
+        </CollapseCard>
 
-        <Section id="advreq" icon="📄" title="Advance salary requests" sub="approve · reject · query"
+        <CollapseCard htmlId="sec-advreq" open={!!openSec["advreq"]} onToggle={() => toggleSec("advreq")} icon="📄" title="Advance salary requests" sub="approve · reject · query"
           stats={[["Pending", inr(sumBy(advPending, a => a.amount)), advPending.length ? "var(--amber)" : undefined], ["Approved", inr(sumBy(advApproved, a => a.amount)), "var(--green)"], ["Requests", (adv || []).length]]}>
           {!adv ? <div className="muted">Loading…</div> :
             <DataTable columns={advCols} rows={adv} exportName="advance_requests" dateField="date" pageSize={10} />}
-        </Section>
+        </CollapseCard>
 
-        <Section id="claims" icon="💳" title="Expenses ledger" sub="all site expenses & payments"
+        <CollapseCard htmlId="sec-claims" open={!!openSec["claims"]} onToggle={() => toggleSec("claims")} icon="💳" title="Expenses ledger" sub="all site expenses & payments"
           stats={[["Approved", inr(approvedClaims), "var(--green)"], ["Pending", inr(pendingClaims), pendingClaims ? "var(--amber)" : undefined], ["Rejected", inr(rejectedClaims), rejectedClaims ? "var(--red)" : undefined], ["Transactions", (claims || []).length]]}>
           {!claims ? <div className="muted">Loading…</div> :
             <DataTable columns={claimCols} rows={claims} exportName="expense_claims" dateField="date" pageSize={10} />}
-        </Section>
+        </CollapseCard>
 
         {pettyReturns.length > 0 && (
           <div className="panel" style={{ borderLeft: "4px solid var(--copper)" }}>
@@ -360,7 +356,7 @@ export default function ExpensesPage() {
                   </td>
                 </tr>))}
               </tbody></table>
-            <Pager n={pettyReturns.length} pg={pgRet} set={setPgRet} />
+            {Pager({ n: pettyReturns.length, pg: pgRet, set: setPgRet })}
           </div>
         )}
 
@@ -420,23 +416,23 @@ export default function ExpensesPage() {
           </div>
         )}
 
-        <Section id="pettyled" icon="📒" title="Petty cash ledger" sub="cash balance held by persons"
+        <CollapseCard htmlId="sec-pettyled" open={!!openSec["pettyled"]} onToggle={() => toggleSec("pettyled")} icon="📒" title="Petty cash ledger" sub="cash balance held by persons"
           stats={[["Balance held", inr(pettyBal)], ["Spent", inr(pettySpent)], ["Returned", inr(pettyReturned), "var(--green)"], ["Holders", petty.length]]}>
           {petty.length === 0 ? <span className="muted">No petty cash issued yet.</span> :
             <DataTable columns={pettyCols} rows={petty} exportName="petty_cash" pageSize={10} />}
-        </Section>
+        </CollapseCard>
         <div id="advances" />
-        <Section id="advled" icon="🧾" title="Advance salary ledger" sub="advances given to employees"
+        <CollapseCard htmlId="sec-advled" open={!!openSec["advled"]} onToggle={() => toggleSec("advled")} keepMounted icon="🧾" title="Advance salary ledger" sub="advances given to employees"
           stats={[["Taken", inr(advTotals.taken)], ["Recovered", inr(advTotals.rec), "var(--green)"], ["Outstanding", inr(advTotals.out), advTotals.out > 0 ? "var(--red)" : "var(--green)"]]}>
-          <AdvanceLedger onTotals={setAdvTotals} />
-        </Section>
-        <Section id="reports" icon="📊" title="Reports" sub="exports & Tally">
+          <AdvanceLedger onTotals={t => setAdvTotals(prev => (prev.taken === t.taken && prev.rec === t.rec && prev.out === t.out) ? prev : t)} />
+        </CollapseCard>
+        <CollapseCard htmlId="sec-reports" open={!!openSec["reports"]} onToggle={() => toggleSec("reports")} icon="📊" title="Reports" sub="exports & Tally">
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", paddingTop: 4 }}>
             <span className="muted" style={{ fontSize: 12.5, width: "100%" }}>Every ledger above has its own ⬇ Excel export (with the filters you set). Additional:</span>
             <a href="/tally"><button style={{ fontSize: 12.5 }}>🧾 Tally export</button></a>
             <button style={{ fontSize: 12.5 }} onClick={() => window.print()}>🖨 Print this overview</button>
           </div>
-        </Section>
+        </CollapseCard>
       </main>
     </div>
   );

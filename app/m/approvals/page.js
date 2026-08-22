@@ -31,6 +31,16 @@ const TYPES = [
   ["leave", "🌴 Leave"], ["return", "↩ Returns"], ["item", "📦 New items"], ["po", "📄 POs"],
 ];
 
+// stable top-level (update204: inline component defs remount their subtree every render)
+function Sec({ visible, title, count, children }) {
+  return (visible && count > 0) ? (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontWeight: 700, fontSize: 13.5, margin: "4px 0 6px" }}>{title} <span className="badge warn">{count}</span></div>
+      {children}
+    </div>
+  ) : null;
+}
+
 export default function ApprovalsScreen() {
   const sess = typeof window !== "undefined" ? getSession() : null;
   useEffect(() => { if (typeof window !== "undefined" && !getSession()) window.location.replace("/m"); }, []);
@@ -92,12 +102,6 @@ export default function ApprovalsScreen() {
       action === "confirmed" ? `₹${row.amount} return from ${row.holder} confirmed received.` : "Return not accepted.");
   }
 
-  const Sec = ({ id, title, count, children }) => (show(id) && count > 0) ? (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ fontWeight: 700, fontSize: 13.5, margin: "4px 0 6px" }}>{title} <span className="badge warn">{count}</span></div>
-      {children}
-    </div>
-  ) : null;
 
   return (
     <div className="m-wrap">
@@ -126,7 +130,7 @@ export default function ApprovalsScreen() {
         {err && <div className="note red">{err}</div>}
         {!data ? <div className="muted">Loading…</div> : total === 0 ? <div className="note green">Nothing pending. Enjoy the site rounds 🚧</div> : (
           <>
-            <Sec id="petty" title="Petty cash requests" count={data.petty.filter(bySite).length}>
+            <Sec visible={show("petty")} title="Petty cash requests" count={data.petty.filter(bySite).length}>
               {data.petty.filter(bySite).map(r => (
                 <div key={r.id} style={card}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
@@ -140,7 +144,7 @@ export default function ApprovalsScreen() {
                 </div>
               ))}
             </Sec>
-            <Sec id="expense" title="Expense claims" count={data.expense.filter(bySite).length}>
+            <Sec visible={show("expense")} title="Expense claims" count={data.expense.filter(bySite).length}>
               {data.expense.filter(bySite).map(r => (
                 <div key={r.id} style={card}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
@@ -156,7 +160,7 @@ export default function ApprovalsScreen() {
                 </div>
               ))}
             </Sec>
-            <Sec id="advance" title="Salary advances" count={data.advance.filter(bySite).length}>
+            <Sec visible={show("advance")} title="Salary advances" count={data.advance.filter(bySite).length}>
               {data.advance.filter(bySite).map(r => (
                 <div key={r.id} style={card}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
@@ -171,7 +175,7 @@ export default function ApprovalsScreen() {
                 </div>
               ))}
             </Sec>
-            <Sec id="leave" title="Leave requests" count={data.leave.length}>
+            <Sec visible={show("leave")} title="Leave requests" count={data.leave.length}>
               {data.leave.map(r => (
                 <div key={r.id} style={card}>
                   <div><b>{r.staff_name}</b> <span className="muted">({r.app_users?.role})</span>
@@ -185,7 +189,7 @@ export default function ApprovalsScreen() {
                 </div>
               ))}
             </Sec>
-            <Sec id="return" title="Petty cash returns — confirm cash received" count={data.ret.filter(bySite).length}>
+            <Sec visible={show("return")} title="Petty cash returns — confirm cash received" count={data.ret.filter(bySite).length}>
               {data.ret.filter(bySite).map(r => (
                 <div key={r.id} style={card}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
@@ -199,7 +203,7 @@ export default function ApprovalsScreen() {
                 </div>
               ))}
             </Sec>
-            <Sec id="po" title="Purchase orders awaiting approval" count={(data.pos || []).length}>
+            <Sec visible={show("po")} title="Purchase orders awaiting approval" count={(data.pos || []).length}>
               {(data.pos || []).map(r => (
                 <div key={r.id} style={card}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
@@ -213,7 +217,7 @@ export default function ApprovalsScreen() {
                 </div>
               ))}
             </Sec>
-            <Sec id="item" title="New items awaiting review" count={data.items.length}>
+            <Sec visible={show("item")} title="New items awaiting review" count={data.items.length}>
               {data.items.map(r => (
                 <div key={r.id} style={card}>
                   <div><b>{r.display_name}</b><div className="muted" style={{ fontSize: 12 }}>{r.item_type}{r.unit ? ` · ${r.unit}` : ""} · quick-added at site</div></div>
