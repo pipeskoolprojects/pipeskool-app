@@ -4,7 +4,7 @@
 // transaction rows (historical) — never recomputed from current stock.
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
-import { getGrnRegister, getGrnDocUrl, grnDocName, cancelGrn, getGrnHistory, migrateGrnDocsToPrivate, GRN_BUCKET, getVendorReturnHistory, editGrnHeader, addGrnDocs } from "@/lib/stock";
+import { getGrnRegister, getGrnDocUrl, grnDocName, cancelGrn, getGrnHistory, migrateGrnDocsToPrivate, GRN_BUCKET, getVendorReturnHistory, editGrnHeader, addGrnDocs, setRtvStatus } from "@/lib/stock";
 import { getSites } from "@/lib/data";
 import { getSession, canSeeModuleAnySite } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
@@ -66,6 +66,9 @@ export default function GrnRegisterPage() {
   // update191: vendor-return history view
   const [view, setView] = useState("grns");   // grns | returns
   const [retRows, setRetRows] = useState(null);
+  const [retSt, setRetSt] = useState("all");     // update205: status filter
+  const [stMenu, setStMenu] = useState(null);    // ref whose status dropdown is open
+  const [inr2] = useState(() => n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 }));
   useEffect(() => { if (view === "returns") { setRetRows(null); getVendorReturnHistory({ siteId: site, from, to }).then(r => setRetRows(r.rows || [])); } }, [view, site, from, to]);   // eslint-disable-line react-hooks/exhaustive-deps
   // resolve the viewer's current page URL (signed if private)
   useEffect(() => {
@@ -202,12 +205,30 @@ export default function GrnRegisterPage() {
 
         {view === "returns" && (
           <div className="panel">
-            {!retRows ? <div className="muted">Loading returns…</div> : retRows.length === 0 ? <div className="muted">No vendor returns in this period.</div> : (
+            {(() => { const rs = retRows || []; const cnt = { awaiting: 0, delayed: 0, returned: 0 };
+              rs.forEach(r => { cnt[r.status] = (cnt[r.status] || 0) + 1; });
+              const shownR = retSt === "all" ? rs : rs.filter(r => r.status === retSt);
+              const retVal = shownR.reduce((t, r) => t + (r.total_value || 0), 0);
+              const stBadge = { awaiting: ["●", "Awaiting", "var(--amber)"], delayed: ["●", "Delayed", "var(--red)"], returned: ["●", "Returned", "var(--green)"] };
+              return (<>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+                <span className="muted" style={{ fontSize: 12.5 }}>Return status:</span>
+                {[["all", "All", rs.length], ["awaiting", "Awaiting", cnt.awaiting], ["delayed", "Delayed", cnt.delayed], ["returned", "Returned", cnt.returned]].map(([v, l, n]) => (
+                  <button key={v} type="button" onClick={() => setRetSt(v)}
+                    style={{ fontSize: 12, borderRadius: 999, background: retSt === v ? "var(--copper)" : "#fff", color: retSt === v ? "#fff" : v === "awaiting" ? "var(--amber)" : v === "delayed" ? "var(--red)" : v === "returned" ? "var(--green)" : "var(--text)", fontWeight: retSt === v ? 800 : 600 }}>
+                    {l} · {n}</button>
+                ))}
+                <div style={{ marginLeft: "auto", border: "1px solid var(--border)", borderRadius: 10, padding: "6px 12px", textAlign: "right" }}>
+                  <div className="muted" style={{ fontSize: 10.5 }}>↩ Returned value (this filter)</div>
+                  <b style={{ fontSize: 15 }}>{inr2(retVal)}</b> <span className="muted" style={{ fontSize: 11 }}>· {shownR.length} RTVs</span>
+                </div>
+              </div>
+            {!retRows ? <div className="muted">Loading returns…</div> : shownR.length === 0 ? <div className="muted">No vendor returns match this filter.</div> : (
               <div style={{ overflowX: "auto" }}>
                 <table className="dt-compact">
-                  <thead><tr><th>Ref</th><th>Date</th><th>Site</th><th>Vendor</th><th>Against GRN</th><th>Items</th><th className="num">Total qty</th><th>Reason</th><th>By</th></tr></thead>
+                  <thead><tr><th>Ref</th><th>Date</th><th>Site</th><th>Vendor</th><th>Against GRN</th><th>Items</th><th className="num">Qty</th><th className="num">Value ₹</th><th>Status</th><th>Reason</th><th>By</th><th>Receipt</th></tr></thead>
                   <tbody>
-                    {retRows.map((r, i) => (
+                    {shownR.map((r, i) => { const [dot, sl, sc] = stBadge[r.status] || stBadge.awaiting; return (
                       <tr key={i}>
                         <td style={{ fontWeight: 600 }}>{r.ref}</td>
                         <td className="muted">{fmtDT(r.date)}</td>
@@ -216,15 +237,39 @@ export default function GrnRegisterPage() {
                         <td>{r.src_grn || <span className="badge gray">No GRN</span>}</td>
                         <td>{r.lines.map((l, j) => <div key={j} style={{ fontSize: 12 }}>{l.item} — {l.qty} {l.unit}</div>)}</td>
                         <td className="num">{qty(r.total_qty)}</td>
-                        <td className="muted" style={{ maxWidth: 220 }}>{r.reason || "—"}</td>
+                        <td className="num">{r.total_value ? inr2(r.total_value) : <span className="muted" title="No rate found on the source GRN">—</span>}</td>
+                        <td style={{ position: "relative", whiteSpace: "nowrap" }}>
+                          <button type="button" onClick={() => setStMenu(stMenu === r.ref ? null : r.ref)}
+                            style={{ borderRadius: 999, fontSize: 11.5, fontWeight: 700, color: sc, background: sc + "18", border: "1px solid " + sc }}>
+                            {dot} {sl} ▾</button>
+                          {r.status_by && <div className="muted" style={{ fontSize: 10 }}>{r.status_by} · {r.status_at}</div>}
+                          {stMenu === r.ref && (
+                            <div style={{ position: "absolute", zIndex: 30, background: "#fff", border: "1px solid var(--border)", borderRadius: 10, boxShadow: "0 6px 20px rgba(0,0,0,0.12)", padding: 4, marginTop: 2 }}>
+                              {["awaiting", "delayed", "returned"].map(st2 => (
+                                <div key={st2} role="button" onClick={async () => { setStMenu(null); const res = await setRtvStatus(r.ref, st2);
+                                    if (!res.ok) { alert(res.error); return; }
+                                    setRetRows(rows => rows.map(x => x.ref === r.ref ? { ...x, status: st2, status_by: res.by, status_at: new Date().toISOString().slice(0, 10) } : x)); }}
+                                  style={{ padding: "6px 14px", fontSize: 12.5, cursor: "pointer", color: stBadge[st2][2], fontWeight: r.status === st2 ? 800 : 500 }}>
+                                  ● {stBadge[st2][1]}{r.status === st2 ? " ✓" : ""}</div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="muted" style={{ maxWidth: 200 }}>{r.reason || "—"}</td>
                         <td>{r.by || "—"}</td>
+                        <td>
+                          {r.status === "awaiting"
+                            ? <button type="button" disabled title="Receipt available once the return is marked Delayed or Returned" style={{ fontSize: 11.5, color: "var(--muted)" }}>⬇ Receipt</button>
+                            : <a href={"/stock/rtv-print?ref=" + encodeURIComponent(r.ref)} target="_blank" rel="noreferrer"><button type="button" style={{ fontSize: 11.5 }}>⬇ Receipt</button></a>}
+                        </td>
                       </tr>
-                    ))}
+                    ); })}
                   </tbody>
                 </table>
               </div>
             )}
-            <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>Every return-to-vendor transaction, newest first — GRN-linked returns show the receipt they went back against; each also appears in the item's stock ledger.</div>
+              </>); })()}
+            <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>Every return-to-vendor transaction, newest first. Value uses each item's rate from the SOURCE GRN. Click a status pill to change it (Directors / IT / stock managers); the receipt opens print-ready — use the browser's Print → Save as PDF.</div>
           </div>
         )}
         {view === "grns" && <div className="panel">
