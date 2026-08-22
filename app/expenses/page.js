@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import AdvanceLedger from "@/components/AdvanceLedger";
+import CollapseCard from "@/components/CollapseCard";
 import { billUrl, isPdf } from "@/lib/bills";
 import { isDemo } from "@/lib/supabase";
 import {
@@ -56,26 +57,9 @@ export default function ExpensesPage() {
   // every existing block just lives inside a section that opens on demand)
   const [openSec, setOpenSec] = useState({});   // key -> bool
   const toggleSec = k => setOpenSec(o => ({ ...o, [k]: !o[k] }));
-  const Section = ({ id, icon, title, sub, stats, accent, children }) => (
-    <div className="panel" style={{ padding: 0, overflow: "hidden", ...(accent ? { borderLeft: "4px solid " + accent } : {}) }}>
-      <div onClick={() => toggleSec(id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", cursor: "pointer", flexWrap: "wrap" }}>
-        <div style={{ fontSize: 20 }}>{icon}</div>
-        <div style={{ minWidth: 160 }}>
-          <div style={{ fontWeight: 700 }}>{title}</div>
-          {sub && <div className="muted" style={{ fontSize: 11.5 }}>{sub}</div>}
-        </div>
-        <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginLeft: "auto", alignItems: "center" }}>
-          {(stats || []).map(([l, v, c]) => (
-            <div key={l} style={{ textAlign: "right" }}>
-              <div className="muted" style={{ fontSize: 10.5 }}>{l}</div>
-              <div style={{ fontWeight: 700, fontSize: 13.5, color: c || "var(--text)" }}>{v}</div>
-            </div>
-          ))}
-          <button style={{ fontSize: 12 }} onClick={e => { e.stopPropagation(); toggleSec(id); }}>{openSec[id] ? "Hide ▲" : "View ▼"}</button>
-        </div>
-      </div>
-      <div style={{ display: openSec[id] ? "block" : "none", padding: "0 16px 16px" }}>{children}</div>{/* kept mounted so section totals stay live */}
-    </div>
+  // update201: Section now delegates to the stable top-level CollapseCard (fixes dead View buttons)
+  const Section = ({ id, ...rest }) => (
+    <CollapseCard htmlId={"sec-" + id} open={!!openSec[id]} onToggle={() => toggleSec(id)} keepMounted={id === "advled"} {...rest} />
   );
   const sumBy = (rows, f) => (rows || []).reduce((t, r) => t + (f(r) || 0), 0);
   const approvedClaims = sumBy((claims || []).filter(c => c.status === "approved"), c => c.amount);
@@ -241,16 +225,17 @@ export default function ExpensesPage() {
 
         {/* update200: overview cards */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, marginBottom: 14 }}>
-          {[["💳 Total expenses", inr(approvedClaims), (claims || []).length + " transactions", null],
-            ["🪙 Petty cash held", inr(pettyBal), petty.length + " holders", null],
-            ["💸 Advances (approved)", inr(sumBy(advApproved, a => a.amount)), advApproved.length + " requests", null],
-            ["✅ Recovered / deducted", inr(advTotals.rec), "through pay", "var(--green)"],
-            ["🔺 Outstanding advances", inr(advTotals.out), "to be recovered", advTotals.out > 0 ? "var(--red)" : "var(--green)"],
-            ["⏳ Advance requests pending", inr(sumBy(advPending, a => a.amount)), advPending.length + " waiting", advPending.length ? "var(--amber)" : null]].map(([l, v, sub2, c]) => (
-            <div key={l} className="panel" style={{ padding: "10px 14px", margin: 0 }}>
+          {[["💳 Total expenses", inr(approvedClaims), (claims || []).length + " transactions", null, "claims"],
+            ["🪙 Petty cash held", inr(pettyBal), petty.length + " holders", null, "pettyled"],
+            ["💸 Advances (approved)", inr(sumBy(advApproved, a => a.amount)), advApproved.length + " requests", null, "advled"],
+            ["✅ Recovered / deducted", inr(advTotals.rec), "through pay", "var(--green)", "advled"],
+            ["🔺 Outstanding advances", inr(advTotals.out), "to be recovered", advTotals.out > 0 ? "var(--red)" : "var(--green)", "advled"],
+            ["⏳ Advance requests pending", inr(sumBy(advPending, a => a.amount)), advPending.length + " waiting", advPending.length ? "var(--amber)" : null, "advreq"]].map(([l, v, sub2, c, sec]) => (
+            <div key={l} className="panel" role="button" tabIndex={0} style={{ padding: "10px 14px", margin: 0, cursor: "pointer" }}
+              onClick={() => { setOpenSec(o => ({ ...o, [sec]: true })); setTimeout(() => document.getElementById("sec-" + sec)?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); }}>
               <div className="muted" style={{ fontSize: 11.5 }}>{l}</div>
               <div style={{ fontWeight: 800, fontSize: 19, color: c || "var(--text)" }}>{v}</div>
-              <div className="muted" style={{ fontSize: 10.5 }}>{sub2}</div>
+              <div className="muted" style={{ fontSize: 10.5 }}>{sub2} · <span style={{ color: "var(--copper)" }}>View details →</span></div>
             </div>
           ))}
         </div>
