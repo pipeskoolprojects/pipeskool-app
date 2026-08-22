@@ -41,7 +41,7 @@ export default function AdvanceLedger({ onTotals }) {
   const totals = useMemo(() => Object.values(perPerson).reduce(
     (t, g) => ({ taken: t.taken + g.taken, rec: t.rec + g.recovered, out: t.out + g.outstanding }),
     { taken: 0, rec: 0, out: 0 }), [perPerson]);
-  useEffect(() => { onTotals?.(totals); }, [totals]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { onTotals?.(totals); }, [totals.taken, totals.rec, totals.out]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // update197: person-wise rows like "Petty cash — balance held by person" — one row per
   // employee with totals + 📒 Ledger; per-advance detail (date/reason/status) lives in the ledger.

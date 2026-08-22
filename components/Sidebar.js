@@ -41,6 +41,34 @@ const GROUPS = [
 ];
 const groupItems = g => g.items || (g.subs || []).flatMap(x => x.items);
 
+// stable top-level (update204): defined inside Sidebar it remounted the whole nav on every badge/path re-render, eating taps on Android
+function Group({ label, items, subs, depth = 0, canSee, path, open, toggle, unreadNotices }) {
+  const all = items || (subs || []).flatMap(x => x.items);
+  const visibleAll = all.filter(it => canSee(it.module));
+  if (visibleAll.length === 0) return null;
+  const hasActive = visibleAll.some(it => it.href === path);
+  const isOpen = open[label] ?? hasActive;
+  return (
+    <div style={depth ? { paddingLeft: 10 } : undefined}>
+      <button className={"nav-group" + (hasActive && !isOpen ? " has-active" : "")}
+              style={depth ? { fontSize: 11, opacity: 0.95 } : undefined}
+              onClick={() => toggle(label)}>
+        <span>{label}</span>
+        <span className="chev">{isOpen ? "▾" : "▸"}</span>
+      </button>
+      {isOpen && (subs ? (
+        subs.map(sg => <Group key={sg.label} label={sg.label} items={sg.items} depth={depth + 1} canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} />)
+      ) : (
+        <nav className="nav-sub" style={{ marginTop: 0, paddingLeft: depth ? 6 : 0 }}>
+          {items.filter(it => canSee(it.module)).map(l => (
+            <Link key={l.href} href={l.href} className={path === l.href ? "active" : ""}>{l.label}{l.href === "/notices" && unreadNotices > 0 && <span style={{ background: "var(--copper)", color: "#fff", borderRadius: 9, fontSize: 10, padding: "1px 6px", marginLeft: 6 }}>{unreadNotices}</span>}</Link>
+          ))}
+        </nav>
+      ))}
+    </div>
+  );
+}
+
 export default function Sidebar() {
   const path = usePathname();
   const router = useRouter();
@@ -81,32 +109,6 @@ export default function Sidebar() {
   const showAccess = session && session.role === "director";
   const showDash = canSee("dashboard");
 
-  function Group({ label, items, subs, depth = 0 }) {
-    const all = items || (subs || []).flatMap(x => x.items);
-    const visibleAll = all.filter(it => canSee(it.module));
-    if (visibleAll.length === 0) return null;
-    const hasActive = visibleAll.some(it => it.href === path);
-    const isOpen = open[label] ?? hasActive;
-    return (
-      <div style={depth ? { paddingLeft: 10 } : undefined}>
-        <button className={"nav-group" + (hasActive && !isOpen ? " has-active" : "")}
-                style={depth ? { fontSize: 11, opacity: 0.95 } : undefined}
-                onClick={() => toggle(label)}>
-          <span>{label}</span>
-          <span className="chev">{isOpen ? "▾" : "▸"}</span>
-        </button>
-        {isOpen && (subs ? (
-          subs.map(sg => <Group key={sg.label} label={sg.label} items={sg.items} depth={depth + 1} />)
-        ) : (
-          <nav className="nav-sub" style={{ marginTop: 0, paddingLeft: depth ? 6 : 0 }}>
-            {items.filter(it => canSee(it.module)).map(l => (
-              <Link key={l.href} href={l.href} className={path === l.href ? "active" : ""}>{l.label}{l.href === "/notices" && unreadNotices > 0 && <span style={{ background: "var(--copper)", color: "#fff", borderRadius: 9, fontSize: 10, padding: "1px 6px", marginLeft: 6 }}>{unreadNotices}</span>}</Link>
-            ))}
-          </nav>
-        ))}
-      </div>
-    );
-  }
 
   if (hidden) return (
     <><button className="sidebar-show" title="Show menu" onClick={() => toggleHidden(false)}>☰</button><Assistant /></>
@@ -143,9 +145,9 @@ export default function Sidebar() {
         </nav>
       )}
 
-      {GROUPS.map(g => <Group key={g.label} label={g.label} items={g.items} subs={g.subs} />)}
+      {GROUPS.map(g => <Group key={g.label} label={g.label} items={g.items} subs={g.subs} canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} />)}
 
-      {showAccess && <Group label="Admin" items={[{ href: "/access", label: "Access Rights", module: null }, { href: "/sitemaster", label: "Site Master (timings)", module: null }, { href: "/backup", label: "Backup & Restore", module: null }, { href: "/tickets", label: "Support Tickets", module: null }]} />}
+      {showAccess && <Group label="Admin" canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} items={[{ href: "/access", label: "Access Rights", module: null }, { href: "/sitemaster", label: "Site Master (timings)", module: null }, { href: "/backup", label: "Backup & Restore", module: null }, { href: "/tickets", label: "Support Tickets", module: null }]} />}
 
       <nav style={{ marginTop: 20 }}>
         <a onClick={logout} style={{ cursor: "pointer" }}>Log out</a>
