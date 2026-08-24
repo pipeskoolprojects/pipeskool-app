@@ -133,7 +133,7 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
       </div>
 
       </div>
-      <div className="dt-scroll" style={fill ? { maxHeight: "none", flex: 1, minHeight: 0 } : undefined}>
+      <div className="dt-scroll" style={fill ? { maxHeight: "none", flex: 1, minHeight: 0, marginBottom: 4 } : undefined}>
       <table style={fixed ? { width: "100%", tableLayout: "fixed" } : { width: "max-content", minWidth: "100%" }} className="dt-compact">
         {fixed && <colgroup>{visCols.map(c => <col key={c.key} style={c.width ? { width: c.width } : {}} />)}</colgroup>}
         <thead>
@@ -163,7 +163,7 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
         </tbody>
       </table>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
+      <div style={fill ? { display: "flex", alignItems: "center", gap: 10, marginTop: 4, flexWrap: "wrap", flexShrink: 0, paddingTop: 6, borderTop: "1px solid var(--border)" } : { display: "flex", alignItems: "center", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
         <span className="muted">
           {paged && filtered.length > pageSize
             ? `Showing ${rangeFrom}–${rangeTo} of ${filtered.length}` : `${filtered.length} of ${(rows||[]).length} records`}
