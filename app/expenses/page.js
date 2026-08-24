@@ -11,7 +11,7 @@ import {
   getBeneficiaries, raiseAdvanceSalary,
   getPettyReturnQueue, confirmPettyReturn, getPettyLedger,
   getPettyReconciliation, catLabel, inr, markAdvancePosted, markExpensePosted,
-  getPettyRequestQueue, reviewPettyRequest, requestPettyCash , selfEditExpense, EXPENSE_CATEGORIES } from "@/lib/money";
+  getPettyRequestQueue, reviewPettyRequest, requestPettyCash , selfEditExpense, EXPENSE_CATEGORIES, getPersonMoneyProfile } from "@/lib/money";
 import { getSession, canAnySite } from "@/lib/auth";
 
 export default function ExpensesPage() {
@@ -120,7 +120,7 @@ export default function ExpensesPage() {
     { key: "site", label: "Site", filter: "select" },
     { key: "reason", label: "Reason",
       render: r => <span className="muted"><span className="clamp2" title={r.reason || ""}>{r.reason || "—"}</span>{r.response && <div className="clamp2" title={r.response} style={{ color: "var(--green)" }}>↩ {r.response}</div>}{r.status === "queried" && r.query && <div className="clamp2" title={r.query} style={{ color: "var(--amber)" }}>❓ {r.query}</div>}</span> },
-    { key: "amount", label: "Amount", type: "num", render: r => inr(r.amount), exportValue: r => r.amount },
+    { key: "amount", label: "Amount", type: "num", render: r => <b>{inr(r.amount)}</b>, exportValue: r => r.amount },
     { key: "bank_on_file", label: "Bank", filter: "select", optionLabel: o => o ? "On file" : "Missing", render: r => r.bank_on_file ? <span className="badge p">On file</span> : <span className="badge warn">⚠ Missing</span>, exportValue: r => r.bank_on_file ? "On file" : "Missing" },
     { key: "status", label: "Status", filter: "select", render: r => r.status === "approved" ? <span className="badge p">Approved</span> : r.status === "rejected" ? <span className="badge a">Rejected</span> : r.status === "queried" ? <span className="badge h">Queried</span> : <span className="badge gray">Pending</span> },
     { key: "approved_on", label: "Appr. date", render: r => <span className="muted">{r.approved_on || "—"}</span> },
@@ -142,15 +142,17 @@ export default function ExpensesPage() {
 
   const claimCols = [
     { key: "date", label: "Date", filter: "search" },
-    { key: "claimant", label: "Claimant", filter: "select", render: r => <span style={{ fontWeight: 600 }}>{r.claimant || "—"}</span> },
+    { key: "claimant", label: "Claimant", filter: "select",
+      render: r => <a style={{ fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }} title="View profile & history" onClick={() => openProfile(r.claimant_id, r.claimant)}>
+        <span className="avatar-chip" style={{ background: avColor(r.claimant) }}>{avInit(r.claimant)}</span>{r.claimant || "—"}</a> },
     { key: "site", label: "Site", filter: "select" },
     { key: "category", label: "Category", filter: "select", render: r => catLabel(r.category), exportValue: r => catLabel(r.category) },
     { key: "paid_to", label: "Paid to", filter: "search", render: r => <span>{r.paid_to}{r.response && <div className="muted" style={{ color: "var(--green)" }}>↩ {r.response}</div>}{r.status === "queried" && r.query && <div className="muted" style={{ color: "var(--amber)" }}>❓ {r.query}</div>}</span> },
     { key: "note", label: "Purpose / note", filter: "search",
       render: r => <span className="muted clamp2" title={r.note || ""}>{r.note || "—"}</span>, exportValue: r => r.note || "" },
     { key: "bill_links", label: "Bill links (export)", hidden: true, exportValue: r => (r.bills || []).map(b => billUrl(b)).join("  |  ") },
-    { key: "funding_source", label: "Source", filter: "select", optionLabel: o => o === "petty_cash" ? "Petty cash" : "Own pocket", render: r => r.funding_source === "petty_cash" ? <span className="badge info">Petty cash</span> : <span className="badge gray">Own pocket</span> },
-    { key: "amount", label: "Amount", type: "num", render: r => inr(r.amount), exportValue: r => r.amount },
+    { key: "funding_source", label: "Source", filter: "select", optionLabel: o => o === "petty_cash" ? "Petty cash" : "Own pocket", render: r => r.funding_source === "petty_cash" ? <span className="badge" style={{ background: "#e8f0fe", color: "#1a56db", border: "1px solid #1a56db" }}>Petty cash</span> : <span className="badge gray">Own pocket</span> },
+    { key: "amount", label: "Amount", type: "num", render: r => <b>{inr(r.amount)}</b>, exportValue: r => r.amount },
     { key: "photo", label: "Proof", render: r => (r.bills || []).length === 0
       ? (r.photo ? <a href={r.photo} target="_blank" rel="noreferrer">📎 Bill</a> : <span className="muted">—</span>)
       : <span className="bill-strip">
@@ -186,6 +188,18 @@ export default function ExpensesPage() {
   ];
   // update212: six sections as TABS — one fixed-height scroll panel, page never grows
   const [mtab, setMtab] = useState("claims");
+  const [fullView, setFullView] = useState(false);
+  // update214: clickable claimant profile (live from the same tables — zero duplicate data)
+  const AV_COLORS = ["#e07020", "#2b6cb0", "#15803d", "#6b46c1", "#b91c1c", "#0e7490", "#a16207"];
+  const avInit = n => (n || "").split(/\s+/).slice(0, 2).map(x => x[0] || "").join("").toUpperCase() || "?";
+  const avColor = n => AV_COLORS[((n || "").split("").reduce((t, c) => t + c.charCodeAt(0), 0)) % AV_COLORS.length];
+  const [profile, setProfile] = useState(null);     // { loading, name, ... }
+  const [profTab, setProfTab] = useState("all");
+  function openProfile(staffId, name) {
+    if (!staffId) return;
+    setProfTab("all"); setProfile({ loading: true, name });
+    getPersonMoneyProfile(staffId).then(pr => setProfile(pr ? { ...pr, loading: false } : null));
+  }   // update214: ⛶ full-page browsing (same DOM — filters/state preserved)
   const MT = [
     ["pettyreq", "🪙", "Petty cash requests", () => (pettyReqs || []).filter(r => r.status === "pending").length],
     ["advreq", "📄", "Advance salary requests", () => (adv || []).length],
@@ -290,6 +304,7 @@ export default function ExpensesPage() {
           </div>
         )}
 
+        <div style={fullView ? { position: "fixed", inset: 0, zIndex: 92, background: "var(--bg)", padding: "10px 14px", display: "flex", flexDirection: "column" } : { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
         <div style={{ display: "flex", gap: 2, overflowX: "auto", whiteSpace: "nowrap", borderBottom: "2px solid var(--border)", margin: "2px 0 0" }}>
           {MT.map(([k, ic, l, cnt]) => { const n = cnt(); return (
             <button key={k} type="button" onClick={() => setMtab(k)}
@@ -299,9 +314,12 @@ export default function ExpensesPage() {
               {ic} {l}{n !== null && n > 0 && <span className="badge gray" style={{ marginLeft: 6, fontSize: 10.5 }}>{n}</span>}
             </button>
           ); })}
+          <button type="button" title={fullView ? "Back to normal view" : "Open full-page view"} onClick={() => setFullView(v => !v)}
+            style={{ marginLeft: "auto", border: "1px solid var(--border)", background: "#fff", borderRadius: 8, padding: "4px 10px", fontSize: 13, cursor: "pointer", flexShrink: 0 }}>
+            {fullView ? "✕ Close" : "⛶ Expand"}</button>
         </div>
-        <div className="panel money-tab-panel" style={{ marginTop: 0, marginBottom: 8, borderTopLeftRadius: 0, flex: 1, minHeight: 260, overflowY: "auto", overflowX: "auto" }}>
-        <div style={{ display: mtab === "pettyreq" ? "block" : "none" }}>
+        <div className="panel money-tab-panel" style={{ marginTop: 0, marginBottom: 8, borderTopLeftRadius: 0, flex: 1, minHeight: 260, overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 4px 14px rgba(15,20,25,0.05)" }}>
+        <div className={mtab === "pettyreq" ? "money-sec" : undefined} style={{ display: mtab === "pettyreq" ? "flex" : "none", overflowY: "auto" }}>
           {session && canAnySite(session, "money", "create") && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginBottom: 12, alignItems: "end" }}>
               <div><label className="muted">Amount ₹ *</label>
@@ -369,14 +387,14 @@ export default function ExpensesPage() {
           </>)}
         </div>
 
-        <div style={{ display: mtab === "advreq" ? "block" : "none" }}>
+        <div className={mtab === "advreq" ? "money-sec" : undefined} style={{ display: mtab === "advreq" ? "flex" : "none", overflowY: "auto" }}>
           {!adv ? <div className="muted">Loading…</div> :
-            <DataTable columns={advCols} rows={adv} exportName="advance_requests" dateField="date" pageSize={10} />}
+            <DataTable columns={advCols} rows={adv} exportName="advance_requests" dateField="date" pageSize={10} fill />}
         </div>
 
-        <div style={{ display: mtab === "claims" ? "block" : "none" }}>
+        <div className={mtab === "claims" ? "money-sec" : undefined} style={{ display: mtab === "claims" ? "flex" : "none", overflowY: "auto" }}>
           {!claims ? <div className="muted">Loading…</div> :
-            <DataTable columns={claimCols} rows={claims} exportName="expense_claims" dateField="date" pageSize={10} />}
+            <DataTable columns={claimCols} rows={claims} exportName="expense_claims" dateField="date" pageSize={10} fill />}
         </div>
 
         {pettyReturns.length > 0 && (
@@ -455,15 +473,15 @@ export default function ExpensesPage() {
           </div>
         )}
 
-        <div style={{ display: mtab === "pettyled" ? "block" : "none" }}>
+        <div className={mtab === "pettyled" ? "money-sec" : undefined} style={{ display: mtab === "pettyled" ? "flex" : "none", overflowY: "auto" }}>
           {petty.length === 0 ? <span className="muted">No petty cash issued yet.</span> :
-            <DataTable columns={pettyCols} rows={petty} exportName="petty_cash" pageSize={10} />}
+            <DataTable columns={pettyCols} rows={petty} exportName="petty_cash" pageSize={10} fill />}
         </div>
         <div id="advances" />
-        <div style={{ display: mtab === "advled" ? "block" : "none" }}>
+        <div className={mtab === "advled" ? "money-sec" : undefined} style={{ display: mtab === "advled" ? "flex" : "none", overflowY: "auto" }}>
           <AdvanceLedger onTotals={t => setAdvTotals(prev => (prev.taken === t.taken && prev.rec === t.rec && prev.out === t.out) ? prev : t)} />
         </div>
-        <div style={{ display: mtab === "reports" ? "block" : "none" }}>
+        <div className={mtab === "reports" ? "money-sec" : undefined} style={{ display: mtab === "reports" ? "flex" : "none", overflowY: "auto" }}>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", paddingTop: 4 }}>
             <span className="muted" style={{ fontSize: 12.5, width: "100%" }}>Every ledger above has its own ⬇ Excel export (with the filters you set). Additional:</span>
             <a href="/tally"><button style={{ fontSize: 12.5 }}>🧾 Tally export</button></a>
@@ -471,6 +489,7 @@ export default function ExpensesPage() {
           </div>
         </div>
         </div>{/* end fixed tab panel */}
+        </div>{/* end fullview wrapper */}
         {editExp && (
           <div onClick={() => setEditExp(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 97, padding: 14 }}>
             <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 460, width: "100%", padding: 20 }}>
@@ -524,6 +543,60 @@ export default function ExpensesPage() {
             </div>
           </div>
         )}
+        {profile && (
+          <div onClick={() => setProfile(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 99, padding: 14 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, maxWidth: 680, width: "100%", maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
+              <div style={{ background: "var(--deep)", color: "#fff", padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+                <span className="avatar-chip" style={{ width: 40, height: 40, fontSize: 15, background: avColor(profile.name) }}>{avInit(profile.name)}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 800, fontSize: 17 }}>{profile.name}</div>
+                  {!profile.loading && <div style={{ fontSize: 12, opacity: 0.8 }}>{(profile.role || "").replace("_", " ")}</div>}
+                </div>
+                <button type="button" onClick={() => setProfile(null)} style={{ background: "none", border: "none", color: "#fff", fontSize: 18, cursor: "pointer" }}>✕</button>
+              </div>
+              {profile.loading ? <div className="muted" style={{ padding: 24 }}>Loading history…</div> : <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(105px, 1fr))", gap: 0, borderBottom: "1px solid var(--border)", background: "#faf9f6" }}>
+                  {[["Total used (all time)", inr(profile.totals.all), null],
+                    ["This month", inr(profile.totals.month), null],
+                    ["Advances taken", inr(profile.totals.taken), null],
+                    ["Advances recovered", inr(profile.totals.recovered), "var(--green)"],
+                    ["Outstanding", inr(profile.totals.outstanding), profile.totals.outstanding > 0 ? "var(--red)" : "var(--green)"],
+                    ["Petty cash held", inr(profile.totals.petty), null]].map(([l, v, c]) => (
+                    <div key={l} style={{ padding: "10px 12px", textAlign: "center" }}>
+                      <div className="muted" style={{ fontSize: 10 }}>{l}</div>
+                      <b style={{ fontSize: 14.5, color: c || "var(--text)" }}>{v}</b>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 2, padding: "0 14px", borderBottom: "1px solid var(--border)" }}>
+                  {[["all", "All transactions", profile.txns.length], ["exp", "Expenses", profile.txns.filter(t => t.kind === "exp").length], ["adv", "Advances", profile.txns.filter(t => t.kind === "adv").length]].map(([k, l, n]) => (
+                    <button key={k} type="button" onClick={() => setProfTab(k)}
+                      style={{ border: "none", background: "none", padding: "9px 10px", fontSize: 12.5, cursor: "pointer", fontWeight: profTab === k ? 800 : 600, color: profTab === k ? "var(--copper)" : "var(--text)", borderBottom: profTab === k ? "3px solid var(--copper)" : "3px solid transparent", marginBottom: -1 }}>
+                      {l} · {n}</button>
+                  ))}
+                </div>
+                <div style={{ overflowY: "auto", padding: "6px 14px 14px", overscrollBehavior: "contain" }}>
+                  <table className="dt-compact" style={{ width: "100%" }}>
+                    <thead><tr><th>Date</th><th>Type</th><th>Purpose / paid to</th><th>Site</th><th className="num">Amount</th><th>Status</th></tr></thead>
+                    <tbody>
+                      {profile.txns.filter(t => profTab === "all" || t.kind === profTab).map((t, i) => (
+                        <tr key={i}>
+                          <td className="muted">{t.date}</td>
+                          <td>{t.type === "Advance recovered" ? <span style={{ color: "var(--green)" }}>{t.type}</span> : t.type}</td>
+                          <td><span className="clamp2" title={t.what}>{t.what || "—"}</span></td>
+                          <td className="muted">{t.site}</td>
+                          <td className="num"><b style={{ color: t.type === "Expense" ? "var(--red)" : t.type === "Advance recovered" ? "var(--green)" : "var(--text)" }}>{inr(t.amount)}</b></td>
+                          <td><span className={"badge " + (t.status === "approved" ? "p" : t.status === "rejected" ? "red" : "warn")}>{t.status}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>}
+            </div>
+          </div>
+        )}
+
 
 
       </main>

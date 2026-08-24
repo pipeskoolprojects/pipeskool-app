@@ -180,3 +180,9 @@ html.psk-nosb .main { padding-left: 76px; }
 .clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 340px; line-height: 1.35; }
 .money-tab-panel { overscroll-behavior: contain; }   /* scroll never escapes to the page */
 .bill-strip { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+
+/* --- update214: sticky column headers + polished money page --- */
+.dt-scroll thead th { position: sticky; top: 0; background: var(--card); z-index: 3; box-shadow: 0 2px 4px rgba(15,20,25,0.06); }
+.money-sec { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.money-sec .dt-filterbar { position: sticky; top: 0; z-index: 4; background: var(--card); padding-bottom: 6px; box-shadow: 0 3px 8px rgba(15,20,25,0.05); }
+.avatar-chip { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; color: #fff; font-size: 9.5px; font-weight: 800; margin-right: 5px; vertical-align: middle; }
