@@ -22,7 +22,7 @@ function wrapCell(c) {
   return c.filter === "search" && c.type !== "num" && c.type !== "date";
 }
 
-export default function DataTable({ columns, rows, exportName = "export", dateField, rightExtra, fixed, pageSize = 25 }) {
+export default function DataTable({ columns, rows, exportName = "export", dateField, rightExtra, fixed, pageSize = 25, fill }) {
   const visCols = columns.filter(c => !c.hidden);   // update176: hidden cols export-only
   const [search, setSearch] = useState("");
   const [selects, setSelects] = useState({});      // {colKey: value}
@@ -107,7 +107,8 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
   const rangeTo = paged ? Math.min((curPage + 1) * pageSize, filtered.length) : filtered.length;
 
   return (
-    <div>
+    <div style={fill ? { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 } : undefined}>
+      <div className={fill ? "dt-filterbar" : undefined}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
         {searchCols.length > 0 && (
           <input value={search} onChange={e => setSearch(e.target.value)}
@@ -131,7 +132,8 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
         </div>
       </div>
 
-      <div className="dt-scroll">
+      </div>
+      <div className="dt-scroll" style={fill ? { maxHeight: "none", flex: 1, minHeight: 0 } : undefined}>
       <table style={fixed ? { width: "100%", tableLayout: "fixed" } : { width: "max-content", minWidth: "100%" }} className="dt-compact">
         {fixed && <colgroup>{visCols.map(c => <col key={c.key} style={c.width ? { width: c.width } : {}} />)}</colgroup>}
         <thead>
