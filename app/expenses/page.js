@@ -118,7 +118,8 @@ export default function ExpensesPage() {
     { key: "beneficiary_name", label: "Beneficiary", filter: "select", render: r => <span style={{ fontWeight: 600 }}>{r.beneficiary_name}</span> },
     { key: "beneficiary_kind", label: "Type", filter: "select", optionLabel: o => o === "labour" ? "Labour" : "Staff", render: r => r.beneficiary_kind === "labour" ? "Labour" : "Staff" },
     { key: "site", label: "Site", filter: "select" },
-    { key: "reason", label: "Reason", render: r => <span className="muted">{r.reason || "—"}{r.response && <div style={{ color: "var(--green)" }}>↩ {r.response}</div>}{r.status === "queried" && r.query && <div style={{ color: "var(--amber)" }}>❓ {r.query}</div>}</span> },
+    { key: "reason", label: "Reason",
+      render: r => <span className="muted"><span className="clamp2" title={r.reason || ""}>{r.reason || "—"}</span>{r.response && <div className="clamp2" title={r.response} style={{ color: "var(--green)" }}>↩ {r.response}</div>}{r.status === "queried" && r.query && <div className="clamp2" title={r.query} style={{ color: "var(--amber)" }}>❓ {r.query}</div>}</span> },
     { key: "amount", label: "Amount", type: "num", render: r => inr(r.amount), exportValue: r => r.amount },
     { key: "bank_on_file", label: "Bank", filter: "select", optionLabel: o => o ? "On file" : "Missing", render: r => r.bank_on_file ? <span className="badge p">On file</span> : <span className="badge warn">⚠ Missing</span>, exportValue: r => r.bank_on_file ? "On file" : "Missing" },
     { key: "status", label: "Status", filter: "select", render: r => r.status === "approved" ? <span className="badge p">Approved</span> : r.status === "rejected" ? <span className="badge a">Rejected</span> : r.status === "queried" ? <span className="badge h">Queried</span> : <span className="badge gray">Pending</span> },
@@ -145,19 +146,23 @@ export default function ExpensesPage() {
     { key: "site", label: "Site", filter: "select" },
     { key: "category", label: "Category", filter: "select", render: r => catLabel(r.category), exportValue: r => catLabel(r.category) },
     { key: "paid_to", label: "Paid to", filter: "search", render: r => <span>{r.paid_to}{r.response && <div className="muted" style={{ color: "var(--green)" }}>↩ {r.response}</div>}{r.status === "queried" && r.query && <div className="muted" style={{ color: "var(--amber)" }}>❓ {r.query}</div>}</span> },
-    { key: "note", label: "Purpose / note", filter: "search", render: r => <span className="muted">{r.note || "—"}</span>, exportValue: r => r.note || "" },
+    { key: "note", label: "Purpose / note", filter: "search",
+      render: r => <span className="muted clamp2" title={r.note || ""}>{r.note || "—"}</span>, exportValue: r => r.note || "" },
     { key: "bill_links", label: "Bill links (export)", hidden: true, exportValue: r => (r.bills || []).map(b => billUrl(b)).join("  |  ") },
     { key: "funding_source", label: "Source", filter: "select", optionLabel: o => o === "petty_cash" ? "Petty cash" : "Own pocket", render: r => r.funding_source === "petty_cash" ? <span className="badge info">Petty cash</span> : <span className="badge gray">Own pocket</span> },
     { key: "amount", label: "Amount", type: "num", render: r => inr(r.amount), exportValue: r => r.amount },
     { key: "photo", label: "Proof", render: r => (r.bills || []).length === 0
-        ? <span className="badge warn">No proof</span>
-        : <span>{r.bills.map((b, i) => (
-            <span key={i} style={{ whiteSpace: "nowrap", marginRight: 6 }}>
-              <a href={billUrl(b)} target="_blank" rel="noreferrer" style={{ fontSize: 11.5 }}
-                 title={isPdf(b) ? "Preview PDF" : "Preview image"}>📎 Bill {r.bills.length > 1 ? i + 1 : ""}</a>
-              <a href={billUrl(b, true)} download style={{ fontSize: 11.5, marginLeft: 3 }} title="Download">⬇</a>
-            </span>))}
-          </span>,
+      ? (r.photo ? <a href={r.photo} target="_blank" rel="noreferrer">📎 Bill</a> : <span className="muted">—</span>)
+      : <span className="bill-strip">
+          {r.bills.slice(0, 2).map((b, i) => (
+            <a key={i} href={billUrl(b)} target="_blank" rel="noreferrer" style={{ fontSize: 11.5 }}
+               title={isPdf(b) ? "Preview PDF" : "Preview image"}>📎{r.bills.length > 1 ? i + 1 : ""}</a>
+          ))}
+          {r.bills.length > 2 && (
+            <button type="button" className="badge gray" style={{ cursor: "pointer", fontSize: 10.5, border: "1px solid var(--border)" }}
+              onClick={() => setBillsFor(r)}>+{r.bills.length - 2} more</button>
+          )}
+        </span>,
       exportValue: r => (r.bills || []).length + " file(s)" },
     { key: "status", label: "Status", filter: "select", render: r => r.status === "approved" ? <span className="badge p">Approved</span> : r.status === "rejected" ? <span className="badge a">Rejected</span> : r.status === "queried" ? <span className="badge h">Queried</span> : <span className="badge gray">Pending</span> },
     { key: "approved_on", label: "Appr. date", render: r => <span className="muted">{r.approved_on || "—"}</span> },
@@ -191,6 +196,7 @@ export default function ExpensesPage() {
   ];
   // update211: requester edits their own pending expense (incl. Own pocket <-> Petty cash)
   const [editExp, setEditExp] = useState(null);
+  const [billsFor, setBillsFor] = useState(null);   // update213: compact proof strip → gallery
   const [editBusy, setEditBusy] = useState(false); const [editErr, setEditErr] = useState("");
   async function saveEditExp() {
     setEditBusy(true); setEditErr("");
@@ -239,7 +245,7 @@ export default function ExpensesPage() {
   return (
     <div className="layout">
       <Sidebar />
-      <main className="main">
+      <main className="main" style={{ overflow: "hidden", display: "flex", flexDirection: "column" }}>{/* update213: page itself never scrolls */}
         <div className="page-head"><h1>Money &amp; expenses</h1></div>
         {isDemo && <div className="demo-banner">Demo mode — sample data.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
@@ -294,7 +300,7 @@ export default function ExpensesPage() {
             </button>
           ); })}
         </div>
-        <div className="panel" style={{ marginTop: 0, borderTopLeftRadius: 0, height: "calc(100vh - 330px)", minHeight: 380, overflowY: "auto", overflowX: "auto" }}>
+        <div className="panel money-tab-panel" style={{ marginTop: 0, marginBottom: 8, borderTopLeftRadius: 0, flex: 1, minHeight: 260, overflowY: "auto", overflowX: "auto" }}>
         <div style={{ display: mtab === "pettyreq" ? "block" : "none" }}>
           {session && canAnySite(session, "money", "create") && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginBottom: 12, alignItems: "end" }}>
@@ -381,7 +387,7 @@ export default function ExpensesPage() {
                 <tr key={r.id}>
                   <td className="muted">{r.date}</td><td style={{ fontWeight: 600 }}>{r.holder}</td>
                   <td className="muted">{r.site}</td><td className="num">{inr(r.amount)}</td>
-                  <td className="muted">{r.note || "—"}</td>
+                  <td className="muted"><span className="clamp2" title={r.note || ""}>{r.note || "—"}</span></td>
                   <td style={{ whiteSpace: "nowrap" }}>
                     <button className="primary" style={{ fontSize: 11.5, marginRight: 4 }}
                             onClick={() => { if (window.confirm("Confirm you RECEIVED " + inr(r.amount) + " cash from " + r.holder + "? Their balance reduces by this amount.")) actReturn(r.id, "confirmed"); }}>✔ Received</button>
@@ -497,6 +503,28 @@ export default function ExpensesPage() {
             </div>
           </div>
         )}
+        {billsFor && (
+          <div onClick={() => setBillsFor(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 98, padding: 14 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 620, width: "100%", padding: 18, maxHeight: "88vh", overflowY: "auto" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ margin: 0 }}>📎 Bills — {billsFor.paid_to} · {inr(billsFor.amount)}</h3>
+                <button type="button" onClick={() => setBillsFor(null)}>✕</button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10, marginTop: 12 }}>
+                {(billsFor.bills || []).map((b, i) => (
+                  <a key={i} href={billUrl(b)} target="_blank" rel="noreferrer" style={{ textDecoration: "none", textAlign: "center", border: "1px solid var(--border)", borderRadius: 10, padding: 8 }}>
+                    {isPdf(b)
+                      ? <div style={{ height: 84, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30 }}>📄</div>
+                      : <img src={billUrl(b)} alt={"bill " + (i + 1)} style={{ height: 84, width: "100%", objectFit: "cover", borderRadius: 6 }} />}
+                    <div style={{ fontSize: 11.5, marginTop: 4 }}>Bill {i + 1} <span className="muted">· open ↗</span></div>
+                  </a>
+                ))}
+              </div>
+              <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>Tap any bill to open it full size in a new tab (⬇ from there).</div>
+            </div>
+          </div>
+        )}
+
 
       </main>
     </div>
