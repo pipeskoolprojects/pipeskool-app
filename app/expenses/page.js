@@ -146,13 +146,16 @@ export default function ExpensesPage() {
       render: r => <a style={{ fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }} title="View profile & history" onClick={() => openProfile(r.claimant_id, r.claimant)}>
         <span className="avatar-chip" style={{ background: avColor(r.claimant) }}>{avInit(r.claimant)}</span>{r.claimant || "—"}</a> },
     { key: "site", label: "Site", filter: "select" },
-    { key: "category", label: "Category", filter: "select", render: r => catLabel(r.category), exportValue: r => catLabel(r.category) },
-    { key: "paid_to", label: "Paid to", filter: "search", render: r => <span>{r.paid_to}{r.response && <div className="muted" style={{ color: "var(--green)" }}>↩ {r.response}</div>}{r.status === "queried" && r.query && <div className="muted" style={{ color: "var(--amber)" }}>❓ {r.query}</div>}</span> },
-    { key: "note", label: "Purpose / note", filter: "search",
-      render: r => <span className="muted clamp2" title={r.note || ""}>{r.note || "—"}</span>, exportValue: r => r.note || "" },
+    { key: "category", label: "Category", filter: "select", hidden: true, optionLabel: o => catLabel(o), exportValue: r => catLabel(r.category) },
+    { key: "paid_to", label: "Paid to / purpose", filter: "search", render: r => <span>
+        <b style={{ fontWeight: 600 }}>{r.paid_to}</b>
+        <div className="muted clamp2" title={(catLabel(r.category) + " · " + (r.note || "")).trim()} style={{ fontSize: 11.5 }}>{catLabel(r.category)}{r.note ? " · " + r.note : ""}</div>
+        {r.response && <div className="muted clamp2" title={r.response} style={{ color: "var(--green)" }}>↩ {r.response}</div>}
+        {r.status === "queried" && r.query && <div className="muted clamp2" title={r.query} style={{ color: "var(--amber)" }}>❓ {r.query}</div>}</span> },
+    { key: "note", label: "Purpose / note", filter: "search", hidden: true, exportValue: r => r.note || "" },
     { key: "bill_links", label: "Bill links (export)", hidden: true, exportValue: r => (r.bills || []).map(b => billUrl(b)).join("  |  ") },
-    { key: "funding_source", label: "Source", filter: "select", optionLabel: o => o === "petty_cash" ? "Petty cash" : "Own pocket", render: r => r.funding_source === "petty_cash" ? <span className="badge" style={{ background: "#e8f0fe", color: "#1a56db", border: "1px solid #1a56db" }}>Petty cash</span> : <span className="badge gray">Own pocket</span> },
-    { key: "amount", label: "Amount", type: "num", render: r => <b>{inr(r.amount)}</b>, exportValue: r => r.amount },
+    { key: "funding_source", label: "Source", filter: "select", hidden: true, optionLabel: o => o === "petty_cash" ? "Petty cash" : "Own pocket", exportValue: r => r.funding_source === "petty_cash" ? "Petty cash" : "Own pocket" },
+    { key: "amount", label: "Amount", type: "num", render: r => <span><b>{inr(r.amount)}</b><div>{r.funding_source === "petty_cash" ? <span className="badge" style={{ background: "#e8f0fe", color: "#1a56db", border: "1px solid #1a56db", fontSize: 9.5 }}>Petty</span> : <span className="badge gray" style={{ fontSize: 9.5 }}>Own</span>}</div></span>, exportValue: r => r.amount },
     { key: "photo", label: "Proof", render: r => (r.bills || []).length === 0
       ? (r.photo ? <a href={r.photo} target="_blank" rel="noreferrer">📎 Bill</a> : <span className="muted">—</span>)
       : <span className="bill-strip">
@@ -166,25 +169,30 @@ export default function ExpensesPage() {
           )}
         </span>,
       exportValue: r => (r.bills || []).length + " file(s)" },
-    { key: "status", label: "Status", filter: "select", render: r => r.status === "approved" ? <span className="badge p">Approved</span> : r.status === "rejected" ? <span className="badge a">Rejected</span> : r.status === "queried" ? <span className="badge h">Queried</span> : <span className="badge gray">Pending</span> },
-    { key: "approved_on", label: "Appr. date", render: r => <span className="muted">{r.approved_on || "—"}</span> },
-    { key: "approved_by", label: "Appr. by", filter: "select", render: r => <span className="muted">{r.approved_by || "—"}</span> },
-    { key: "posted", label: "Tally", filter: "select", optionLabel: o => o ? "Posted" : "Not posted",
+    { key: "status", label: "Status", filter: "select", render: r => <span>
+        {r.status === "approved" ? <span className="badge p">Approved</span> : r.status === "rejected" ? <span className="badge a">Rejected</span> : r.status === "queried" ? <span className="badge h">Queried</span> : <span className="badge gray">Pending</span>}
+        {r.approved_by && <div className="muted" style={{ fontSize: 10 }}>{r.approved_by}{r.approved_on ? " · " + r.approved_on : ""}</div>}</span> },
+    { key: "approved_on", label: "Appr. date", hidden: true, exportValue: r => r.approved_on || "" },
+    { key: "approved_by", label: "Appr. by", filter: "select", hidden: true, exportValue: r => r.approved_by || "" },
+    { key: "posted", label: "Tally", filter: "select", hidden: true, optionLabel: o => o ? "Posted" : "Not posted",
       render: r => r.status === "approved" ? (
         <label style={{ display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 12 }}>
           <input type="checkbox" checked={!!r.posted} onChange={() => togglePostExp(r)} style={{ width: 16, height: 16, accentColor: "var(--copper)" }} />
           {r.posted ? <span className="badge p">Posted</span> : <span className="badge gray">Mark posted</span>}
         </label>) : <span className="muted">—</span>,
       exportValue: r => r.posted ? "Posted" : "" },
-    { key: "_action", label: "Action", sortable: false, render: r => (r.status === "pending" || r.status === "queried") ? (
+    { key: "_action", label: "Action", sortable: false, render: r => (
       <span style={{ whiteSpace: "nowrap" }}>
+        <button style={{ fontSize: 11.5, marginRight: 4 }} title="View full record" onClick={() => setViewExp(r)}>👁</button>
+        {(r.status === "pending" || r.status === "queried") ? (<>
         {session && r.claimant_id === session.id && (
           <button style={{ fontSize: 11.5, marginRight: 4 }} title="Edit before it is approved" onClick={() => setEditExp({ ...r })}>✎</button>
         )}
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actClaim(r.id, "approved")}>✓</button>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actClaim(r.id, "queried")}>?</button>
         <button style={{ fontSize: 11.5 }} onClick={() => actClaim(r.id, "rejected")}>✕</button>
-      </span>) : <span className="muted" style={{ fontSize: 11.5 }}>Done</span> },
+        </>) : null}
+      </span>) },
   ];
   // update212: six sections as TABS — one fixed-height scroll panel, page never grows
   const [mtab, setMtab] = useState("claims");
@@ -210,7 +218,8 @@ export default function ExpensesPage() {
   ];
   // update211: requester edits their own pending expense (incl. Own pocket <-> Petty cash)
   const [editExp, setEditExp] = useState(null);
-  const [billsFor, setBillsFor] = useState(null);   // update213: compact proof strip → gallery
+  const [billsFor, setBillsFor] = useState(null);
+  const [viewExp, setViewExp] = useState(null);     // update216: 👁 full-record view   // update213: compact proof strip → gallery
   const [editBusy, setEditBusy] = useState(false); const [editErr, setEditErr] = useState("");
   async function saveEditExp() {
     setEditBusy(true); setEditErr("");
@@ -596,6 +605,47 @@ export default function ExpensesPage() {
             </div>
           </div>
         )}
+        {viewExp && (
+          <div onClick={() => setViewExp(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 98, padding: 14 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, maxWidth: 520, width: "100%", maxHeight: "90vh", overflowY: "auto", padding: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <h2 style={{ margin: 0 }}>💳 Expense — <b>{inr(viewExp.amount)}</b></h2>
+                <button type="button" onClick={() => setViewExp(null)}>✕</button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 18px", marginTop: 14, fontSize: 13 }}>
+                {[["Date", viewExp.date], ["Claimant", viewExp.claimant], ["Site", viewExp.site], ["Category", catLabel(viewExp.category)],
+                  ["Paid to", viewExp.paid_to], ["Source", viewExp.funding_source === "petty_cash" ? "🪙 Petty cash" : "👛 Own pocket"],
+                  ["Status", viewExp.status], ["Approved by", viewExp.approved_by ? viewExp.approved_by + (viewExp.approved_on ? " · " + viewExp.approved_on : "") : "—"],
+                  ["Tally", viewExp.posted ? "Posted" : "Not posted"]].map(([l, v]) => (
+                  <div key={l}><div className="muted" style={{ fontSize: 10.5 }}>{l}</div><b style={{ fontWeight: 600 }}>{v || "—"}</b></div>
+                ))}
+              </div>
+              <div style={{ marginTop: 10 }}><div className="muted" style={{ fontSize: 10.5 }}>Purpose / note</div><div style={{ fontSize: 13 }}>{viewExp.note || "—"}</div></div>
+              {viewExp.response && <div style={{ marginTop: 8, color: "var(--green)", fontSize: 12.5 }}>↩ Reply: {viewExp.response}</div>}
+              {viewExp.query && <div style={{ marginTop: 4, color: "var(--amber)", fontSize: 12.5 }}>❓ Query: {viewExp.query}</div>}
+              {(viewExp.bills || []).length > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))", gap: 8, marginTop: 12 }}>
+                  {viewExp.bills.map((b, i) => (
+                    <a key={i} href={billUrl(b)} target="_blank" rel="noreferrer" style={{ textDecoration: "none", textAlign: "center", border: "1px solid var(--border)", borderRadius: 10, padding: 6 }}>
+                      {isPdf(b) ? <div style={{ height: 64, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26 }}>📄</div>
+                        : <img src={billUrl(b)} alt={"bill " + (i + 1)} style={{ height: 64, width: "100%", objectFit: "cover", borderRadius: 6 }} />}
+                      <div style={{ fontSize: 11 }}>Bill {i + 1}</div>
+                    </a>
+                  ))}
+                </div>
+              )}
+              {(viewExp.status === "pending" || viewExp.status === "queried") && (
+                <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+                  <button className="primary" onClick={async () => { await actClaim(viewExp.id, "approved"); setViewExp(null); }}>✓ Approve</button>
+                  <button onClick={async () => { await actClaim(viewExp.id, "queried"); setViewExp(null); }}>? Query</button>
+                  <button style={{ color: "var(--red)" }} onClick={async () => { await actClaim(viewExp.id, "rejected"); setViewExp(null); }}>✕ Reject</button>
+                  {session && viewExp.claimant_id === session.id && <button onClick={() => { setEditExp({ ...viewExp }); setViewExp(null); }}>✎ Edit</button>}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
 
 
 
