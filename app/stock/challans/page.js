@@ -3,8 +3,7 @@
 // listed + filtered, then Convert -> GRN. Print / PDF / Tally per row and in bulk.
 import { useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
-import { getOpenPOs } from "@/lib/stock";
-import { createDeliveryChallan, getDeliveryChallans, convertDcToGrn, uploadDcProof, dcProofUrl, priceDcLines, dcTallyXml } from "@/lib/challan";
+import { createDeliveryChallan, getDeliveryChallans, convertDcToGrn, uploadDcProof, dcProofUrl, priceDcLines, dcTallyXml, getChallanPOs } from "@/lib/challan";
 import { getTallySettings } from "@/lib/tally";
 import { getSession, canSeeModuleAnySite } from "@/lib/auth";
 
@@ -35,7 +34,7 @@ export default function DeliveryChallans() {
   useEffect(() => {
     const s = getSession(); if (!s) { window.location.replace("/login"); return; }
     setSession(s);
-    load(); getOpenPOs().then(setPos); getTallySettings().then(setTally);
+    load(); getChallanPOs().then(setPos); getTallySettings().then(setTally);
   }, []);
 
   function pickPO(p) {
@@ -197,7 +196,7 @@ export default function DeliveryChallans() {
                         <span className="muted" style={{ fontSize: 12 }}>{p.site || ""} · {p.pending_items} item(s) pending</span>
                       </div>
                     ))}
-                    {pos.length === 0 && <div className="muted" style={{ padding: 10 }}>No open approved POs.</div>}
+                    {pos.length === 0 && <div className="muted" style={{ padding: 10 }}>No approved POs with pending material anywhere — approve a PO first, or check with the Director.</div>}
                   </div>
                 </div>
               )}
