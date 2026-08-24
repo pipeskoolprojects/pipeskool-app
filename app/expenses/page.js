@@ -179,6 +179,16 @@ export default function ExpensesPage() {
         <button style={{ fontSize: 11.5 }} onClick={() => actClaim(r.id, "rejected")}>✕</button>
       </span>) : <span className="muted" style={{ fontSize: 11.5 }}>Done</span> },
   ];
+  // update212: six sections as TABS — one fixed-height scroll panel, page never grows
+  const [mtab, setMtab] = useState("claims");
+  const MT = [
+    ["pettyreq", "🪙", "Petty cash requests", () => (pettyReqs || []).filter(r => r.status === "pending").length],
+    ["advreq", "📄", "Advance salary requests", () => (adv || []).length],
+    ["claims", "💳", "Expenses ledger", () => (claims || []).length],
+    ["pettyled", "📒", "Petty cash ledger", () => petty.length],
+    ["advled", "🧾", "Advance salary ledger", () => null],
+    ["reports", "📊", "Reports", () => null],
+  ];
   // update211: requester edits their own pending expense (incl. Own pocket <-> Petty cash)
   const [editExp, setEditExp] = useState(null);
   const [editBusy, setEditBusy] = useState(false); const [editErr, setEditErr] = useState("");
@@ -243,7 +253,7 @@ export default function ExpensesPage() {
             ["🔺 Outstanding advances", inr(advTotals.out), "to be recovered", advTotals.out > 0 ? "var(--red)" : "var(--green)", "advled"],
             ["⏳ Advance requests pending", inr(sumBy(advPending, a => a.amount)), advPending.length + " waiting", advPending.length ? "var(--amber)" : null, "advreq"]].map(([l, v, sub2, c, sec]) => (
             <div key={l} className="panel" role="button" tabIndex={0} style={{ padding: "10px 14px", margin: 0, cursor: "pointer" }}
-              onClick={() => { setOpenSec(o => ({ ...o, [sec]: true })); setTimeout(() => document.getElementById("sec-" + sec)?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); }}>
+              onClick={() => setMtab(sec)}>
               <div className="muted" style={{ fontSize: 11.5 }}>{l}</div>
               <div style={{ fontWeight: 800, fontSize: 19, color: c || "var(--text)" }}>{v}</div>
               <div className="muted" style={{ fontSize: 10.5 }}>{sub2} · <span style={{ color: "var(--copper)" }}>View details →</span></div>
@@ -274,8 +284,18 @@ export default function ExpensesPage() {
           </div>
         )}
 
-        <CollapseCard htmlId="sec-pettyreq" open={!!openSec["pettyreq"]} onToggle={() => toggleSec("pettyreq")} icon="🪙" title="Petty cash requests" sub="ask · approve · grant"
-          stats={[["Pending", (pettyReqs || []).filter(r => r.status === "pending").length, "var(--amber)"], ["Total", (pettyReqs || []).length]]}>
+        <div style={{ display: "flex", gap: 2, overflowX: "auto", whiteSpace: "nowrap", borderBottom: "2px solid var(--border)", margin: "2px 0 0" }}>
+          {MT.map(([k, ic, l, cnt]) => { const n = cnt(); return (
+            <button key={k} type="button" onClick={() => setMtab(k)}
+              style={{ border: "none", background: "none", padding: "9px 12px", fontSize: 12.5, cursor: "pointer", flexShrink: 0,
+                fontWeight: mtab === k ? 800 : 600, color: mtab === k ? "var(--copper)" : "var(--text)",
+                borderBottom: mtab === k ? "3px solid var(--copper)" : "3px solid transparent", marginBottom: -2 }}>
+              {ic} {l}{n !== null && n > 0 && <span className="badge gray" style={{ marginLeft: 6, fontSize: 10.5 }}>{n}</span>}
+            </button>
+          ); })}
+        </div>
+        <div className="panel" style={{ marginTop: 0, borderTopLeftRadius: 0, height: "calc(100vh - 330px)", minHeight: 380, overflowY: "auto", overflowX: "auto" }}>
+        <div style={{ display: mtab === "pettyreq" ? "block" : "none" }}>
           {session && canAnySite(session, "money", "create") && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginBottom: 12, alignItems: "end" }}>
               <div><label className="muted">Amount ₹ *</label>
@@ -341,19 +361,17 @@ export default function ExpensesPage() {
             </table>
             {Pager({ n: pettyReqs.length, pg: pgPetty, set: setPgPetty })}
           </>)}
-        </CollapseCard>
+        </div>
 
-        <CollapseCard htmlId="sec-advreq" open={!!openSec["advreq"]} onToggle={() => toggleSec("advreq")} icon="📄" title="Advance salary requests" sub="approve · reject · query"
-          stats={[["Pending", inr(sumBy(advPending, a => a.amount)), advPending.length ? "var(--amber)" : undefined], ["Approved", inr(sumBy(advApproved, a => a.amount)), "var(--green)"], ["Requests", (adv || []).length]]}>
+        <div style={{ display: mtab === "advreq" ? "block" : "none" }}>
           {!adv ? <div className="muted">Loading…</div> :
             <DataTable columns={advCols} rows={adv} exportName="advance_requests" dateField="date" pageSize={10} />}
-        </CollapseCard>
+        </div>
 
-        <CollapseCard htmlId="sec-claims" open={!!openSec["claims"]} onToggle={() => toggleSec("claims")} icon="💳" title="Expenses ledger" sub="all site expenses & payments"
-          stats={[["Approved", inr(approvedClaims), "var(--green)"], ["Pending", inr(pendingClaims), pendingClaims ? "var(--amber)" : undefined], ["Rejected", inr(rejectedClaims), rejectedClaims ? "var(--red)" : undefined], ["Transactions", (claims || []).length]]}>
+        <div style={{ display: mtab === "claims" ? "block" : "none" }}>
           {!claims ? <div className="muted">Loading…</div> :
             <DataTable columns={claimCols} rows={claims} exportName="expense_claims" dateField="date" pageSize={10} />}
-        </CollapseCard>
+        </div>
 
         {pettyReturns.length > 0 && (
           <div className="panel" style={{ borderLeft: "4px solid var(--copper)" }}>
@@ -431,23 +449,22 @@ export default function ExpensesPage() {
           </div>
         )}
 
-        <CollapseCard htmlId="sec-pettyled" open={!!openSec["pettyled"]} onToggle={() => toggleSec("pettyled")} icon="📒" title="Petty cash ledger" sub="cash balance held by persons"
-          stats={[["Balance held", inr(pettyBal)], ["Spent", inr(pettySpent)], ["Returned", inr(pettyReturned), "var(--green)"], ["Holders", petty.length]]}>
+        <div style={{ display: mtab === "pettyled" ? "block" : "none" }}>
           {petty.length === 0 ? <span className="muted">No petty cash issued yet.</span> :
             <DataTable columns={pettyCols} rows={petty} exportName="petty_cash" pageSize={10} />}
-        </CollapseCard>
+        </div>
         <div id="advances" />
-        <CollapseCard htmlId="sec-advled" open={!!openSec["advled"]} onToggle={() => toggleSec("advled")} keepMounted icon="🧾" title="Advance salary ledger" sub="advances given to employees"
-          stats={[["Taken", inr(advTotals.taken)], ["Recovered", inr(advTotals.rec), "var(--green)"], ["Outstanding", inr(advTotals.out), advTotals.out > 0 ? "var(--red)" : "var(--green)"]]}>
+        <div style={{ display: mtab === "advled" ? "block" : "none" }}>
           <AdvanceLedger onTotals={t => setAdvTotals(prev => (prev.taken === t.taken && prev.rec === t.rec && prev.out === t.out) ? prev : t)} />
-        </CollapseCard>
-        <CollapseCard htmlId="sec-reports" open={!!openSec["reports"]} onToggle={() => toggleSec("reports")} icon="📊" title="Reports" sub="exports & Tally">
+        </div>
+        <div style={{ display: mtab === "reports" ? "block" : "none" }}>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", paddingTop: 4 }}>
             <span className="muted" style={{ fontSize: 12.5, width: "100%" }}>Every ledger above has its own ⬇ Excel export (with the filters you set). Additional:</span>
             <a href="/tally"><button style={{ fontSize: 12.5 }}>🧾 Tally export</button></a>
             <button style={{ fontSize: 12.5 }} onClick={() => window.print()}>🖨 Print this overview</button>
           </div>
-        </CollapseCard>
+        </div>
+        </div>{/* end fixed tab panel */}
         {editExp && (
           <div onClick={() => setEditExp(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 97, padding: 14 }}>
             <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 460, width: "100%", padding: 20 }}>
