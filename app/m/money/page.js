@@ -6,7 +6,7 @@ import { getSession } from "@/lib/auth";
 import { billUrl } from "@/lib/bills";
 import {
   EXPENSE_CATEGORIES, inr, getBeneficiaries, raiseAdvanceSalary,
-  claimExpense, getMyRecentMoney, getPettyBalance, respondAdvance, respondExpense, requestPettyCash,
+  claimExpense, selfEditExpense, getMyRecentMoney, getPettyBalance, respondAdvance, respondExpense, requestPettyCash,
   getPettyOverview, getPettyLedger, requestPettyReturn } from "@/lib/money";
 
 export default function MoneyScreen() {
@@ -38,6 +38,8 @@ export default function MoneyScreen() {
   const fileRef = useRef(null);
   const replyFileRef = useRef(null);
   const [reply, setReply] = useState(null);     // the queried item being answered
+  const [editExp, setEditExp] = useState(null);   // update211: edit my pending expense
+  const [editBusy, setEditBusy] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [replyAmount, setReplyAmount] = useState("");
   const [replyPhoto, setReplyPhoto] = useState(null);
@@ -279,11 +281,16 @@ export default function MoneyScreen() {
       )}
       My recent requests</h3>
         {recent.length === 0 ? <div className="muted">Nothing yet.</div> : recent.map((r, i) => (
-          <div className="m-row" key={i} onClick={() => { if (r.status === "queried") { setReply(r); setReplyAmount(String(r.amount)); setReplyText(""); setMsg(""); setErr(""); } }} style={{ cursor: r.status === "queried" ? "pointer" : "default" }}>
+          <div className="m-row" key={i} onClick={() => {
+              if (r.status === "queried" && r.type !== "Expense") { setReply(r); setReplyAmount(String(r.amount)); setReplyText(""); setMsg(""); setErr(""); return; }
+              if (r.type === "Expense" && (r.status === "pending" || r.status === "queried")) { setEditExp({ ...r }); setMsg(""); setErr(""); return; }
+              if (r.status === "queried") { setReply(r); setReplyAmount(String(r.amount)); setReplyText(""); setMsg(""); setErr(""); }
+            }} style={{ cursor: (r.status === "queried" || (r.type === "Expense" && r.status === "pending")) ? "pointer" : "default" }}>
             <div className="info">
               <div className="nm">{inr(r.amount)}{r.asked ? <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}> (asked {inr(r.asked)})</span> : null} — {r.name}</div>
               <div className="dt">{r.type} · {r.date}</div>
-              {r.status === "queried" && r.query && <div className="flag">❓ Query: {r.query} — tap to reply</div>}
+              {r.status === "queried" && r.query && <div className="flag">❓ Query: {r.query} — tap to {r.type === "Expense" ? "edit / fix" : "reply"}</div>}
+              {r.type === "Expense" && r.status === "pending" && <div className="muted" style={{ fontSize: 11 }}>✎ tap to edit (until approved)</div>}
             </div>
             {statusBadge(r.status)}
           </div>
@@ -314,6 +321,40 @@ export default function MoneyScreen() {
         )}
       </div>
       <MobileNav />
+      {editExp && (
+        <div onClick={() => setEditExp(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.6)", display: "flex", alignItems: "flex-end", zIndex: 60 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "16px 16px 0 0", width: "100%", padding: 18, maxHeight: "85vh", overflowY: "auto" }}>
+            <h3 style={{ marginTop: 0 }}>✎ Edit expense <span className="muted" style={{ fontSize: 12 }}>(until approved)</span></h3>
+            {err && <div className="note red">{err}</div>}
+            <label className="muted" style={{ fontSize: 12 }}>Amount ₹</label>
+            <input inputMode="decimal" style={{ width: "100%", marginBottom: 8 }} value={editExp.amount} onChange={e2 => setEditExp(x => ({ ...x, amount: e2.target.value }))} />
+            <label className="muted" style={{ fontSize: 12 }}>Category</label>
+            <select style={{ width: "100%", marginBottom: 8 }} value={editExp.category} onChange={e2 => setEditExp(x => ({ ...x, category: e2.target.value }))}>
+              {EXPENSE_CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+            <label className="muted" style={{ fontSize: 12 }}>Paid to</label>
+            <input style={{ width: "100%", marginBottom: 8 }} value={editExp.name || ""} onChange={e2 => setEditExp(x => ({ ...x, name: e2.target.value }))} />
+            <label className="muted" style={{ fontSize: 12 }}>Purpose / note</label>
+            <input style={{ width: "100%", marginBottom: 8 }} value={editExp.note || ""} onChange={e2 => setEditExp(x => ({ ...x, note: e2.target.value }))} />
+            <div style={{ margin: "6px 0 2px" }}>
+              {[["own_pocket", "👛 Own pocket"], ["petty_cash", "🪙 Petty cash"]].map(([v, l]) => (
+                <label key={v} style={{ marginRight: 14, fontSize: 14 }}>
+                  <input type="radio" checked={editExp.funding_source === v} onChange={() => setEditExp(x => ({ ...x, funding_source: v }))} /> {l}
+                </label>
+              ))}
+            </div>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 10 }}>Switching source is safe before approval — petty cash deducts only when approved.</div>
+            <button className="m-btn primary" disabled={editBusy} onClick={async () => {
+              setEditBusy(true); setErr("");
+              const res = await selfEditExpense(editExp.id, { amount: editExp.amount, note: editExp.note, category: editExp.category, funding_source: editExp.funding_source, expense_date: editExp.expense_date, paid_to: editExp.name });
+              setEditBusy(false);
+              if (!res.ok) { setErr(res.error); return; }
+              setEditExp(null); setMsg("Expense updated ✓"); load();
+            }}>{editBusy ? "Saving…" : "Save changes"}</button>
+            <button className="m-btn" style={{ marginTop: 6 }} onClick={() => setEditExp(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

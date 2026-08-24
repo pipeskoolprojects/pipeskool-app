@@ -11,7 +11,7 @@ import {
   getBeneficiaries, raiseAdvanceSalary,
   getPettyReturnQueue, confirmPettyReturn, getPettyLedger,
   getPettyReconciliation, catLabel, inr, markAdvancePosted, markExpensePosted,
-  getPettyRequestQueue, reviewPettyRequest, requestPettyCash } from "@/lib/money";
+  getPettyRequestQueue, reviewPettyRequest, requestPettyCash , selfEditExpense, EXPENSE_CATEGORIES } from "@/lib/money";
 import { getSession, canAnySite } from "@/lib/auth";
 
 export default function ExpensesPage() {
@@ -171,11 +171,26 @@ export default function ExpensesPage() {
       exportValue: r => r.posted ? "Posted" : "" },
     { key: "_action", label: "Action", sortable: false, render: r => (r.status === "pending" || r.status === "queried") ? (
       <span style={{ whiteSpace: "nowrap" }}>
+        {session && r.claimant_id === session.id && (
+          <button style={{ fontSize: 11.5, marginRight: 4 }} title="Edit before it is approved" onClick={() => setEditExp({ ...r })}>✎</button>
+        )}
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actClaim(r.id, "approved")}>✓</button>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actClaim(r.id, "queried")}>?</button>
         <button style={{ fontSize: 11.5 }} onClick={() => actClaim(r.id, "rejected")}>✕</button>
       </span>) : <span className="muted" style={{ fontSize: 11.5 }}>Done</span> },
   ];
+  // update211: requester edits their own pending expense (incl. Own pocket <-> Petty cash)
+  const [editExp, setEditExp] = useState(null);
+  const [editBusy, setEditBusy] = useState(false); const [editErr, setEditErr] = useState("");
+  async function saveEditExp() {
+    setEditBusy(true); setEditErr("");
+    const res = await selfEditExpense(editExp.id, {
+      amount: editExp.amount, note: editExp.note, category: editExp.category,
+      funding_source: editExp.funding_source, expense_date: editExp.expense_date, paid_to: editExp.paid_to });
+    setEditBusy(false);
+    if (!res.ok) { setEditErr(res.error); return; }
+    setEditExp(null); setMsg("Expense updated."); getExpenses("all").then(setClaims);
+  }
 
   // returns queue + person ledger (update167)
   const [pettyReturns, setPettyReturns] = useState([]);
@@ -433,6 +448,39 @@ export default function ExpensesPage() {
             <button style={{ fontSize: 12.5 }} onClick={() => window.print()}>🖨 Print this overview</button>
           </div>
         </CollapseCard>
+        {editExp && (
+          <div onClick={() => setEditExp(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 97, padding: 14 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 460, width: "100%", padding: 20 }}>
+              <h2>✎ Edit expense <span className="muted" style={{ fontSize: 12 }}>(before approval)</span></h2>
+              {editErr && <div className="note red">{editErr}</div>}
+              <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <div><label className="muted" style={{ fontSize: 11.5 }}>Date</label><br /><input type="date" value={editExp.expense_date || ""} onChange={e => setEditExp(x => ({ ...x, expense_date: e.target.value }))} /></div>
+                  <div><label className="muted" style={{ fontSize: 11.5 }}>Amount ₹ *</label><br /><input inputMode="decimal" style={{ width: 110 }} value={editExp.amount} onChange={e => setEditExp(x => ({ ...x, amount: e.target.value }))} /></div>
+                  <div><label className="muted" style={{ fontSize: 11.5 }}>Category</label><br />
+                    <select value={editExp.category} onChange={e => setEditExp(x => ({ ...x, category: e.target.value }))}>
+                      {EXPENSE_CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
+                </div>
+                <div><label className="muted" style={{ fontSize: 11.5 }}>Paid to</label><br /><input style={{ width: "100%" }} value={editExp.paid_to || ""} onChange={e => setEditExp(x => ({ ...x, paid_to: e.target.value }))} /></div>
+                <div><label className="muted" style={{ fontSize: 11.5 }}>Purpose / note</label><br /><input style={{ width: "100%" }} value={editExp.note || ""} onChange={e => setEditExp(x => ({ ...x, note: e.target.value }))} /></div>
+                <div>
+                  <label className="muted" style={{ fontSize: 11.5 }}>Paid from</label><br />
+                  {[["own_pocket", "👛 Own pocket"], ["petty_cash", "🪙 Petty cash"]].map(([v, l]) => (
+                    <label key={v} style={{ marginRight: 16, fontSize: 13, cursor: "pointer" }}>
+                      <input type="radio" name="fundsrc" checked={editExp.funding_source === v} onChange={() => setEditExp(x => ({ ...x, funding_source: v }))} /> {l}
+                    </label>
+                  ))}
+                  <div className="muted" style={{ fontSize: 11 }}>Switching is safe before approval — petty cash is deducted only when the Director approves.</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                <button className="primary" disabled={editBusy} onClick={saveEditExp}>{editBusy ? "Saving…" : "Save changes"}</button>
+                <button onClick={() => setEditExp(null)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
     </div>
   );
