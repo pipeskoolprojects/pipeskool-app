@@ -219,7 +219,8 @@ export default function ExpensesPage() {
   // update211: requester edits their own pending expense (incl. Own pocket <-> Petty cash)
   const [editExp, setEditExp] = useState(null);
   const [billsFor, setBillsFor] = useState(null);
-  const [viewExp, setViewExp] = useState(null);     // update216: 👁 full-record view   // update213: compact proof strip → gallery
+  const [viewExp, setViewExp] = useState(null);
+  const [showAdvForm, setShowAdvForm] = useState(false);   // update217: collapsed raise-advance form (lives in the advreq tab now)     // update216: 👁 full-record view   // update213: compact proof strip → gallery
   const [editBusy, setEditBusy] = useState(false); const [editErr, setEditErr] = useState("");
   async function saveEditExp() {
     setEditBusy(true); setEditErr("");
@@ -290,28 +291,6 @@ export default function ExpensesPage() {
           ))}
         </div>
 
-        {session && canAnySite(session, "money", "create") && (
-          <div className="panel">
-            <h2>Raise advance salary</h2>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
-              <div><label className="muted">For whom * (staff &amp; labour of your sites)</label>
-                <select style={{ width: "100%" }} value={advForm.beneficiary}
-                        onChange={e => setAdvForm(f => ({ ...f, beneficiary: e.target.value }))}>
-                  <option value="">Select person…</option>
-                  {bens.map(b => <option key={`${b.kind}:${b.id}`} value={`${b.kind}:${b.id}`}>{b.label}{!b.bank ? " · ⚠ no bank" : ""}</option>)}
-                </select></div>
-              <div><label className="muted">Amount ₹ *</label>
-                <input style={{ width: "100%" }} inputMode="numeric" value={advForm.amount}
-                       onChange={e => setAdvForm(f => ({ ...f, amount: e.target.value }))} /></div>
-              <div><label className="muted">Reason</label>
-                <input style={{ width: "100%" }} value={advForm.reason} placeholder="e.g. medical / festival advance"
-                       onChange={e => setAdvForm(f => ({ ...f, reason: e.target.value }))} /></div>
-              <div style={{ display: "flex", alignItems: "flex-end" }}>
-                <button className="primary" disabled={advBusy} onClick={submitWebAdvance}>{advBusy ? "Sending…" : "Send request"}</button></div>
-            </div>
-            {advErr && <div className="note red" style={{ marginTop: 8 }}>{advErr}</div>}
-          </div>
-        )}
 
         <div style={fullView ? { position: "fixed", inset: 0, zIndex: 92, background: "var(--bg)", padding: "10px 14px", display: "flex", flexDirection: "column" } : { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, borderBottom: "2px solid var(--border)", margin: "2px 0 0" }}>
@@ -401,6 +380,37 @@ export default function ExpensesPage() {
         </div>
 
         <div className={mtab === "advreq" ? "money-sec" : undefined} style={{ display: mtab === "advreq" ? "flex" : "none", overflowY: "auto" }}>
+          {/* update217: the standalone page-top form moved here, collapsed behind one button */}
+          {session && canAnySite(session, "money", "create") && <div style={{ flexShrink: 0, marginBottom: 8 }}>
+            {!showAdvForm ? (
+              <button type="button" className="primary" style={{ fontSize: 12.5 }} onClick={() => setShowAdvForm(true)}>＋ Raise advance salary</button>
+            ) : (
+              <div style={{ border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px", background: "#faf9f6" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h2 style={{ margin: 0, fontSize: 15 }}>Raise advance salary</h2>
+                  <button type="button" onClick={() => setShowAdvForm(false)}>✕ Close</button>
+                </div>
+            
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
+              <div><label className="muted">For whom * (staff &amp; labour of your sites)</label>
+                <select style={{ width: "100%" }} value={advForm.beneficiary}
+                        onChange={e => setAdvForm(f => ({ ...f, beneficiary: e.target.value }))}>
+                  <option value="">Select person…</option>
+                  {bens.map(b => <option key={`${b.kind}:${b.id}`} value={`${b.kind}:${b.id}`}>{b.label}{!b.bank ? " · ⚠ no bank" : ""}</option>)}
+                </select></div>
+              <div><label className="muted">Amount ₹ *</label>
+                <input style={{ width: "100%" }} inputMode="numeric" value={advForm.amount}
+                       onChange={e => setAdvForm(f => ({ ...f, amount: e.target.value }))} /></div>
+              <div><label className="muted">Reason</label>
+                <input style={{ width: "100%" }} value={advForm.reason} placeholder="e.g. medical / festival advance"
+                       onChange={e => setAdvForm(f => ({ ...f, reason: e.target.value }))} /></div>
+              <div style={{ display: "flex", alignItems: "flex-end" }}>
+                <button className="primary" disabled={advBusy} onClick={submitWebAdvance}>{advBusy ? "Sending…" : "Send request"}</button></div>
+            </div>
+            {advErr && <div className="note red" style={{ marginTop: 8 }}>{advErr}</div>}
+              </div>
+            )}
+          </div>}
           {!adv ? <div className="muted">Loading…</div> :
             <DataTable columns={advCols} rows={adv} exportName="advance_requests" dateField="date" pageSize={10} fill />}
         </div>
