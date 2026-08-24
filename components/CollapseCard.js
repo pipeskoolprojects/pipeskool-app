@@ -6,7 +6,10 @@
 // type="button" and conditional rendering, so View/Hide always works.
 export default function CollapseCard({ htmlId, open, onToggle, icon, title, sub, stats, accent, keepMounted, children }) {
   return (
-    <div id={htmlId} className="panel" style={{ padding: 0, overflow: "hidden", scrollMarginTop: 70, ...(accent ? { borderLeft: "4px solid " + accent } : {}) }}>
+    // update210: overflow:hidden here TRAPPED wheel/touch scrolling (it consumed the scroll
+    // hand-off from the tables' internal scroller) and hid the horizontal bar that reaches
+    // the right-side action columns. The card no longer clips; the content strip scrolls X.
+    <div id={htmlId} className="panel" style={{ padding: 0, overflowX: "visible", scrollMarginTop: 70, ...(accent ? { borderLeft: "4px solid " + accent } : {}) }}>
       <div role="button" tabIndex={0} onClick={onToggle} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") onToggle(); }}
         style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", cursor: "pointer", flexWrap: "wrap" }}>
         <div style={{ fontSize: 20 }}>{icon}</div>
@@ -26,8 +29,8 @@ export default function CollapseCard({ htmlId, open, onToggle, icon, title, sub,
         </div>
       </div>
       {keepMounted
-        ? <div hidden={!open} style={{ padding: "0 16px 16px" }}>{children}</div>
-        : open && <div style={{ padding: "0 16px 16px" }}>{children}</div>}
+        ? <div hidden={!open} style={{ padding: "0 16px 16px", overflowX: "auto" }}>{children}</div>
+        : open && <div style={{ padding: "0 16px 16px", overflowX: "auto" }}>{children}</div>}
     </div>
   );
 }
