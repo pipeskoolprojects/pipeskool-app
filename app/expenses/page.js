@@ -229,7 +229,7 @@ export default function ExpensesPage() {
       funding_source: editExp.funding_source, expense_date: editExp.expense_date, paid_to: editExp.paid_to });
     setEditBusy(false);
     if (!res.ok) { setEditErr(res.error); return; }
-    setEditExp(null); setMsg("Expense updated."); getExpenses("all").then(setClaims);
+    setEditExp(null); setMsg("Expense updated."); getExpenseClaimQueue().then(setClaims);
   }
 
   // returns queue + person ledger (update167)

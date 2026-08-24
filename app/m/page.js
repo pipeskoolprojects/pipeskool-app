@@ -142,6 +142,11 @@ export default function PunchScreen() {
   }
 
   return (
+    <>
+    {staffRole === "director" && (
+      <a href="/m/dashboard" style={{ position: "fixed", top: 10, left: "50%", transform: "translateX(-50%)", zIndex: 40, background: "#0F1419", color: "#fff", borderRadius: 999, padding: "8px 16px", fontSize: 13, fontWeight: 700, textDecoration: "none", boxShadow: "0 4px 14px rgba(0,0,0,0.3)", whiteSpace: "nowrap" }}>
+        📊 Director Dashboard</a>
+    )}
     <div className="m-wrap">
       <div className="m-head">
         <div>
@@ -204,5 +209,6 @@ export default function PunchScreen() {
       </div>
       <MobileNav />
     </div>
+    </>
   );
 }
