@@ -168,6 +168,7 @@ html.psk-nosb .main { padding-left: 76px; }
   overflow-y: auto; overflow-x: auto; width: 100%;
   max-height: max(340px, calc(100vh - 310px));
   border: 1px solid var(--border); border-radius: 10px;
+  overscroll-behavior: auto;   /* update210: hand scrolling to the page when the table's own scroll ends */
 }
 .dt-scroll table { margin: 0; }
 .dt-scroll thead th {
