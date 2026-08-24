@@ -174,7 +174,7 @@ export default function ExpensesPage() {
         {r.approved_by && <div className="muted" style={{ fontSize: 10 }}>{r.approved_by}{r.approved_on ? " · " + r.approved_on : ""}</div>}</span> },
     { key: "approved_on", label: "Appr. date", hidden: true, exportValue: r => r.approved_on || "" },
     { key: "approved_by", label: "Appr. by", filter: "select", hidden: true, exportValue: r => r.approved_by || "" },
-    { key: "posted", label: "Tally", filter: "select", hidden: true, optionLabel: o => o ? "Posted" : "Not posted",
+    { key: "posted", label: "Tally", filter: "select", optionLabel: o => o ? "Posted" : "Not posted",
       render: r => r.status === "approved" ? (
         <label style={{ display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 12 }}>
           <input type="checkbox" checked={!!r.posted} onChange={() => togglePostExp(r)} style={{ width: 16, height: 16, accentColor: "var(--copper)" }} />
