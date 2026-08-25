@@ -779,7 +779,10 @@ export default function ProcurePage() {
                         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => setDeliv({ id: p.id, po_no: p.po_no, expected_delivery: p.expected_delivery || "", delivery_status: p.delivery_status || "pending", delivery_note: p.delivery_note || "" })}>📦 Delivery</button>
                         {p.approval === "approved"
                           ? <a href={"/purchase/po?po=" + p.id} target="_blank" rel="noreferrer"><button style={{ fontSize: 11.5, marginRight: 4 }}>Print</button></a>
-                          : <button style={{ fontSize: 11.5, marginRight: 4, color: "var(--muted)" }} disabled title={p.approval === "rejected" ? "Rejected — cannot be issued" : "Waiting for Director approval — cannot be issued yet"}>🔒 Print</button>}
+                          : p.approval !== "rejected" && isDirector
+                            /* update221: the APPROVER must be able to review the full draft before deciding */
+                            ? <a href={"/purchase/po?po=" + p.id + "&review=1"} target="_blank" rel="noreferrer"><button style={{ fontSize: 11.5, marginRight: 4, border: "1px solid var(--amber)", color: "var(--amber)", fontWeight: 700 }} title="Review the draft PO (printed copy is watermarked DRAFT)">👁 Review draft</button></a>
+                            : <button style={{ fontSize: 11.5, marginRight: 4, color: "var(--muted)" }} disabled title={p.approval === "rejected" ? "Rejected — cannot be issued" : "Waiting for Director approval — cannot be issued yet"}>🔒 Print</button>}
                         {p.status !== "cancelled" && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => doCancel(p)}>Cancel</button>}
                       </td>
                     </tr>

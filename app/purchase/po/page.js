@@ -14,11 +14,13 @@ function POView() {
     getPODetail(poId).then(d => { setPo(d); setLoading(false); });
   }, [poId]);
 
+  const isApprover = (() => { try { const { getSession } = require("@/lib/auth"); return getSession()?.role === "director"; } catch { return false; } })();
   const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN");
 
   if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading PO…</div>;
 
-  if (po && po.approval && po.approval !== "approved") return (
+  const draftReview = po && po.approval === "pending" && isApprover;   // update221: approver reviews drafts
+  if (po && po.approval && po.approval !== "approved" && !draftReview) return (
 
     <div style={{ maxWidth: 560, margin: "60px auto", textAlign: "center", fontFamily: "system-ui" }}>
 
@@ -40,6 +42,14 @@ function POView() {
 
   return (
     <div style={{ maxWidth: 820, margin: "0 auto", padding: 36, background: "#fff", color: "#111", fontFamily: "Newsreader, Georgia, serif" }}>
+      {draftReview && (<>
+        {/* update221: DRAFT watermark + banner — approver's review copy of an unapproved PO */}
+        <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", zIndex: 5 }}>
+          <div style={{ transform: "rotate(-30deg)", fontSize: 92, fontWeight: 900, color: "rgba(220,38,38,0.13)", letterSpacing: 6, whiteSpace: "nowrap" }}>DRAFT — NOT APPROVED</div>
+        </div>
+        <div style={{ background: "#fff7ed", border: "1.5px solid #f59e0b", color: "#92400e", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+          ⚠ DRAFT — NOT YET APPROVED. Review copy for the approving Director; not valid for issue to vendor.</div>
+      </>)}
       <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "3px solid #FF7A1A", paddingBottom: 14 }}>
         <div>
           <svg width="46" height="5" viewBox="0 0 46 5" style={{ display: "block", marginBottom: 7 }}>
