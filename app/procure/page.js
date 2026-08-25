@@ -817,7 +817,7 @@ export default function ProcurePage() {
         )}
         {allInd !== null && (
           <div onClick={() => setAllInd(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 95, padding: 14 }}>
-            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 860, width: "100%", padding: 20, maxHeight: "90vh", overflowY: "auto" }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 1000, width: "100%", padding: 20, maxHeight: "92vh", overflowY: "auto" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <h2 style={{ margin: 0 }}>🗂 All indents ever raised</h2>
                 <button type="button" onClick={() => setAllInd(null)}>✕ Close</button>
@@ -825,19 +825,23 @@ export default function ProcurePage() {
               <div className="muted" style={{ fontSize: 12, margin: "4px 0 10px" }}>Every indent, any status — nothing disappears just because a PO was raised from it.</div>
               {allInd.length === 0 ? <div className="muted">Loading…</div> : (
                 <div style={{ overflowX: "auto" }}>
-                  <table className="dt-compact" style={{ width: "100%" }}>
-                    <thead><tr><th>Indent</th><th>Site</th><th>Status</th><th>POs</th><th className="num">Items</th><th>By</th><th>Date</th><th>Need by</th></tr></thead>
+                  {/* update222: 4 folded wrapping columns — the whole record fits without sideways scrolling */}
+                  <table className="dt-compact allind-tbl" style={{ width: "100%" }}>
+                    <thead><tr><th>Indent · Site</th><th>Raised</th><th className="num">Items</th><th>Status &amp; POs</th></tr></thead>
                     <tbody>
                       {allInd.map(i => { const [lbl, cls] = ({ open: ["open", "warn"], quoting: ["quoting", "h"], po_issued: ["PO Raised", "p"], closed: ["closed", "gray"], cancelled: ["cancelled", "red"] })[i.status] || [i.status, "gray"]; return (
                         <tr key={i.id}>
-                          <td style={{ fontWeight: 600 }}>{i.indent_no}{i.urgency === "urgent" && <span className="badge red" style={{ marginLeft: 6 }}>Urgent</span>}</td>
-                          <td>{i.site}</td>
-                          <td><span className={"badge " + cls}>{lbl}{i.status === "po_issued" && i.pos.length ? " — " + i.pos.join(", ") : ""}</span></td>
-                          <td className="muted" style={{ fontSize: 11.5 }}>{i.status !== "po_issued" && i.pos.length ? i.pos.join(", ") : i.pos.length ? "" : "—"}</td>
-                          <td className="num">{i.items}</td>
-                          <td>{i.by || "—"}</td>
-                          <td className="muted">{i.date}</td>
-                          <td className="muted">{i.required_by || "—"}</td>
+                          <td>
+                            <b>{i.indent_no}</b>{i.urgency === "urgent" && <span className="badge red" style={{ marginLeft: 6, fontSize: 10 }}>Urgent</span>}
+                            <div className="muted" style={{ fontSize: 11.5 }}>📍 {i.site}</div>
+                          </td>
+                          <td style={{ fontSize: 12 }}>{i.by || "—"}<div className="muted" style={{ fontSize: 11 }}>{i.date}{i.required_by ? " · need by " + i.required_by : ""}</div></td>
+                          <td className="num" style={{ fontWeight: 700 }}>{i.items}</td>
+                          <td>
+                            <span className={"badge " + cls}>{lbl}</span>
+                            {i.pos.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 3 }}>
+                              {i.pos.map(pn => <span key={pn} className="badge p" style={{ fontSize: 10.5 }}>{pn}</span>)}</div>}
+                          </td>
                         </tr>
                       ); })}
                     </tbody>
