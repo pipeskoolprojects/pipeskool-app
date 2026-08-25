@@ -46,7 +46,7 @@ export default function MobileNav() {
   // update227: director tabs lead with Home (Director Dashboard) + Projects, reachable from every page.
   const primary = workerOnly ? workerPrimary : role === "director"
     ? [{ href: "/m/dashboard", ico: "🏠", key: "nav_home" },
-       { href: "/projects", ico: "📁", key: "nav_projects" },
+       { href: "/m/dashboard#projects", ico: "📁", key: "nav_projects" },   // update228: opens the inline project explorer — bottom nav never disappears
        { href: "/m/approvals", ico: "✅", key: "nav_approvals" },
        { href: "/m/muster", ico: "👥", key: "nav_muster" }]
     : primaryBase.filter(tab => tab.show(sess));
