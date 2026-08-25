@@ -20,6 +20,8 @@ const primaryBase = [
 const more = [
   { href: "/m/report", ico: "📊", key: "m_report", show: s => s?.role !== "director" && (canSeeModuleAnySite(s, "dpr") || canSeeModuleAnySite(s, "attendance")) },
   { href: "/m/dpr", ico: "📋", key: "nav_dpr", show: s => s?.role === "director" },   // update188: director reads DPRs from More
+  { href: "/m/report", ico: "📊", key: "nav_report", show: s => s?.role === "director" },   // update227: moved off director tab bar
+  { href: "/m/stock", ico: "📦", key: "nav_stock", show: s => s?.role === "director" },     // update227: moved off director tab bar
   { href: "/m/indent", ico: "🧾", key: "m_indent", show: s => canSeeModuleAnySite(s, "indent") },
   { href: "/m/assets", ico: "🔧", key: "m_assets", show: s => canSeeModuleAnySite(s, "assets") },
   { href: "/m/rentals", ico: "🚜", key: "m_rentals", show: s => canSeeModuleAnySite(s, "rentals") },
@@ -41,11 +43,12 @@ export default function MobileNav() {
   const role = sess?.role || null;
   const workerPrimary = [{ href: "/m", ico: "⏱", key: "nav_punch" }];
   // update188: director tabs = view & approve, entry screens live one tap deeper.
+  // update227: director tabs lead with Home (Director Dashboard) + Projects, reachable from every page.
   const primary = workerOnly ? workerPrimary : role === "director"
-    ? [{ href: "/m/report", ico: "📊", key: "nav_report" },
+    ? [{ href: "/m/dashboard", ico: "🏠", key: "nav_home" },
+       { href: "/projects", ico: "📁", key: "nav_projects" },
        { href: "/m/approvals", ico: "✅", key: "nav_approvals" },
-       { href: "/m/muster", ico: "👥", key: "nav_muster" },
-       { href: "/m/stock", ico: "📦", key: "nav_stock" }]
+       { href: "/m/muster", ico: "👥", key: "nav_muster" }]
     : primaryBase.filter(tab => tab.show(sess));
   const [pendCount, setPendCount] = useState(0);
   useEffect(() => {

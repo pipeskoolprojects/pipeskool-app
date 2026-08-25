@@ -146,6 +146,7 @@ export default function Sidebar() {
         <nav style={{ marginTop: 10 }}>
           <Link href="/dashboard" className={path === "/dashboard" ? "active" : ""}>Dashboard</Link>
           <Link href="/projects" className={path.startsWith("/projects") ? "active" : ""}>Projects</Link>
+        {session?.role === "director" && <Link href="/m/dashboard">📱 Director Home</Link>}   {/* update227: one-tap back to the mobile Director Dashboard from any desktop-layout page */}
           <Link href="/reports" className={path === "/reports" ? "active" : ""}>Site Reports</Link>
         </nav>
       )}
