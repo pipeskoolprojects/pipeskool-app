@@ -16,6 +16,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const router = useRouter();
+  const [loginAs, setLoginAs] = useState("staff");   // update225: staff | director tab (same secure login; role comes from the account)
 
   async function handleNext(e) {
     e.preventDefault(); setError("");
@@ -46,8 +47,9 @@ export default function Login() {
     setBusy(false);
     if (!res.ok) { noteFail(); setError(res.error); return; }
     clearFails();
-    const home = res.session?.role === "director" ? "/m/report" : "/m/muster";
-    router.push(window.innerWidth <= 820 ? home : "/dashboard");
+    // update225: route by the account's REAL role — Director -> Director Dashboard
+    const isDir = res.session?.role === "director";
+    router.push(window.innerWidth <= 820 ? (isDir ? "/m/dashboard" : "/m/muster") : "/dashboard");
   }
 
   async function handleCreate(e) {
@@ -58,8 +60,9 @@ export default function Login() {
     const res = await createPasswordAndLogin(mobile, password);
     setBusy(false);
     if (!res.ok) { setError(res.error); return; }
-    const home = res.session?.role === "director" ? "/m/report" : "/m/muster";
-    router.push(window.innerWidth <= 820 ? home : "/dashboard");
+    // update225: route by the account's REAL role — Director -> Director Dashboard
+    const isDir = res.session?.role === "director";
+    router.push(window.innerWidth <= 820 ? (isDir ? "/m/dashboard" : "/m/muster") : "/dashboard");
   }
 
   const back = () => { setMode("start"); setPassword(""); setConfirm(""); setError(""); };
@@ -69,7 +72,16 @@ export default function Login() {
       <form className="login-card" onSubmit={mode === "start" ? handleNext : mode === "set" ? handleCreate : handleLogin}>
         <div style={{ marginBottom: 18 }}>
           <Logo height={30} color="#FF7A1A" wordColor="#0F1419" />
-          <p style={{ margin: "10px 0 0", color: "var(--muted)", fontSize: 13 }}>Site Management — staff login</p>
+          <p style={{ margin: "10px 0 0", color: "var(--muted)", fontSize: 13 }}>Site Management</p>
+        <div style={{ display: "flex", gap: 8, margin: "10px 0 2px" }}>
+          {[["staff", "👷 Staff Login"], ["director", "🎩 Director Login"]].map(([k, l]) => (
+            <button key={k} type="button" onClick={() => setLoginAs(k)}
+              style={{ flex: 1, padding: "9px 0", borderRadius: 10, fontSize: 13, fontWeight: loginAs === k ? 800 : 600, cursor: "pointer",
+                border: loginAs === k ? "2px solid var(--copper)" : "1px solid var(--border)",
+                background: loginAs === k ? "#fff8f2" : "#fff", color: loginAs === k ? "var(--copper)" : "var(--text)" }}>{l}</button>
+          ))}
+        </div>
+        {loginAs === "director" && <div className="muted" style={{ fontSize: 11.5, marginBottom: 4 }}>Sign in with your Director mobile number &amp; password — you&apos;ll land on the Director Dashboard.</div>}
           {lQuote && <p style={{ margin: "8px 0 0", color: "var(--muted)", fontSize: 12, fontStyle: "italic" }}>💡 {lQuote}</p>}
         </div>
         {isDemo && <div className="demo-banner">Demo mode — enter any number to sign in as Director (demo).</div>}
