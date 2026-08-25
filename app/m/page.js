@@ -170,6 +170,16 @@ export default function PunchScreen() {
         {mQuote && <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 8px 8px", fontStyle: "italic" }}>💡 {mQuote}</div>}
         {isDemo && <div className="note amber">Demo mode — punches save on this phone only.</div>}
 
+        {/* update224: multi-site worker — large Select Site control (assigned sites ONLY) */}
+        {!staffRole && wSites.length > 1 && (
+          <div style={{ textAlign: "left", margin: "4px 2px 10px" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Select Site</div>
+            <select value={worker.site_id} onChange={e => switchPunchSite(e.target.value)}
+              style={{ width: "100%", padding: "13px 14px", fontSize: 15.5, fontWeight: 700, borderRadius: 12, border: "1.5px solid var(--copper)", background: "#fff" }}>
+              {wSites.map(st => <option key={st.id} value={st.id}>{st.name}{Number(st.id) === Number(worker.site_id) ? " (Current)" : ""}</option>)}
+            </select>
+          </div>
+        )}
         <div style={{ margin: "10px 0" }}>
           {dist === null ? (
             <span className="geo-chip geo-wait">{t(lang, "checking_loc")}</span>
@@ -178,6 +188,9 @@ export default function PunchScreen() {
           ) : (
             <span className="geo-chip geo-bad">📍 {dist} {t(lang, "outside_site")}</span>
           )}
+          {dist !== null && (insideFence
+            ? <div style={{ fontSize: 11.5, color: "var(--green)", marginTop: 4 }}>📍 You are within the site location{pos?.acc ? " · Accuracy " + Math.round(pos.acc) + "m" : ""}</div>
+            : <div style={{ fontSize: 11.5, color: "var(--red)", marginTop: 4 }}>You are outside <b>{worker.site_name}</b> — move closer to punch here, or pick another of your sites above.</div>)}
         </div>
 
         <button
