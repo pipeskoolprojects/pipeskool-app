@@ -34,6 +34,8 @@ export default function DirectorDashboard() {
   const [pos, setPos] = useState([]);
   const [indents, setIndents] = useState([]);
   const [digest, setDigest] = useState(null);
+  const [panel, setPanel] = useState(null);      // update228: inline project explorer — 'all'|'active'|'hold'|'completed'|'upcoming'
+  const [expId, setExpId] = useState(null);
 
   useEffect(() => {
     const s = getSession();
@@ -51,6 +53,9 @@ export default function DirectorDashboard() {
     getPOs("all").then(r => setPos(arr(r))).catch(() => {});
     getOpenIndents("all").then(r => setIndents(arr(r))).catch(() => {});
     getDigest(todayLocal()).then(setDigest).catch(() => {});
+    const openFromHash = () => { if (window.location.hash === "#projects") setPanel("all"); };
+    openFromHash(); window.addEventListener("hashchange", openFromHash);
+    return () => window.removeEventListener("hashchange", openFromHash);
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const hour = new Date().getHours();
@@ -91,9 +96,19 @@ export default function DirectorDashboard() {
     return sites.filter(s2 => s2.is_active !== false && !filed.has(s2.name)).length;
   }, [digest, sites]);
 
+  const panelRows = useMemo(() => {
+    const all = pj.all;
+    if (panel === "active") return all.filter(p => p.status === "active");
+    if (panel === "hold") return all.filter(p => p.status === "on_hold" || p.status === "delayed");
+    if (panel === "completed") return all.filter(p => p.status === "completed");
+    if (panel === "upcoming") return all.filter(p => p.status === "upcoming" || p.status === "idea");
+    return all;
+  }, [pj, panel]);
+  const fin = useMemo(() => ({ contract: pj.all.reduce((t, p) => t + Number(p.contract_value || 0), 0),
+    invoiced: pj.all.reduce((t, p) => t + Number(p.invoiced || 0), 0) }), [pj]);
   const daysLeft = p => { if (!p?.end_date) return null; const d = Math.ceil((new Date(p.end_date) - new Date()) / 86400000); return d; };
   const QA = [
-    ["📁", "Projects", "/projects"], ["👷", "Muster", "/m/muster"], ["✅", "Approvals", "/m/approvals", apprTotal],
+    ["📁", "Projects", "#projects"], ["👷", "Muster", "/m/muster"], ["✅", "Approvals", "/m/approvals", apprTotal],
     ["📦", "Stock", "/m/stock"], ["💳", "Expenses", "/m/money"], ["🗒", "Tasks", "/tasks"], ["📋", "Reports", "/m/report"], ["⋯", "More", "/m"],
   ];
 
@@ -121,9 +136,9 @@ export default function DirectorDashboard() {
       <div style={{ padding: 12, display: "grid", gap: 12 }}>
         {/* project stat row — live project statuses */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          {[["🏗", pj.total, "Total Projects", "/projects"], ["▶", pj.active, "Active", "/projects?tab=active"],
-            ["⏸", pj.hold, "On Hold / Delayed", "/projects?tab=on_hold"], ["✅", pj.done, "Completed", "/projects?tab=completed"]].map(([ic, n, l, href]) => (
-            <Card key={l} onClick={() => router.push(href)}>
+          {[["🏗", pj.total, "Total Projects", "all"], ["▶", pj.active, "Active", "active"],
+            ["⏸", pj.hold, "On Hold / Delayed", "hold"], ["✅", pj.done, "Completed", "completed"]].map(([ic, n, l, k]) => (
+            <Card key={l} onClick={() => setPanel(k)}>
               <div style={{ fontSize: 20 }}>{ic}</div>
               <div style={{ fontSize: 22, fontWeight: 800 }}>{projects ? n : "…"}</div>
               <div className="muted" style={{ fontSize: 12 }}>{l}</div>
@@ -223,7 +238,7 @@ export default function DirectorDashboard() {
           <Card>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <b style={{ fontSize: 14 }}>🔜 Upcoming projects</b>
-              <Link href="/projects?tab=upcoming" style={{ fontSize: 12 }}>View all</Link>
+              <a onClick={() => setPanel("upcoming")} style={{ fontSize: 12, color: "var(--copper)", cursor: "pointer" }}>View all</a>
             </div>
             <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
               {pj.upcoming.map(p => (
@@ -239,6 +254,63 @@ export default function DirectorDashboard() {
           </Card>
         )}
       </div>
+      {/* update228: INLINE project explorer — full-screen sheet ABOVE content but BELOW the
+          bottom nav, so Home/Projects/Approvals/Muster/More stay visible and working.
+          No route change: Back/✕ just closes the sheet and the dashboard is untouched. */}
+      {panel && (
+        <div style={{ position: "fixed", left: 0, right: 0, top: 0, bottom: 62, background: "var(--bg)", zIndex: 60, display: "flex", flexDirection: "column" }}>
+          <div style={{ background: "linear-gradient(115deg, #1a2450, #2b3a86)", color: "#fff", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            <button type="button" onClick={() => { setPanel(null); setExpId(null); }} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 10, padding: "7px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>← Back</button>
+            <b style={{ fontSize: 15, flex: 1 }}>📁 Projects</b>
+            <button type="button" onClick={() => { setPanel(null); setExpId(null); }} style={{ background: "none", border: "none", color: "#fff", fontSize: 17, cursor: "pointer", padding: 6 }}>✕</button>
+          </div>
+          <div style={{ display: "flex", gap: 6, padding: "10px 12px 4px", overflowX: "auto", flexShrink: 0 }}>
+            {[["all", "All", pj.total], ["active", "Active", pj.active], ["hold", "On hold", pj.hold], ["completed", "Completed", pj.done], ["upcoming", "Upcoming", pj.all.filter(p => p.status === "upcoming" || p.status === "idea").length]].map(([k, l, n]) => (
+              <button key={k} type="button" onClick={() => { setPanel(k); setExpId(null); }}
+                style={{ flexShrink: 0, borderRadius: 999, padding: "7px 13px", fontSize: 12.5, fontWeight: panel === k ? 800 : 600, cursor: "pointer",
+                  border: panel === k ? "2px solid var(--copper)" : "1px solid var(--border)", background: panel === k ? "#fff8f2" : "#fff", color: panel === k ? "var(--copper)" : "var(--text)" }}>
+                {l} · {n}</button>
+            ))}
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px 16px", display: "grid", gap: 10, alignContent: "start" }}>
+            <div className="panel" style={{ margin: 0, padding: 12, display: "flex", gap: 8, justifyContent: "space-between" }}>
+              <span style={{ fontSize: 12 }}><span className="muted">Contract</span><br /><b>{inr(fin.contract)}</b></span>
+              <span style={{ fontSize: 12, textAlign: "right" }}><span className="muted">Invoiced (RA bills)</span><br /><b style={{ color: "var(--green)" }}>{inr(fin.invoiced)}</b></span>
+            </div>
+            {panelRows.map(p => { const open2 = expId === p.id; const sm = ST_META[p.status] || [p.status, "#6b7280"]; return (
+              <div key={p.id} className="panel" style={{ margin: 0, padding: 13, borderRadius: 14, borderLeft: "4px solid " + sm[1] }} onClick={() => setExpId(open2 ? null : p.id)}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <b style={{ fontSize: 14, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</b>
+                  <span className="badge" style={{ color: sm[1], border: "1px solid currentColor", background: "transparent", flexShrink: 0 }}>{sm[0]}</span>
+                </div>
+                {p.client_name && <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>👤 {p.client_name}</div>}
+                {p.progress !== null && (
+                  <div style={{ marginTop: 7 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}><span className="muted">Progress</span><b>{p.progress}%</b></div>
+                    <div style={{ height: 7, background: "#f0ece6", borderRadius: 4, marginTop: 2 }}><div style={{ width: Math.min(p.progress, 100) + "%", height: 7, borderRadius: 4, background: "var(--copper)" }} /></div>
+                  </div>
+                )}
+                {open2 && (
+                  <div style={{ marginTop: 10, borderTop: "1px solid var(--border)", paddingTop: 8, fontSize: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                      <span><span className="muted">Start</span><br /><b>{p.start_date || "—"}</b></span>
+                      <span><span className="muted">End</span><br /><b>{p.end_date || "—"}</b></span>
+                      <span><span className="muted">Contract</span><br /><b>{p.contract_value ? inr(p.contract_value) : "—"}</b></span>
+                      <span><span className="muted">Invoiced</span><br /><b>{inr(p.invoiced || 0)}</b></span>
+                      {p.expected_start && <span><span className="muted">Expected start</span><br /><b>{p.expected_start}</b></span>}
+                      <span><span className="muted">RA bills</span><br /><b>{p.bills || 0}</b></span>
+                    </div>
+                    <a href={"/projects/" + p.id} onClick={e => e.stopPropagation()} style={{ display: "inline-block", marginTop: 9, color: "var(--copper)", fontWeight: 800, fontSize: 12.5 }}>Open full workspace →</a>
+                  </div>
+                )}
+                <div className="muted" style={{ fontSize: 10, marginTop: 6 }}>{open2 ? "Tap to collapse ▲" : "Tap for details ▼"}</div>
+              </div>
+            ); })}
+            {panelRows.length === 0 && <div className="muted" style={{ padding: 20, textAlign: "center" }}>No projects in this filter.</div>}
+          </div>
+        </div>
+      )}
+
       <MobileNav />
     </div>
   );
