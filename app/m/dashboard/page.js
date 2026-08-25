@@ -41,13 +41,15 @@ export default function DirectorDashboard() {
     if (s.role !== "director") { router.replace("/m"); return; }
     setSess(s);
     getSites().then(setSites);
-    getProjects().then(setProjects);
+    // update226 FIX: getProjects returns { rows, staff } — not an array (caused s.filter crash)
+    getProjects().then(r => setProjects(Array.isArray(r) ? r : (r?.rows || [])));
     getAttendance(todayLocal(), "all").then(r => setAtt(r?.rows || [])).catch(() => setAtt([]));
-    getPettyRequestQueue().then(setPettyQ).catch(() => {});
-    getAdvanceQueue().then(r => setAdvQ(r || [])).catch(() => {});
-    getExpenseClaimQueue().then(r => setClaims(r || [])).catch(() => {});
-    getPOs("all").then(r => setPos(r || [])).catch(() => {});
-    getOpenIndents("all").then(r => setIndents(r || [])).catch(() => {});
+    const arr = x => Array.isArray(x) ? x : (x?.rows || []);
+    getPettyRequestQueue().then(r => setPettyQ(arr(r))).catch(() => {});
+    getAdvanceQueue().then(r => setAdvQ(arr(r))).catch(() => {});
+    getExpenseClaimQueue().then(r => setClaims(arr(r))).catch(() => {});
+    getPOs("all").then(r => setPos(arr(r))).catch(() => {});
+    getOpenIndents("all").then(r => setIndents(arr(r))).catch(() => {});
     getDigest(todayLocal()).then(setDigest).catch(() => {});
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
