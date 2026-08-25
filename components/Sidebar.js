@@ -31,7 +31,7 @@ const GROUPS = [
     ] },
   ] },
   { label: "Communication", items: [
-    { href: "/notices", label: "Notice Board", module: "notices" },
+    { href: "/notices", label: "Notice Board", module: "notices" }, { href: "/tasks", label: "Tasks", module: null },
   ] },
   { label: "Commercial / Billing", items: [
     { href: "/boq", label: "BOQ Master", module: "billing" },
