@@ -92,7 +92,7 @@ export default function DirectorDashboard() {
   const daysLeft = p => { if (!p?.end_date) return null; const d = Math.ceil((new Date(p.end_date) - new Date()) / 86400000); return d; };
   const QA = [
     ["📁", "Projects", "/projects"], ["👷", "Muster", "/m/muster"], ["✅", "Approvals", "/m/approvals", apprTotal],
-    ["📦", "Stock", "/m/stock"], ["💳", "Expenses", "/m/money"], ["📋", "Reports", "/m/report"], ["⋯", "More", "/m"],
+    ["📦", "Stock", "/m/stock"], ["💳", "Expenses", "/m/money"], ["🗒", "Tasks", "/tasks"], ["📋", "Reports", "/m/report"], ["⋯", "More", "/m"],
   ];
 
   if (!sess) return null;
