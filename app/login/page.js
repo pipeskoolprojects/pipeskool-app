@@ -49,7 +49,7 @@ export default function Login() {
     clearFails();
     // update225: route by the account's REAL role — Director -> Director Dashboard
     const isDir = res.session?.role === "director";
-    router.push(window.innerWidth <= 820 ? (isDir ? "/m/dashboard" : "/m/muster") : "/dashboard");
+    router.push(window.innerWidth <= 820 ? (isDir ? "/m/dashboard" : "/m/muster") : (isDir ? "/home" : "/dashboard"));
   }
 
   async function handleCreate(e) {
@@ -62,7 +62,7 @@ export default function Login() {
     if (!res.ok) { setError(res.error); return; }
     // update225: route by the account's REAL role — Director -> Director Dashboard
     const isDir = res.session?.role === "director";
-    router.push(window.innerWidth <= 820 ? (isDir ? "/m/dashboard" : "/m/muster") : "/dashboard");
+    router.push(window.innerWidth <= 820 ? (isDir ? "/m/dashboard" : "/m/muster") : (isDir ? "/home" : "/dashboard"));
   }
 
   const back = () => { setMode("start"); setPassword(""); setConfirm(""); setError(""); };

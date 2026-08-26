@@ -138,12 +138,16 @@ export default function HomeDashboard() {
   const [asSite, setAsSite] = useState(null);     // director: view as site manager
   const [pickSite, setPickSite] = useState(false);
   const [tasks, setTasks] = useState(null);   // update230: tasks surfaced on Home
+  const [embed, setEmbed] = useState(false);   // update233: rendered inside Director Home
 
   useEffect(() => {
     const s = getSession();
     if (!s) { router.replace("/m/login"); return; }
     // update231: desktop/web never stays on the mobile home — go to the desktop dashboard.
-    if (typeof window !== "undefined" && window.innerWidth > 760) { router.replace("/dashboard"); return; }
+    const embedded = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("embed") === "1";
+    if (embedded) setEmbed(true);
+    // update233: desktop goes to Director Home (/home) — unless this IS the embedded overview tab
+    if (!embedded && typeof window !== "undefined" && window.innerWidth > 760) { router.replace("/home"); return; }
     setSess(s);
     getSites().then(r => setSites(arr(r)));
     getProjects().then(r => setProjects(arr(r)));
@@ -264,7 +268,7 @@ export default function HomeDashboard() {
 
   if (!sess) return null;
   return (
-    <div style={{ background: "var(--bg)", minHeight: "100dvh", paddingBottom: "calc(86px + env(safe-area-inset-bottom))" }}>
+    <div style={{ background: "var(--bg)", minHeight: "100dvh", paddingBottom: embed ? 24 : "calc(86px + env(safe-area-inset-bottom))" }}>
       <div style={{ background: NAVY, color: "#fff", padding: "calc(12px + env(safe-area-inset-top)) 14px 14px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, maxWidth: 1100, margin: "0 auto" }}>
           <span style={{ width: 40, height: 40, borderRadius: 12, background: "rgba(255,255,255,0.1)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{isDirector ? "👑" : "🔧"}</span>
@@ -478,7 +482,7 @@ export default function HomeDashboard() {
         </div>
       )}
 
-      <MobileNav />
+      {!embed && <MobileNav />}
     </div>
   );
 }
