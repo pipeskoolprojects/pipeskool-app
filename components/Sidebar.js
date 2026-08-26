@@ -144,10 +144,12 @@ export default function Sidebar() {
 
       {showDash && (
         <nav style={{ marginTop: 10 }}>
-          <Link href="/dashboard" className={path === "/dashboard" ? "active" : ""}>Dashboard</Link>
-          <Link href="/projects" className={path.startsWith("/projects") ? "active" : ""}>Projects</Link>
-        {session?.role === "director" && <Link href="/dashboard">🏠 Director Home</Link>}   {/* update231: desktop chrome → desktop dashboard (mobile has its own Home tab) */}
-          <Link href="/reports" className={path === "/reports" ? "active" : ""}>Site Reports</Link>
+          {/* update233: Dashboard / Projects / Site Reports are now TABS inside Director Home.
+              Their routes still exist and still work — this is a menu reorganisation only. */}
+          <Link href="/home" className={path === "/home" ? "active" : ""}>🏠 Director Home</Link>
+          <Link href="/home?tab=projects" className={path.startsWith("/projects") ? "active" : ""}>↳ Projects</Link>
+          <Link href="/home?tab=dashboard" className={path === "/dashboard" ? "active" : ""}>↳ Dashboard</Link>
+          <Link href="/home?tab=reports" className={path === "/reports" ? "active" : ""}>↳ Site Reports</Link>
         </nav>
       )}
 
