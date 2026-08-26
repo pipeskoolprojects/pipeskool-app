@@ -148,11 +148,11 @@ export default function Sidebar() {
 
       {showDash && (
         <nav style={{ marginTop: 10 }}>
-          {/* update236: ONE Home entry. Home IS the dashboard; Projects / Dashboard / Site Reports
-              are tabs inside it. Their routes still exist and still work standalone. */}
+          {/* update237: ONE Home entry. Home IS the dashboard; Projects / Dashboard / Site Reports
+              are reached from the page cards at the bottom of Home. Approvals is NOT listed here
+              (it is reached from Quick Access) — the /approvals route itself is untouched. */}
           {/* update236: Home IS the dashboard now (Projects / Dashboard / Site reports are its tabs) */}
           <Link href="/home" className={path === "/home" || path === "/projects" || path === "/dashboard" || path === "/reports" ? "active" : ""}>🏠 Director Home</Link>
-          <Link href="/approvals" className={path === "/approvals" ? "active" : ""}>✅ Approvals</Link>
         </nav>
       )}
 

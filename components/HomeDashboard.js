@@ -117,7 +117,23 @@ function GlanceCard({ label, value, foot, footColor, href }) {
   );
 }
 
-export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSite = () => {}, onOpenProjects = null, onSites = null }) {
+/* update237: the four page cards that replaced the top tab strip. Module scope. */
+function PageCard({ ico, title, desc, href, current, onClick }) {
+  const inner = (
+    <div style={{ background: "#fff", border: "1px solid " + (current ? "var(--copper)" : "var(--border)"), borderRadius: 16, padding: "18px 18px 16px",
+        display: "flex", flexDirection: "column", gap: 7, height: "100%", cursor: "pointer", boxShadow: "0 2px 10px rgba(15,26,46,0.05)" }}>
+      <span style={{ width: 46, height: 46, borderRadius: 14, background: "#f6f2ec", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>{ico}</span>
+      <b style={{ fontSize: 15.5 }}>{title}</b>
+      <span className="muted" style={{ fontSize: 12.5, lineHeight: 1.45, flex: 1 }}>{desc}</span>
+      <span style={{ color: current ? "var(--muted)" : "var(--copper)", fontWeight: 800, fontSize: 12.5 }}>{current ? "You are here — back to top ↑" : "Open →"}</span>
+    </div>
+  );
+  return current
+    ? <div onClick={onClick}>{inner}</div>
+    : <Link href={href} style={{ textDecoration: "none", color: "var(--text)" }}>{inner}</Link>;
+}
+
+export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSite = () => {}, onOpenProjects = null, onSites = null, showPageCards = false }) {
   const desk = mode === "desk";
   // update236: on desktop, every link goes to the real DESKTOP route; only phones use /m/*.
   const R = (m, d) => desk ? d : m;
@@ -264,7 +280,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
 
   return (
     <div style={{ background: "var(--bg)", minHeight: desk ? 0 : "100dvh", paddingBottom: desk ? 24 : "calc(86px + env(safe-area-inset-bottom))" }}>
-      <div style={{ padding: "14px 12px 0", maxWidth: 1100, margin: "0 auto" }}>
+      <div style={{ padding: desk ? "18px 28px 0" : "14px 12px 0", maxWidth: desk ? "none" : 1100, margin: desk ? 0 : "0 auto" }}>
         <div style={{ background: "linear-gradient(140deg, " + NAVY + " 0%, " + NAVY2 + " 100%)", color: "#fff", borderRadius: 18, padding: 17, boxShadow: "0 10px 26px rgba(15,26,46,0.28)" }}>
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -283,7 +299,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
             <Ring pct={companyView ? pj.avg : (pj.site?.progress || 0)} label={companyView ? "AVG" : "COMPLETE"} />
           </div>
           <div style={{ height: 1, background: "rgba(255,255,255,0.14)", margin: "14px 0 12px" }} />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
+          <div style={{ display: "grid", gridTemplateColumns: desk ? "repeat(4, 1fr)" : "1fr 1fr", gap: 13 }}>
             <HeroStat ico="₹" label={companyView ? "Total contract value" : "Contract value"} value={crore(companyView ? pj.contract : (pj.site?.contract_value || 0))} />
             <HeroStat ico="↗" label="Billed to date" value={crore(companyView ? pj.invoiced : (pj.site?.invoiced || 0))} />
             <HeroStat ico="🗓" label={companyView ? "Nearest deadline" : "Target finish"} value={(companyView ? pj.deadline : pj.site?.end_date) || "—"} />
@@ -376,6 +392,18 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
           <ApprovalRow ico="💳" title="Expense claims" sub={companyView ? "Across all sites" : siteName} count={appr.claims} href={R("/m/approvals", "/approvals")} />
           <ApprovalRow ico="🛒" title={companyView ? "Indent approvals" : "Open indents"} sub="Material pending" count={appr.ind} href="/procure" />
         </Section>
+
+        {showPageCards && (
+          <Section title="Go to">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 12 }}>
+              <PageCard ico="🏠" title="Home" desc="Overview of sites, tasks and important updates." current
+                onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} />
+              <PageCard ico="📁" title="Projects" desc="Manage and track projects." href="/projects" />
+              <PageCard ico="📊" title="Dashboard" desc="View analytics and key site metrics." href="/dashboard" />
+              <PageCard ico="📋" title="Site Reports" desc="View and analyze site reports." href="/reports" />
+            </div>
+          </Section>
+        )}
 
         <Section title="Today at a glance">
           <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
