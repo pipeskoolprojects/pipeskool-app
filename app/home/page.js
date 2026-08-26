@@ -30,6 +30,12 @@ function HomeInner() {
     if (t && TABS.some(x => x[0] === t)) { setTab(t); setSeen(v => ({ ...v, [t]: true })); }
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {   // update234: embedded overview asks the shell to switch tabs (no overlays)
+    const onMsg = e => { const k = e?.data?.pskTab; if (k && TABS.some(x => x[0] === k)) { setTab(k); setSeen(v => ({ ...v, [k]: true })); try { window.history.replaceState(null, "", "/home?tab=" + k); } catch {} } };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+
   function go(k) {
     setTab(k); setSeen(v => ({ ...v, [k]: true }));
     try { window.history.replaceState(null, "", "/home?tab=" + k); } catch {}
@@ -37,9 +43,9 @@ function HomeInner() {
   if (!sess) return null;
 
   return (
-    <div className="app-shell" style={{ display: "flex", minHeight: "100dvh" }}>
+    <div className="app-shell" style={{ display: "flex", height: "100dvh", overflow: "hidden" }}>   {/* update234: single scroll — the shell never scrolls, the active tab does */}
       <Sidebar />
-      <main className="main" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", padding: 0 }}>
+      <main className="main" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", padding: 0, height: "100dvh", overflow: "hidden" }}>
         <div style={{ padding: "16px 20px 0" }}>
           <h1 style={{ margin: 0, fontSize: 22 }}>🏠 Director Home</h1>
           <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>Everything in one place — overview, projects, dashboard and site reports.</div>

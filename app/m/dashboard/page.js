@@ -134,6 +134,8 @@ export default function HomeDashboard() {
   const [indents, setIndents] = useState([]);
   const [digest, setDigest] = useState(null);
   const [panel, setPanel] = useState(null);       // project explorer (kept from 228)
+  // update234: inside Director Home the Projects TAB owns projects — no overlay panel here
+  const openProjects = () => embed ? window.parent?.postMessage({ pskTab: "projects" }, "*") : setPanel("all");
   const [expId, setExpId] = useState(null);
   const [asSite, setAsSite] = useState(null);     // director: view as site manager
   const [pickSite, setPickSite] = useState(false);
@@ -165,7 +167,7 @@ export default function HomeDashboard() {
     const key = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
     Promise.all(days.map(d => getAttendance(key(d), "all").then(r => arr(r)).catch(() => [])))
       .then(lists => setWeek(days.map((d, i) => ({ day: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()], date: key(d), rows: lists[i] }))));
-    const openFromHash = () => { if (window.location.hash === "#projects") setPanel("all"); };
+    const openFromHash = () => { if (window.location.hash === "#projects" && !embedded) setPanel("all"); };
     openFromHash(); window.addEventListener("hashchange", openFromHash);
     return () => window.removeEventListener("hashchange", openFromHash);
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -330,7 +332,7 @@ export default function HomeDashboard() {
         </div>
 
         {companyView && (
-          <Section title="Sites overview" action={<a onClick={() => setPanel("all")} style={{ fontSize: 12.5, color: COPPER, fontWeight: 700, cursor: "pointer" }}>View all {pj.total} →</a>}>
+          <Section title="Sites overview" action={<a onClick={openProjects} style={{ fontSize: 12.5, color: COPPER, fontWeight: 700, cursor: "pointer" }}>View all {pj.total} →</a>}>
             <div style={{ display: "flex", gap: 9, overflowX: "auto", paddingBottom: 4 }}>
               {pj.live.map(p => { const sm = ST_META[p.status] || ["Active", "#15803d"]; return (
                 <div key={p.id} onClick={() => { setAsSite(Number(p.id)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
@@ -350,7 +352,7 @@ export default function HomeDashboard() {
               <Tile key={label} ico={ico} label={label} badge={badge} href={href || undefined}
                 onClick={href ? undefined : () => label === "Tasks"
                   ? document.getElementById("home-tasks")?.scrollIntoView({ behavior: "smooth", block: "start" })
-                  : setPanel("all")} />
+                  : openProjects()} />
             ))}
           </div>
         </Section>
@@ -425,7 +427,7 @@ export default function HomeDashboard() {
         </Section>
       </div>
 
-      {panel && (
+      {panel && !embed && (
         <div style={{ position: "fixed", left: 0, right: 0, top: 0, bottom: "calc(62px + env(safe-area-inset-bottom))", background: "var(--bg)", zIndex: 60, display: "flex", flexDirection: "column" }}>
           <div style={{ background: "linear-gradient(115deg, " + NAVY + ", " + NAVY2 + ")", color: "#fff", padding: "calc(10px + env(safe-area-inset-top)) 14px 12px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <button type="button" onClick={() => { setPanel(null); setExpId(null); }} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 10, padding: "7px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>← Back</button>
