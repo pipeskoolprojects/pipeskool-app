@@ -12,6 +12,7 @@ import { LANGS, getLang, setLang, t } from "@/lib/i18n";
 // show(sess) must be true for the item to appear; Directors pass everything
 // (canSeeModuleAnySite / canAnySite return true for director).
 const primaryBase = [
+  { href: "/m/dashboard", ico: "🏠", key: "nav_home", show: s => !!s?.role },   // update229: staff home dashboard (workers use workerPrimary, unaffected)
   { href: "/m", ico: "⏱", key: "nav_punch", show: () => true },
   { href: "/m/muster", ico: "👥", key: "nav_muster", show: s => canSeeModuleAnySite(s, "attendance") },
   { href: "/m/dpr", ico: "📋", key: "nav_dpr", show: s => canSeeModuleAnySite(s, "dpr") },
