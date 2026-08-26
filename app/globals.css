@@ -195,3 +195,28 @@ html.psk-nosb .main { padding-left: 76px; }
 .tasks-cols { grid-template-columns: minmax(0, 2fr) minmax(250px, 1fr); }
 @media (max-width: 900px) { .tasks-cols { grid-template-columns: 1fr; } }
 .tasks-cols > * { min-width: 0; }
+
+/* ---------- update236: HOME TABS + DESKTOP APPROVALS ---------- */
+/* Home tab strip: sticky under the greeting bar so it is always reachable while a pane scrolls */
+.home-tabs { position: sticky; top: 0; z-index: 40; display: flex; gap: 6px;
+  padding: 10px 14px 0; background: var(--bg); border-bottom: 1px solid var(--border); overflow-x: auto; }
+.home-tabs button { flex-shrink: 0; border: none; background: transparent; border-bottom: 3px solid transparent;
+  border-radius: 0; padding: 9px 14px 10px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.home-tabs button:hover { background: transparent; color: var(--text); }
+.home-tabs button.active { color: var(--copper); border-bottom-color: var(--copper); font-weight: 800; }
+/* panes carry the padding the shell normally gives .main (which is padding:0 on /home) */
+.home-pane { padding: 20px 28px 28px; }
+/* inside a tab the page-head must not stick to the scroll container — the tab strip owns that */
+.home-pane .page-head { position: static; top: auto; margin: 0 0 14px; padding: 0; }
+@media (max-width: 760px) { .home-pane { padding: 16px; } }
+
+/* Desktop approvals: full width, cards in a responsive grid instead of a 430px strip */
+.appr-wrap { display: flex; flex-direction: column; width: 100%; }
+.appr-head { padding: 12px 16px; background: var(--deep); color: #fff; border-radius: 12px;
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.appr-head .title { font-size: 17px; font-weight: 700; }
+.appr-head .sub { font-size: 12px; color: #9aa4ac; }
+.appr-body { flex: 1; }
+.appr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; align-items: start; }
+@media (max-width: 900px) { .appr-grid { grid-template-columns: 1fr; } }
+.appr-grid > * { min-width: 0; }

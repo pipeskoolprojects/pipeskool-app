@@ -136,7 +136,7 @@ export default function TasksPage() {
         stats: [["POs w/ pending qty", cpos.filter(p2 => p2.pending_items > 0).length]], done: false, dueH: 19, act: ["Open Challans", "/stock/challans", "#6b46c1"] });
       push({ ic: "✅", name: "Pending Approvals Sweep", tag: "Daily", desc: "Petty cash · Expenses · Advances · PO drafts", role: "IT / ACCOUNTS",
         stats: [["Petty", apprC.petty], ["Claims", apprC.claims], ["Adv", apprC.adv], ["PO", apprC.po]],
-        done: apprC.petty + apprC.claims + apprC.adv + apprC.po === 0, dueH: 18, act: ["View Approvals", "/m/approvals", "var(--green)"] });
+        done: apprC.petty + apprC.claims + apprC.adv + apprC.po === 0, dueH: 18, act: ["View Approvals", "/approvals", "var(--green)"] });
       push({ ic: "📋", name: "Site Reports Follow-up", tag: "Daily", desc: "Sites with DPR not filed · aged indents", role: "IT / ACCOUNTS",
         stats: [["DPR missing", dprMissing.length], ["Aged indents", agedInd]], done: dprMissing.length === 0, dueH: 19, mn: 30, act: ["View Reports", "/dpr", "var(--copper)"] });
     }
@@ -304,7 +304,7 @@ export default function TasksPage() {
                   <span className="badge red">{apprC.petty + apprC.claims + apprC.adv + apprC.ind + apprC.po}</span></div>
                 {[["Petty Cash Requests", apprC.petty], ["Expense Claims", apprC.claims], ["Advance Requests", apprC.adv], ["Indent Approvals", apprC.ind], ["PO Draft Approvals", apprC.po]].map(([l2, n2]) => (
                   <div key={l2} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginTop: 6 }}><span>{l2}</span><b>{n2}</b></div>))}
-                <a href="/m/approvals" style={{ fontSize: 12, color: "var(--copper)", fontWeight: 700 }}>View All Approvals →</a>
+                <a href="/approvals" style={{ fontSize: 12, color: "var(--copper)", fontWeight: 700 }}>View All Approvals →</a>
               </div>
               <div className="panel" style={{ margin: 0, padding: 14 }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}><b style={{ fontSize: 13.5 }}>📋 Site Reports</b><span className="badge red">{dprMissing.length + agedInd}</span></div>
