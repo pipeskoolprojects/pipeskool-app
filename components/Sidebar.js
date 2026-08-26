@@ -146,10 +146,8 @@ export default function Sidebar() {
         <nav style={{ marginTop: 10 }}>
           {/* update233: Dashboard / Projects / Site Reports are now TABS inside Director Home.
               Their routes still exist and still work — this is a menu reorganisation only. */}
-          <Link href="/home" className={path === "/home" ? "active" : ""}>🏠 Director Home</Link>
-          <Link href="/home?tab=projects" className={path.startsWith("/projects") ? "active" : ""}>↳ Projects</Link>
-          <Link href="/home?tab=dashboard" className={path === "/dashboard" ? "active" : ""}>↳ Dashboard</Link>
-          <Link href="/home?tab=reports" className={path === "/reports" ? "active" : ""}>↳ Site Reports</Link>
+          {/* update234: ONE entry — Projects / Dashboard / Site Reports are tabs inside Director Home */}
+          <Link href="/home" className={path === "/home" || path === "/projects" || path === "/dashboard" || path === "/reports" ? "active" : ""}>🏠 Director Home</Link>
         </nav>
       )}
 
