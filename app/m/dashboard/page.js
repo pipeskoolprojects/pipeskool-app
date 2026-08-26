@@ -15,6 +15,7 @@ import { getPettyRequestQueue, getAdvanceQueue, getExpenseClaimQueue, inr } from
 import { getPOs, getOpenIndents } from "@/lib/procure";
 import { getDigest } from "@/lib/dpr";
 import { todayLocal } from "@/lib/today";
+import { getTasks, groupTasks, setTaskStatus, PRIORITY_META, TASK_ST } from "@/lib/tasks";
 
 const ST_META = { active: ["Active", "#15803d"], upcoming: ["Upcoming", "#6b46c1"], on_hold: ["On hold", "#b45309"], delayed: ["Delayed", "#b91c1c"], completed: ["Completed", "#2b6cb0"], idea: ["Idea", "#6b7280"] };
 const NAVY = "#0F1A2E", NAVY2 = "#16233d", COPPER = "#e07020";
@@ -136,6 +137,7 @@ export default function HomeDashboard() {
   const [expId, setExpId] = useState(null);
   const [asSite, setAsSite] = useState(null);     // director: view as site manager
   const [pickSite, setPickSite] = useState(false);
+  const [tasks, setTasks] = useState(null);   // update230: tasks surfaced on Home
 
   useEffect(() => {
     const s = getSession();
@@ -151,6 +153,7 @@ export default function HomeDashboard() {
     getPOs("all").then(r => setPos(arr(r))).catch(() => {});
     getOpenIndents("all").then(r => setIndents(arr(r))).catch(() => {});
     getDigest(todayLocal()).then(r => setDigest(arr(r))).catch(() => setDigest([]));
+    getTasks().then(r => setTasks(arr(r))).catch(() => setTasks([]));
     const days = [];
     for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push(d); }
     const key = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
@@ -162,7 +165,7 @@ export default function HomeDashboard() {
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const isDirector = sess?.role === "director";
-  const viewSiteId = isDirector ? asSite : (sess?.current_site_id || sess?.site_id);
+  const viewSiteId = isDirector ? asSite : (sess?.currentSite || sess?.sites?.[0]?.id || null);
   const companyView = isDirector && !asSite;
   const hour = new Date().getHours();
   const greet = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -185,7 +188,7 @@ export default function HomeDashboard() {
   }, [projects, viewSiteId]);
 
   const inSite = rows => companyView ? rows : rows.filter(r => String(r.site_id) === String(viewSiteId));
-  const presentCount = rows => rows.filter(r => r.punch_in || r.status === "present" || r.status === "half_day").length;
+  const presentCount = rows => rows.filter(r => (r.in && r.in !== "—") || r.status === "present" || r.status === "half_day").length;
 
   const man = useMemo(() => {
     const rows = companyView ? (att || []) : (att || []).filter(r => String(r.site_id) === String(viewSiteId));
@@ -210,7 +213,8 @@ export default function HomeDashboard() {
   const expPending = inSite(claims).filter(c => c.status === "pending").reduce((t, c) => t + Number(c.amount || 0), 0);
   const dprFiled = new Set((digest || []).map(d => d.site));
   const dprMissing = sites.filter(s => s.is_active !== false && !dprFiled.has(s.name));
-  const siteName = sites.find(s => String(s.id) === String(viewSiteId))?.name || "";
+  const siteName = sites.find(s => String(s.id) === String(viewSiteId))?.name
+    || (sess?.sites || []).find(s => String(s.id) === String(viewSiteId))?.name || "";
 
   const panelRows = useMemo(() => {
     const all = pj.all;
@@ -221,10 +225,39 @@ export default function HomeDashboard() {
     return all;
   }, [pj, panel]);
 
+  // ---- update230: tasks on Home (auto = computed live; assigned = real rows) ----
+  const grp = useMemo(() => groupTasks(tasks || []), [tasks]);
+  const myTasks = useMemo(() => grp.overdue.concat(grp.today).slice(0, 6), [grp]);
+  async function completeTask(t) {
+    const r = await setTaskStatus(t.id, "completed", null, sess?.name, t.title);
+    if (r.ok) getTasks().then(x => setTasks(arr(x)));
+  }
+  const autoTasks = useMemo(() => {
+    if (!sess) return [];
+    const out = [];
+    if (companyView) {
+      out.push({ ico: "🧾", name: "PO draft approvals", tag: "Daily", desc: "Review and approve pending purchase orders",
+        stats: [["Pending", appr.po]], done: appr.po === 0, href: "/procure", cta: "Review POs" });
+      out.push({ ico: "✅", name: "Approvals sweep", tag: "Daily", desc: "Petty cash · expenses · advances",
+        stats: [["Petty", appr.petty], ["Claims", appr.claims], ["Adv", appr.adv]], done: appr.petty + appr.claims + appr.adv === 0, href: "/m/approvals", cta: "View approvals" });
+      out.push({ ico: "📋", name: "Site reports follow-up", tag: "Daily", desc: "Sites without today's DPR",
+        stats: [["Missing", dprMissing.length]], done: dprMissing.length === 0, href: "/dpr", cta: "DPR digest" });
+    } else {
+      out.push({ ico: "🧑‍🤝‍🧑", name: "Attendance check", tag: "Morning", desc: "Verify today's punch-ins for your site",
+        stats: [["In", man.inNow], ["Absent", man.absent]], done: man.inNow > 0 && man.absent === 0, href: "/attendance", cta: "Check attendance" });
+      out.push({ ico: "📝", name: "DPR submission", tag: "Evening", desc: "Submit today's Daily Progress Report",
+        stats: [["Filed", dprFiled.has(siteName) ? "Yes" : "No"]], done: dprFiled.has(siteName), href: "/m/dpr", cta: "Submit DPR" });
+      out.push({ ico: "🛒", name: "Open indents", tag: "Material", desc: "Material requests awaiting action",
+        stats: [["Open", appr.ind]], done: appr.ind === 0, href: "/procure", cta: "Review indents" });
+    }
+    return out;
+  }, [sess, companyView, appr, dprMissing, man, siteName]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const taskPending = autoTasks.filter(t => !t.done).length + myTasks.filter(t => t.status !== "completed").length;
+
   const dirTiles = [["✅", "Approvals", "/m/approvals", apprTotal], ["💰", "Finance", "/expenses", 0], ["📊", "Analytics", "/m/report", 0], ["🏗", "All Sites", null, 0],
     ["🏢", "Vendors", "/vendors", 0], ["👥", "Team & HR", "/workers", 0], ["🗒", "Assign Task", "/tasks", 0], ["⚙", "Admin", "/admin", 0]];
   const staffTiles = [["📁", "Projects", null, 0], ["👷", "Muster", "/m/muster", 0], ["✅", "Approvals", "/m/approvals", apprTotal], ["📦", "Stock", "/m/stock", 0],
-    ["💳", "Expenses", "/m/money", appr.claims], ["🗒", "Tasks", "/tasks", 0], ["📋", "Reports", "/m/report", 0], ["🛒", "Indents", "/procure", appr.ind]];
+    ["💳", "Expenses", "/m/money", appr.claims], ["🗒", "Tasks", null, 0], ["📋", "Reports", "/m/report", 0], ["🛒", "Indents", "/procure", appr.ind]];
   const tiles = companyView ? dirTiles : staffTiles;
 
   if (!sess) return null;
@@ -236,7 +269,7 @@ export default function HomeDashboard() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 9.5, letterSpacing: 1, color: COPPER, fontWeight: 800, textTransform: "uppercase" }}>{greet}</div>
             <div style={{ fontSize: 17, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {String(sess.full_name || "").split(" ")[0]} <span style={{ opacity: 0.6, fontWeight: 600, fontSize: 14 }}>· {roleLabel}</span></div>
+              {String(sess.name || sess.full_name || "").split(" ")[0] || "there"} <span style={{ opacity: 0.6, fontWeight: 600, fontSize: 14 }}>· {roleLabel}</span></div>
           </div>
           {isDirector && (
             <button type="button" onClick={() => setPickSite(v => !v)}
@@ -308,8 +341,53 @@ export default function HomeDashboard() {
         <Section title="Quick access">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(86px, 1fr))", gap: 9 }}>
             {tiles.map(([ico, label, href, badge]) => (
-              <Tile key={label} ico={ico} label={label} badge={badge} href={href || undefined} onClick={href ? undefined : () => setPanel("all")} />
+              <Tile key={label} ico={ico} label={label} badge={badge} href={href || undefined}
+                onClick={href ? undefined : () => label === "Tasks"
+                  ? document.getElementById("home-tasks")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  : setPanel("all")} />
             ))}
+          </div>
+        </Section>
+
+        {/* update230: TASKS ON HOME — the separate Tasks tab is gone; everything lives here.
+            Auto tasks are computed live from the same operational data (never stored). */}
+        <div id="home-tasks" />
+        <Section title="My tasks today"
+          action={<span style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {taskPending > 0 && <span style={{ background: "var(--red)", color: "#fff", borderRadius: 999, padding: "2px 10px", fontSize: 11.5, fontWeight: 800 }}>{taskPending} pending</span>}
+            <Link href="/tasks" style={{ fontSize: 12.5, color: COPPER, fontWeight: 700 }}>{isDirector ? "Assign / all →" : "All tasks →"}</Link>
+          </span>}>
+          <div style={{ display: "grid", gap: 9 }}>
+            {autoTasks.map((t, i) => (
+              <div key={"a" + i} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 14, padding: 13, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                <span style={{ width: 38, height: 38, borderRadius: 12, background: "#f6f2ec", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{t.ico}</span>
+                <span style={{ flex: "1 1 150px", minWidth: 0 }}>
+                  <b style={{ fontSize: 13.5 }}>{t.name}</b> <span className="badge gray" style={{ fontSize: 9.5 }}>{t.tag}</span>
+                  <div className="muted" style={{ fontSize: 11.5 }}>{t.desc}</div>
+                </span>
+                <span style={{ display: "flex", gap: 12, flexShrink: 0 }}>
+                  {t.stats.map(([l2, v2]) => <span key={l2} style={{ textAlign: "center" }}><span className="muted" style={{ fontSize: 9.5, display: "block" }}>{l2}</span><b style={{ fontSize: 14 }}>{v2}</b></span>)}
+                </span>
+                <span style={{ textAlign: "right", flexShrink: 0 }}>
+                  <span className="badge" style={{ color: t.done ? "var(--green)" : COPPER, border: "1px solid currentColor", background: "transparent", fontWeight: 800 }}>{t.done ? "✓ Done" : "Pending"}</span>
+                  {!t.done && <Link href={t.href}><button type="button" style={{ display: "block", marginTop: 5, background: NAVY, color: "#fff", border: "none", borderRadius: 9, padding: "7px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{t.cta}</button></Link>}
+                </span>
+              </div>
+            ))}
+            {myTasks.map(t => { const pm = PRIORITY_META[t.priority] || PRIORITY_META.normal; const st = TASK_ST[t.status] || ["Pending", "gray"]; return (
+              <div key={t.id} style={{ background: "#fff", border: "1px solid var(--border)", borderLeft: "4px solid " + pm[1], borderRadius: 14, padding: 13, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                <span style={{ flex: "1 1 160px", minWidth: 0 }}>
+                  <b style={{ fontSize: 13.5 }}>{t.title}</b> <span className="badge" style={{ fontSize: 9.5, color: pm[1], border: "1px solid " + pm[1], background: "transparent" }}>{pm[0]}</span>
+                  {t.description && <div className="muted" style={{ fontSize: 11.5 }}>{t.description}</div>}
+                  <div className="muted" style={{ fontSize: 10.5, marginTop: 2 }}>{isDirector && t.assignee ? "→ " + t.assignee + " · " : ""}{t.due_at ? "⏰ " + String(t.due_at).slice(0, 16).replace("T", " ") : "No due date"}</div>
+                </span>
+                <span className={"badge " + st[1]} style={{ flexShrink: 0 }}>{st[0]}</span>
+                {t.status !== "completed" && (
+                  <button type="button" onClick={() => completeTask(t)} style={{ flexShrink: 0, background: "var(--green)", color: "#fff", border: "none", borderRadius: 9, padding: "7px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>✓ Done</button>
+                )}
+              </div>
+            ); })}
+            {autoTasks.length + myTasks.length === 0 && <div className="muted" style={{ fontSize: 12.5 }}>{tasks === null ? "Loading tasks…" : "Nothing due today. 🎉"}</div>}
           </div>
         </Section>
 
