@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import MobileNav from "@/components/MobileNav";
+import Sidebar from "@/components/Sidebar";
 import { getSession } from "@/lib/auth";
 import { getSites, getAttendance, getWorkers } from "@/lib/data";
 import { getProjects } from "@/lib/projects";
@@ -135,21 +136,22 @@ export default function HomeDashboard() {
   const [digest, setDigest] = useState(null);
   const [panel, setPanel] = useState(null);       // project explorer (kept from 228)
   // update234: inside Director Home the Projects TAB owns projects — no overlay panel here
-  const openProjects = () => embed ? window.parent?.postMessage({ pskTab: "projects" }, "*") : setPanel("all");
+  const openProjects = () => setPanel("all");
   const [expId, setExpId] = useState(null);
   const [asSite, setAsSite] = useState(null);     // director: view as site manager
   const [pickSite, setPickSite] = useState(false);
   const [tasks, setTasks] = useState(null);   // update230: tasks surfaced on Home
-  const [embed, setEmbed] = useState(false);   // update233: rendered inside Director Home
+  const [desk, setDesk] = useState(false);   // update235: desktop shell mode (/m/dashboard?desk=1)
 
   useEffect(() => {
     const s = getSession();
     if (!s) { router.replace("/m/login"); return; }
     // update231: desktop/web never stays on the mobile home — go to the desktop dashboard.
-    const embedded = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("embed") === "1";
-    if (embedded) setEmbed(true);
-    // update233: desktop goes to Director Home (/home) — unless this IS the embedded overview tab
-    if (!embedded && typeof window !== "undefined" && window.innerWidth > 760) { router.replace("/home"); return; }
+    // update235: ?desk=1 = the Home-overview page inside the normal desktop shell
+    const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const deskMode = q?.get("desk") === "1";
+    if (deskMode) setDesk(true);
+    if (!deskMode && typeof window !== "undefined" && window.innerWidth > 760) { router.replace("/home"); return; }
     setSess(s);
     getSites().then(r => setSites(arr(r)));
     getProjects().then(r => setProjects(arr(r)));
@@ -167,7 +169,7 @@ export default function HomeDashboard() {
     const key = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
     Promise.all(days.map(d => getAttendance(key(d), "all").then(r => arr(r)).catch(() => [])))
       .then(lists => setWeek(days.map((d, i) => ({ day: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()], date: key(d), rows: lists[i] }))));
-    const openFromHash = () => { if (window.location.hash === "#projects" && !embedded) setPanel("all"); };
+    const openFromHash = () => { if (window.location.hash === "#projects") setPanel("all"); };
     openFromHash(); window.addEventListener("hashchange", openFromHash);
     return () => window.removeEventListener("hashchange", openFromHash);
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -269,8 +271,8 @@ export default function HomeDashboard() {
   const tiles = companyView ? dirTiles : staffTiles;
 
   if (!sess) return null;
-  return (
-    <div style={{ background: "var(--bg)", minHeight: "100dvh", paddingBottom: embed ? 24 : "calc(86px + env(safe-area-inset-bottom))" }}>
+  const body = (
+    <div style={{ background: "var(--bg)", minHeight: "100dvh", paddingBottom: desk ? 24 : "calc(86px + env(safe-area-inset-bottom))" }}>
       <div style={{ background: NAVY, color: "#fff", padding: "calc(12px + env(safe-area-inset-top)) 14px 14px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, maxWidth: 1100, margin: "0 auto" }}>
           <span style={{ width: 40, height: 40, borderRadius: 12, background: "rgba(255,255,255,0.1)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{isDirector ? "👑" : "🔧"}</span>
@@ -427,7 +429,7 @@ export default function HomeDashboard() {
         </Section>
       </div>
 
-      {panel && !embed && (
+      {panel && (
         <div style={{ position: "fixed", left: 0, right: 0, top: 0, bottom: "calc(62px + env(safe-area-inset-bottom))", background: "var(--bg)", zIndex: 60, display: "flex", flexDirection: "column" }}>
           <div style={{ background: "linear-gradient(115deg, " + NAVY + ", " + NAVY2 + ")", color: "#fff", padding: "calc(10px + env(safe-area-inset-top)) 14px 12px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <button type="button" onClick={() => { setPanel(null); setExpId(null); }} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 10, padding: "7px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>← Back</button>
@@ -484,7 +486,19 @@ export default function HomeDashboard() {
         </div>
       )}
 
-      {!embed && <MobileNav />}
+      {!desk && <MobileNav />}
+    </div>
+  );
+  if (!desk) return body;
+  return (
+    <div className="app-shell" style={{ display: "flex", minHeight: "100dvh" }}>
+      <Sidebar />
+      <main className="main" style={{ padding: 0 }}>
+        <div style={{ padding: "14px 20px 0" }}>
+          <Link href="/home" style={{ fontSize: 12.5, color: "var(--copper)", fontWeight: 700 }}>← Director Home</Link>
+        </div>
+        {body}
+      </main>
     </div>
   );
 }

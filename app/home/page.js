@@ -1,75 +1,56 @@
 "use client";
-// update233: DIRECTOR HOME (desktop shell) — one place with tabs instead of separate
-// Dashboard / Projects / Site Reports sidebar items. Each tab EMBEDS the existing page
-// unchanged via the same-origin ?embed=1 pattern from update207, so every route, query,
-// permission and piece of data keeps working exactly as before. Nothing was rewritten.
-import { useEffect, useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+// update235: DIRECTOR HOME = a 4-card launcher. No tabs, no iframes, no overlays.
+// Each card is a normal link to a REAL page that renders the app's single shell itself —
+// which is what removes the nested-shell / double-sidebar / double-scrollbar problem.
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import { getSession } from "@/lib/auth";
 
-const TABS = [
-  ["overview", "🏠", "Home overview", "/m/dashboard?embed=1"],
-  ["projects", "📁", "Projects", "/projects?embed=1"],
-  ["dashboard", "📊", "Dashboard", "/dashboard?embed=1"],
-  ["reports", "📋", "Site reports", "/reports?embed=1"],
+const CARDS = [
+  ["🏠", "Home overview", "Portfolio snapshot — sites, workforce, tasks, approvals", "/m/dashboard?desk=1", "#1a2450"],
+  ["📁", "Projects", "All company projects, progress and financials", "/projects", "#0e7490"],
+  ["📊", "Dashboard", "Attendance, overtime, proxy punches and site strength", "/dashboard", "#15803d"],
+  ["📋", "Site reports", "DPR digest, indents and daily site reporting", "/reports", "#b45309"],
 ];
 
-function HomeInner() {
+export default function DirectorHome() {
   const router = useRouter();
-  const sp = useSearchParams();
   const [sess, setSess] = useState(null);
-  const [tab, setTab] = useState("overview");
-  const [seen, setSeen] = useState({ overview: true });   // lazy-mount, then keep alive
-
   useEffect(() => {
     const s = getSession();
     if (!s) { router.replace("/login"); return; }
     setSess(s);
-    const t = sp.get("tab");
-    if (t && TABS.some(x => x[0] === t)) { setTab(t); setSeen(v => ({ ...v, [t]: true })); }
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {   // update234: embedded overview asks the shell to switch tabs (no overlays)
-    const onMsg = e => { const k = e?.data?.pskTab; if (k && TABS.some(x => x[0] === k)) { setTab(k); setSeen(v => ({ ...v, [k]: true })); try { window.history.replaceState(null, "", "/home?tab=" + k); } catch {} } };
-    window.addEventListener("message", onMsg);
-    return () => window.removeEventListener("message", onMsg);
-  }, []);
-
-  function go(k) {
-    setTab(k); setSeen(v => ({ ...v, [k]: true }));
-    try { window.history.replaceState(null, "", "/home?tab=" + k); } catch {}
-  }
   if (!sess) return null;
+  const hour = new Date().getHours();
+  const greet = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
-    <div className="app-shell" style={{ display: "flex", height: "100dvh", overflow: "hidden" }}>   {/* update234: single scroll — the shell never scrolls, the active tab does */}
+    <div className="app-shell" style={{ display: "flex", minHeight: "100dvh" }}>
       <Sidebar />
-      <main className="main" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", padding: 0, height: "100dvh", overflow: "hidden" }}>
-        <div style={{ padding: "16px 20px 0" }}>
-          <h1 style={{ margin: 0, fontSize: 22 }}>🏠 Director Home</h1>
-          <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>Everything in one place — overview, projects, dashboard and site reports.</div>
+      <main className="main">
+        <div className="page-head">
+          <div>
+            <h1 style={{ margin: 0 }}>🏠 Director Home</h1>
+            <div className="muted" style={{ fontSize: 13 }}>{greet}, {String(sess.name || "").split(" ")[0]} — pick where you want to go.</div>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 4, padding: "10px 20px 0", borderBottom: "2px solid var(--border)", overflowX: "auto" }}>
-          {TABS.map(([k, ico, label]) => (
-            <button key={k} type="button" onClick={() => go(k)}
-              style={{ flexShrink: 0, border: "none", background: "none", padding: "9px 14px", fontSize: 13, cursor: "pointer",
-                fontWeight: tab === k ? 800 : 600, color: tab === k ? "var(--copper)" : "var(--text)",
-                borderBottom: tab === k ? "3px solid var(--copper)" : "3px solid transparent" }}>
-              {ico} {label}</button>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, marginTop: 6 }}>
+          {CARDS.map(([ico, title, desc, href, tint]) => (
+            <Link key={title} href={href} style={{ textDecoration: "none", color: "var(--text)" }}>
+              <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 18, padding: "22px 20px", minHeight: 168,
+                  display: "flex", flexDirection: "column", gap: 8, boxShadow: "0 4px 16px rgba(15,26,46,0.06)", cursor: "pointer", height: "100%" }}>
+                <span style={{ width: 52, height: 52, borderRadius: 15, background: tint + "14", color: tint, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 25 }}>{ico}</span>
+                <b style={{ fontSize: 17 }}>{title}</b>
+                <span className="muted" style={{ fontSize: 12.5, lineHeight: 1.45, flex: 1 }}>{desc}</span>
+                <span style={{ color: "var(--copper)", fontWeight: 800, fontSize: 12.5 }}>Open →</span>
+              </div>
+            </Link>
           ))}
-        </div>
-        <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
-          {TABS.map(([k, , , src]) => seen[k] ? (
-            <iframe key={k} src={src} title={k}
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none", display: tab === k ? "block" : "none", background: "var(--bg)" }} />
-          ) : null)}
         </div>
       </main>
     </div>
   );
-}
-
-export default function DirectorHome() {
-  return <Suspense fallback={<div style={{ padding: 40 }}>Loading…</div>}><HomeInner /></Suspense>;
 }

@@ -106,6 +106,8 @@ export default function ReportsPage() {
     <div className="layout">
       <Sidebar />
       <main className="main">
+        {/* update235: consistent way back to the 4-card Director Home (no floating Back/✕) */}
+        <a href="/home" style={{ fontSize: 12.5, color: "var(--copper)", fontWeight: 700, textDecoration: "none" }}>← Director Home</a>
         <div className="page-head">
           <h1>Site reports</h1>
           <div className="filters">

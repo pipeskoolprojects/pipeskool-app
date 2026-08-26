@@ -102,6 +102,8 @@ export default function ProjectsPage() {
     <div className="layout">
       <Sidebar />
       <main className="main">
+        {/* update235: consistent way back to the 4-card Director Home (no floating Back/✕) */}
+        <a href="/home" style={{ fontSize: 12.5, color: "var(--copper)", fontWeight: 700, textDecoration: "none" }}>← Director Home</a>
         <style>{`.proj-card:hover { box-shadow: 0 6px 18px rgba(15,20,25,0.10); border-color: var(--copper) !important; }`}</style>
         <div className="page-head" style={{ flexWrap: "wrap", gap: 8 }}>
           <div><h1>Project dashboard</h1><div className="muted" style={{ fontSize: 12.5 }}>Overview of all company projects and their progress</div></div>
