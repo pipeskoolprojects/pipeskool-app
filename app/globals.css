@@ -189,3 +189,9 @@ html.psk-nosb .main { padding-left: 76px; }
 
 /* update222: All-Indents modal — cells wrap so no sideways scrolling is ever needed */
 .allind-tbl td, .allind-tbl th { white-space: normal !important; vertical-align: top; }
+
+/* update232: tasks board — 2 columns on desktop, ONE full-width column on phones/tablets
+   (the old inline 2-column grid clipped every card at 360px) */
+.tasks-cols { grid-template-columns: minmax(0, 2fr) minmax(250px, 1fr); }
+@media (max-width: 900px) { .tasks-cols { grid-template-columns: 1fr; } }
+.tasks-cols > * { min-width: 0; }

@@ -361,23 +361,23 @@ export default function HomeDashboard() {
           </span>}>
           <div style={{ display: "grid", gap: 9 }}>
             {autoTasks.map((t, i) => (
-              <div key={"a" + i} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 14, padding: 13, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+              <div key={"a" + i} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 14, padding: 13, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", minWidth: 0, overflowWrap: "anywhere" }}>
                 <span style={{ width: 38, height: 38, borderRadius: 12, background: "#f6f2ec", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{t.ico}</span>
                 <span style={{ flex: "1 1 150px", minWidth: 0 }}>
                   <b style={{ fontSize: 13.5 }}>{t.name}</b> <span className="badge gray" style={{ fontSize: 9.5 }}>{t.tag}</span>
                   <div className="muted" style={{ fontSize: 11.5 }}>{t.desc}</div>
                 </span>
-                <span style={{ display: "flex", gap: 12, flexShrink: 0 }}>
+                <span style={{ display: "flex", gap: 12, flexWrap: "wrap", minWidth: 0 }}>
                   {t.stats.map(([l2, v2]) => <span key={l2} style={{ textAlign: "center" }}><span className="muted" style={{ fontSize: 9.5, display: "block" }}>{l2}</span><b style={{ fontSize: 14 }}>{v2}</b></span>)}
                 </span>
-                <span style={{ textAlign: "right", flexShrink: 0 }}>
+                <span style={{ textAlign: "right", marginLeft: "auto" }}>
                   <span className="badge" style={{ color: t.done ? "var(--green)" : COPPER, border: "1px solid currentColor", background: "transparent", fontWeight: 800 }}>{t.done ? "✓ Done" : "Pending"}</span>
                   {!t.done && <Link href={t.href}><button type="button" style={{ display: "block", marginTop: 5, background: NAVY, color: "#fff", border: "none", borderRadius: 9, padding: "7px 13px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{t.cta}</button></Link>}
                 </span>
               </div>
             ))}
             {myTasks.map(t => { const pm = PRIORITY_META[t.priority] || PRIORITY_META.normal; const st = TASK_ST[t.status] || ["Pending", "gray"]; return (
-              <div key={t.id} style={{ background: "#fff", border: "1px solid var(--border)", borderLeft: "4px solid " + pm[1], borderRadius: 14, padding: 13, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+              <div key={t.id} style={{ background: "#fff", border: "1px solid var(--border)", borderLeft: "4px solid " + pm[1], borderRadius: 14, padding: 13, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", minWidth: 0, overflowWrap: "anywhere" }}>
                 <span style={{ flex: "1 1 160px", minWidth: 0 }}>
                   <b style={{ fontSize: 13.5 }}>{t.title}</b> <span className="badge" style={{ fontSize: 9.5, color: pm[1], border: "1px solid " + pm[1], background: "transparent" }}>{pm[0]}</span>
                   {t.description && <div className="muted" style={{ fontSize: 11.5 }}>{t.description}</div>}

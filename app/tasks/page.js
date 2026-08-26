@@ -218,7 +218,7 @@ export default function TasksPage() {
           <div style={{ position: "absolute", right: -50, top: -60, width: 190, height: 190, borderRadius: "50%", background: "rgba(255,255,255,0.06)" }} />
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", position: "relative" }}>
             <div style={{ flex: 1, minWidth: 220 }}>
-              <div style={{ fontSize: 20, fontWeight: 800 }}>{new Date().getHours() < 12 ? "Good Morning" : new Date().getHours() < 17 ? "Good Afternoon" : "Good Evening"}, {(session?.full_name || "").split(" ")[0]}! 🤟</div>
+              <div style={{ fontSize: 20, fontWeight: 800 }}>🗒 Tasks & reminders</div>
               <div style={{ fontSize: 12.5, opacity: 0.85, marginTop: 3 }}>{isAdmin ? "Director view — assign tasks to any site or person, and track today's auto-generated tasks across your whole company." : "Here's what needs your attention today — auto-generated daily tasks + anything assigned to you."}</div>
             </div>
             <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
@@ -260,7 +260,7 @@ export default function TasksPage() {
               </div>
             ))}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(250px, 1fr)", gap: 12, alignItems: "start" }}>
+          <div className="tasks-cols" style={{ display: "grid", gap: 12, alignItems: "start" }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <b style={{ fontSize: 15 }}>Today&apos;s Tasks</b>
@@ -268,17 +268,17 @@ export default function TasksPage() {
               </div>
               <div style={{ display: "grid", gap: 10 }}>
                 {autoTasks.map((t, i) => { const dt = t.done ? ["Done", "var(--green)"] : dueTag(t.dueH, t.mn || 0); return (
-                  <div key={i} className="panel" style={{ margin: 0, padding: 14, borderRadius: 14, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                  <div key={i} className="panel" style={{ margin: 0, padding: 14, borderRadius: 14, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", minWidth: 0, overflowWrap: "anywhere" }}>
                     <div style={{ fontSize: 22, width: 40, height: 40, borderRadius: 12, background: "#faf6f1", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{t.ic}</div>
-                    <div style={{ flex: 1, minWidth: 170 }}>
+                    <div style={{ flex: "1 1 170px", minWidth: 0 }}>
                       <b style={{ fontSize: 13.5 }}>{i + 1}. {t.name}</b> <span className="badge gray" style={{ fontSize: 9.5 }}>{t.tag}</span>
                       <div className="muted" style={{ fontSize: 11.5 }}>{t.desc}</div>
                       <div style={{ fontSize: 9.5, fontWeight: 800, color: "var(--copper)", marginTop: 2 }}>FOR: {t.role}</div>
                     </div>
-                    <div style={{ display: "flex", gap: 14, flexShrink: 0 }}>
-                      {t.stats.map(([l2, v2]) => <div key={l2} style={{ textAlign: "center" }}><div className="muted" style={{ fontSize: 9.5 }}>{l2}</div><b style={{ fontSize: 14 }}>{v2}</b></div>)}
+                    <div style={{ display: "flex", gap: 14, flexWrap: "wrap", minWidth: 0 }}>
+                      {t.stats.map(([l2, v2]) => <div key={l2} style={{ textAlign: "center", minWidth: 52 }}><div className="muted" style={{ fontSize: 9.5, whiteSpace: "nowrap" }}>{l2}</div><b style={{ fontSize: 14 }}>{v2}</b></div>)}
                     </div>
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={{ textAlign: "right", marginLeft: "auto" }}>
                       <span className="badge" style={{ color: dt[1], border: "1px solid " + dt[1], background: "transparent", fontWeight: 800 }}>{t.done ? "✓ Done" : dt[0]}</span>
                       <div className="muted" style={{ fontSize: 10 }}>{t.done ? "" : "Due " + fmtDue(t.dueH)}</div>
                       {!t.done && <a href={t.act[1]}><button type="button" style={{ marginTop: 4, background: t.act[2], color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{t.act[0]}</button></a>}
@@ -287,7 +287,7 @@ export default function TasksPage() {
                 ); })}
                 {assignedToday.map(t => { const pm = PRIORITY_META[t.priority] || PRIORITY_META.normal; const st2 = TASK_ST[t.status]; return (
                   <div key={"a" + t.id} onClick={() => openTask(t)} className="panel" style={{ margin: 0, padding: 14, borderRadius: 14, borderLeft: "4px solid " + pm[1], cursor: "pointer", display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-                    <div style={{ flex: 1, minWidth: 170 }}>
+                    <div style={{ flex: "1 1 170px", minWidth: 0 }}>
                       <b style={{ fontSize: 13.5 }}>{t.title}</b> <span className="badge" style={{ fontSize: 9.5, color: pm[1], border: "1px solid " + pm[1], background: "transparent" }}>{pm[0]}</span>
                       {t.description && <div className="muted clamp2" style={{ fontSize: 11.5 }}>{t.description}</div>}
                       <div className="muted" style={{ fontSize: 10.5, marginTop: 2 }}>Assigned{isAdmin ? " to " + t.assignee : ""}{t.site ? " · 📍 " + t.site : ""}</div>
