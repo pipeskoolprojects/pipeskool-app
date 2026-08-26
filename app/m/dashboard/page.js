@@ -142,6 +142,8 @@ export default function HomeDashboard() {
   useEffect(() => {
     const s = getSession();
     if (!s) { router.replace("/m/login"); return; }
+    // update231: desktop/web never stays on the mobile home — go to the desktop dashboard.
+    if (typeof window !== "undefined" && window.innerWidth > 760) { router.replace("/dashboard"); return; }
     setSess(s);
     getSites().then(r => setSites(arr(r)));
     getProjects().then(r => setProjects(arr(r)));
