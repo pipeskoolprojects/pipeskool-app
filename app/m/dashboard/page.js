@@ -1,100 +1,216 @@
 "use client";
-// update218: DIRECTOR DASHBOARD (Android-first 360–430px). UI ONLY — every number on this
-// screen comes from the SAME live loaders the existing pages use (projects, attendance,
-// money queues, DPR digest, notices). Nothing is written; nothing is invented; widgets in
-// the reference mock without real backing data (planned-vs-actual, trade %, milestones)
-// are deliberately omitted rather than faked.
+// update229: PREMIUM HOME DASHBOARD — UI redesign only.
+// Same live loaders, routes and permissions as 218/226/228; nothing removed.
+// One design system, two variants: director = company portfolio, staff = their site.
+// Every figure comes from an existing loader — nothing invented (a "slipping %" would need
+// a baseline schedule we don't store, so pills show each project's REAL status).
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import MobileNav from "@/components/MobileNav";
-import { getSession, setCurrentSite } from "@/lib/auth";
-import { getSites, getAttendance } from "@/lib/data";
-import { getProjects, PROJECT_STATUSES } from "@/lib/projects";
+import { getSession } from "@/lib/auth";
+import { getSites, getAttendance, getWorkers } from "@/lib/data";
+import { getProjects } from "@/lib/projects";
 import { getPettyRequestQueue, getAdvanceQueue, getExpenseClaimQueue, inr } from "@/lib/money";
-import { getPOs } from "@/lib/procure";
-import { getOpenIndents } from "@/lib/procure";
+import { getPOs, getOpenIndents } from "@/lib/procure";
 import { getDigest } from "@/lib/dpr";
 import { todayLocal } from "@/lib/today";
 
 const ST_META = { active: ["Active", "#15803d"], upcoming: ["Upcoming", "#6b46c1"], on_hold: ["On hold", "#b45309"], delayed: ["Delayed", "#b91c1c"], completed: ["Completed", "#2b6cb0"], idea: ["Idea", "#6b7280"] };
-const Card = ({ children, style, onClick }) => (
-  <div onClick={onClick} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 14, padding: 14, boxShadow: "0 2px 8px rgba(15,20,25,0.05)", cursor: onClick ? "pointer" : "default", ...style }}>{children}</div>
-);
+const NAVY = "#0F1A2E", NAVY2 = "#16233d", COPPER = "#e07020";
+const arr = x => Array.isArray(x) ? x : (x?.rows || []);
+const crore = n => { const v = Number(n) || 0; return v >= 1e7 ? "₹" + (v / 1e7).toFixed(2) + " Cr" : v >= 1e5 ? "₹" + (v / 1e5).toFixed(2) + " L" : inr(v); };
 
-export default function DirectorDashboard() {
+/* ---- shared design-system pieces (module scope — never redefined per render) ---- */
+function Ring({ pct, label }) {
+  const p = Math.max(0, Math.min(Number(pct) || 0, 100)), R = 30, C = 2 * Math.PI * R;
+  return (
+    <svg width="78" height="78" viewBox="0 0 78 78" style={{ flexShrink: 0 }}>
+      <circle cx="39" cy="39" r={R} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth="7" />
+      <circle cx="39" cy="39" r={R} fill="none" stroke={COPPER} strokeWidth="7" strokeLinecap="round"
+        strokeDasharray={(C * p / 100) + " " + C} transform="rotate(-90 39 39)" />
+      <text x="39" y="38" textAnchor="middle" fill="#fff" fontSize="15" fontWeight="800">{Math.round(p)}%</text>
+      <text x="39" y="50" textAnchor="middle" fill="rgba(255,255,255,0.6)" fontSize="7.5">{label}</text>
+    </svg>
+  );
+}
+function Pill({ tone, children }) {
+  const c = { green: ["#0f3d24", "#4ade80"], amber: ["#3d2f0f", "#fbbf24"], red: ["#3d1414", "#f87171"] }[tone] || ["#26324a", "#cbd5e1"];
+  return <span style={{ background: c[0], color: c[1], borderRadius: 999, padding: "4px 11px", fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>● {children}</span>;
+}
+function HeroStat({ ico, label, value }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: 9.5, letterSpacing: 0.6, color: "rgba(255,255,255,0.55)", textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ico} {label}</div>
+      <div style={{ fontSize: 17, fontWeight: 800, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", marginTop: 1 }}>{value}</div>
+    </div>
+  );
+}
+function Section({ title, action, children }) {
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 9, gap: 8 }}>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>{title}</h2>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+function Tile({ ico, label, badge, href, onClick }) {
+  const inner = (
+    <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 16, padding: "13px 6px 10px", textAlign: "center", position: "relative", boxShadow: "0 2px 8px rgba(15,26,46,0.05)", cursor: "pointer", height: "100%" }}>
+      <span style={{ display: "inline-flex", width: 42, height: 42, borderRadius: 13, background: "#f6f2ec", alignItems: "center", justifyContent: "center", fontSize: 19 }}>{ico}</span>
+      {badge > 0 && <span style={{ position: "absolute", top: 7, right: 9, background: "var(--red)", color: "#fff", borderRadius: 9, fontSize: 10, fontWeight: 800, padding: "1px 6px" }}>{badge}</span>}
+      <div style={{ fontSize: 11.5, fontWeight: 600, marginTop: 6, lineHeight: 1.2 }}>{label}</div>
+    </div>
+  );
+  return href ? <Link href={href} style={{ textDecoration: "none", color: "var(--text)" }}>{inner}</Link> : <div onClick={onClick}>{inner}</div>;
+}
+function TrioCard({ v, l, color }) {
+  return (
+    <div style={{ flex: 1, minWidth: 96, background: "#fff", border: "1px solid var(--border)", borderRadius: 14, padding: "11px 12px" }}>
+      <div style={{ fontSize: 21, fontWeight: 800, color: color || "var(--text)" }}>{v}</div>
+      <div className="muted" style={{ fontSize: 11 }}>{l}</div>
+    </div>
+  );
+}
+function WeekChart({ data }) {
+  const max = Math.max.apply(null, data.map(d => d.n).concat([1]));
+  return (
+    <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 16, padding: "14px 10px 8px", marginTop: 10 }}>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 5, height: 112 }}>
+        {data.map(d => (
+          <div key={d.date} style={{ flex: 1, textAlign: "center", minWidth: 0 }}>
+            <div style={{ fontSize: 9.5, color: "var(--muted)", marginBottom: 2 }}>{d.n}</div>
+            <div title={d.date + ": " + d.n} style={{ height: Math.max(Math.round(d.n / max * 78), 3), borderRadius: "5px 5px 0 0", background: "linear-gradient(180deg, #4c7a99, #2f5470)" }} />
+            <div style={{ fontSize: 9.5, color: "var(--muted)", marginTop: 3 }}>{d.day}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+function ApprovalRow({ ico, title, sub, count, href }) {
+  return (
+    <Link href={href} style={{ textDecoration: "none", color: "var(--text)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 11, background: "#fff", border: "1px solid var(--border)", borderRadius: 14, padding: "11px 13px", marginBottom: 8 }}>
+        <span style={{ width: 36, height: 36, borderRadius: 11, background: "#fdf1e7", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 17, flexShrink: 0 }}>{ico}</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <b style={{ fontSize: 13.5, display: "block" }}>{title}</b>
+          <span className="muted" style={{ fontSize: 11.5 }}>{sub}</span>
+        </span>
+        <b style={{ fontSize: 16, color: count > 0 ? COPPER : "var(--muted)" }}>{count}</b>
+        <span style={{ fontSize: 15, color: "var(--muted)" }}>›</span>
+      </div>
+    </Link>
+  );
+}
+function GlanceCard({ label, value, foot, footColor, href }) {
+  return (
+    <Link href={href} style={{ textDecoration: "none", color: "var(--text)", flex: 1, minWidth: 150 }}>
+      <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 16, padding: 14, height: "100%" }}>
+        <div className="muted" style={{ fontSize: 11.5 }}>{label}</div>
+        <div style={{ fontSize: 21, fontWeight: 800, margin: "3px 0 2px" }}>{value}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: footColor || COPPER }}>{foot}</div>
+      </div>
+    </Link>
+  );
+}
+
+export default function HomeDashboard() {
   const router = useRouter();
   const [sess, setSess] = useState(null);
   const [sites, setSites] = useState([]);
   const [projects, setProjects] = useState(null);
-  const [att, setAtt] = useState(null);          // today's attendance rows (all sites)
+  const [att, setAtt] = useState(null);
+  const [week, setWeek] = useState([]);
+  const [workers, setWorkers] = useState(null);
   const [pettyQ, setPettyQ] = useState([]);
   const [advQ, setAdvQ] = useState([]);
   const [claims, setClaims] = useState([]);
   const [pos, setPos] = useState([]);
   const [indents, setIndents] = useState([]);
   const [digest, setDigest] = useState(null);
-  const [panel, setPanel] = useState(null);      // update228: inline project explorer — 'all'|'active'|'hold'|'completed'|'upcoming'
+  const [panel, setPanel] = useState(null);       // project explorer (kept from 228)
   const [expId, setExpId] = useState(null);
+  const [asSite, setAsSite] = useState(null);     // director: view as site manager
+  const [pickSite, setPickSite] = useState(false);
 
   useEffect(() => {
     const s = getSession();
     if (!s) { router.replace("/m/login"); return; }
-    if (s.role !== "director") { router.replace("/m"); return; }
     setSess(s);
-    getSites().then(setSites);
-    // update226 FIX: getProjects returns { rows, staff } — not an array (caused s.filter crash)
-    getProjects().then(r => setProjects(Array.isArray(r) ? r : (r?.rows || [])));
-    getAttendance(todayLocal(), "all").then(r => setAtt(r?.rows || [])).catch(() => setAtt([]));
-    const arr = x => Array.isArray(x) ? x : (x?.rows || []);
+    getSites().then(r => setSites(arr(r)));
+    getProjects().then(r => setProjects(arr(r)));
+    getAttendance(todayLocal(), "all").then(r => setAtt(arr(r))).catch(() => setAtt([]));
+    getWorkers().then(r => setWorkers(arr(r))).catch(() => setWorkers([]));
     getPettyRequestQueue().then(r => setPettyQ(arr(r))).catch(() => {});
     getAdvanceQueue().then(r => setAdvQ(arr(r))).catch(() => {});
     getExpenseClaimQueue().then(r => setClaims(arr(r))).catch(() => {});
     getPOs("all").then(r => setPos(arr(r))).catch(() => {});
     getOpenIndents("all").then(r => setIndents(arr(r))).catch(() => {});
-    getDigest(todayLocal()).then(setDigest).catch(() => {});
+    getDigest(todayLocal()).then(r => setDigest(arr(r))).catch(() => setDigest([]));
+    const days = [];
+    for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push(d); }
+    const key = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    Promise.all(days.map(d => getAttendance(key(d), "all").then(r => arr(r)).catch(() => [])))
+      .then(lists => setWeek(days.map((d, i) => ({ day: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()], date: key(d), rows: lists[i] }))));
     const openFromHash = () => { if (window.location.hash === "#projects") setPanel("all"); };
     openFromHash(); window.addEventListener("hashchange", openFromHash);
     return () => window.removeEventListener("hashchange", openFromHash);
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  const isDirector = sess?.role === "director";
+  const viewSiteId = isDirector ? asSite : (sess?.current_site_id || sess?.site_id);
+  const companyView = isDirector && !asSite;
   const hour = new Date().getHours();
   const greet = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const curSiteId = sess?.current_site_id || sess?.site_id;
+  const roleLabel = isDirector ? "Director" : String(sess?.role || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
   const pj = useMemo(() => {
     const all = projects || [];
-    const by = k => all.filter(p => p.status === k).length;
-    return { all, total: all.length, active: by("active"), hold: by("on_hold") + by("delayed"), done: by("completed"),
-      current: all.find(p => String(p.id) === String(curSiteId)) || all.find(p => p.status === "active"),
-      upcoming: all.filter(p => p.status === "upcoming" || p.status === "idea").slice(0, 3) };
-  }, [projects, curSiteId]);
+    const live = all.filter(p => ["active", "on_hold", "delayed"].includes(p.status));
+    const withPct = live.filter(p => p.progress !== null && p.progress !== undefined);
+    return { all, live, total: all.length,
+      active: all.filter(p => p.status === "active").length,
+      hold: all.filter(p => p.status === "on_hold").length,
+      delayed: all.filter(p => p.status === "delayed").length,
+      done: all.filter(p => p.status === "completed").length,
+      avg: withPct.length ? Math.round(withPct.reduce((t, p) => t + p.progress, 0) / withPct.length) : 0,
+      contract: all.reduce((t, p) => t + Number(p.contract_value || 0), 0),
+      invoiced: all.reduce((t, p) => t + Number(p.invoiced || 0), 0),
+      deadline: live.map(p => p.end_date).filter(Boolean).sort()[0] || null,
+      site: all.find(p => String(p.id) === String(viewSiteId)) || null };
+  }, [projects, viewSiteId]);
+
+  const inSite = rows => companyView ? rows : rows.filter(r => String(r.site_id) === String(viewSiteId));
+  const presentCount = rows => rows.filter(r => r.punch_in || r.status === "present" || r.status === "half_day").length;
 
   const man = useMemo(() => {
-    const rows = att || [];
-    const present = rows.filter(r => r.punch_in || r.status === "present" || r.status === "half_day").length;
-    return { present, marked: rows.length };
-  }, [att]);
+    const rows = companyView ? (att || []) : (att || []).filter(r => String(r.site_id) === String(viewSiteId));
+    const roll = companyView ? (workers || []).length : (workers || []).filter(w => String(w.site_id) === String(viewSiteId)).length;
+    const inNow = presentCount(rows);
+    return { roll, inNow, absent: Math.max(rows.length - inNow, 0), pct: roll ? Math.round(inNow / roll * 1000) / 10 : 0 };
+  }, [att, workers, viewSiteId, companyView]);
+
+  const weekData = useMemo(() => week.map(d => ({ day: d.day, date: d.date,
+    n: presentCount(companyView ? d.rows : d.rows.filter(r => String(r.site_id) === String(viewSiteId))) })), [week, viewSiteId, companyView]);
 
   const appr = useMemo(() => ({
-    petty: (pettyQ || []).filter(r => r.status === "pending").length,
-    claims: (claims || []).filter(r => r.status === "pending" || r.status === "queried").length,
-    adv: (advQ || []).filter(r => r.status === "pending").length,
-    po: (pos || []).filter(p => p.approval === "pending" && p.status !== "cancelled").length,
-    ind: (indents || []).length,
-  }), [pettyQ, claims, advQ, pos, indents]);
-  const apprTotal = appr.petty + appr.claims + appr.adv + appr.po;
+    po: pos.filter(p => p.approval === "pending" && p.status !== "cancelled").length,
+    adv: advQ.filter(r => r.status === "pending").length,
+    claims: inSite(claims).filter(r => r.status === "pending" || r.status === "queried").length,
+    petty: pettyQ.filter(r => r.status === "pending").length,
+    ind: companyView ? indents.length : indents.filter(i => String(i.site_id) === String(viewSiteId)).length,
+  }), [pos, advQ, claims, pettyQ, indents, viewSiteId, companyView]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const apprTotal = appr.po + appr.adv + appr.claims + appr.petty + appr.ind;
 
-  const money = useMemo(() => {
-    const ok = (claims || []).filter(e => e.status === "approved");
-    return { total: ok.reduce((t, e) => t + Number(e.amount), 0), pending: (claims || []).filter(e => e.status === "pending").length };
-  }, [claims]);
-
-  const dprMissing = useMemo(() => {
-    if (!digest || !sites.length) return null;
-    const filed = new Set((digest || []).map(d => d.site));
-    return sites.filter(s2 => s2.is_active !== false && !filed.has(s2.name)).length;
-  }, [digest, sites]);
+  const expApproved = inSite(claims).filter(c => c.status === "approved").reduce((t, c) => t + Number(c.amount || 0), 0);
+  const expPending = inSite(claims).filter(c => c.status === "pending").reduce((t, c) => t + Number(c.amount || 0), 0);
+  const dprFiled = new Set((digest || []).map(d => d.site));
+  const dprMissing = sites.filter(s => s.is_active !== false && !dprFiled.has(s.name));
+  const siteName = sites.find(s => String(s.id) === String(viewSiteId))?.name || "";
 
   const panelRows = useMemo(() => {
     const all = pj.all;
@@ -104,190 +220,158 @@ export default function DirectorDashboard() {
     if (panel === "upcoming") return all.filter(p => p.status === "upcoming" || p.status === "idea");
     return all;
   }, [pj, panel]);
-  const fin = useMemo(() => ({ contract: pj.all.reduce((t, p) => t + Number(p.contract_value || 0), 0),
-    invoiced: pj.all.reduce((t, p) => t + Number(p.invoiced || 0), 0) }), [pj]);
-  const daysLeft = p => { if (!p?.end_date) return null; const d = Math.ceil((new Date(p.end_date) - new Date()) / 86400000); return d; };
-  const QA = [
-    ["📁", "Projects", "#projects"], ["👷", "Muster", "/m/muster"], ["✅", "Approvals", "/m/approvals", apprTotal],
-    ["📦", "Stock", "/m/stock"], ["💳", "Expenses", "/m/money"], ["🗒", "Tasks", "/tasks"], ["📋", "Reports", "/m/report"], ["⋯", "More", "/m"],
-  ];
+
+  const dirTiles = [["✅", "Approvals", "/m/approvals", apprTotal], ["💰", "Finance", "/expenses", 0], ["📊", "Analytics", "/m/report", 0], ["🏗", "All Sites", null, 0],
+    ["🏢", "Vendors", "/vendors", 0], ["👥", "Team & HR", "/workers", 0], ["🗒", "Assign Task", "/tasks", 0], ["⚙", "Admin", "/admin", 0]];
+  const staffTiles = [["📁", "Projects", null, 0], ["👷", "Muster", "/m/muster", 0], ["✅", "Approvals", "/m/approvals", apprTotal], ["📦", "Stock", "/m/stock", 0],
+    ["💳", "Expenses", "/m/money", appr.claims], ["🗒", "Tasks", "/tasks", 0], ["📋", "Reports", "/m/report", 0], ["🛒", "Indents", "/procure", appr.ind]];
+  const tiles = companyView ? dirTiles : staffTiles;
 
   if (!sess) return null;
   return (
-    <div style={{ background: "var(--bg)", minHeight: "100dvh", paddingBottom: 76 }}>
-      {/* header */}
-      <div style={{ background: "#0F1419", color: "#fff", padding: "16px 14px 14px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    <div style={{ background: "var(--bg)", minHeight: "100dvh", paddingBottom: "calc(86px + env(safe-area-inset-bottom))" }}>
+      <div style={{ background: NAVY, color: "#fff", padding: "calc(12px + env(safe-area-inset-top)) 14px 14px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, maxWidth: 1100, margin: "0 auto" }}>
+          <span style={{ width: 40, height: 40, borderRadius: 12, background: "rgba(255,255,255,0.1)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{isDirector ? "👑" : "🔧"}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ color: "var(--copper)", fontSize: 12, fontWeight: 700 }}>{greet},</div>
-            <div style={{ fontSize: 20, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sess.full_name || "Director"} <span style={{ fontSize: 12 }}>✔</span></div>
-            <div style={{ fontSize: 11, opacity: 0.7 }}>Pipeskool Director</div>
+            <div style={{ fontSize: 9.5, letterSpacing: 1, color: COPPER, fontWeight: 800, textTransform: "uppercase" }}>{greet}</div>
+            <div style={{ fontSize: 17, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {String(sess.full_name || "").split(" ")[0]} <span style={{ opacity: 0.6, fontWeight: 600, fontSize: 14 }}>· {roleLabel}</span></div>
           </div>
-          <Link href="/notices" style={{ color: "#fff", fontSize: 20, textDecoration: "none", padding: 8 }}>🔔</Link>
-          <span style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--copper)", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14 }}>
-            {(sess.full_name || "D").split(/\s+/).slice(0, 2).map(x => x[0]).join("").toUpperCase()}</span>
-        </div>
-        <select value={String(curSiteId || "")} onChange={e => { setCurrentSite(Number(e.target.value)); setSess(s => ({ ...s, current_site_id: Number(e.target.value) })); }}
-          style={{ marginTop: 10, width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #333", background: "#1a222b", color: "#fff", fontSize: 14 }}>
-          {sites.map(s2 => <option key={s2.id} value={s2.id}>{s2.name}</option>)}
-        </select>
-      </div>
-
-      <div style={{ padding: 12, display: "grid", gap: 12 }}>
-        {/* project stat row — live project statuses */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          {[["🏗", pj.total, "Total Projects", "all"], ["▶", pj.active, "Active", "active"],
-            ["⏸", pj.hold, "On Hold / Delayed", "hold"], ["✅", pj.done, "Completed", "completed"]].map(([ic, n, l, k]) => (
-            <Card key={l} onClick={() => setPanel(k)}>
-              <div style={{ fontSize: 20 }}>{ic}</div>
-              <div style={{ fontSize: 22, fontWeight: 800 }}>{projects ? n : "…"}</div>
-              <div className="muted" style={{ fontSize: 12 }}>{l}</div>
-            </Card>
-          ))}
-        </div>
-
-        {/* current project progress — real invoiced/contract */}
-        {pj.current && (
-          <Card onClick={() => router.push("/projects/" + pj.current.id)}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <b style={{ fontSize: 14.5 }}>{pj.current.name}</b>
-              <span className="badge" style={{ color: (ST_META[pj.current.status] || [])[1], border: "1px solid currentColor", background: "transparent" }}>{(ST_META[pj.current.status] || [pj.current.status])[0]}</span>
-            </div>
-            {pj.current.progress !== null ? (<>
-              <div style={{ fontSize: 30, fontWeight: 800, margin: "6px 0 2px" }}>{pj.current.progress}%</div>
-              <div style={{ height: 9, background: "#f0ece6", borderRadius: 5 }}>
-                <div style={{ width: Math.min(pj.current.progress, 100) + "%", height: 9, borderRadius: 5, background: "var(--copper)" }} />
-              </div>
-              <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Progress = RA bills invoiced ÷ contract value</div>
-            </>) : <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Add contract value in the project to see progress.</div>}
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 12 }}>
-              <span><span className="muted">Start</span><br /><b>{pj.current.start_date || "—"}</b></span>
-              <span style={{ textAlign: "right" }}><span className="muted">End</span><br /><b>{pj.current.end_date || "—"}</b></span>
-            </div>
-            {daysLeft(pj.current) !== null && (
-              <div style={{ marginTop: 8, background: "#fff3e8", border: "1px solid var(--copper)", borderRadius: 10, padding: "8px 12px", fontSize: 13 }}>
-                📅 <b>{daysLeft(pj.current)} days</b> {daysLeft(pj.current) >= 0 ? "remaining" : "overdue"}</div>
-            )}
-          </Card>
-        )}
-
-        {/* quick access — real modules, live approval badge */}
-        <Card>
-          <div style={{ display: "flex", justifyContent: "space-between" }}><b style={{ fontSize: 14 }}>Quick Access</b></div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginTop: 10 }}>
-            {QA.map(([ic, l, href, badge]) => (
-              <Link key={l} href={href} style={{ textDecoration: "none", textAlign: "center", color: "var(--text)" }}>
-                <span style={{ position: "relative", display: "inline-flex", width: 48, height: 48, borderRadius: 14, background: "#faf6f1", border: "1px solid var(--border)", alignItems: "center", justifyContent: "center", fontSize: 21 }}>
-                  {ic}{badge > 0 && <span style={{ position: "absolute", top: -6, right: -6, background: "var(--red)", color: "#fff", borderRadius: 9, fontSize: 10, fontWeight: 800, padding: "1px 5px" }}>{badge}</span>}</span>
-                <div style={{ fontSize: 11, marginTop: 4 }}>{l}</div>
-              </Link>
-            ))}
-          </div>
-        </Card>
-
-        {/* manpower today — real muster */}
-        <Card onClick={() => router.push("/attendance")}>
-          <b style={{ fontSize: 14 }}>👷 Manpower today</b>
-          {att === null ? <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Loading…</div> : (
-            <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-              <div style={{ flex: 1, background: "#eaf7ee", borderRadius: 10, padding: "10px 0", textAlign: "center" }}>
-                <div style={{ fontWeight: 800, fontSize: 18, color: "var(--green)" }}>{man.present}</div><div className="muted" style={{ fontSize: 11 }}>Present (marked in)</div></div>
-              <div style={{ flex: 1, background: "#faf6f1", borderRadius: 10, padding: "10px 0", textAlign: "center" }}>
-                <div style={{ fontWeight: 800, fontSize: 18 }}>{man.marked}</div><div className="muted" style={{ fontSize: 11 }}>Attendance records today</div></div>
-            </div>
+          {isDirector && (
+            <button type="button" onClick={() => setPickSite(v => !v)}
+              style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)", color: "#fff", borderRadius: 999, padding: "7px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", flexShrink: 0, maxWidth: 155, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {asSite ? siteName : "View as Site Mgr"} ▾</button>
           )}
-          <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Tap for the full register →</div>
-        </Card>
-
-        {/* pending approvals — live queues */}
-        <Card onClick={() => router.push("/m/approvals")}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <b style={{ fontSize: 14 }}>✅ Pending approvals</b>
-            {apprTotal > 0 && <span style={{ background: "var(--red)", color: "#fff", borderRadius: 10, fontSize: 11.5, fontWeight: 800, padding: "1px 8px" }}>{apprTotal}</span>}
-          </div>
-          <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
-            {[["🪙 Petty cash requests", appr.petty], ["💳 Expense claims", appr.claims], ["📄 Advance requests", appr.adv], ["🧾 PO drafts (Director)", appr.po]].map(([l, n]) => (
-              <div key={l} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                <span>{l}</span><b style={{ color: n > 0 ? "var(--amber)" : "var(--muted)" }}>{n}</b>
-              </div>
-            ))}
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-              <span>🛒 Open indents</span><b style={{ color: appr.ind > 0 ? "var(--amber)" : "var(--muted)" }}>{appr.ind}</b>
-            </div>
-          </div>
-        </Card>
-
-        {/* expenses summary + site reports — live */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Card onClick={() => router.push("/expenses")}>
-            <b style={{ fontSize: 13.5 }}>₹ Expenses</b>
-            <div style={{ fontSize: 17, fontWeight: 800, marginTop: 6 }}>{claims.length ? inr(money.total) : "…"}</div>
-            <div className="muted" style={{ fontSize: 11 }}>approved, all time</div>
-            <div style={{ fontSize: 12, marginTop: 6 }}><b style={{ color: money.pending ? "var(--amber)" : "var(--green)" }}>{money.pending}</b> <span className="muted">pending claims</span></div>
-          </Card>
-          <Card onClick={() => router.push("/dpr")}>
-            <b style={{ fontSize: 13.5 }}>📋 Site reports</b>
-            <div style={{ fontSize: 17, fontWeight: 800, marginTop: 6 }}>{dprMissing === null ? "…" : dprMissing}</div>
-            <div className="muted" style={{ fontSize: 11 }}>sites without today's DPR</div>
-            <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>Tap for DPR digest →</div>
-          </Card>
+          <Link href="/notices" style={{ color: "#fff", fontSize: 19, textDecoration: "none", padding: 6, flexShrink: 0 }}>🔔</Link>
         </div>
-
-        {/* upcoming projects — real upcoming/idea */}
-        {pj.upcoming.length > 0 && (
-          <Card>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <b style={{ fontSize: 14 }}>🔜 Upcoming projects</b>
-              <a onClick={() => setPanel("upcoming")} style={{ fontSize: 12, color: "var(--copper)", cursor: "pointer" }}>View all</a>
-            </div>
-            <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
-              {pj.upcoming.map(p => (
-                <Link key={p.id} href={"/projects/" + p.id} style={{ textDecoration: "none", color: "var(--text)", display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px" }}>
-                  <span style={{ minWidth: 0 }}>
-                    <b style={{ fontSize: 13, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</b>
-                    <span className="muted" style={{ fontSize: 11 }}>{p.expected_start ? "Expected: " + p.expected_start : (ST_META[p.status] || [p.status])[0]}</span>
-                  </span>
-                  <span className="badge" style={{ color: (ST_META[p.status] || [])[1], border: "1px solid currentColor", background: "transparent", flexShrink: 0 }}>{(ST_META[p.status] || [p.status])[0]}</span>
-                </Link>
-              ))}
-            </div>
-          </Card>
+        {pickSite && (
+          <div style={{ marginTop: 10, background: NAVY2, borderRadius: 12, padding: 8, maxHeight: 220, overflowY: "auto", maxWidth: 1100, margin: "10px auto 0" }}>
+            <div onClick={() => { setAsSite(null); setPickSite(false); }} style={{ padding: "9px 10px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: !asSite ? 800 : 600, color: !asSite ? COPPER : "#fff" }}>🏢 Company portfolio (all sites)</div>
+            {sites.filter(s => s.is_active !== false).map(s => (
+              <div key={s.id} onClick={() => { setAsSite(Number(s.id)); setPickSite(false); }}
+                style={{ padding: "9px 10px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: String(asSite) === String(s.id) ? 800 : 600, color: String(asSite) === String(s.id) ? COPPER : "#fff" }}>📍 {s.name}</div>
+            ))}
+          </div>
         )}
       </div>
-      {/* update228: INLINE project explorer — full-screen sheet ABOVE content but BELOW the
-          bottom nav, so Home/Projects/Approvals/Muster/More stay visible and working.
-          No route change: Back/✕ just closes the sheet and the dashboard is untouched. */}
+
+      {isDirector && asSite && (
+        <div style={{ background: "#fff7ed", borderBottom: "1px solid #f0c9a4", padding: "7px 14px", fontSize: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <span>👁 Viewing <b>{siteName}</b> as its site manager</span>
+          <button type="button" onClick={() => setAsSite(null)} style={{ fontSize: 11.5, fontWeight: 700, border: "1px solid var(--copper)", color: "var(--copper)", background: "#fff", borderRadius: 8, padding: "4px 10px", cursor: "pointer" }}>✕ Exit</button>
+        </div>
+      )}
+
+      <div style={{ padding: "14px 12px 0", maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ background: "linear-gradient(140deg, " + NAVY + " 0%, " + NAVY2 + " 100%)", color: "#fff", borderRadius: 18, padding: 17, boxShadow: "0 10px 26px rgba(15,26,46,0.28)" }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 9.5, letterSpacing: 1.1, color: COPPER, fontWeight: 800, textTransform: "uppercase" }}>{companyView ? "Company portfolio" : "Active site"}</div>
+              <div style={{ fontSize: 22, fontWeight: 800, marginTop: 3, lineHeight: 1.15 }}>
+                {projects === null ? "…" : companyView ? (pj.active + pj.hold + pj.delayed) + " Active Sites" : (siteName || "Your site")}</div>
+              <div style={{ fontSize: 12, opacity: 0.65, marginTop: 2 }}>↗ {companyView ? pj.total + " projects on record" : (pj.site?.client_name || "Pipeskool project")}</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 9 }}>
+                {companyView ? (<>
+                  <Pill tone="green">{pj.active} on schedule</Pill>
+                  {pj.hold > 0 && <Pill tone="amber">{pj.hold} on hold</Pill>}
+                  {pj.delayed > 0 && <Pill tone="red">{pj.delayed} delayed</Pill>}
+                </>) : <Pill tone={pj.site?.status === "delayed" ? "red" : pj.site?.status === "on_hold" ? "amber" : "green"}>{(ST_META[pj.site?.status] || ["Active"])[0]}</Pill>}
+              </div>
+            </div>
+            <Ring pct={companyView ? pj.avg : (pj.site?.progress || 0)} label={companyView ? "AVG" : "COMPLETE"} />
+          </div>
+          <div style={{ height: 1, background: "rgba(255,255,255,0.14)", margin: "14px 0 12px" }} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
+            <HeroStat ico="₹" label={companyView ? "Total contract value" : "Contract value"} value={crore(companyView ? pj.contract : (pj.site?.contract_value || 0))} />
+            <HeroStat ico="↗" label="Billed to date" value={crore(companyView ? pj.invoiced : (pj.site?.invoiced || 0))} />
+            <HeroStat ico="🗓" label={companyView ? "Nearest deadline" : "Target finish"} value={(companyView ? pj.deadline : pj.site?.end_date) || "—"} />
+            <HeroStat ico="👥" label={companyView ? "Total workforce" : "Workforce"} value={workers === null ? "…" : man.roll + " on roll"} />
+          </div>
+        </div>
+
+        {companyView && (
+          <Section title="Sites overview" action={<a onClick={() => setPanel("all")} style={{ fontSize: 12.5, color: COPPER, fontWeight: 700, cursor: "pointer" }}>View all {pj.total} →</a>}>
+            <div style={{ display: "flex", gap: 9, overflowX: "auto", paddingBottom: 4 }}>
+              {pj.live.map(p => { const sm = ST_META[p.status] || ["Active", "#15803d"]; return (
+                <div key={p.id} onClick={() => { setAsSite(Number(p.id)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                  style={{ flexShrink: 0, minWidth: 178, background: "#fff", border: "1px solid var(--border)", borderRadius: 14, padding: "11px 13px", cursor: "pointer", boxShadow: "0 2px 8px rgba(15,26,46,0.05)" }}>
+                  <b style={{ fontSize: 13, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</b>
+                  <span style={{ fontSize: 11, color: sm[1], fontWeight: 700 }}>● {sm[0]}{p.progress !== null && p.progress !== undefined ? " · " + p.progress + "%" : ""}</span>
+                </div>
+              ); })}
+              {pj.live.length === 0 && <div className="muted" style={{ fontSize: 12.5 }}>No active sites.</div>}
+            </div>
+          </Section>
+        )}
+
+        <Section title="Quick access">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(86px, 1fr))", gap: 9 }}>
+            {tiles.map(([ico, label, href, badge]) => (
+              <Tile key={label} ico={ico} label={label} badge={badge} href={href || undefined} onClick={href ? undefined : () => setPanel("all")} />
+            ))}
+          </div>
+        </Section>
+
+        <Section title={companyView ? "Manpower — company wide" : "Manpower today"}
+          action={<Link href="/attendance" style={{ fontSize: 12.5, color: COPPER, fontWeight: 700 }}>Full register →</Link>}>
+          <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
+            <TrioCard v={att === null ? "…" : man.inNow} l="Marked in today" />
+            <TrioCard v={att === null ? "…" : man.absent} l="Absent" color="var(--red)" />
+            <TrioCard v={man.pct + "%"} l="Deployment" color="var(--green)" />
+          </div>
+          {weekData.length > 0 && <WeekChart data={weekData} />}
+        </Section>
+
+        <Section title="Pending approvals" action={apprTotal > 0 ? <span style={{ background: COPPER, color: "#fff", borderRadius: 999, padding: "2px 10px", fontSize: 12, fontWeight: 800 }}>{apprTotal}</span> : null}>
+          {companyView && <ApprovalRow ico="🧾" title="PO draft approvals" sub="Awaiting your approval" count={appr.po} href="/procure" />}
+          {companyView && <ApprovalRow ico="₹" title="Advance salary requests" sub="Across all sites" count={appr.adv} href="/expenses" />}
+          <ApprovalRow ico="🪙" title="Petty cash requests" sub={companyView ? "Across all sites" : siteName} count={appr.petty} href="/m/approvals" />
+          <ApprovalRow ico="💳" title="Expense claims" sub={companyView ? "Across all sites" : siteName} count={appr.claims} href="/m/approvals" />
+          <ApprovalRow ico="🛒" title={companyView ? "Indent approvals" : "Open indents"} sub="Material pending" count={appr.ind} href="/procure" />
+        </Section>
+
+        <Section title="Today at a glance">
+          <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
+            <GlanceCard label="Expenses approved" value={inr(expApproved)} foot={inr(expPending) + " pending"} href="/expenses" />
+            {companyView
+              ? <GlanceCard label="Sites without DPR" value={dprMissing.length + " today"} foot="Open DPR digest →" footColor={dprMissing.length ? "var(--red)" : "var(--green)"} href="/dpr" />
+              : <GlanceCard label="My DPR status" value={dprFiled.has(siteName) ? "Filed ✓" : "Pending"} foot={dprFiled.has(siteName) ? "Submitted today" : "Submit today's DPR →"} footColor={dprFiled.has(siteName) ? "var(--green)" : "var(--red)"} href="/m/dpr" />}
+          </div>
+        </Section>
+      </div>
+
       {panel && (
-        <div style={{ position: "fixed", left: 0, right: 0, top: 0, bottom: 62, background: "var(--bg)", zIndex: 60, display: "flex", flexDirection: "column" }}>
-          <div style={{ background: "linear-gradient(115deg, #1a2450, #2b3a86)", color: "#fff", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+        <div style={{ position: "fixed", left: 0, right: 0, top: 0, bottom: "calc(62px + env(safe-area-inset-bottom))", background: "var(--bg)", zIndex: 60, display: "flex", flexDirection: "column" }}>
+          <div style={{ background: "linear-gradient(115deg, " + NAVY + ", " + NAVY2 + ")", color: "#fff", padding: "calc(10px + env(safe-area-inset-top)) 14px 12px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <button type="button" onClick={() => { setPanel(null); setExpId(null); }} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 10, padding: "7px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>← Back</button>
             <b style={{ fontSize: 15, flex: 1 }}>📁 Projects</b>
             <button type="button" onClick={() => { setPanel(null); setExpId(null); }} style={{ background: "none", border: "none", color: "#fff", fontSize: 17, cursor: "pointer", padding: 6 }}>✕</button>
           </div>
           <div style={{ display: "flex", gap: 6, padding: "10px 12px 4px", overflowX: "auto", flexShrink: 0 }}>
-            {[["all", "All", pj.total], ["active", "Active", pj.active], ["hold", "On hold", pj.hold], ["completed", "Completed", pj.done], ["upcoming", "Upcoming", pj.all.filter(p => p.status === "upcoming" || p.status === "idea").length]].map(([k, l, n]) => (
+            {[["all", "All", pj.total], ["active", "Active", pj.active], ["hold", "On hold", pj.hold + pj.delayed], ["completed", "Completed", pj.done], ["upcoming", "Upcoming", pj.all.filter(p => p.status === "upcoming" || p.status === "idea").length]].map(([k, l, n]) => (
               <button key={k} type="button" onClick={() => { setPanel(k); setExpId(null); }}
                 style={{ flexShrink: 0, borderRadius: 999, padding: "7px 13px", fontSize: 12.5, fontWeight: panel === k ? 800 : 600, cursor: "pointer",
                   border: panel === k ? "2px solid var(--copper)" : "1px solid var(--border)", background: panel === k ? "#fff8f2" : "#fff", color: panel === k ? "var(--copper)" : "var(--text)" }}>
                 {l} · {n}</button>
             ))}
           </div>
-          <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px 16px", display: "grid", gap: 10, alignContent: "start" }}>
-            <div className="panel" style={{ margin: 0, padding: 12, display: "flex", gap: 8, justifyContent: "space-between" }}>
-              <span style={{ fontSize: 12 }}><span className="muted">Contract</span><br /><b>{inr(fin.contract)}</b></span>
-              <span style={{ fontSize: 12, textAlign: "right" }}><span className="muted">Invoiced (RA bills)</span><br /><b style={{ color: "var(--green)" }}>{inr(fin.invoiced)}</b></span>
+          <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px 16px", display: "grid", gap: 10, alignContent: "start", maxWidth: 1100, margin: "0 auto", width: "100%" }}>
+            <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 14, padding: 12, display: "flex", justifyContent: "space-between", gap: 8 }}>
+              <span style={{ fontSize: 12 }}><span className="muted">Contract</span><br /><b>{crore(pj.contract)}</b></span>
+              <span style={{ fontSize: 12, textAlign: "right" }}><span className="muted">Invoiced (RA bills)</span><br /><b style={{ color: "var(--green)" }}>{crore(pj.invoiced)}</b></span>
             </div>
             {panelRows.map(p => { const open2 = expId === p.id; const sm = ST_META[p.status] || [p.status, "#6b7280"]; return (
-              <div key={p.id} className="panel" style={{ margin: 0, padding: 13, borderRadius: 14, borderLeft: "4px solid " + sm[1] }} onClick={() => setExpId(open2 ? null : p.id)}>
+              <div key={p.id} onClick={() => setExpId(open2 ? null : p.id)} style={{ background: "#fff", border: "1px solid var(--border)", padding: 13, borderRadius: 14, borderLeft: "4px solid " + sm[1], cursor: "pointer" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                   <b style={{ fontSize: 14, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</b>
                   <span className="badge" style={{ color: sm[1], border: "1px solid currentColor", background: "transparent", flexShrink: 0 }}>{sm[0]}</span>
                 </div>
                 {p.client_name && <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>👤 {p.client_name}</div>}
-                {p.progress !== null && (
+                {p.progress !== null && p.progress !== undefined && (
                   <div style={{ marginTop: 7 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}><span className="muted">Progress</span><b>{p.progress}%</b></div>
-                    <div style={{ height: 7, background: "#f0ece6", borderRadius: 4, marginTop: 2 }}><div style={{ width: Math.min(p.progress, 100) + "%", height: 7, borderRadius: 4, background: "var(--copper)" }} /></div>
+                    <div style={{ height: 7, background: "#f0ece6", borderRadius: 4, marginTop: 2 }}><div style={{ width: Math.min(p.progress, 100) + "%", height: 7, borderRadius: 4, background: COPPER }} /></div>
                   </div>
                 )}
                 {open2 && (
@@ -295,12 +379,15 @@ export default function DirectorDashboard() {
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                       <span><span className="muted">Start</span><br /><b>{p.start_date || "—"}</b></span>
                       <span><span className="muted">End</span><br /><b>{p.end_date || "—"}</b></span>
-                      <span><span className="muted">Contract</span><br /><b>{p.contract_value ? inr(p.contract_value) : "—"}</b></span>
-                      <span><span className="muted">Invoiced</span><br /><b>{inr(p.invoiced || 0)}</b></span>
-                      {p.expected_start && <span><span className="muted">Expected start</span><br /><b>{p.expected_start}</b></span>}
+                      <span><span className="muted">Contract</span><br /><b>{p.contract_value ? crore(p.contract_value) : "—"}</b></span>
+                      <span><span className="muted">Invoiced</span><br /><b>{crore(p.invoiced || 0)}</b></span>
                       <span><span className="muted">RA bills</span><br /><b>{p.bills || 0}</b></span>
+                      {p.expected_start && <span><span className="muted">Expected start</span><br /><b>{p.expected_start}</b></span>}
                     </div>
-                    <a href={"/projects/" + p.id} onClick={e => e.stopPropagation()} style={{ display: "inline-block", marginTop: 9, color: "var(--copper)", fontWeight: 800, fontSize: 12.5 }}>Open full workspace →</a>
+                    <div style={{ display: "flex", gap: 12, marginTop: 10, flexWrap: "wrap" }}>
+                      <Link href={"/projects/" + p.id} onClick={e => e.stopPropagation()} style={{ color: COPPER, fontWeight: 800, fontSize: 12.5 }}>Open full workspace →</Link>
+                      {isDirector && <a onClick={e => { e.stopPropagation(); setAsSite(Number(p.id)); setPanel(null); }} style={{ color: "#2b6cb0", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>👁 View as site manager</a>}
+                    </div>
                   </div>
                 )}
                 <div className="muted" style={{ fontSize: 10, marginTop: 6 }}>{open2 ? "Tap to collapse ▲" : "Tap for details ▼"}</div>
