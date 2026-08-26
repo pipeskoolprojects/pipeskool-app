@@ -31,7 +31,7 @@ const GROUPS = [
     ] },
   ] },
   { label: "Communication", items: [
-    { href: "/notices", label: "Notice Board", module: "notices" }, { href: "/tasks", label: "Tasks", module: null },
+    { href: "/notices", label: "Notice Board", module: "notices" },   // update230: Tasks removed from nav — tasks live on the Home dashboard
   ] },
   { label: "Commercial / Billing", items: [
     { href: "/boq", label: "BOQ Master", module: "billing" },
