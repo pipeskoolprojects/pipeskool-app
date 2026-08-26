@@ -10,7 +10,7 @@ export default function ProjectsPage() {
     <div className="layout">
       <Sidebar />
       <main className="main">
-        <Link href="/home?tab=projects" style={{ fontSize: 12.5, color: "var(--copper)", fontWeight: 700, textDecoration: "none" }}>← Home</Link>
+        <Link href="/home" style={{ fontSize: 12.5, color: "var(--copper)", fontWeight: 700, textDecoration: "none" }}>← Home</Link>
         <ProjectsView />
       </main>
     </div>

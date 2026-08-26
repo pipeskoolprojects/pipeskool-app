@@ -197,18 +197,7 @@ html.psk-nosb .main { padding-left: 76px; }
 .tasks-cols > * { min-width: 0; }
 
 /* ---------- update236: HOME TABS + DESKTOP APPROVALS ---------- */
-/* Home tab strip: sticky under the greeting bar so it is always reachable while a pane scrolls */
-.home-tabs { position: sticky; top: 0; z-index: 40; display: flex; gap: 6px;
-  padding: 10px 14px 0; background: var(--bg); border-bottom: 1px solid var(--border); overflow-x: auto; }
-.home-tabs button { flex-shrink: 0; border: none; background: transparent; border-bottom: 3px solid transparent;
-  border-radius: 0; padding: 9px 14px 10px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; }
-.home-tabs button:hover { background: transparent; color: var(--text); }
-.home-tabs button.active { color: var(--copper); border-bottom-color: var(--copper); font-weight: 800; }
-/* panes carry the padding the shell normally gives .main (which is padding:0 on /home) */
-.home-pane { padding: 20px 28px 28px; }
-/* inside a tab the page-head must not stick to the scroll container — the tab strip owns that */
-.home-pane .page-head { position: static; top: auto; margin: 0 0 14px; padding: 0; }
-@media (max-width: 760px) { .home-pane { padding: 16px; } }
+/* (update237: the .home-tabs strip and .home-pane wrappers were removed with the tab bar) */
 
 /* Desktop approvals: full width, cards in a responsive grid instead of a 430px strip */
 .appr-wrap { display: flex; flex-direction: column; width: 100%; }

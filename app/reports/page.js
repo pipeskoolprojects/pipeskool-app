@@ -10,7 +10,7 @@ export default function ReportsPage() {
     <div className="layout">
       <Sidebar />
       <main className="main">
-        <Link href="/home?tab=reports" style={{ fontSize: 12.5, color: "var(--copper)", fontWeight: 700, textDecoration: "none" }}>← Home</Link>
+        <Link href="/home" style={{ fontSize: 12.5, color: "var(--copper)", fontWeight: 700, textDecoration: "none" }}>← Home</Link>
         <ReportsView />
       </main>
     </div>
