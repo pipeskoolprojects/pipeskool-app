@@ -80,8 +80,12 @@ export default function Sidebar() {
   const [unreadNotices, setUnreadNotices] = useState(0);
   const [hidden, setHidden] = useState(false);
   useEffect(() => { if (session) getUnreadNoticeCount(session).then(setUnreadNotices); }, [session, path]);
-  useEffect(() => { try { const v = localStorage.getItem("psk_sidebar_hidden") === "1"; setHidden(v); document.documentElement.classList.toggle("psk-nosb", v); } catch {} }, []);
-  const toggleHidden = (v) => { setHidden(v); try { localStorage.setItem("psk_sidebar_hidden", v ? "1" : "0"); document.documentElement.classList.toggle("psk-nosb", v); } catch {} };
+  useEffect(() => { try {
+    const wide = window.innerWidth > 760;
+    const v = localStorage.getItem("psk_sidebar_hidden_v2") === "1" && wide ? true : (localStorage.getItem("psk_sidebar_hidden_v2") === "1");
+    setHidden(v); document.documentElement.classList.toggle("psk-nosb", v);
+  } catch {} }, []);
+  const toggleHidden = (v) => { setHidden(v); try { localStorage.setItem("psk_sidebar_hidden_v2", v ? "1" : "0"); document.documentElement.classList.toggle("psk-nosb", v); } catch {} };
 
   useEffect(() => {
     const s = getSession();
