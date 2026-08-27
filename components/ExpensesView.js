@@ -55,6 +55,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
     setPettyMsg("Request sent."); getPettyRequestQueue(scope).then(setPettyReqs);
   }
   const [claims, setClaims] = useState(null);
+  const [sel, setSel] = useState({});   // update247: expense ids chosen for a Cash Voucher
   const [petty, setPetty] = useState([]);
   const [advTotals, setAdvTotals] = useState({ taken: 0, rec: 0, out: 0 });   // update200: fed by AdvanceLedger
   // update200: compact overview — summary cards + collapsible module sections (nothing removed,
@@ -176,7 +177,18 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
     } },
   ];
 
+  // update247: pick claims -> print ONE Cash Voucher covering them all
+  const toggleSel = id => setSel(v => { const n = { ...v }; n[id] ? delete n[id] : (n[id] = true); return n; });
+  const selIds = Object.keys(sel);
+  const selRows = (claims || []).filter(r => sel[r.id]);
+  const selTotal = selRows.reduce((t, r) => t + Number(r.amount || 0), 0);
+  const selPayees = [...new Set(selRows.map(r => r.claimant_id))].length;
+  const openVoucher = () => window.open("/expenses/voucher?ids=" + selIds.join(","), "_blank", "noopener");
+
   const claimCols = [
+    { key: "_sel", label: "", sortable: false, exportValue: () => "",
+      render: r => <input type="checkbox" checked={!!sel[r.id]} onChange={() => toggleSel(r.id)}
+        title="Add to Cash Voucher" style={{ width: 15, height: 15, accentColor: "var(--copper)" }} /> },
     { key: "date", label: "Date", filter: "search" },
     { key: "claimant", label: "Claimant", filter: "select",
       render: r => <a style={{ fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }} title="View profile & history" onClick={() => openProfile(r.claimant_id, r.claimant)}>
@@ -458,6 +470,17 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
         </div>
 
         <div className={mtab === "claims" ? "money-sec" : undefined} style={{ display: mtab === "claims" ? "flex" : "none", overflowY: "auto" }}>
+          {/* update247: the voucher bar only appears once something is ticked */}
+          {selIds.length > 0 && (
+            <div className="note" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+              background: "var(--copper-soft)", border: "1px solid var(--copper)", marginBottom: 8, padding: "8px 12px" }}>
+              <b style={{ fontSize: 13 }}>{selIds.length} claim(s) selected · {inr(selTotal)}</b>
+              {selPayees > 1 && <span style={{ fontSize: 11.5, color: "var(--red)", fontWeight: 700 }}>
+                ⚠ more than one claimant — a voucher should cover one payee</span>}
+              <button className="primary" style={{ fontSize: 12.5, marginLeft: "auto" }} onClick={openVoucher}>🧾 Cash Voucher</button>
+              <button style={{ fontSize: 12.5 }} onClick={() => setSel({})}>Clear</button>
+            </div>
+          )}
           {!claims ? <div className="muted">Loading…</div> :
             <DataTable columns={claimCols} rows={claims} exportName="expense_claims" dateField="date" pageSize={10} fill />}
         </div>
