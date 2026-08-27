@@ -23,13 +23,21 @@ export default function WagesPage() {
   const [srows, setSrows] = useState(null);
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState("");   // update239: live progress during a bulk run
+  const [loadErr, setLoadErr] = useState("");   // update240: a failed READ, shown as an error not as emptiness
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
   const sess = typeof window !== "undefined" ? getSession() : null;
   const canApprove = sess && (sess.role === "director" || sess.role === "ho_admin");
 
   const filt = rs => (rs || []).filter(r => !wq || (r.worker || r.name || "").toLowerCase().includes(wq.toLowerCase()));
 
-  const load = () => { getPayouts(month, site).then(setRows); getStaffPayouts(month).then(setSrows); };
+  // update240: a FAILED read must never render as "no data". Before this, getStaffPayouts()
+  // threw its error away and returned [], so a broken query and an empty month looked
+  // identical — which is how "16 rows saved" could sit above "no rows exist".
+  const load = () => {
+    getPayouts(month, site).then(setRows).catch(e => { setRows([]); setLoadErr("Could not load labour payroll: " + (e?.message || e)); });
+    getStaffPayouts(month).then(r => { setSrows(r); setLoadErr(""); })
+      .catch(e => { setSrows([]); setLoadErr("Could not load staff salary: " + (e?.message || e)); });
+  };
   useEffect(() => { getSites().then(setSites); }, []);
   useEffect(() => { setRows(null); load(); setMsg(""); setErr(""); }, [month, site]);
 
@@ -120,6 +128,7 @@ export default function WagesPage() {
         {isDemo && <div className="demo-banner">Demo mode — payroll needs a live database.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
         {err && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
+        {loadErr && <div className="note red" style={{ marginBottom: 12 }}>⚠ {loadErr}</div>}
 
         {tab === "labour" && <div className="panel">
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
