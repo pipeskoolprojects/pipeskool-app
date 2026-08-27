@@ -117,11 +117,14 @@ export default function Sidebar() {
   const showDash = canSee("dashboard");
 
 
+  // update243: embedded FIRST. When this renders inside an embedded view the page owns the
+  // chrome, so nothing here should paint — not even the collapsed-sidebar ☰ button, which
+  // used to leak into every embedded tab once you collapsed the sidebar.
+  if (embedded) return null;
+
   if (hidden) return (
     <><button className="sidebar-show" title="Show menu" onClick={() => toggleHidden(false)}>☰</button><Assistant /></>
   );
-
-  if (embedded) return null;
 
   return (
     <><aside className="sidebar">
