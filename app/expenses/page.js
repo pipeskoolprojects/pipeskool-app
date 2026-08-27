@@ -103,10 +103,17 @@ export default function ExpensesPage() {
   // update238: one gate for every approval action on this page — identical rule to the
   // Approvals inbox and to the RLS policies behind it.
   const canApprMoney = canApprove(session, "money");
-  async function actAdv(id, status) {
+  // update242: an advance can now be revised or withdrawn AFTER approval, not only decided once
+  async function actAdv(id, status, amount) {
     let note = null;
     if (status === "queried") { note = prompt("Query to send back:"); if (!note) return; }
-    await reviewAdvance(id, status, note, session?.id); setMsg("Updated."); load();
+    const res = await reviewAdvance(id, status, note, session?.id, amount);
+    if (!res.ok) { setAdvErr(res.error); setMsg(""); return; }
+    setAdvErr("");
+    setMsg(res.revised ? `Approval revised to ${inr(res.amount)} (asked ${inr(res.requested)}).`
+         : res.withdrawn ? "Approval withdrawn \u2014 nothing will be deducted from salary for it."
+         : status === "approved" ? `Approved ${inr(res.amount)}.` : "Updated.");
+    load();
   }
   async function actClaim(id, status) {
     let note = null;
@@ -124,7 +131,10 @@ export default function ExpensesPage() {
     { key: "site", label: "Site", filter: "select" },
     { key: "reason", label: "Reason",
       render: r => <span className="muted"><span className="clamp2" title={r.reason || ""}>{r.reason || "—"}</span>{r.response && <div className="clamp2" title={r.response} style={{ color: "var(--green)" }}>↩ {r.response}</div>}{r.status === "queried" && r.query && <div className="clamp2" title={r.query} style={{ color: "var(--amber)" }}>❓ {r.query}</div>}</span> },
-    { key: "amount", label: "Amount", type: "num", render: r => <b>{inr(r.amount)}</b>, exportValue: r => r.amount },
+    { key: "amount", label: "Amount", type: "num", exportValue: r => r.approved_amount ?? r.amount,
+      render: r => (r.approved_amount != null && Number(r.approved_amount) !== Number(r.amount))
+        ? <span><b>{inr(r.approved_amount)}</b><div className="muted" style={{ fontSize: 10.5 }}>asked {inr(r.amount)}</div></span>
+        : <b>{inr(r.amount)}</b> },
     { key: "bank_on_file", label: "Bank", filter: "select", optionLabel: o => o ? "On file" : "Missing", render: r => r.bank_on_file ? <span className="badge p">On file</span> : <span className="badge warn">⚠ Missing</span>, exportValue: r => r.bank_on_file ? "On file" : "Missing" },
     { key: "status", label: "Status", filter: "select", render: r => r.status === "approved" ? <span className="badge p">Approved</span> : r.status === "rejected" ? <span className="badge a">Rejected</span> : r.status === "queried" ? <span className="badge h">Queried</span> : <span className="badge gray">Pending</span> },
     { key: "approved_on", label: "Appr. date", render: r => <span className="muted">{r.approved_on || "—"}</span> },
@@ -136,12 +146,31 @@ export default function ExpensesPage() {
           {r.posted ? <span className="badge p">Posted</span> : <span className="badge gray">Mark posted</span>}
         </label>) : <span className="muted">—</span>,
       exportValue: r => r.posted ? "Posted" : "" },
-    { key: "_action", label: "Action", sortable: false, render: r => canApprMoney && (r.status === "pending" || r.status === "queried") ? (
-      <span style={{ whiteSpace: "nowrap" }}>
-        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actAdv(r.id, "approved")}>✓</button>
-        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actAdv(r.id, "queried")}>?</button>
-        <button style={{ fontSize: 11.5 }} onClick={() => actAdv(r.id, "rejected")}>✕</button>
-      </span>) : <span className="muted" style={{ fontSize: 11.5 }}>Done</span> },
+    // update242: approved and rejected rows are no longer dead ends — same controls petty
+    // cash has had since 194. A PAID advance is refused by fn_review_advance, not here.
+    { key: "_action", label: "Action", sortable: false, render: r => {
+      if (!canApprMoney) return <span className="muted" style={{ fontSize: 11.5 }}>—</span>;
+      if (r.status === "pending" || r.status === "queried") return (
+        <span style={{ whiteSpace: "nowrap" }}>
+          <button style={{ fontSize: 11.5, marginRight: 4 }} title="Approve in full" onClick={() => actAdv(r.id, "approved")}>✓</button>
+          <button style={{ fontSize: 11.5, marginRight: 4 }} title="Approve a different amount"
+            onClick={() => { const v = window.prompt(`Approve how much for ${r.beneficiary_name}? (asked \u20b9${r.amount})`, String(r.amount)); if (v != null && v !== "") actAdv(r.id, "approved", v); }}>✎</button>
+          <button style={{ fontSize: 11.5, marginRight: 4 }} title="Send back with a question" onClick={() => actAdv(r.id, "queried")}>?</button>
+          <button style={{ fontSize: 11.5 }} title="Reject" onClick={() => actAdv(r.id, "rejected")}>✕</button>
+        </span>);
+      if (r.status === "approved") return (
+        <span style={{ whiteSpace: "nowrap" }}>
+          <button style={{ fontSize: 11.5, marginRight: 4 }} title="Approve a different amount"
+            onClick={() => { const v = window.prompt(`Revised approved amount for ${r.beneficiary_name} \u20b9 (asked \u20b9${r.amount}):`, String(r.approved_amount ?? r.amount)); if (v != null && v !== "") actAdv(r.id, "approved", v); }}>✎ Change amount</button>
+          <button style={{ fontSize: 11.5, color: "var(--red)" }} title="Withdraw this approval"
+            onClick={() => { if (window.confirm(`Withdraw this approval?\n\n${r.beneficiary_name} \u2014 \u20b9${r.approved_amount ?? r.amount}\n\nIt goes back to Pending and will NOT be deducted from salary. Regenerate that month's payroll afterwards.`)) actAdv(r.id, "rejected"); }}>Undo approval</button>
+        </span>);
+      return (
+        <span style={{ whiteSpace: "nowrap" }}>
+          <button style={{ fontSize: 11.5 }} title="Approve after all"
+            onClick={() => { const v = window.prompt(`Approve amount for ${r.beneficiary_name} \u20b9 (asked \u20b9${r.amount}):`, String(r.amount)); if (v != null && v !== "") actAdv(r.id, "approved", v); }}>Approve…</button>
+        </span>);
+    } },
   ];
 
   const claimCols = [
@@ -384,6 +413,8 @@ export default function ExpensesPage() {
         </div>
 
         <div className={mtab === "advreq" ? "money-sec" : undefined} style={{ display: mtab === "advreq" ? "flex" : "none", overflowY: "auto" }}>
+          {/* update242: review failures (e.g. "already marked PAID") must be visible, not swallowed */}
+          {advErr && <div className="note red" style={{ marginBottom: 8 }}>⚠ {advErr}</div>}
           {/* update217: the standalone page-top form moved here, collapsed behind one button */}
           {session && canAnySite(session, "money", "create") && <div style={{ flexShrink: 0, marginBottom: 8 }}>
             {!showAdvForm ? (
