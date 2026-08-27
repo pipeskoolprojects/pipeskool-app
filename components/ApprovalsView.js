@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
+import { approvalRights } from "@/lib/perms";
 import {
   getPettyRequestQueue, reviewPettyRequest,
   getExpenseClaimQueue, reviewExpenseClaim,
@@ -35,6 +36,15 @@ const TYPES = [
 ];
 
 // stable top-level (update204: inline component defs remount their subtree every render)
+// update238: read-only marker for view_all_money holders (Accountant / IT Executive).
+// They see the pending record; they never get an action.
+function ViewOnly({ inline }) {
+  return <span className="muted" style={{ fontSize: 11.5, fontWeight: 600, marginTop: inline ? 0 : 8, display: inline ? "inline" : "block" }}>👁 View only · awaiting Director</span>;
+}
+
+// update238: which module right each inbox section belongs to (module scope, one map)
+const RIGHT_OF = { petty: "moneyView", expense: "moneyView", advance: "moneyView", return: "moneyView", leave: "leave", po: "indent", item: "stock" };
+
 function Sec({ visible, title, count, grid, children }) {
   return (visible && count > 0) ? (
     <div style={{ marginBottom: 14 }}>
@@ -48,7 +58,16 @@ export default function ApprovalsView({ mode = "mobile" }) {
   const desk = mode === "desk";
   const cardS = desk ? { ...card, marginBottom: 0 } : card;
   const sess = typeof window !== "undefined" ? getSession() : null;
-  useEffect(() => { if (typeof window !== "undefined" && !getSession()) window.location.replace(desk ? "/login" : "/m"); }, []);
+  // update238: ONE rights object, from lib/perms — the same question every other screen asks.
+  const rights = approvalRights(sess);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const s = getSession();
+    if (!s) { window.location.replace(desk ? "/login" : "/m"); return; }
+    // route guard: a direct hit on /approvals or /m/approvals by someone with no approval
+    // right goes home. The DB refuses them anyway; this stops the empty-screen confusion.
+    if (!approvalRights(s).open) window.location.replace(desk ? "/home" : "/m/dashboard");
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [data, setData] = useState(null);   // { petty, expense, advance, leave, ret, items }
   const [type, setType] = useState("all");
   const [site, setSite] = useState("all");
@@ -59,14 +78,16 @@ export default function ApprovalsView({ mode = "mobile" }) {
   const [viewer, setViewer] = useState(null); // { urls, idx, title }
 
   const load = async () => {
+    // update238: do not even ASK for a queue the person cannot act on
+    const none = () => Promise.resolve([]);
     const [petty, expense, advance, leave, ret, items, pos] = await Promise.all([
-      getPettyRequestQueue().then(rs => rs.filter(r => r.status === "pending")),
-      getExpenseClaimQueue().then(rs => rs.filter(r => r.status === "pending")),
-      getAdvanceQueue().then(rs => rs.filter(r => r.status === "pending")),
-      getApprovalQueue().catch(() => []),
-      getPettyReturnQueue().catch(() => []),
-      listPendingItems().catch(() => []),
-      getPOs("all").then(ps => ps.filter(p => p.approval === "pending" && p.status !== "cancelled")).catch(() => []),
+      rights.moneyView ? getPettyRequestQueue().then(rs => rs.filter(r => r.status === "pending")) : none(),
+      rights.moneyView ? getExpenseClaimQueue().then(rs => rs.filter(r => r.status === "pending")) : none(),
+      rights.moneyView ? getAdvanceQueue().then(rs => rs.filter(r => r.status === "pending")) : none(),
+      rights.leave ? getApprovalQueue().catch(() => []) : none(),
+      rights.moneyView ? getPettyReturnQueue().catch(() => []) : none(),
+      rights.stock ? listPendingItems().catch(() => []) : none(),
+      rights.indent ? getPOs("all").then(ps => ps.filter(p => p.approval === "pending" && p.status !== "cancelled")).catch(() => []) : none(),
     ]);
     setData({ petty, expense, advance, leave, ret, items, pos });
   };
@@ -121,7 +142,7 @@ export default function ApprovalsView({ mode = "mobile" }) {
         {isDemo && <div className="note amber">Demo mode.</div>}
         <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 6 }}>
           <button style={{ ...btn, background: type === "all" ? "var(--copper)" : "#fff", color: type === "all" ? "#fff" : "var(--text)" }} onClick={() => setType("all")}>All {data ? `(${total})` : ""}</button>
-          {TYPES.map(([k, l]) => { const n = data ? ({ petty: data.petty, expense: data.expense, advance: data.advance, leave: data.leave, return: data.ret, item: data.items, po: data.pos || [] })[k].length : 0; return n > 0 && (
+          {TYPES.map(([k, l]) => { const n = data && RIGHT_OF[k] && rights[RIGHT_OF[k]] ? ({ petty: data.petty, expense: data.expense, advance: data.advance, leave: data.leave, return: data.ret, item: data.items, po: data.pos || [] })[k].length : 0; return n > 0 && (
             <button key={k} style={{ ...btn, whiteSpace: "nowrap", background: type === k ? "var(--copper)" : "#fff", color: type === k ? "#fff" : "var(--text)" }} onClick={() => setType(type === k ? "all" : k)}>{l} ({n})</button>
           ); })}
         </div>
@@ -135,52 +156,58 @@ export default function ApprovalsView({ mode = "mobile" }) {
         {err && <div className="note red">{err}</div>}
         {!data ? <div className="muted">Loading…</div> : total === 0 ? <div className="note green">Nothing pending. Enjoy the site rounds 🚧</div> : (
           <>
-            <Sec grid={desk} visible={show("petty")} title="Petty cash requests" count={data.petty.filter(bySite).length}>
+            <Sec grid={desk} visible={rights.moneyView && show("petty")} title="Petty cash requests" count={data.petty.filter(bySite).length}>
               {data.petty.filter(bySite).map(r => (
                 <div key={r.id} style={cardS}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                     <div><b>{r.requester}</b> · {r.site}<div className="muted" style={{ fontSize: 12 }}>{r.purpose || "—"}{r.required_date ? ` · needs by ${r.required_date}` : ""} · waiting {age(r.date)}</div></div>
                     <div style={{ fontWeight: 800, fontSize: 16, whiteSpace: "nowrap" }}>{inr(r.amount)}</div>
                   </div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                    <button style={okBtn} disabled={busyId === r.id} onClick={() => confirmSheet("petty", r, "approved", true)}>✓ Approve</button>
-                    <button style={noBtn} disabled={busyId === r.id} onClick={() => confirmSheet("petty", r, "rejected")}>✕ Reject</button>
-                  </div>
+                  {rights.money ? (
+                    <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                      <button style={okBtn} disabled={busyId === r.id} onClick={() => confirmSheet("petty", r, "approved", true)}>✓ Approve</button>
+                      <button style={noBtn} disabled={busyId === r.id} onClick={() => confirmSheet("petty", r, "rejected")}>✕ Reject</button>
+                    </div>
+                  ) : <ViewOnly />}
                 </div>
               ))}
             </Sec>
-            <Sec grid={desk} visible={show("expense")} title="Expense claims" count={data.expense.filter(bySite).length}>
+            <Sec grid={desk} visible={rights.moneyView && show("expense")} title="Expense claims" count={data.expense.filter(bySite).length}>
               {data.expense.filter(bySite).map(r => (
                 <div key={r.id} style={cardS}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                     <div><b>{r.claimant}</b> · {r.site}<div className="muted" style={{ fontSize: 12 }}>{r.category} · {r.paid_to || "—"}{r.note ? ` · ${r.note}` : ""} · {r.funding_source === "petty_cash" ? "Petty cash" : "Own pocket"} · {r.date}</div></div>
                     <div style={{ fontWeight: 800, fontSize: 16, whiteSpace: "nowrap" }}>{inr(r.amount)}</div>
                   </div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
                     {r.bills?.length > 0 && <button style={btn} onClick={() => openBills(r.bills, `${r.claimant} · ${inr(r.amount)}`)}>📎 Bills ({r.bills.length})</button>}
-                    <button style={okBtn} disabled={busyId === r.id} onClick={() => confirmSheet("expense", r, "approved")}>✓ Approve</button>
-                    <button style={noBtn} disabled={busyId === r.id} onClick={() => confirmSheet("expense", r, "rejected")}>✕ Reject</button>
-                    <button style={btn} disabled={busyId === r.id} onClick={() => confirmSheet("expense", r, "query")}>❓ Query</button>
+                    {rights.money ? (<>
+                      <button style={okBtn} disabled={busyId === r.id} onClick={() => confirmSheet("expense", r, "approved")}>✓ Approve</button>
+                      <button style={noBtn} disabled={busyId === r.id} onClick={() => confirmSheet("expense", r, "rejected")}>✕ Reject</button>
+                      <button style={btn} disabled={busyId === r.id} onClick={() => confirmSheet("expense", r, "query")}>❓ Query</button>
+                    </>) : <ViewOnly inline />}
                   </div>
                 </div>
               ))}
             </Sec>
-            <Sec grid={desk} visible={show("advance")} title="Salary advances" count={data.advance.filter(bySite).length}>
+            <Sec grid={desk} visible={rights.moneyView && show("advance")} title="Salary advances" count={data.advance.filter(bySite).length}>
               {data.advance.filter(bySite).map(r => (
                 <div key={r.id} style={cardS}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                     <div><b>{r.beneficiary_name}</b> <span className="muted">({r.beneficiary_kind})</span> · {r.site}<div className="muted" style={{ fontSize: 12 }}>{r.reason || "—"} · {r.bank_on_file ? "🏦 bank on file" : "⚠ no bank details"} · waiting {age(r.date)}</div></div>
                     <div style={{ fontWeight: 800, fontSize: 16, whiteSpace: "nowrap" }}>{inr(r.amount)}</div>
                   </div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                    <button style={okBtn} disabled={busyId === r.id} onClick={() => confirmSheet("advance", r, "approved")}>✓ Approve</button>
-                    <button style={noBtn} disabled={busyId === r.id} onClick={() => confirmSheet("advance", r, "rejected")}>✕ Reject</button>
-                    <button style={btn} disabled={busyId === r.id} onClick={() => confirmSheet("advance", r, "query")}>❓ Query</button>
-                  </div>
+                  {rights.money ? (
+                    <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                      <button style={okBtn} disabled={busyId === r.id} onClick={() => confirmSheet("advance", r, "approved")}>✓ Approve</button>
+                      <button style={noBtn} disabled={busyId === r.id} onClick={() => confirmSheet("advance", r, "rejected")}>✕ Reject</button>
+                      <button style={btn} disabled={busyId === r.id} onClick={() => confirmSheet("advance", r, "query")}>❓ Query</button>
+                    </div>
+                  ) : <ViewOnly />}
                 </div>
               ))}
             </Sec>
-            <Sec grid={desk} visible={show("leave")} title="Leave requests" count={data.leave.length}>
+            <Sec grid={desk} visible={rights.leave && show("leave")} title="Leave requests" count={data.leave.length}>
               {data.leave.map(r => (
                 <div key={r.id} style={cardS}>
                   <div><b>{r.staff_name}</b> <span className="muted">({r.app_users?.role})</span>
@@ -194,21 +221,23 @@ export default function ApprovalsView({ mode = "mobile" }) {
                 </div>
               ))}
             </Sec>
-            <Sec grid={desk} visible={show("return")} title="Petty cash returns — confirm cash received" count={data.ret.filter(bySite).length}>
+            <Sec grid={desk} visible={rights.moneyView && show("return")} title="Petty cash returns — confirm cash received" count={data.ret.filter(bySite).length}>
               {data.ret.filter(bySite).map(r => (
                 <div key={r.id} style={cardS}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                     <div><b>{r.holder}</b> · {r.site}<div className="muted" style={{ fontSize: 12 }}>{r.note || "cash handed back"} · {r.date}</div></div>
                     <div style={{ fontWeight: 800, fontSize: 16 }}>{inr(r.amount)}</div>
                   </div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                    <button style={okBtn} disabled={busyId === r.id} onClick={() => confirmSheet("return", r, "confirmed")}>✔ Received</button>
-                    <button style={noBtn} disabled={busyId === r.id} onClick={() => confirmSheet("return", r, "rejected")}>✕ Not received</button>
-                  </div>
+                  {rights.money ? (
+                    <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                      <button style={okBtn} disabled={busyId === r.id} onClick={() => confirmSheet("return", r, "confirmed")}>✔ Received</button>
+                      <button style={noBtn} disabled={busyId === r.id} onClick={() => confirmSheet("return", r, "rejected")}>✕ Not received</button>
+                    </div>
+                  ) : <ViewOnly />}
                 </div>
               ))}
             </Sec>
-            <Sec grid={desk} visible={show("po")} title="Purchase orders awaiting approval" count={(data.pos || []).length}>
+            <Sec grid={desk} visible={rights.indent && show("po")} title="Purchase orders awaiting approval" count={(data.pos || []).length}>
               {(data.pos || []).map(r => (
                 <div key={r.id} style={cardS}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
@@ -222,7 +251,7 @@ export default function ApprovalsView({ mode = "mobile" }) {
                 </div>
               ))}
             </Sec>
-            <Sec grid={desk} visible={show("item")} title="New items awaiting review" count={data.items.length}>
+            <Sec grid={desk} visible={rights.stock && show("item")} title="New items awaiting review" count={data.items.length}>
               {data.items.map(r => (
                 <div key={r.id} style={cardS}>
                   <div><b>{r.display_name}</b><div className="muted" style={{ fontSize: 12 }}>{r.item_type}{r.unit ? ` · ${r.unit}` : ""} · quick-added at site</div></div>

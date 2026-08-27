@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
+import { approvalRights } from "@/lib/perms";
 import { getSites, getAttendance, getWorkers } from "@/lib/data";
 import { getProjects } from "@/lib/projects";
 import { getPettyRequestQueue, getAdvanceQueue, getExpenseClaimQueue, inr } from "@/lib/money";
@@ -184,6 +185,8 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const isDirector = sess?.role === "director";
+  // update238: same rights object the Approvals inbox uses — no second opinion on this page
+  const rights = approvalRights(sess);
   const viewSiteId = isDirector ? asSite : (sess?.currentSite || sess?.sites?.[0]?.id || null);
   const companyView = isDirector && !asSite;
 
@@ -254,7 +257,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
     if (companyView) {
       out.push({ ico: "🧾", name: "PO draft approvals", tag: "Daily", desc: "Review and approve pending purchase orders",
         stats: [["Pending", appr.po]], done: appr.po === 0, href: "/procure", cta: "Review POs" });
-      out.push({ ico: "✅", name: "Approvals sweep", tag: "Daily", desc: "Petty cash · expenses · advances",
+      if (rights.money) out.push({ ico: "✅", name: "Approvals sweep", tag: "Daily", desc: "Petty cash · expenses · advances",
         stats: [["Petty", appr.petty], ["Claims", appr.claims], ["Adv", appr.adv]], done: appr.petty + appr.claims + appr.adv === 0, href: R("/m/approvals", "/approvals"), cta: "View approvals" });
       out.push({ ico: "📋", name: "Site reports follow-up", tag: "Daily", desc: "Sites without today's DPR",
         stats: [["Missing", dprMissing.length]], done: dprMissing.length === 0, href: "/dpr", cta: "DPR digest" });
@@ -267,12 +270,14 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
         stats: [["Open", appr.ind]], done: appr.ind === 0, href: "/procure", cta: "Review indents" });
     }
     return out;
-  }, [sess, companyView, appr, dprMissing, man, siteName]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sess, companyView, appr, dprMissing, man, siteName, rights.money]);   // eslint-disable-line react-hooks/exhaustive-deps
   const taskPending = autoTasks.filter(t => !t.done).length + myTasks.filter(t => t.status !== "completed").length;
 
-  const dirTiles = [["✅", "Approvals", R("/m/approvals", "/approvals"), apprTotal], ["💰", "Finance", "/expenses", 0], ["📊", "Analytics", R("/m/report", "/reports"), 0], ["🏗", "All Sites", null, 0],
+  // update238: view_all_money holders get the tile too — read-only inbox, no actions inside
+  const apprTile = rights.open ? [["✅", "Approvals", R("/m/approvals", "/approvals"), apprTotal]] : [];
+  const dirTiles = [...apprTile, ["💰", "Finance", "/expenses", 0], ["📊", "Analytics", R("/m/report", "/reports"), 0], ["🏗", "All Sites", null, 0],
     ["🏢", "Vendors", "/vendors", 0], ["👥", "Team & HR", "/workers", 0], ["🗒", "Assign Task", "/tasks", 0], ["⚙", "Admin", "/admin", 0]];
-  const staffTiles = [["📁", "Projects", null, 0], ["👷", "Muster", R("/m/muster", "/attendance"), 0], ["✅", "Approvals", R("/m/approvals", "/approvals"), apprTotal], ["📦", "Stock", R("/m/stock", "/stock"), 0],
+  const staffTiles = [["📁", "Projects", null, 0], ["👷", "Muster", R("/m/muster", "/attendance"), 0], ...apprTile, ["📦", "Stock", R("/m/stock", "/stock"), 0],
     ["💳", "Expenses", R("/m/money", "/expenses"), appr.claims], ["🗒", "Tasks", null, 0], ["📋", "Reports", R("/m/report", "/reports"), 0], ["🛒", "Indents", "/procure", appr.ind]];
   const tiles = companyView ? dirTiles : staffTiles;
 
@@ -385,13 +390,17 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
           {weekData.length > 0 && <WeekChart data={weekData} />}
         </Section>
 
-        <Section title="Pending approvals" action={apprTotal > 0 ? <span style={{ background: COPPER, color: "#fff", borderRadius: 999, padding: "2px 10px", fontSize: 12, fontWeight: 800 }}>{apprTotal}</span> : null}>
-          {companyView && <ApprovalRow ico="🧾" title="PO draft approvals" sub="Awaiting your approval" count={appr.po} href="/procure" />}
-          {companyView && <ApprovalRow ico="₹" title="Advance salary requests" sub="Across all sites" count={appr.adv} href="/expenses" />}
-          <ApprovalRow ico="🪙" title="Petty cash requests" sub={companyView ? "Across all sites" : siteName} count={appr.petty} href={R("/m/approvals", "/approvals")} />
-          <ApprovalRow ico="💳" title="Expense claims" sub={companyView ? "Across all sites" : siteName} count={appr.claims} href={R("/m/approvals", "/approvals")} />
-          <ApprovalRow ico="🛒" title={companyView ? "Indent approvals" : "Open indents"} sub="Material pending" count={appr.ind} href="/procure" />
-        </Section>
+        {/* update238: each row appears only if this person may actually act on it. Open indents
+            is NOT an approval — it is a work queue — so it stays for everyone who sees indents. */}
+        {(rights.open || appr.ind > 0) && (
+          <Section title={rights.any ? "Pending approvals" : rights.moneyView ? "Pending approvals · view only" : "Pending with you"} action={apprTotal > 0 && rights.open ? <span style={{ background: COPPER, color: "#fff", borderRadius: 999, padding: "2px 10px", fontSize: 12, fontWeight: 800 }}>{apprTotal}</span> : null}>
+            {companyView && rights.indent && <ApprovalRow ico="🧾" title="PO draft approvals" sub="Awaiting your approval" count={appr.po} href="/procure" />}
+            {companyView && rights.moneyView && <ApprovalRow ico="₹" title="Advance salary requests" sub="Across all sites" count={appr.adv} href="/expenses" />}
+            {rights.moneyView && <ApprovalRow ico="🪙" title="Petty cash requests" sub={companyView ? "Across all sites" : siteName} count={appr.petty} href={R("/m/approvals", "/approvals")} />}
+            {rights.moneyView && <ApprovalRow ico="💳" title="Expense claims" sub={companyView ? "Across all sites" : siteName} count={appr.claims} href={R("/m/approvals", "/approvals")} />}
+            <ApprovalRow ico="🛒" title={companyView && rights.indent ? "Indent approvals" : "Open indents"} sub="Material pending" count={appr.ind} href="/procure" />
+          </Section>
+        )}
 
         {showPageCards && (
           <Section title="Go to">
