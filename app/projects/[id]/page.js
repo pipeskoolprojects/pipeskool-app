@@ -9,12 +9,14 @@ import { isDemo } from "@/lib/supabase";
 import { getSession, setCurrentSite } from "@/lib/auth";
 import { inr } from "@/lib/money";
 import { getProjects, stMeta, getProjectDocs, uploadProjectDoc, projectDocUrl, deleteProjectDoc, getTasks, addTask, toggleTask } from "@/lib/projects";
+import ProcureView from "@/components/ProcureView";
 
 const MODULES = [   // update207: every module renders INSIDE this page as a tab (embedded view, ?site scoped)
   ["overview", "🏠", "Overview", null],
   ["attendance", "👷", "Attendance & Labour", "/attendance"],
-  ["procure", "🛒", "Procurement / Indents", "/procure"],
-  ["po", "📄", "Purchase Orders", "/procure"],
+  // update243: these two are rendered INLINE (see INLINE below) — no iframe, no shared page.
+  ["procure", "🛒", "Procurement / Indents", null],
+  ["po", "📄", "Purchase Orders", null],
   ["stock", "📦", "Stock", "/stock"],
   ["grn", "🧾", "GRN / Challan", "/stock/grn"],
   ["dpr", "📋", "DPR", "/dpr"],
@@ -117,6 +119,19 @@ export default function ProjectWorkspace() {
         <div className="muted no-print" style={{ fontSize: 11.5, marginBottom: 8 }}>
           Everything for <b>{p.name}</b> lives on this page — switching tabs never navigates away; each tab loads only this project's data (its own filters, search and exports work as usual, and the site dropdown inside can widen the view deliberately).
         </div>
+
+        {/* update243: de-iframed tabs. The view component receives siteId as a PROP, so it
+            cannot show another project's data, and `only` splits it to match the two tabs. */}
+        {visited.procure && (
+          <div style={{ display: tab === "procure" ? "block" : "none" }}>
+            <ProcureView siteId={siteId} only="indents" showHead={false} />
+          </div>
+        )}
+        {visited.po && (
+          <div style={{ display: tab === "po" ? "block" : "none" }}>
+            <ProcureView siteId={siteId} only="po" showHead={false} />
+          </div>
+        )}
 
         {MODULES.filter(m => m[3] && visited[m[0]]).map(([key, , label, href]) => (
           <div key={key} style={{ display: tab === key ? "block" : "none" }}>
