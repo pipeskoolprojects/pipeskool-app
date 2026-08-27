@@ -328,22 +328,27 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
 
 
         <div style={fullView ? { position: "fixed", inset: 0, zIndex: 92, background: "var(--bg)", padding: "10px 14px", display: "flex", flexDirection: "column" } : { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, borderBottom: "2px solid var(--border)", margin: "2px 0 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, borderBottom: embedded ? "none" : "2px solid var(--border)", margin: "2px 0 0", flexWrap: embedded ? "wrap" : "nowrap" }}>
           {/* update216b: the tab strip scrolls; the ⛶ button lives OUTSIDE it in a pinned slot,
               so it can never be scrolled away, clipped, or overlapped at any width or zoom. */}
           <div style={{ flex: 1, minWidth: 0, display: "flex", gap: 2, overflowX: "auto", whiteSpace: "nowrap" }}>
             {MT.map(([k, ic, l, cnt]) => { const n = cnt(); return (
               <button key={k} type="button" onClick={() => setMtab(k)}
-                style={{ border: "none", background: "none", padding: "9px 12px", fontSize: 12.5, cursor: "pointer", flexShrink: 0,
-                  fontWeight: mtab === k ? 800 : 600, color: mtab === k ? "var(--copper)" : "var(--text)",
-                  borderBottom: mtab === k ? "3px solid var(--copper)" : "3px solid transparent" }}>
+                style={embedded
+                  ? { flexShrink: 0, borderRadius: 999, padding: "6px 13px", fontSize: 12.5, cursor: "pointer", margin: "6px 3px",
+                      border: mtab === k ? "2px solid var(--copper)" : "1px solid var(--border)",
+                      background: mtab === k ? "#fff8f2" : "#fff", color: mtab === k ? "var(--copper)" : "var(--text)",
+                      fontWeight: mtab === k ? 800 : 600 }
+                  : { border: "none", background: "none", padding: "9px 12px", fontSize: 12.5, cursor: "pointer", flexShrink: 0,
+                      fontWeight: mtab === k ? 800 : 600, color: mtab === k ? "var(--copper)" : "var(--text)",
+                      borderBottom: mtab === k ? "3px solid var(--copper)" : "3px solid transparent" }}>
                 {ic} {l}{n !== null && n > 0 && <span className="badge gray" style={{ marginLeft: 6, fontSize: 10.5 }}>{n}</span>}
               </button>
             ); })}
           </div>
-          <button type="button" title={fullView ? "Back to normal view" : "Open full-page view"} onClick={() => setFullView(v => !v)}
+          {!embedded && <button type="button" title={fullView ? "Back to normal view" : "Open full-page view"} onClick={() => setFullView(v => !v)}
             style={{ flexShrink: 0, position: "relative", zIndex: 6, border: "1px solid var(--copper)", background: "#fff", color: "var(--copper)", borderRadius: 8, padding: "5px 12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", boxShadow: "0 1px 4px rgba(15,20,25,0.08)" }}>
-            {fullView ? "✕ Close" : "⛶ Expand"}</button>
+            {fullView ? "✕ Close" : "⛶ Expand"}</button>}
         </div>
         <div className="panel money-tab-panel" style={{ marginTop: 0, marginBottom: 8, borderTopLeftRadius: 0, flex: 1, minHeight: 260, overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 4px 14px rgba(15,20,25,0.05)" }}>
         <div className={mtab === "pettyreq" ? "money-sec" : undefined} style={{ display: mtab === "pettyreq" ? "flex" : "none", overflowY: "auto" }}>
