@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { isDemo } from "@/lib/supabase";
 import { getSession, can } from "@/lib/auth";
+import { canApprove } from "@/lib/perms";
 import {
   getOpenIndents, saveQuotes, getQuotes, buildComparison, createPO, getPOs, cancelPO, approvePO, getAllIndents, inr,
   DELIVERY_STATUS, updatePODelivery,
@@ -15,6 +16,10 @@ import { getSites } from "@/lib/data";
 export default function ProcurePage() {
   const [session, setSession] = useState(null);
   const isDirector = session?.role === "director";
+  // update238: PO approval right, from the shared helper. It resolves to director-only because
+  // fn_po_approve is director-only in the database — the UI must not offer a button the RPC
+  // will refuse. Delegating PO approval means changing fn_po_approve AND lib/perms together.
+  const canApprPO = canApprove(session, "indent");
   const [allInd, setAllInd] = useState(null);   // update209: All Indents modal data (null = closed)
   const [indents, setIndents] = useState(null);
   const [pos, setPos] = useState([]);
@@ -759,8 +764,8 @@ export default function ProcurePage() {
                           : <span className="badge warn">Draft · Awaiting approval</span>}
                         {p.approval === "approved" && p.approved_by && <div className="muted" style={{ fontSize: 10.5 }}>{p.approved_by}{p.approved_at ? " · " + p.approved_at : ""}</div>}
                         {p.approval === "rejected" && p.reject_reason && <div className="muted" style={{ fontSize: 10.5, maxWidth: 140 }}>{p.reject_reason}{p.approved_by ? " — " + p.approved_by : ""}</div>}
-                        {!isDirector && p.approval === "pending" && <div style={{ fontSize: 10.5, color: "var(--amber)", marginTop: 2 }}>⏳ Sent to Director — not yet active</div>}
-                        {isDirector && p.approval === "pending" && p.status !== "cancelled" && (
+                        {!canApprPO && p.approval === "pending" && <div style={{ fontSize: 10.5, color: "var(--amber)", marginTop: 2 }}>⏳ Sent to Director — not yet active</div>}
+                        {canApprPO && p.approval === "pending" && p.status !== "cancelled" && (
                           <div style={{ marginTop: 3 }}>
                             <button style={{ fontSize: 11, background: "var(--green)", color: "#fff", border: 0, marginRight: 4 }}
                               onClick={async () => { if (!window.confirm("Approve " + p.po_no + " (" + inr(p.total) + " · " + p.vendor + ")?")) return; const r = await approvePO(p.id, "approved"); if (!r.ok) { setErr(r.error); return; } setMsg(p.po_no + " approved."); load(); }}>✓ Approve</button>
@@ -779,7 +784,7 @@ export default function ProcurePage() {
                         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => setDeliv({ id: p.id, po_no: p.po_no, expected_delivery: p.expected_delivery || "", delivery_status: p.delivery_status || "pending", delivery_note: p.delivery_note || "" })}>📦 Delivery</button>
                         {p.approval === "approved"
                           ? <a href={"/purchase/po?po=" + p.id} target="_blank" rel="noreferrer"><button style={{ fontSize: 11.5, marginRight: 4 }}>Print</button></a>
-                          : p.approval !== "rejected" && isDirector
+                          : p.approval !== "rejected" && canApprPO
                             /* update221: the APPROVER must be able to review the full draft before deciding */
                             ? <a href={"/purchase/po?po=" + p.id + "&review=1"} target="_blank" rel="noreferrer"><button style={{ fontSize: 11.5, marginRight: 4, border: "1px solid var(--amber)", color: "var(--amber)", fontWeight: 700 }} title="Review the draft PO (printed copy is watermarked DRAFT)">👁 Review draft</button></a>
                             : <button style={{ fontSize: 11.5, marginRight: 4, color: "var(--muted)" }} disabled title={p.approval === "rejected" ? "Rejected — cannot be issued" : "Waiting for Director approval — cannot be issued yet"}>🔒 Print</button>}

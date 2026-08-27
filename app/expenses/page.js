@@ -13,6 +13,7 @@ import {
   getPettyReconciliation, catLabel, inr, markAdvancePosted, markExpensePosted,
   getPettyRequestQueue, reviewPettyRequest, requestPettyCash , selfEditExpense, EXPENSE_CATEGORIES, getPersonMoneyProfile } from "@/lib/money";
 import { getSession, canAnySite } from "@/lib/auth";
+import { canApprove } from "@/lib/perms";
 
 export default function ExpensesPage() {
 
@@ -99,6 +100,9 @@ export default function ExpensesPage() {
     getPettyRequestQueue().then(setPettyReqs);
   }, []);
 
+  // update238: one gate for every approval action on this page — identical rule to the
+  // Approvals inbox and to the RLS policies behind it.
+  const canApprMoney = canApprove(session, "money");
   async function actAdv(id, status) {
     let note = null;
     if (status === "queried") { note = prompt("Query to send back:"); if (!note) return; }
@@ -132,7 +136,7 @@ export default function ExpensesPage() {
           {r.posted ? <span className="badge p">Posted</span> : <span className="badge gray">Mark posted</span>}
         </label>) : <span className="muted">—</span>,
       exportValue: r => r.posted ? "Posted" : "" },
-    { key: "_action", label: "Action", sortable: false, render: r => (r.status === "pending" || r.status === "queried") ? (
+    { key: "_action", label: "Action", sortable: false, render: r => canApprMoney && (r.status === "pending" || r.status === "queried") ? (
       <span style={{ whiteSpace: "nowrap" }}>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actAdv(r.id, "approved")}>✓</button>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actAdv(r.id, "queried")}>?</button>
@@ -184,7 +188,7 @@ export default function ExpensesPage() {
     { key: "_action", label: "Action", sortable: false, render: r => (
       <span style={{ whiteSpace: "nowrap" }}>
         <button style={{ fontSize: 11.5, marginRight: 4 }} title="View full record" onClick={() => setViewExp(r)}>👁</button>
-        {(r.status === "pending" || r.status === "queried") ? (<>
+        {canApprMoney && (r.status === "pending" || r.status === "queried") ? (<>
         {session && r.claimant_id === session.id && (
           <button style={{ fontSize: 11.5, marginRight: 4 }} title="Edit before it is approved" onClick={() => setEditExp({ ...r })}>✎</button>
         )}
@@ -348,7 +352,7 @@ export default function ExpensesPage() {
                         : r.status === "rejected" ? <span className="badge a">Rejected{r.query ? " — " + r.query : ""}</span>
                         : <span className="badge gray">Pending</span>}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
-                      {r.status === "pending" && (
+                      {canApprMoney && r.status === "pending" && (
                         <>
                           <input inputMode="numeric" style={{ width: 70, fontSize: 11.5, marginRight: 4 }}
                                  value={pettyAmt[r.id] ?? String(r.amount)} title="Amount to approve (can differ from asked)"
@@ -358,7 +362,7 @@ export default function ExpensesPage() {
                           <button style={{ fontSize: 11.5 }} onClick={() => actPetty(r.id, "rejected")}>Reject</button>
                         </>
                       )}
-                      {r.status === "approved" && (
+                      {canApprMoney && r.status === "approved" && (
                         <>
                           <button style={{ fontSize: 11.5, marginRight: 4 }} title="Approve a different amount"
                                   onClick={() => { const v = window.prompt("Revised approved amount \u20b9 (asked \u20b9" + r.amount + "):", String(r.approved_amount ?? r.amount)); if (v != null && v !== "") actPetty(r.id, "approved", v); }}>✎ Change amount</button>
@@ -366,7 +370,7 @@ export default function ExpensesPage() {
                                   onClick={() => { if (window.confirm("Withdraw this approval? \u20b9" + (r.approved_amount ?? r.amount) + " will be removed from " + r.requester + "'s petty balance.")) actPetty(r.id, "rejected"); }}>Undo approval</button>
                         </>
                       )}
-                      {r.status === "rejected" && (
+                      {canApprMoney && r.status === "rejected" && (
                         <button style={{ fontSize: 11.5 }} title="Approve after all"
                                 onClick={() => { const v = window.prompt("Approve amount \u20b9 (asked \u20b9" + r.amount + "):", String(r.amount)); if (v != null && v !== "") actPetty(r.id, "approved", v); }}>Approve…</button>
                       )}
@@ -430,9 +434,11 @@ export default function ExpensesPage() {
                   <td className="muted">{r.site}</td><td className="num">{inr(r.amount)}</td>
                   <td className="muted"><span className="clamp2" title={r.note || ""}>{r.note || "—"}</span></td>
                   <td style={{ whiteSpace: "nowrap" }}>
-                    <button className="primary" style={{ fontSize: 11.5, marginRight: 4 }}
-                            onClick={() => { if (window.confirm("Confirm you RECEIVED " + inr(r.amount) + " cash from " + r.holder + "? Their balance reduces by this amount.")) actReturn(r.id, "confirmed"); }}>✔ Received</button>
-                    <button style={{ fontSize: 11.5 }} onClick={() => actReturn(r.id, "cancelled")}>Not received</button>
+                    {canApprMoney ? (<>
+                      <button className="primary" style={{ fontSize: 11.5, marginRight: 4 }}
+                              onClick={() => { if (window.confirm("Confirm you RECEIVED " + inr(r.amount) + " cash from " + r.holder + "? Their balance reduces by this amount.")) actReturn(r.id, "confirmed"); }}>✔ Received</button>
+                      <button style={{ fontSize: 11.5 }} onClick={() => actReturn(r.id, "cancelled")}>Not received</button>
+                    </>) : <span className="muted" style={{ fontSize: 11.5 }}>Awaiting Director</span>}
                   </td>
                 </tr>))}
               </tbody></table>
@@ -648,12 +654,17 @@ export default function ExpensesPage() {
                   ))}
                 </div>
               )}
-              {(viewExp.status === "pending" || viewExp.status === "queried") && (
+              {/* update238: self-edit (211) is NOT an approval — it stays for the claimant regardless */}
+              {session && viewExp.claimant_id === session.id && (viewExp.status === "pending" || viewExp.status === "queried") && (
+                <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+                  <button onClick={() => { setEditExp({ ...viewExp }); setViewExp(null); }}>✎ Edit</button>
+                </div>
+              )}
+              {canApprMoney && (viewExp.status === "pending" || viewExp.status === "queried") && (
                 <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
                   <button className="primary" onClick={async () => { await actClaim(viewExp.id, "approved"); setViewExp(null); }}>✓ Approve</button>
                   <button onClick={async () => { await actClaim(viewExp.id, "queried"); setViewExp(null); }}>? Query</button>
                   <button style={{ color: "var(--red)" }} onClick={async () => { await actClaim(viewExp.id, "rejected"); setViewExp(null); }}>✕ Reject</button>
-                  {session && viewExp.claimant_id === session.id && <button onClick={() => { setEditExp({ ...viewExp }); setViewExp(null); }}>✎ Edit</button>}
                 </div>
               )}
             </div>

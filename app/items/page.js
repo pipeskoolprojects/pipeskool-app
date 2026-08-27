@@ -5,6 +5,7 @@ import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import { ITEM_TYPES, getItemTypes, addItemType, getAllItems, addItem, updateItem, toggleItemActive, deleteItem, approveItem } from "@/lib/stock";
 import { getSession, canAnySite } from "@/lib/auth";
+import { canApprove } from "@/lib/perms";
 
 const UNITS = ["Nos", "Rmt", "Mtr", "Kg", "Set", "Box", "Litre", "Bag"];
 const BLANK = { item_type: "Pipe", material: "", sub_type: "", size: "", item_class: "", make: "", unit: "Rmt", hsn_code: "", min_stock: "", is_active: true };
@@ -32,6 +33,9 @@ export default function ItemsPage() {
   useEffect(() => { load(); }, []);
 
   const canManage = canAnySite(session, "stock", "manage");   // Manage tick on any site (or Director)
+  // update238: APPROVING a pending item is a separate right from editing the master.
+  // Same rule as the Approvals inbox and as fn_approve_item in the database.
+  const canApprItem = canApprove(session, "stock");
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   async function remove(it) {
@@ -115,9 +119,11 @@ export default function ItemsPage() {
                     <td style={{ fontWeight: 600 }}>{r.display_name}</td>
                     <td className="muted">{r.unit || "\u2014"}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
-                      <button style={{ fontSize: 11.5, marginRight: 6 }} onClick={() => openEditRow(r)}>Edit</button>
-                      <button className="primary" style={{ fontSize: 11.5, marginRight: 6 }} onClick={() => doApprove(r)}>Approve &amp; add</button>
-                      <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => toggle(r)}>Reject</button>
+                      {canManage && <button style={{ fontSize: 11.5, marginRight: 6 }} onClick={() => openEditRow(r)}>Edit</button>}
+                      {canApprItem ? (<>
+                        <button className="primary" style={{ fontSize: 11.5, marginRight: 6 }} onClick={() => doApprove(r)}>Approve &amp; add</button>
+                        <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => toggle(r)}>Reject</button>
+                      </>) : <span className="muted" style={{ fontSize: 11.5 }}>Awaiting Director</span>}
                     </td>
                   </tr>
                 ))}

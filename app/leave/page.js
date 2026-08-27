@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { getSession, canAnySite } from "@/lib/auth";
+import { canApprove as canApproveModule } from "@/lib/perms";
 import { getStaff, getRoles } from "@/lib/access";
 import {
   LEAVE_TYPES, typeLabel, getLeaveContext, getHolidays, addHoliday, deleteHoliday,
@@ -33,7 +34,8 @@ export default function LeavePage() {
 
   useEffect(() => { setSess(getSession()); }, []);
   const isDirector = sess?.role === "director";
-  const isApprover = sess && (isDirector || canAnySite(sess, "leave", "approve"));
+  // update238: shared rule (director OR leave approve|manage) — same as the Approvals inbox
+  const isApprover = canApproveModule(sess, "leave");
 
   const holidaySet = new Set(hols.map(h => h.on_date));
 
