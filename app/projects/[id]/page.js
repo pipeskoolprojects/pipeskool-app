@@ -10,6 +10,7 @@ import { getSession, setCurrentSite } from "@/lib/auth";
 import { inr } from "@/lib/money";
 import { getProjects, stMeta, getProjectDocs, uploadProjectDoc, projectDocUrl, deleteProjectDoc, getTasks, addTask, toggleTask } from "@/lib/projects";
 import ProcureView from "@/components/ProcureView";
+import { setScopeSite, clearScopeSite } from "@/lib/scope";
 import ExpensesView from "@/components/ExpensesView";
 import GrnView from "@/components/GrnView";
 
@@ -52,9 +53,13 @@ export default function ProjectWorkspace() {
     if (s.role !== "director" && !(s.sites || []).some(x => Number(x.id) === siteId)) { setNotFound(true); return; }
     setSession(s);
     setCurrentSite(siteId);   // modules opened from here default to this project
+    // update245: publish the scope. Every site-scoped loader inherits it automatically, so a
+    // tab cannot show another site's rows even if nobody remembered to thread a prop into it.
+    setScopeSite(siteId);
     getProjects().then(r => { const row = (r.rows || []).find(x => Number(x.id) === siteId); row ? setP(row) : setNotFound(true); });
     getProjectDocs(siteId).then(setDocs);
     getTasks({ siteId }).then(setTasks);
+    return () => clearScopeSite();   // leaving the workspace restores the all-sites views
   }, [siteId]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   async function upload(e) {
@@ -148,8 +153,10 @@ export default function ProjectWorkspace() {
 
         {MODULES.filter(m => m[3] && visited[m[0]]).map(([key, , label, href]) => (
           <div key={key} style={{ display: tab === key ? "block" : "none" }}>
-            <iframe title={label} src={href + "?site=" + siteId + "&embed=1"}
-              style={{ width: "100%", height: "calc(100vh - 230px)", minHeight: 480, border: "1px solid var(--border)", borderRadius: 12, background: "#fff" }} />
+            {/* update245: &scope= carries the project site INTO the frame, so the loaders
+                inside inherit it exactly as the inline tabs do. */}
+            <iframe title={label} src={href + "?site=" + siteId + "&scope=" + siteId + "&embed=1"}
+              className="proj-frame" />
           </div>
         ))}
 

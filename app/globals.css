@@ -235,3 +235,17 @@ button.primary:disabled:hover, button.primary[disabled]:hover { background: var(
 .money-embed { display: flex; flex-direction: column; min-width: 0; }
 .money-embed .money-sec { height: auto; max-height: 62vh; }
 .money-embed .page-head { display: none; }
+
+/* ---------- update245: PROJECT TABS USE THE REAL SCREEN ----------
+   The panes are inline now, so they should fill the page rather than sit in a small box. */
+.proj-pane { width: 100%; min-width: 0; }
+.proj-pane .panel { margin-left: 0; margin-right: 0; }
+.proj-pane .dt-scroll, .proj-pane .money-sec { max-height: none; }
+/* tables scroll inside their own frame instead of being clipped by the pane */
+.proj-pane table { width: 100%; }
+.proj-pane .dt-wrap { overflow-x: auto; min-width: 0; }
+.money-embed .money-sec { height: auto; max-height: none; }
+.money-embed .money-tab-panel { min-height: 320px; }
+/* iframed tabs that remain: give them real height instead of a fixed short box */
+.proj-frame { width: 100%; border: 1px solid var(--border); border-radius: 12px; background: #fff;
+  height: calc(100vh - 240px); min-height: 560px; }
