@@ -1,4 +1,5 @@
 "use client";
+import { getSession } from "@/lib/auth";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { getPODetail } from "@/lib/procure";
@@ -14,7 +15,8 @@ function POView() {
     getPODetail(poId).then(d => { setPo(d); setLoading(false); });
   }, [poId]);
 
-  const isApprover = (() => { try { const { getSession } = require("@/lib/auth"); return getSession()?.role === "director"; } catch { return false; } })();
+  // update241: was a require() swallowed by try/catch — a throw silently hid the control
+  const isApprover = (typeof window !== "undefined" && getSession()?.role === "director");
   const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN");
 
   if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading PO…</div>;

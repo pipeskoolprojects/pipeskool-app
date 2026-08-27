@@ -88,7 +88,7 @@ export default function BoqPage() {
               {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             <button onClick={() => { setForm({ ...blank }); setMsg(""); }}>＋ Add line</button>
-            <button onClick={async () => { setErr(""); const r = await autoShortenBoq(site); if (!r.ok) { setErr(r.error); return; } setMsg(r.count + " line(s) given short names — edit any line to refine."); load(); }}>✂ Auto-shorten names</button>
+            <button onClick={async () => { setErr(""); const r = await autoShortenBoq(site); if (!r.ok) { setErr(r.error); return; } setMsg(r.count + " line(s) given short names — edit any line to refine."); }}>✂ Auto-shorten names</button>
             <button onClick={() => fileRef.current?.click()}>⬆ Import BOQ (CSV / Excel)</button>
             <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={onFile} />
           </div>

@@ -138,7 +138,9 @@ export default function PunchScreen() {
     setMsg(phase === "in"
       ? t(lang, "punched_in")
       : `${fresh.status === "present" ? t(lang, "full_day") : fresh.status === "half_day" ? t(lang, "half_day") : t(lang, "recorded")}${fresh.ot_hours > 0 ? " · OT " + fresh.ot_hours + "h " + t(lang, "ot_sent") : ""}.`);
-    e.target.value = "";
+    // update241: removed `e.target.value = ""` — a leftover from when the selfie came from a
+    // file input. onSelfie(file) is called by CameraCapture's onCapture, so `e` never existed
+    // and this threw a ReferenceError AFTER a successful punch, crashing the punch screen.
   }
 
   return (

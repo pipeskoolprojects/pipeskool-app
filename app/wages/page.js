@@ -238,7 +238,11 @@ export default function WagesPage() {
                 <table className="dt-compact">
                   <thead><tr><th>Staff</th><th>Role</th><th className="num">Salary</th><th className="num">Present / Working</th><th className="num">Absent</th><th className="num">Paid leave (bal)</th><th className="num">Deduction</th><th className="num">OT h</th><th className="num">OT ₹</th><th className="num">Advances</th><th className="num">Net</th><th>Status</th></tr></thead>
                   <tbody>
-                    {sfilt(rows).map(r => { const [lbl, cls] = STATUS[r.status] || [r.status, "gray"]; return (
+                    {/* update241: was `sfilt(rows)` — an undefined function AND the wrong array
+                        (rows = labour payouts). Latent since the staff tab was built: the table
+                        only renders when srows is non-empty, and getStaffPayouts() always
+                        returned [] because of the ambiguous embed fixed in 240. */}
+                    {filt(srows).map(r => { const [lbl, cls] = STATUS[r.status] || [r.status, "gray"]; return (
                       <tr key={r.id}>
                         <td style={{ fontWeight: 600 }}>{r.name}</td><td className="muted">{r.role}</td>
                         <td className="num">{inr(r.salary)}</td>

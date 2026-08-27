@@ -55,7 +55,7 @@ export default function AssetsPage() {
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
     setMsg(res.unchanged ? "No changes." : "Asset updated — change logged.");
-    setEditA(null); load();
+    setEditA(null);   // update241: dropped a call to a non-existent load() — setMsg() already refreshes
   }
   function closeModal() { setModal(null); setMv({}); }
   async function runModal() {
