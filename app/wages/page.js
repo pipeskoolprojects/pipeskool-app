@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { getSites, inr } from "@/lib/data";
-import { generatePayouts, getPayouts, setPayoutAdvance, setPayoutMode, setPayoutStatutory, fmtHM, approvePayouts, markPayoutsPaid } from "@/lib/payroll";
+import { generatePayouts, generatePayoutsAll, getPayouts, setPayoutAdvance, setPayoutMode, setPayoutStatutory, fmtHM, approvePayouts, markPayoutsPaid } from "@/lib/payroll";
 import { generateStaffPayouts, getStaffPayouts, approveStaffPayouts, markStaffPayoutsPaid } from "@/lib/staffpay";
 import { getSession } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
@@ -22,6 +22,7 @@ export default function WagesPage() {
   const [tab, setTab] = useState("labour");           // labour | staff
   const [srows, setSrows] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [prog, setProg] = useState("");   // update239: live progress during a bulk run
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
   const sess = typeof window !== "undefined" ? getSession() : null;
   const canApprove = sess && (sess.role === "director" || sess.role === "ho_admin");
@@ -33,17 +34,35 @@ export default function WagesPage() {
   useEffect(() => { setRows(null); load(); setMsg(""); setErr(""); }, [month, site]);
 
   async function run(fn, okMsg) {
-    setBusy(true); setErr(""); setMsg("");
-    const r = await fn();
-    setBusy(false);
-    if (!r.ok) { setErr(r.error); return; }
+    setBusy(true); setErr(""); setMsg(""); setProg("");
+    let r;
+    try { r = await fn(); }
+    catch (e) { setBusy(false); setProg(""); setErr("Could not complete: " + (e?.message || String(e))); return; }
+    setBusy(false); setProg("");
+    if (!r?.ok) { setErr(r?.error || "Nothing happened — please try again or tell Claude what you did."); return; }
     setMsg(okMsg(r)); load();
   }
 
-  const generate = () => run(() => generatePayouts(site, month),
-    r => `Generated from attendance: ${r.created} new, ${r.updated} draft(s) refreshed` +
-         (r.skippedFinal ? `, ${r.skippedFinal} approved/paid left untouched` : "") +
-         (r.skippedNoWage ? `, ${r.skippedNoWage} skipped (₹0 wage — staff punch profiles)` : "") + ".");
+  // update239: "All sites" now GENERATES for every site instead of silently doing nothing.
+  // Confirmed first, because one click can write draft rows across a dozen sites.
+  const tail = r => (r.skippedFinal ? `, ${r.skippedFinal} approved/paid left untouched` : "") +
+                    (r.skippedNoWage ? `, ${r.skippedNoWage} skipped (₹0 wage — staff punch profiles)` : "");
+  const generate = () => {
+    if (site !== "all") {
+      return run(() => generatePayouts(site, month),
+        r => `Generated from attendance: ${r.created} new, ${r.updated} draft(s) refreshed` + tail(r) + ".");
+    }
+    if (sites.length === 0) { setErr("No sites available to generate for."); return; }
+    const ok = window.confirm(
+      `Generate labour payroll for ALL ${sites.length} site(s) for ${month}?\n\n` +
+      "Draft rows are created or refreshed. Approved and paid rows are never changed.");
+    if (!ok) return;
+    return run(
+      () => generatePayoutsAll(sites, month, (d, t, name) =>
+        setProg(name ? `Generating — site ${d + 1} of ${t}: ${name}…` : "")),
+      r => `Generated across ${r.sites} site(s): ${r.created} new, ${r.updated} draft(s) refreshed` + tail(r) + "." +
+           (r.failedSites?.length ? ` ⚠ ${r.failedSites.length} site(s) failed — ${r.failedSites.join(" | ")}` : ""));
+  };
   const approve = () => run(() => approvePayouts(month, site, sess?.id),
     r => r.count + " payout(s) approved.");
   const paid = () => run(() => markPayoutsPaid(month, site),
@@ -104,18 +123,27 @@ export default function WagesPage() {
 
         {tab === "labour" && <div className="panel">
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-            <button className="primary" disabled={busy || site === "all"} onClick={generate}
-              title={site === "all" ? "Pick a site first" : ""}>⚙ Generate / refresh from attendance</button>
-            {canApprove && <button disabled={busy || site === "all" || !drafts} onClick={approve}>✓ Approve {drafts || ""} draft(s)</button>}
-            {canApprove && <button disabled={busy || site === "all" || !approved} onClick={paid}>₹ Mark {approved || ""} approved as PAID</button>}
+            <button className="primary" disabled={busy} onClick={generate}
+              title={site === "all" ? "Generates for every site you can see" : ""}>
+              {busy ? "Working…" : "⚙ Generate / refresh from attendance" + (site === "all" ? ` (all ${sites.length} sites)` : "")}</button>
+            {canApprove && <button disabled={busy || site === "all" || !drafts} onClick={approve}
+              title={site === "all" ? "Pick one site — approving is a financial decision, made site by site" : ""}>✓ Approve {drafts || ""} draft(s)</button>}
+            {canApprove && <button disabled={busy || site === "all" || !approved} onClick={paid}
+              title={site === "all" ? "Pick one site — marking PAID is a financial decision, made site by site" : ""}>₹ Mark {approved || ""} approved as PAID</button>}
             <button disabled={!rows?.length} onClick={exportExcel}>⬇ Export Excel</button>
           </div>
+          {prog && <div className="demo-banner" style={{ background: "var(--copper-soft)" }}>⏳ {prog}</div>}
+          {canApprove && site === "all" && (
+            <div className="note amber" style={{ marginBottom: 10 }}>
+              Generating works across all sites. <b>Approve</b> and <b>Mark PAID</b> are done one site at a time — pick a site above to enable them.
+            </div>
+          )}
           <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
             Own labour only · days from attendance · <b>OT counts only after approval</b> (Attendance → approve OT) · OT paid at daily rate ÷ site working hours · regenerate any time — approved/paid rows are never changed.
           </div>
 
           {!rows ? <div className="muted">Loading…</div> : rows.length === 0 ? (
-            <div className="muted">No payouts for this month{site === "all" ? "" : " at this site"} yet. Pick the site and click <b>Generate</b>.</div>
+            <div className="muted">No payouts for {month}{site === "all" ? " at any site" : " at this site"} yet. Click <b>Generate / refresh from attendance</b>{site === "all" ? " to build them for every site" : ""}.</div>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table className="dt-compact">
@@ -171,9 +199,16 @@ export default function WagesPage() {
 
         {tab === "staff" && (
           <div className="panel">
+            {/* update239: staff salary has no per-site step — generateStaffPayouts(month) covers
+                every active staff member, so the "All sites" dead-end never existed here. */}
+            <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+              Staff salary is <b>company-wide</b> — the site filter above applies to labour payroll only.
+            </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
               <button className="primary" disabled={busy} onClick={() => run(() => generateStaffPayouts(month),
-                r => `Staff salary generated: ${r.created} new, ${r.updated} draft(s) refreshed` + (r.skippedFinal ? `, ${r.skippedFinal} approved/paid untouched` : "") + ".")}>⚙ Generate from attendance</button>
+                r => `Staff salary generated: ${r.created} new, ${r.updated} draft(s) refreshed` + (r.skippedFinal ? `, ${r.skippedFinal} approved/paid untouched` : "") + ".")}
+                title="Staff salary is company-wide — the site filter above does not apply here">
+                {busy ? "Working…" : "⚙ Generate from attendance"}</button>
               {canApprove && <button disabled={busy || !(srows || []).some(r => r.status === "draft")} onClick={() => run(() => approveStaffPayouts(month, sess?.id), r => r.count + " approved.")}>✓ Approve drafts</button>}
               {canApprove && <button disabled={busy || !(srows || []).some(r => r.status === "approved")} onClick={() => run(() => markStaffPayoutsPaid(month), r => r.count + " marked PAID.")}>₹ Mark PAID</button>}
               <button disabled={!srows?.length} onClick={() => {
@@ -188,7 +223,7 @@ export default function WagesPage() {
               Per-day = salary ÷ 30 (fixed) · Sundays paid · leave year Apr–Mar · max 50% of leaves usable Apr–Sep · max 10 leaves at a stretch · absences beyond these limits deduct <b>OT eligible</b> (approved hours, per-day ÷ 8) · approved salary advances auto-deducted · approved/paid rows never change.
             </div>
             {!srows ? <div className="muted">Loading…</div> : srows.length === 0 ? (
-              <div className="muted">No staff salary rows for {month}. Set <b>Monthly salary</b> on staff (Workers & Staff Master → Edit) and click Generate.</div>
+              <div className="muted">{prog ? "⏳ " + prog : <>No staff salary rows for {month}. Set <b>Monthly salary</b> on staff (Workers &amp; Staff Master → Edit) and click <b>Generate from attendance</b>.</>}</div>
             ) : (
               <div style={{ overflowX: "auto" }}>
                 <table className="dt-compact">

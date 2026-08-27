@@ -209,3 +209,17 @@ html.psk-nosb .main { padding-left: 76px; }
 .appr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; align-items: start; }
 @media (max-width: 900px) { .appr-grid { grid-template-columns: 1fr; } }
 .appr-grid > * { min-width: 0; }
+
+/* ---------- update239: DISABLED BUTTONS MUST LOOK DISABLED ----------
+   Root cause of the "/wages Generate does nothing" report: the button was correctly
+   disabled when no site was picked, but the app had NO :disabled styling, so a disabled
+   .primary button still rendered full copper with a pointer cursor. The browser swallowed
+   the click and the user saw a live-looking button do nothing at all. This is app-wide —
+   every disabled button in Pipeskool had the same problem. */
+button:disabled, button[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.35);
+}
+button:disabled:hover, button[disabled]:hover { background: #fff; }
+button.primary:disabled:hover, button.primary[disabled]:hover { background: var(--copper); }
