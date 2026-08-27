@@ -10,6 +10,8 @@ import { getSession, setCurrentSite } from "@/lib/auth";
 import { inr } from "@/lib/money";
 import { getProjects, stMeta, getProjectDocs, uploadProjectDoc, projectDocUrl, deleteProjectDoc, getTasks, addTask, toggleTask } from "@/lib/projects";
 import ProcureView from "@/components/ProcureView";
+import ExpensesView from "@/components/ExpensesView";
+import GrnView from "@/components/GrnView";
 
 const MODULES = [   // update207: every module renders INSIDE this page as a tab (embedded view, ?site scoped)
   ["overview", "🏠", "Overview", null],
@@ -18,9 +20,9 @@ const MODULES = [   // update207: every module renders INSIDE this page as a tab
   ["procure", "🛒", "Procurement / Indents", null],
   ["po", "📄", "Purchase Orders", null],
   ["stock", "📦", "Stock", "/stock"],
-  ["grn", "🧾", "GRN / Challan", "/stock/grn"],
+  ["grn", "🧾", "GRN / Challan", null],   // update244: inline
   ["dpr", "📋", "DPR", "/dpr"],
-  ["expenses", "💳", "Expenses & Money", "/expenses"],
+  ["expenses", "💳", "Expenses & Money", null],   // update244: inline
   ["wages", "💰", "Salary / Wages", "/wages"],
   ["billing", "🧮", "Billing", "/billing"],
   ["assets", "🏗", "Assets", "/assets"],
@@ -123,13 +125,24 @@ export default function ProjectWorkspace() {
         {/* update243: de-iframed tabs. The view component receives siteId as a PROP, so it
             cannot show another project's data, and `only` splits it to match the two tabs. */}
         {visited.procure && (
-          <div style={{ display: tab === "procure" ? "block" : "none" }}>
+          <div className="proj-pane" style={{ display: tab === "procure" ? "block" : "none" }}>
             <ProcureView siteId={siteId} only="indents" showHead={false} />
           </div>
         )}
         {visited.po && (
-          <div style={{ display: tab === "po" ? "block" : "none" }}>
+          <div className="proj-pane" style={{ display: tab === "po" ? "block" : "none" }}>
             <ProcureView siteId={siteId} only="po" showHead={false} />
+          </div>
+        )}
+
+        {visited.grn && (
+          <div className="proj-pane" style={{ display: tab === "grn" ? "block" : "none" }}>
+            <GrnView siteId={siteId} embedded />
+          </div>
+        )}
+        {visited.expenses && (
+          <div className="proj-pane" style={{ display: tab === "expenses" ? "block" : "none" }}>
+            <ExpensesView siteId={siteId} embedded />
           </div>
         )}
 

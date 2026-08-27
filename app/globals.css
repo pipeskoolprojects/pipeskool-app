@@ -223,3 +223,15 @@ button:disabled, button[disabled] {
 }
 button:disabled:hover, button[disabled]:hover { background: #fff; }
 button.primary:disabled:hover, button.primary[disabled]:hover { background: var(--copper); }
+
+/* ---------- update244: PROJECT TAB PANES — fit to the screen ----------
+   De-iframed tabs render inline, so they inherit the project page's width instead of a fixed
+   iframe box. Tables that used to be clipped ("Change amou…", "Undo appro…" cut off at the
+   right edge) now scroll inside their own frame instead of being cut by the pane. */
+.proj-pane { width: 100%; min-width: 0; }
+.proj-pane table { width: 100%; }
+.proj-pane .dt-wrap, .proj-pane .money-sec { min-width: 0; }
+/* the money page normally owns the full viewport height; inside a tab it must size to content */
+.money-embed { display: flex; flex-direction: column; min-width: 0; }
+.money-embed .money-sec { height: auto; max-height: 62vh; }
+.money-embed .page-head { display: none; }
