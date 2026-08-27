@@ -7,6 +7,7 @@ import { getSession, canAnySite } from "@/lib/auth";
 import { todayLocal } from "@/lib/today";
 import { isDemo } from "@/lib/supabase";
 import { fmtHM } from "@/lib/payroll";
+import { getHolidayMap } from "@/lib/holidays";
 
 const statusBadge = s =>
   s === "present" ? <span className="badge p">P</span> :
@@ -25,6 +26,13 @@ export default function AttendancePage() {
   const [loadErr, setLoadErr] = useState("");
   const [fails, setFails] = useState([]);                     // update180: rejected punches
   useEffect(() => { getPunchFailures(date).then(setFails); }, [date]);
+  // update246: is the date being viewed a company holiday for this site?
+  const [holName, setHolName] = useState("");
+  useEffect(() => {
+    const next = new Date(date + "T00:00:00"); next.setDate(next.getDate() + 1);
+    getHolidayMap(site && site !== "all" ? site : null, date, next.toLocaleDateString("en-CA"))
+      .then(m => setHolName(m[date] || "")).catch(() => setHolName(""));
+  }, [date, site]);
   const sess0 = getSession();
   const canVerify = !!sess0 && (canAnySite(sess0, "attendance", "verify") || canAnySite(sess0, "attendance", "manage"));
   async function doVerify(r) {
@@ -99,7 +107,10 @@ export default function AttendancePage() {
       <Sidebar />
       <main className="main">
         <div className="page-head">
-          <h1>Attendance register</h1>
+          <h1>Attendance register
+            {/* update246: the register says out loud that this date is a paid holiday */}
+            {holName && <span className="badge" style={{ marginLeft: 10, fontSize: 11, verticalAlign: "middle", color: "#b45309", border: "1px solid #b45309", background: "#fff7ed" }}>⭐ Holiday · {holName}</span>}
+          </h1>
           <div className="filters">
             <input type="date" value={date} onChange={e => setDate(e.target.value)} />
             <select value={site} onChange={e => setSite(e.target.value)}>

@@ -9,6 +9,8 @@ import { getMuster, proxyPunch, proxyPunchOut, getSiteGeo, getPosition, distance
 import { approveOt } from "@/lib/data";
 import { otRound, fmtHM } from "@/lib/payroll";
 import { getSession, setCurrentSite, can } from "@/lib/auth";
+import { getHolidayMap } from "@/lib/holidays";
+import { todayLocal } from "@/lib/today";
 
 const initials = n => (n || "?").split(" ").map(x => x[0]).slice(0, 2).join("");
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
@@ -46,6 +48,13 @@ export default function MusterScreen() {
   const markedBy = sess?.name || "Supervisor";
 
   const load = () => getMuster(siteId).then(setRows);
+  // update246: supervisors see the holiday on the muster before they mark anyone absent
+  const [holName, setHolName] = useState("");
+  useEffect(() => {
+    const t = todayLocal(); const n = new Date(t + "T00:00:00"); n.setDate(n.getDate() + 1);
+    getHolidayMap(siteId, t, n.toLocaleDateString("en-CA"))
+      .then(m => setHolName(m[t] || "")).catch(() => setHolName(""));
+  }, [siteId]);
   useEffect(() => { load(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     let alive = true;
@@ -144,6 +153,8 @@ export default function MusterScreen() {
           ) : (
             <div className="sub">{siteName || "Site"} · {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</div>
           )}
+          {/* update246: the supervisor sees the holiday before marking anyone absent */}
+          {holName && <div style={{ fontSize: 11, fontWeight: 700, color: "#fbbf24", marginTop: 3 }}>⭐ Holiday · {holName} — absent is still paid</div>}
         </div>
         {geo?.director ? null :
           !geo ? <span className="geo-chip geo-wait" style={{ fontSize: 11 }}>📍 Checking location…</span> :

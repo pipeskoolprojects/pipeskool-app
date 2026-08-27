@@ -10,6 +10,24 @@ import * as XLSX from "xlsx";
 
 const STATUS = { draft: ["Draft", "gray"], approved: ["Approved", "h"], paid: ["Paid", "p"] };
 
+// update246: festival-holiday tags on the payslip row. Module scope — never redefined per render.
+function HolidayTags({ r }) {
+  const bits = [];
+  if (r.holDouble > 0) bits.push(["Holiday \u00b7 2\u00d7 pay", "#0f3d24", "#1a7f4f", r.holDouble]);
+  if (r.holHalf > 0) bits.push(["Holiday \u00b7 2\u00d7 (half day)", "#3d2f0f", "#b45309", r.holHalf]);
+  if (r.holPaid > 0) bits.push(["Holiday \u00b7 Paid", "#26324a", "#2b6cb0", r.holPaid]);
+  if (!bits.length) return null;
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
+      {bits.map(([label, , color, n]) => (
+        <span key={label} className="badge" style={{ fontSize: 9.5, color, border: "1px solid " + color, background: "transparent", whiteSpace: "nowrap" }}>
+          {label}{n > 1 ? " \u00d7" + n : ""}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export default function WagesPage() {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [site, setSite] = useState("all");
@@ -162,7 +180,8 @@ export default function WagesPage() {
                     const [lbl, cls] = STATUS[r.status] || [r.status, "gray"];
                     return (
                       <tr key={r.id}>
-                        <td style={{ fontWeight: 600 }}>{r.worker_id ? <a href={"/attendance/slip?worker=" + r.worker_id + "&month=" + month} target="_blank" rel="noreferrer">{r.worker}</a> : r.worker}</td>
+                        <td style={{ fontWeight: 600 }}>{r.worker_id ? <a href={"/attendance/slip?worker=" + r.worker_id + "&month=" + month} target="_blank" rel="noreferrer">{r.worker}</a> : r.worker}
+                          <HolidayTags r={r} />{/* update246 */}</td>
                         <td className="muted">{r.category}</td>
                         {site === "all" && <td className="muted">{r.site}</td>}
                         <td className="num">{r.days} <span className="muted" style={{ fontSize: 10.5 }}>({r.daysFull}+{r.daysHalf}½)</span></td>
@@ -244,7 +263,7 @@ export default function WagesPage() {
                         returned [] because of the ambiguous embed fixed in 240. */}
                     {filt(srows).map(r => { const [lbl, cls] = STATUS[r.status] || [r.status, "gray"]; return (
                       <tr key={r.id}>
-                        <td style={{ fontWeight: 600 }}>{r.name}</td><td className="muted">{r.role}</td>
+                        <td style={{ fontWeight: 600 }}>{r.name}<HolidayTags r={r} />{/* update246 */}</td><td className="muted">{r.role}</td>
                         <td className="num">{inr(r.salary)}</td>
                         <td className="num">{r.present} / {r.working}</td>
                         <td className="num" style={{ color: r.absent > 0 ? "var(--red)" : "inherit" }}>{r.absent}</td>
