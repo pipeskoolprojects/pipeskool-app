@@ -152,6 +152,13 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
       exportValue: r => r.posted ? "Posted" : "" },
     // update242: approved and rejected rows are no longer dead ends — same controls petty
     // cash has had since 194. A PAID advance is refused by fn_review_advance, not here.
+    // update249: the voucher is a RECORD, not an approval — anyone who can see the row may
+    // print it, and it is only offered once the advance is actually approved.
+    { key: "_voucher", label: "Voucher", sortable: false, exportValue: () => "",
+      render: r => r.status === "approved"
+        ? <button style={{ fontSize: 11.5 }} title="Print advance salary voucher"
+            onClick={() => window.open("/expenses/advance-voucher?id=" + r.id, "_blank", "noopener")}>🧾 Voucher</button>
+        : <span className="muted" style={{ fontSize: 11.5 }}>—</span> },
     { key: "_action", label: "Action", sortable: false, render: r => {
       if (!canApprMoney) return <span className="muted" style={{ fontSize: 11.5 }}>—</span>;
       if (r.status === "pending" || r.status === "queried") return (
