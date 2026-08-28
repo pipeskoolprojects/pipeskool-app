@@ -1,0 +1,539 @@
+"use client";
+import { supabase, isDemo } from "./supabase";
+import { assignedSiteIds } from "./auth";
+import { notifyRequest, notifyDecision } from "./notify";
+import { billUrl } from "./bills";
+import { todayLocal } from "./today";
+import { scoped, isScoped } from "./scope";
+
+export const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN");
+
+// resolve a real staff user id to attribute actions to (testing-safe)
+let _cachedActorId = undefined;
+export async function resolveActorId(preferUserId) {
+  if (isDemo) return preferUserId || 1;
+  if (_cachedActorId !== undefined) return _cachedActorId;
+  // prefer the given id if it exists
+  if (preferUserId) {
+    const { data } = await supabase.from("app_users").select("id").eq("id", preferUserId).maybeSingle();
+    if (data) { _cachedActorId = data.id; return _cachedActorId; }
+  }
+  // else first available staff user, else null
+  const { data } = await supabase.from("app_users").select("id").order("id").limit(1).maybeSingle();
+  _cachedActorId = data ? data.id : null;
+  return _cachedActorId;
+}
+
+
+export const EXPENSE_CATEGORIES = [
+  ["local_material", "Local material purchase"],
+  ["transport", "Transport / tempo"],
+  ["tea_food", "Tea / food"],
+  ["consumables", "Consumables"],
+  ["repairs", "Repairs"],
+  ["loading_unloading", "Loading / unloading"],
+  ["misc", "Miscellaneous"],
+];
+export const catLabel = k => (EXPENSE_CATEGORIES.find(c => c[0] === k) || ["", k])[1];
+
+// ---------------- DEMO STATE ----------------
+let demoAdvReqs = [];
+let demoExpenses = [];
+const demoBalances = { petty: 0 };
+
+// people the supervisor can raise advance for (own site workers + self/staff)
+const demoBeneficiaries = [
+  { kind: "staff", id: 1, name: "SATYENDRA (me)", bank: false },
+];
+
+// ---------------- BENEFICIARIES (for advance salary dropdown) ----------------
+export async function getBeneficiaries(userId, siteIds) {
+  if (isDemo) {
+    // include any demo workers added
+    return demoBeneficiaries;
+  }
+  // update146: BOTH staff and labour from the requester's assigned sites only.
+  const out = [];
+  const passed = (siteIds || []).map(Number).filter(n => !isNaN(n) && n > 0);
+  const scopeB = assignedSiteIds();
+  const siteScope = passed.length ? passed : scopeB;   // null => director => all sites
+
+  let sq = supabase.from("sites").select("id, name").eq("is_active", true);
+  if (siteScope && siteScope.length) sq = sq.in("id", siteScope);
+  const { data: sites } = await sq;
+  const sname = {}; (sites || []).forEach(x => { sname[x.id] = x.name; });
+
+  // STAFF assigned to those sites (requester first); directors excluded (they approve)
+  const [{ data: staffRows }, { data: usRows }] = await Promise.all([
+    supabase.from("app_users").select("id, full_name, mobile, role, bank_complete").eq("is_active", true),
+    supabase.from("user_sites").select("user_id, site_id"),
+  ]);
+  const sitesOf = {}; (usRows || []).forEach(r => (sitesOf[r.user_id] = sitesOf[r.user_id] || []).push(Number(r.site_id)));
+  const staff = (staffRows || []).filter(u => u.role !== "director" &&
+    (!siteScope || (sitesOf[u.id] || []).some(sid => siteScope.includes(sid))));
+  staff.sort((a, b) => a.id === userId ? -1 : b.id === userId ? 1 : String(a.full_name).localeCompare(String(b.full_name)));
+  staff.forEach(u => out.push({ kind: "staff", id: u.id, name: u.full_name, site_id: (sitesOf[u.id] || [])[0] || null,
+    label: u.full_name + (u.id === userId ? " (me)" : "") + " \u00b7 Staff", bank: !!u.bank_complete }));
+
+  // LABOUR at those sites (staff punch-profiles excluded — they are staff, not labour)
+  let wq = supabase.from("workers").select("id, full_name, mobile, profile_complete, site_id").eq("is_active", true);
+  if (siteScope && siteScope.length) wq = wq.in("site_id", siteScope);
+  const { data: workers } = await wq;
+  const staffMob = new Set((staffRows || []).map(u => String(u.mobile)));
+  (workers || [])
+    .filter(w => !staffMob.has(String(w.mobile)))
+    .sort((a, b) => String(a.full_name).localeCompare(String(b.full_name)))
+    .forEach(w => out.push({ kind: "labour", id: w.id, name: w.full_name, site_id: w.site_id,
+      label: w.full_name + " \u00b7 Labour \u00b7 " + (sname[w.site_id] || ("Site " + w.site_id)), bank: !!w.profile_complete }));
+  return out;
+}
+
+// ---------------- ADVANCE SALARY ----------------
+export async function raiseAdvanceSalary(p) {
+  if (isDemo) {
+    demoAdvReqs = [{ id: Date.now(), req_no: "ADV/" + (demoAdvReqs.length + 1),
+      beneficiary_name: p.beneficiary_name, beneficiary_kind: p.beneficiary_kind,
+      amount: p.amount, reason: p.reason, bank_on_file: p.bank_on_file,
+      status: "pending", date: todayLocal() }, ...demoAdvReqs];
+    return { ok: true };
+  }
+  const raisedBy = await resolveActorId(p.raised_by);
+  const payload = {
+    req_no: "ADV/" + new Date().getFullYear().toString().slice(2) + "/" + Date.now().toString().slice(-4),
+    site_id: p.site_id, amount: p.amount, reason: p.reason,
+    beneficiary_name: p.beneficiary_name, beneficiary_kind: p.beneficiary_kind,
+    bank_on_file: p.bank_on_file, raised_by: raisedBy,
+  };
+  if (p.beneficiary_kind === "labour") payload.beneficiary_worker_id = p.beneficiary_id;
+  else payload.beneficiary_user_id = p.beneficiary_id;
+  const { data: ins, error } = await supabase.from("advance_salary_requests").insert(payload).select("id").single();
+  if (error) return { ok: false, error: error.message };
+  notifyRequest({ kind: "advance", requestId: ins?.id, siteId: p.site_id,
+    title: "Advance salary — " + p.beneficiary_name + " (" + (p.beneficiary_kind === "labour" ? "Labour" : "Staff") + ")",
+    body: "\u20b9" + p.amount + (p.reason ? " \u00b7 " + p.reason : "") + " \u00b7 pending approval" });
+  return { ok: true };
+}
+
+// update196: ADVANCE SALARY LEDGER — every request + per-person recovery from payouts.
+// Recovered = advances_deducted on wage payouts (labour) / staff payouts (staff).
+// update214: one person's complete money profile — expenses, advances, recovery, petty held.
+export async function getPersonMoneyProfile(staffId) {
+  if (isDemo || !staffId) return null;
+  const uid = Number(staffId);
+  const [{ data: u }, { data: exp }, { data: adv }, { data: sp }, { data: wp }, { data: pb }] = await Promise.all([
+    supabase.from("app_users").select("full_name, role").eq("id", uid).maybeSingle(),
+    supabase.from("expenses").select("expense_date, category, amount, paid_to, note, funding_source, status, sites(name)")
+      .eq("claimant_user_id", uid).order("expense_date", { ascending: false }).limit(500),
+    supabase.from("advance_salary_requests").select("created_at, amount, reason, status, sites(name)")
+      .eq("beneficiary_user_id", uid).order("created_at", { ascending: false }).limit(200),
+    supabase.from("staff_payouts").select("pay_month, advances_deducted").eq("user_id", uid).gt("advances_deducted", 0),
+    supabase.from("wage_payouts").select("pay_month, advances_deducted").eq("worker_id", -1).limit(1),   // staff profile; workers not covered here
+    supabase.from("v_petty_cash_balance").select("balance").eq("user_id", uid).maybeSingle(),
+  ]);
+  if (!u) return null;
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const expOk = (exp || []).filter(e => e.status === "approved");
+  const advOk = (adv || []).filter(a => a.status === "approved");
+  const recovered = (sp || []).reduce((t, r) => t + Number(r.advances_deducted), 0);
+  const taken = advOk.reduce((t, a) => t + Number(a.amount), 0);
+  const txns = [
+    ...(exp || []).map(e => ({ date: e.expense_date, type: "Expense", what: (e.paid_to || "") + (e.note ? " — " + e.note : ""), site: e.sites?.name || "", amount: Number(e.amount), status: e.status, kind: "exp" })),
+    ...(adv || []).map(a => ({ date: (a.created_at || "").slice(0, 10), type: "Advance", what: a.reason || "Advance salary", site: a.sites?.name || "", amount: Number(a.amount), status: a.status, kind: "adv" })),
+    ...(sp || []).map(r => ({ date: (r.pay_month || "").slice(0, 10), type: "Advance recovered", what: "Deducted from salary", site: "", amount: Number(r.advances_deducted), status: "approved", kind: "adv" })),
+  ].sort((a, b) => (a.date < b.date ? 1 : -1));
+  return {
+    name: u.full_name, role: u.role,
+    totals: {
+      all: expOk.reduce((t, e) => t + Number(e.amount), 0),
+      month: expOk.filter(e => (e.expense_date || "").slice(0, 7) === thisMonth).reduce((t, e) => t + Number(e.amount), 0),
+      taken, recovered: Math.min(recovered, taken), outstanding: Math.max(taken - Math.min(recovered, taken), 0),
+      petty: Number(pb?.balance || 0),
+    },
+    txns,
+  };
+}
+
+export async function getAdvanceLedger(siteId) {
+  if (isDemo) return { rows: [], recovered: {} };
+  siteId = scoped(siteId);   // update245
+  let qReq = supabase.from("advance_salary_requests")
+    .select("id, site_id, req_no, beneficiary_name, beneficiary_kind, beneficiary_worker_id, beneficiary_user_id, amount, reason, status, reviewed_at, created_at, sites(name), reviewer:reviewed_by(full_name)")
+    .order("created_at", { ascending: false }).limit(2000);
+  if (isScoped(siteId)) qReq = qReq.eq("site_id", siteId);
+  const [{ data: reqs }, { data: wp }, { data: sp }] = await Promise.all([
+    qReq,
+    supabase.from("wage_payouts").select("worker_id, pay_month, advances_deducted").gt("advances_deducted", 0),
+    supabase.from("staff_payouts").select("user_id, pay_month, advances_deducted").gt("advances_deducted", 0),
+  ]);
+  const recovered = {};   // key w<id> / u<id> -> { total, months: [{month, amt}] }
+  (wp || []).forEach(r => { const k = "w" + r.worker_id; const g = recovered[k] = recovered[k] || { total: 0, months: [] };
+    g.total += Number(r.advances_deducted); g.months.push({ month: (r.pay_month || "").slice(0, 7), amt: Number(r.advances_deducted) }); });
+  (sp || []).forEach(r => { const k = "u" + r.user_id; const g = recovered[k] = recovered[k] || { total: 0, months: [] };
+    g.total += Number(r.advances_deducted); g.months.push({ month: (r.pay_month || "").slice(0, 7), amt: Number(r.advances_deducted) }); });
+  Object.values(recovered).forEach(g => g.months.sort((a, b) => a.month < b.month ? 1 : -1));
+  const rows = (reqs || []).map(r => ({
+    id: r.id, req_no: r.req_no, date: (r.created_at || "").slice(0, 10),
+    employee: r.beneficiary_name, kind: r.beneficiary_kind,
+    pkey: r.beneficiary_worker_id ? "w" + r.beneficiary_worker_id : r.beneficiary_user_id ? "u" + r.beneficiary_user_id : "n" + r.id,
+    site: r.sites?.name || "", amount: Number(r.amount || 0), reason: r.reason || "",
+    status: r.status, approved_by: r.reviewer?.full_name || "", approved_on: r.reviewed_at ? r.reviewed_at.slice(0, 10) : "",
+  }));
+  return { rows, recovered };
+}
+
+export async function getAdvanceQueue(siteId) {
+  if (isDemo) return demoAdvReqs;
+  siteId = scoped(siteId);   // update245
+  let q0 = supabase.from("advance_salary_requests")
+    .select("id, site_id, req_no, beneficiary_name, beneficiary_kind, amount, approved_amount, reason, bank_on_file, status, query_note, response_note, reviewed_at, posted_to_tally, request_date:created_at, sites(name), reviewer:reviewed_by(full_name)")
+    .order("created_at", { ascending: false }).limit(200);
+  if (siteId && siteId !== "all") q0 = q0.eq("site_id", siteId);   // update244
+  const { data } = await q0;
+  // update162: site scoping is enforced by the database read policies
+  // (fn_site_allowed + view_all_money capability) — no client-side copy.
+  return (data || []).map(r => ({ id: r.id, req_no: r.req_no, beneficiary_name: r.beneficiary_name,
+    beneficiary_kind: r.beneficiary_kind, amount: Number(r.amount), reason: r.reason,
+    approved_amount: r.approved_amount != null ? Number(r.approved_amount) : null,   // update242
+    bank_on_file: r.bank_on_file, status: r.status, site: r.sites?.name,
+    query: r.query_note, response: r.response_note,
+    approved_on: r.reviewed_at ? r.reviewed_at.slice(0,10) : "",
+    approved_by: r.reviewer?.full_name || "",
+    posted: r.posted_to_tally,
+    date: r.request_date ? r.request_date.slice(0,10) : "" }));
+}
+
+// update242: goes through fn_review_advance (SECURITY DEFINER) instead of a bare UPDATE, so
+// an already-decided advance can be REVISED or WITHDRAWN, the permission check happens in the
+// database, a PAID advance is refused, and every decision leaves an audit row.
+// amount is optional and only used when approving — null approves the full requested figure.
+export async function reviewAdvance(id, status, note, reviewerId, amount) {
+  if (isDemo) { demoAdvReqs = demoAdvReqs.map(r => r.id === id ? { ...r, status } : r); return { ok: true }; }
+  const { data, error } = await supabase.rpc("fn_review_advance", {
+    p_id: id, p_action: status, p_note: note || null,
+    p_amount: amount === undefined || amount === null || amount === "" ? null : Number(amount),
+  });
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) return { ok: false, error: data?.error || "Could not save this decision." };
+
+  const was = data.prev_status;
+  const revised = status === "approved" && was === "approved";
+  const withdrawn = status !== "approved" && was === "approved";
+  const title = status === "approved"
+    ? (revised ? "Advance approval REVISED \u2014 " + data.beneficiary : "Advance for " + data.beneficiary + " approved")
+    : (withdrawn ? "Advance approval WITHDRAWN \u2014 " + data.beneficiary
+                 : "Advance for " + data.beneficiary + " " + status);
+  const body = status === "approved"
+    ? "\u20b9" + data.amount + (Number(data.amount) !== Number(data.requested) ? " approved of \u20b9" + data.requested + " asked" : "")
+    : (withdrawn ? "The approved \u20b9" + data.requested + " has been withdrawn" : "\u20b9" + data.requested)
+      + (note ? " \u00b7 " + note : "");
+  try {
+    if (data.raised_by) notifyDecision({ toUserId: data.raised_by, kind: "advance", requestId: id,
+      siteId: data.site_id, status, title, body });
+  } catch {}
+  return { ok: true, prevStatus: was, revised, withdrawn, amount: data.amount, requested: data.requested };
+}
+
+// ---------------- SITE EXPENSE CLAIM ----------------
+// update211: requester edits their own PENDING/QUERIED expense (incl. own pocket <-> petty cash;
+// safe because petty deducts on APPROVAL only — the locked rule)
+export async function selfEditExpense(id, { amount, note, category, funding_source, expense_date, paid_to }) {
+  if (isDemo) return { ok: false, error: "Demo mode." };
+  const { data, error } = await supabase.rpc("fn_expense_self_edit", {
+    p_id: id, p_amount: Number(amount), p_note: note || null, p_category: category,
+    p_funding: funding_source, p_date: expense_date || null, p_paid_to: paid_to || null });
+  if (error) return { ok: false, error: /fn_expense_self_edit|schema cache/i.test(error.message) ? "Run pipeskool_expense_self_edit.sql (update 211) first." : error.message };
+  return data?.ok ? { ok: true } : { ok: false, error: data?.error || "Failed" };
+}
+
+export async function claimExpense(p) {
+  if (isDemo) {
+    demoExpenses = [{ id: Date.now(), date: todayLocal(), category: p.category, amount: p.amount,
+      paid_to: p.paid_to, funding_source: p.funding_source, photo: !!p.photoFile, status: "pending" }, ...demoExpenses];
+    return { ok: true };
+  }
+  // update159: multiple bills, images AND PDFs, original file type preserved
+  const files = (p.billFiles && p.billFiles.length ? Array.from(p.billFiles) : (p.photoFile ? [p.photoFile] : []));
+  const paths = [];
+  for (const f of files) {
+    const ext = (f.name && f.name.includes(".") ? f.name.split(".").pop() : (f.type === "application/pdf" ? "pdf" : "jpg")).toLowerCase();
+    const path = `bills/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+    const { error: upErr } = await supabase.storage.from("attendance-photos")
+      .upload(path, f, { contentType: f.type || undefined });
+    if (!upErr) paths.push(path);
+  }
+  const photoUrl = paths[0] || null;
+  const actor = await resolveActorId(p.user_id);
+  const { data: ins, error } = await supabase.from("expenses").insert({
+    site_id: p.site_id, holder_user_id: actor, claimant_user_id: actor,
+    expense_date: todayLocal(), category: p.category, amount: p.amount, paid_to: p.paid_to,
+    pay_mode: "cash", funding_source: p.funding_source, bill_photo_url: photoUrl,
+    bank_on_file: p.bank_on_file, note: p.note,
+  }).select("id").single();
+  if (error) return { ok: false, error: error.message };
+  if (ins?.id && paths.length) {
+    try { await supabase.from("expense_bills").insert(paths.map(x => ({ expense_id: ins.id, path: x }))); } catch {}
+  }
+  notifyRequest({ kind: "expense", requestId: ins?.id, siteId: p.site_id,
+    title: "Expense claim \u2014 " + p.category,
+    body: "\u20b9" + p.amount + " to " + (p.paid_to || "\u2014") + " \u00b7 pending approval" });
+  return { ok: true };
+}
+
+// ---------------- ADVANCE PETTY CASH REQUESTS (update159) ----------------
+export async function requestPettyCash(p) {
+  if (isDemo) return { ok: false, error: "Demo mode." };
+  const actor = await resolveActorId(p.user_id);
+  const { data: ins, error } = await supabase.from("petty_cash_requests").insert({
+    site_id: p.site_id, requested_by: actor, amount: Number(p.amount),
+    purpose: p.purpose, required_date: p.required_date || null, remarks: p.remarks || null,
+  }).select("id").single();
+  if (error) return { ok: false, error: error.message };
+  notifyRequest({ kind: "petty", requestId: ins?.id, siteId: p.site_id,
+    title: "Petty cash request \u2014 " + (p.requester_name || "staff"),
+    body: "\u20b9" + p.amount + " \u00b7 " + p.purpose
+      + (p.required_date ? " \u00b7 needed " + p.required_date : "") + " \u00b7 pending approval" });
+  return { ok: true };
+}
+
+export async function getPettyRequestQueue(siteId) {
+  if (isDemo) return [];
+  siteId = scoped(siteId);   // update245
+  let q0 = supabase.from("petty_cash_requests")
+    .select("id, site_id, amount, approved_amount, purpose, required_date, remarks, status, query_note, created_at, reviewed_at, sites(name), requester:requested_by(full_name), reviewer:reviewed_by(full_name)")
+    .order("created_at", { ascending: false }).limit(300);
+  if (siteId && siteId !== "all") q0 = q0.eq("site_id", siteId);   // update244
+  const { data } = await q0;
+  // update162: site scoping is enforced by the database read policies
+  // (fn_site_allowed + view_all_money capability) — no client-side copy.
+  return (data || []).map(r => ({ id: r.id, amount: Number(r.amount),
+    approved_amount: r.approved_amount != null ? Number(r.approved_amount) : null, purpose: r.purpose,
+    required_date: r.required_date, remarks: r.remarks, status: r.status, query: r.query_note,
+    date: r.created_at?.slice(0, 10), site: r.sites?.name || "", requester: r.requester?.full_name || "",
+    reviewer: r.reviewer?.full_name || "" }));
+}
+
+export async function reviewPettyRequest(id, status, note, amount) {
+  if (isDemo) return { ok: false, error: "Demo mode." };
+  const { data, error } = await supabase.rpc("fn_approve_petty",
+    { p_id: id, p_status: status, p_note: note || null, p_amount: amount != null ? Number(amount) : null });
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) return { ok: false, error: data?.error || "Could not review." };
+  const partial = data.approved_amount != null && Number(data.approved_amount) !== Number(data.requested_amount);
+  const title = status === "approved"
+    ? (data.prev_status === "approved" ? "Petty cash approval REVISED" : "Petty cash request approved")
+    : (data.prev_status === "approved" ? "Petty cash approval WITHDRAWN" : "Petty cash request rejected");
+  const body = status === "approved"
+    ? "\u20b9" + data.approved_amount + " added to your petty balance"
+      + (partial ? " (you asked \u20b9" + data.requested_amount + ")" : "")
+    : (data.prev_status === "approved"
+        ? "\u20b9" + data.requested_amount + " request \u2014 earlier approval removed from your balance" : "")
+      + (note ? " \u00b7 " + note : "");
+  notifyDecision({ toUserId: data.requested_by, kind: "petty", requestId: id, siteId: data.site_id,
+    status, title, body });
+  return { ok: true };
+}
+
+export async function getMyRecentMoney(userId) {
+  if (isDemo) return [...demoAdvReqs.map(r => ({ id: r.id, type: "Advance", name: r.beneficiary_name, amount: r.amount, status: r.status, query: r.query_note, date: r.date })),
+                      ...demoExpenses.map(e => ({ id: e.id, type: "Expense", name: e.paid_to, amount: e.amount, status: e.status, query: e.query_note, date: e.date }))].slice(0, 8);
+  const { data: adv } = await supabase.from("advance_salary_requests")
+    .select("id, beneficiary_name, amount, status, query_note, created_at").eq("raised_by", userId).order("created_at", {ascending:false}).limit(8);
+  const { data: exp } = await supabase.from("expenses")
+    .select("id, paid_to, amount, status, query_note, expense_date, note, category, funding_source").eq("claimant_user_id", userId).order("created_at", {ascending:false}).limit(8);
+  const { data: pet } = await supabase.from("petty_cash_requests")
+    .select("id, amount, approved_amount, purpose, status, query_note, created_at").eq("requested_by", userId).order("created_at", {ascending:false}).limit(8);
+  return [...(adv||[]).map(r => ({ id: r.id, type: "Advance", name: r.beneficiary_name, amount: Number(r.amount), status: r.status, query: r.query_note, date: r.created_at?.slice(0,10) })),
+          ...(exp||[]).map(e => ({ id: e.id, type: "Expense", name: e.paid_to, amount: Number(e.amount), status: e.status, query: e.query_note, date: e.expense_date, note: e.note, category: e.category, funding_source: e.funding_source, expense_date: e.expense_date })),
+          ...(pet||[]).map(r => ({ id: r.id, type: "Petty cash", name: r.purpose,
+            amount: r.status === "approved" && r.approved_amount != null ? Number(r.approved_amount) : Number(r.amount),
+            asked: r.status === "approved" && r.approved_amount != null && Number(r.approved_amount) !== Number(r.amount) ? Number(r.amount) : null,
+            status: r.status, query: r.query_note, date: r.created_at?.slice(0,10) }))];
+}
+
+// ---------------- PETTY CASH BALANCE ----------------
+// ---- petty ledger engine (update167) ----
+export async function getPettyOverview(userId) {
+  if (isDemo) return { granted: 0, spent: 0, returned: 0, balance: 0, settled: false, pendingReturns: 0, pendingSpend: 0 };
+  const [{ data: v }, { data: pr }, { data: pe }] = await Promise.all([
+    supabase.from("v_petty_cash_balance").select("granted, spent_from_petty, returned, balance").eq("user_id", userId),
+    supabase.from("petty_cash_returns").select("amount").eq("user_id", userId).eq("status", "pending"),
+    supabase.from("expenses").select("amount").eq("claimant_user_id", userId)
+      .eq("funding_source", "petty_cash").eq("status", "pending"),
+  ]);
+  const sum = (a, k) => (a || []).reduce((x, r) => x + Number(r[k] ?? r.amount ?? 0), 0);
+  const granted = sum(v, "granted"), spent = sum(v, "spent_from_petty"),
+        returned = sum(v, "returned"), balance = sum(v, "balance");
+  return { granted, spent, returned, balance,
+    settled: granted > 0 && balance === 0,
+    pendingReturns: sum(pr, "amount"), pendingSpend: sum(pe, "amount") };
+}
+
+export async function getPettyLedger(userId) {
+  if (isDemo) return [];
+  const [{ data: g }, { data: e }, { data: r }] = await Promise.all([
+    supabase.from("petty_cash_grants").select("amount, note, created_at, site_id, sites(name)")
+      .eq("user_id", userId).order("created_at", { ascending: false }).limit(200),
+    supabase.from("expenses")
+      .select("id, amount, category, paid_to, note, status, expense_date, created_at, site_id, sites(name), bill_photo_url, expense_bills(path)")
+      .eq("claimant_user_id", userId).eq("funding_source", "petty_cash")
+      .in("status", ["approved", "pending"]).order("created_at", { ascending: false }).limit(200),
+    supabase.from("petty_cash_returns").select("id, amount, note, status, created_at, site_id, sites(name)")
+      .eq("user_id", userId).in("status", ["pending", "confirmed"]).order("created_at", { ascending: false }).limit(200),
+  ]);
+  const rows = [];
+  (g || []).forEach(x => rows.push({ ts: x.created_at, date: x.created_at?.slice(0, 10),
+    kind: "Advance in", label: x.note || "Petty cash advance", site: x.sites?.name || "", category: "",
+    amount: Number(x.amount), sign: 1, status: "confirmed", bills: [] }));
+  (e || []).forEach(x => rows.push({ ts: x.created_at, date: x.expense_date,
+    kind: x.status === "approved" ? "Expense" : "Expense (awaiting approval)",
+    label: (x.paid_to || "") + (x.note ? " \u2014 " + x.note : ""), site: x.sites?.name || "", category: x.category || "",
+    amount: Number(x.amount), sign: x.status === "approved" ? -1 : 0, status: x.status,
+    bills: [...new Set([...((x.expense_bills || []).map(b => b.path)), ...(x.bill_photo_url ? [x.bill_photo_url] : [])].filter(Boolean))] }));   // update248: no duplicate bill
+  (r || []).forEach(x => rows.push({ ts: x.created_at, date: x.created_at?.slice(0, 10),
+    kind: x.status === "confirmed" ? "Cash returned" : "Return (awaiting confirmation)",
+    label: x.note || "", site: x.sites?.name || "", category: "",
+    amount: Number(x.amount), sign: x.status === "confirmed" ? -1 : 0, status: x.status, bills: [] }));
+  return rows.sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+}
+
+export async function requestPettyReturn({ user_id, name, site_id, amount, note }) {
+  if (isDemo) return { ok: false, error: "Demo mode." };
+  if (!amount || Number(amount) <= 0) return { ok: false, error: "Enter the amount being returned." };
+  const { data: ins, error } = await supabase.from("petty_cash_returns")
+    .insert({ user_id, site_id, amount: Number(amount), note: note || null }).select("id").single();
+  if (error) return { ok: false, error: error.message };
+  notifyRequest({ kind: "petty", requestId: ins?.id, siteId: site_id,
+    title: "Cash return \u2014 " + (name || "staff"),
+    body: "\u20b9" + amount + " handed back \u00b7 awaiting your confirmation" });
+  return { ok: true };
+}
+
+export async function getPettyReturnQueue(siteId) {
+  if (isDemo) return [];
+  siteId = scoped(siteId);   // update245
+  let q0 = supabase.from("petty_cash_returns")
+    .select("id, site_id, amount, note, status, created_at, sites(name), holder:user_id(id, full_name)")
+    .eq("status", "pending").order("created_at", { ascending: false }).limit(100);
+  if (siteId && siteId !== "all") q0 = q0.eq("site_id", siteId);   // update244
+  const { data } = await q0;
+  return (data || []).map(r => ({ id: r.id, amount: Number(r.amount), note: r.note,
+    date: r.created_at?.slice(0, 10), site: r.sites?.name || "", holder: r.holder?.full_name || "", holder_id: r.holder?.id }));
+}
+
+export async function confirmPettyReturn(id, action, note) {
+  if (isDemo) return { ok: false, error: "Demo mode." };
+  const { data, error } = await supabase.rpc("fn_confirm_petty_return",
+    { p_id: id, p_action: action, p_note: note || null });
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) return { ok: false, error: data?.error || "Could not confirm." };
+  notifyDecision({ toUserId: data.user_id, kind: "petty", requestId: id, siteId: data.site_id,
+    status: action, title: action === "confirmed" ? "Cash return confirmed" : "Cash return not accepted",
+    body: "\u20b9" + data.amount + (action === "confirmed" ? " deducted from your petty balance" : (note ? " \u00b7 " + note : "")) });
+  return { ok: true };
+}
+
+export async function getPettyBalance(userId) {
+  if (isDemo) return demoBalances.petty;
+  const { data } = await supabase.from("v_petty_cash_balance").select("balance").eq("user_id", userId);
+  return (data || []).reduce((s, r) => s + Number(r.balance || 0), 0);
+}
+
+// ---------------- WEB: expense claim queue + reconciliation ----------------
+export async function getExpenseClaimQueue(siteId) {
+  if (isDemo) return demoExpenses.filter(e => e.status === "pending");
+  siteId = scoped(siteId);   // update245
+  let q0 = supabase.from("expenses")
+    .select("id, claimant_user_id, site_id, expense_date, category, amount, paid_to, note, funding_source, bill_photo_url, bank_on_file, status, query_note, response_note, reviewed_at, posted_to_tally, sites(name), claimant:claimant_user_id(full_name), reviewer:reviewed_by(full_name), expense_bills(path)")
+    .order("created_at", { ascending: false }).limit(300);
+  if (siteId && siteId !== "all") q0 = q0.eq("site_id", siteId);   // update244
+  const { data } = await q0;
+  // update162: site scoping is enforced by the database read policies
+  // (fn_site_allowed + view_all_money capability) — no client-side copy.
+  return (data || []).map(e => ({ id: e.id, date: e.expense_date, category: e.category,
+    claimant_id: e.claimant_user_id, category: e.category, expense_date: e.expense_date, amount: Number(e.amount), paid_to: e.paid_to, note: e.note, funding_source: e.funding_source,
+    photo: !!e.bill_photo_url || (e.expense_bills || []).length > 0,
+    bills: Array.from(new Set([...(e.expense_bills || []).map(b => b.path), ...(e.bill_photo_url ? [e.bill_photo_url] : [])])),
+    bank_on_file: e.bank_on_file, status: e.status,
+    query: e.query_note, response: e.response_note,
+    approved_on: e.reviewed_at ? e.reviewed_at.slice(0,10) : "",
+    approved_by: e.reviewer?.full_name || "",
+    posted: e.posted_to_tally,
+    site: e.sites?.name, claimant: e.claimant?.full_name }));
+}
+
+export async function reviewExpenseClaim(id, status, note, reviewerId) {
+  if (isDemo) { demoExpenses = demoExpenses.map(e => e.id === id ? { ...e, status } : e); return { ok: true }; }
+  const { error } = await supabase.from("expenses")
+    .update({ status, query_note: note || null, reviewed_at: new Date().toISOString(), reviewed_by: reviewerId || null }).eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  try {
+    const { data: r } = await supabase.from("expenses")
+      .select("claimant_user_id, category, amount, site_id").eq("id", id).maybeSingle();
+    if (r?.claimant_user_id) notifyDecision({ toUserId: r.claimant_user_id, kind: "expense", requestId: id, siteId: r.site_id,
+      status, title: "Expense claim (" + r.category + ") " + status,
+      body: "\u20b9" + r.amount + (note ? " \u00b7 " + note : "") });
+  } catch {}
+  return { ok: true };
+}
+
+export async function getPettyReconciliation(siteId) {
+  if (isDemo) return [];
+  siteId = scoped(siteId);   // update245
+  let q0 = supabase.from("v_petty_cash_balance").select("*");
+  if (isScoped(siteId)) q0 = q0.eq("site_id", siteId);
+  const { data } = await q0;
+  return (data || []).map(r => ({ holder: r.full_name, user_id: r.user_id,   // update181: ONE account per person
+    granted: Number(r.granted), spent: Number(r.spent_from_petty),
+    returned: Number(r.returned || 0), balance: Number(r.balance), settled: !!r.settled }));
+}
+
+
+// ---------------- RESPOND TO A QUERY & RESUBMIT ----------------
+export async function respondAdvance(id, responseNote, newAmount) {
+  if (isDemo) { demoAdvReqs = demoAdvReqs.map(r => r.id === id ? { ...r, status: "pending", query_note: null } : r); return { ok: true }; }
+  const patch = { status: "pending", response_note: responseNote || null, resubmitted_at: new Date().toISOString() };
+  if (newAmount) patch.amount = Number(newAmount);
+  const { error } = await supabase.from("advance_salary_requests").update(patch).eq("id", id);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+export async function respondExpense(id, responseNote, newAmount, photoFiles) {
+  if (isDemo) { demoExpenses = demoExpenses.map(e => e.id === id ? { ...e, status: "pending", query_note: null } : e); return { ok: true }; }
+  // update182: query replies accept gallery photos AND PDFs, several at once (parity with the
+  // claim form) — kept with their real extensions and ADDED to expense_bills, so the office sees
+  // the original bill and every added proof as Bill 1 / Bill 2 / ...
+  const files = Array.isArray(photoFiles) ? photoFiles : photoFiles ? [photoFiles] : [];
+  const paths = [];
+  for (const f of files) {
+    const ext = (f.name?.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const path = `bills/${Date.now()}_${Math.random().toString(36).slice(2,6)}.${ext}`;
+    const { error: upErr } = await supabase.storage.from("attendance-photos")
+      .upload(path, f, { contentType: f.type || undefined });
+    if (upErr) return { ok: false, error: "Proof upload failed: " + upErr.message };
+    paths.push(path);
+  }
+  const patch = { status: "pending", response_note: responseNote || null, resubmitted_at: new Date().toISOString() };
+  if (newAmount) patch.amount = Number(newAmount);
+  const { error } = await supabase.from("expenses").update(patch).eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  if (paths.length) {
+    const { error: bErr } = await supabase.from("expense_bills").insert(paths.map(x => ({ expense_id: id, path: x })));
+    if (bErr) return { ok: false, error: "Reply saved but proof not linked: " + bErr.message };
+  }
+  return { ok: true };
+}
+
+
+// ---------------- MARK PAID / POSTED TO TALLY ----------------
+export async function markAdvancePosted(id, posted, byUserId) {
+  if (isDemo) { demoAdvReqs = demoAdvReqs.map(r => r.id === id ? { ...r, posted } : r); return { ok: true }; }
+  const { error } = await supabase.from("advance_salary_requests")
+    .update({ posted_to_tally: posted, posted_at: posted ? new Date().toISOString() : null, posted_by: posted ? (byUserId || null) : null }).eq("id", id);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+export async function markExpensePosted(id, posted, byUserId) {
+  if (isDemo) { demoExpenses = demoExpenses.map(e => e.id === id ? { ...e, posted } : e); return { ok: true }; }
+  const { error } = await supabase.from("expenses")
+    .update({ posted_to_tally: posted, posted_at: posted ? new Date().toISOString() : null, posted_by: posted ? (byUserId || null) : null }).eq("id", id);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}

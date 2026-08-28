@@ -1,0 +1,246 @@
+"use client";
+import { supabase, isDemo } from "./supabase";
+import { notifyRequest, notifyDecision } from "./notify";
+import { getIndents } from "./stock";
+
+export const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN");
+
+// ---- open indents with their item lines (office view) ----
+export async function getOpenIndents(siteId) {
+  const all = await getIndents(siteId);
+  return all;
+}
+
+export async function getVendorsList() {
+  if (isDemo) return [{ id: 1, name: "Turakhia Steel" }, { id: 2, name: "Shree Pipe Traders" }, { id: 3, name: "Gujarat Fittings Co" }];
+  const { data } = await supabase.from("vendors").select("id, name").eq("is_active", true).order("name");
+  return data || [];
+}
+
+// ---- save a set of quotes for an indent (office types them) ----
+// quotes: [{ indent_item_id, vendor_name, rate }]
+export async function saveQuotes(indentId, rows) {
+  if (isDemo) return { ok: true };
+  // rows: [{indent_item_id, vendor_id, vendor_name, list_rate, discount_pct, rate}]
+  // an allocated cell may have no rate yet (asked but not quoted) — keep it.
+  const clean = (rows || []).filter(q => q.indent_item_id && q.vendor_name).map(q => ({
+    indent_id: indentId, indent_item_id: q.indent_item_id,
+    vendor_id: q.vendor_id || null, vendor_name: q.vendor_name,
+    list_rate: q.list_rate != null && q.list_rate !== "" ? Number(q.list_rate) : null,
+    discount_pct: q.discount_pct != null && q.discount_pct !== "" ? Number(q.discount_pct) : null,
+    rate: q.rate != null && q.rate !== "" ? Number(q.rate) : null,
+  }));
+  if (clean.length === 0) return { ok: false, error: "Add at least one vendor and tick the items they should quote." };
+  await supabase.from("indent_quotes").delete().eq("indent_id", indentId);
+  const { error } = await supabase.from("indent_quotes").insert(clean);
+  if (error) return { ok: false, error: error.message };
+  await supabase.from("material_indents").update({ status: "quoting" }).eq("id", indentId);
+  return { ok: true };
+}
+
+export async function getQuotes(indentId) {
+  if (isDemo) return [];
+  const { data } = await supabase.from("indent_quotes")
+    .select("indent_item_id, vendor_id, vendor_name, rate, list_rate, discount_pct").eq("indent_id", indentId);
+  return data || [];
+}
+
+// ---- comparison: build vendor totals + best split + gap ----
+// items: [{id, item_name, qty}]  quotes: [{indent_item_id, vendor_name, rate}]
+export function buildComparison(items, quotes) {
+  const vendors = Array.from(new Set(quotes.map(q => q.vendor_name)));
+  // matrix[itemId][vendor] = rate
+  const matrix = {};
+  quotes.forEach(q => { (matrix[q.indent_item_id] = matrix[q.indent_item_id] || {})[q.vendor_name] = Number(q.rate); });
+
+  // whole-indent total per vendor (only counts items that vendor quoted; missing => not eligible for whole)
+  const vendorTotals = vendors.map(v => {
+    let total = 0, complete = true;
+    items.forEach(it => {
+      const r = matrix[it.id]?.[v];
+      if (r == null) complete = false; else total += r * Number(it.qty || 0);
+    });
+    return { vendor: v, total, complete };
+  });
+  const eligibleWhole = vendorTotals.filter(v => v.complete).sort((a, b) => a.total - b.total);
+  const bestWhole = eligibleWhole[0] || null;
+
+  // best split: cheapest vendor per item
+  let splitTotal = 0; const splitChoice = {};
+  items.forEach(it => {
+    const rates = matrix[it.id] || {};
+    let bestV = null, bestR = Infinity;
+    Object.entries(rates).forEach(([v, r]) => { if (r < bestR) { bestR = r; bestV = v; } });
+    if (bestV) { splitTotal += bestR * Number(it.qty || 0); splitChoice[it.id] = { vendor: bestV, rate: bestR }; }
+  });
+
+  const gap = bestWhole ? bestWhole.total - splitTotal : 0;
+  const gapPct = splitTotal ? Math.round((gap / splitTotal) * 100) : 0;
+  return { vendors, matrix, vendorTotals: eligibleWhole, bestWhole, splitTotal, splitChoice, gap, gapPct };
+}
+
+// ---- create PO(s) ----
+// po: { indent_id, site_id, vendor_name, is_lowest, non_lowest_reason, split_note, lines:[{indent_item_id, item_id, item_name, qty, unit, rate}] }
+// update198: Director approve / reject a PO (DB enforces director-only)
+export async function approvePO(poId, action, reason) {
+  if (isDemo) return { ok: false, error: "Demo mode." };
+  const { data, error } = await supabase.rpc("fn_po_approve", { p_po_id: poId, p_action: action, p_reason: reason || null });
+  if (error) return { ok: false, error: /fn_po_approve|schema cache/i.test(error.message) ? "Approval workflow not enabled yet — run pipeskool_po_approval.sql (update 198)." : error.message };
+  if (data?.ok) {
+    try {   // update202: tell the person who prepared the PO
+      const { data: p } = await supabase.from("purchase_orders").select("issued_by, po_no").eq("id", poId).single();
+      if (p?.issued_by) notifyDecision({ toUserId: p.issued_by, kind: "po_approval", requestId: poId,
+        title: "PO " + (action === "approved" ? "approved ✓" : "rejected ✗"),
+        body: p.po_no + (action === "approved" ? " is approved — you can issue/print it now." : " was rejected" + (reason ? ": " + reason : ".")), status: action });
+    } catch {}
+    return { ok: true, po_no: data.po_no, by: data.by };
+  }
+  return { ok: false, error: data?.error || "Failed" };
+}
+
+export async function createPO(po, issuedBy) {
+  if (isDemo) return { ok: true, po_no: "PO/DEMO" };
+  const { data: noData } = await supabase.rpc("fn_next_po_no", { p_site_id: po.site_id });
+  const poNo = noData || ("PO/" + Date.now());
+  const total = po.lines.reduce((s, l) => s + Number(l.qty) * Number(l.rate), 0);
+  const vendorId = await resolveVendorId(po.vendor_name);
+  const { data: head, error } = await supabase.from("purchase_orders").insert({
+    po_no: poNo, indent_id: po.indent_id, site_id: po.site_id, vendor_name: po.vendor_name, vendor_id: vendorId,
+    total_amount: total, is_lowest: po.is_lowest, non_lowest_reason: po.non_lowest_reason || null,
+    split_note: po.split_note || null, status: "issued", issued_by: issuedBy,
+  }).select().single();
+  if (error) return { ok: false, error: error.message };
+  const rows = po.lines.map(l => ({ po_id: head.id, indent_item_id: l.indent_item_id, item_id: l.item_id || null,
+    item_name: l.item_name, spec: l.spec || null, qty: Number(l.qty), unit: l.unit, rate: Number(l.rate),
+    list_rate: l.list_rate ?? null, discount_pct: l.discount_pct ?? 0, gst_pct: l.gst_pct ?? 18 }));
+  const { error: e2 } = await supabase.from("po_items").insert(rows);
+  if (e2) return { ok: false, error: e2.message };
+  // update170: PARTIAL POs — the indent stays open until every item is covered
+  const [{ data: allIt }, { data: cov }] = await Promise.all([
+    supabase.from("material_indent_items").select("id").eq("indent_id", po.indent_id),
+    supabase.from("po_items").select("indent_item_id, purchase_orders!inner(id)")
+      .eq("purchase_orders.indent_id", po.indent_id).neq("purchase_orders.status", "cancelled"),
+  ]);
+  const covered = new Set((cov || []).map(x => x.indent_item_id));
+  const remaining = (allIt || []).filter(x => !covered.has(x.id)).length;
+  await supabase.from("material_indents")
+    .update({ status: remaining === 0 ? "po_issued" : "quoting" }).eq("id", po.indent_id);
+  try {   // update202/209: notify directors a PO awaits approval (in-app bell + phone push)
+    notifyRequest({ kind: "po_approval", requestId: head.id, siteId: po.site_id,
+      title: "PO approval request", body: poNo + " · " + (po.vendor_name || "") + " · ₹" + total.toLocaleString("en-IN") + " — needs your approval." });
+  } catch {}
+  return { ok: true, po_no: poNo, remaining };
+}
+
+// update209: every indent ever raised, any status, with site + PO links
+export async function getAllIndents() {
+  if (isDemo) return [];
+  const { data } = await supabase.from("material_indents")
+    .select("id, indent_no, status, required_by, urgency, created_at, sites(name), app_users(full_name), material_indent_items(id), purchase_orders(po_no, status)")
+    .order("created_at", { ascending: false }).limit(1000);
+  return (data || []).map(i => ({
+    id: i.id, indent_no: i.indent_no, status: i.status, site: i.sites?.name || "",
+    by: i.app_users?.full_name || "", date: i.created_at?.slice(0, 10), required_by: i.required_by || "",
+    urgency: i.urgency, items: (i.material_indent_items || []).length,
+    pos: (i.purchase_orders || []).filter(p => p.status !== "cancelled").map(p => p.po_no),
+  }));
+}
+
+export async function getPOs(siteId) {
+  if (isDemo) return [];
+  let q = supabase.from("purchase_orders")
+    .select("id, po_no, vendor_name, total_amount, is_lowest, non_lowest_reason, status, expected_delivery, delivery_status, delivery_note, created_at, approval_status, approved_at, reject_reason, approver:approved_by(full_name), site_id, sites(name), material_indents(indent_no, required_by, app_users(full_name))")
+    .order("created_at", { ascending: false }).limit(400);   // update184: was 100; + indent raiser for PO filters
+  if (siteId && siteId !== "all") q = q.eq("site_id", siteId);
+  const { data } = await q;
+  // update185: receipt progress per PO (view from pipeskool_grn_po_link.sql; absent -> blank column)
+  const rc = {};
+  if (data?.length) {
+    const { data: rv, error: rvErr } = await supabase.from("v_po_receipt").select("po_id, ordered_qty, received_qty, pending_qty, item_count, items_complete").in("po_id", data.map(p => p.id));
+    if (!rvErr) (rv || []).forEach(r => { rc[r.po_id] = r; });
+  }
+  return (data || []).map(p => ({ id: p.id, po_no: p.po_no, site_id: p.site_id, vendor: p.vendor_name, total: Number(p.total_amount),
+    approval: p.approval_status || "approved", approved_by: p.approver?.full_name || "",
+    approved_at: p.approved_at ? p.approved_at.slice(0, 10) : "", reject_reason: p.reject_reason || "",
+    received_pct: rc[p.id] && Number(rc[p.id].ordered_qty) > 0 ? Math.round(100 * Number(rc[p.id].received_qty) / Number(rc[p.id].ordered_qty)) : null,
+    items_complete: rc[p.id]?.items_complete ?? null, item_count: rc[p.id]?.item_count ?? null,
+    is_lowest: p.is_lowest, reason: p.non_lowest_reason, status: p.status,
+    expected_delivery: p.expected_delivery || p.material_indents?.required_by || null,
+    delivery_status: p.delivery_status || "pending", delivery_note: p.delivery_note || "",
+    indent_no: p.material_indents?.indent_no, raised_by: p.material_indents?.app_users?.full_name || "", site: p.sites?.name, date: p.created_at?.slice(0,10) }));
+}
+
+export const DELIVERY_STATUS = {
+  pending: ["Awaiting confirmation", "gray"], confirmed: ["Date confirmed", "info"],
+  delayed: ["Delayed", "a"], dispatched: ["Out for delivery", "h"], partial: ["Partly received", "info"], delivered: ["Delivered", "p"],
+};
+
+export async function updatePODelivery(poId, fields) {
+  if (isDemo) return { ok: true };
+  const upd = { delivery_updated_at: new Date().toISOString() };
+  if (fields.expected_delivery !== undefined) upd.expected_delivery = fields.expected_delivery || null;
+  if (fields.delivery_status !== undefined) upd.delivery_status = fields.delivery_status;
+  if (fields.delivery_note !== undefined) upd.delivery_note = fields.delivery_note || null;
+  if (fields.delivery_status === "delivered") upd.status = "delivered";
+  const { error } = await supabase.from("purchase_orders").update(upd).eq("id", poId);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+// ---- resolve vendor master id by name (so PO links to vendor details) ----
+async function resolveVendorId(name) {
+  if (isDemo || !name) return null;
+  const { data } = await supabase.from("vendors").select("id").ilike("name", name.trim()).maybeSingle();
+  return data?.id || null;
+}
+
+// ---- full PO detail for the printable letterhead ----
+export async function getPODetail(poId) {
+  if (isDemo) {
+    return { po_no: "PO/DEMO", date: new Date().toISOString().slice(0,10), site: "KEI Industries, Sanand",
+      vendor: { name: "Demo Vendor", gstin: "24XXXXXXX", phone: "9800000000", contact: "" },
+      items: [{ item_name: "Pipe - MS 350NB (Heavy)", qty: 300, unit: "Rmt", rate: 1795 }], gst_pct: 18 };
+  }
+  const { data: po } = await supabase.from("purchase_orders")
+    .select("po_no, vendor_name, vendor_id, total_amount, status, approval_status, approved_at, approver:approved_by(full_name), created_at, sites(name, address)")
+    .eq("id", poId).maybeSingle();
+  if (!po) return null;
+  const { data: items } = await supabase.from("po_items")
+    .select("item_name, spec, qty, unit, rate, spec, list_rate, discount_pct, gst_pct").eq("po_id", poId);
+  let vendor = { name: po.vendor_name, gstin: "", phone: "", contact: "" };
+  if (po.vendor_id) {
+    const { data: v } = await supabase.from("vendors").select("name, gstin, phone, contact").eq("id", po.vendor_id).maybeSingle();
+    if (v) vendor = { name: v.name, gstin: v.gstin || "", phone: v.phone || "", contact: v.contact || "" };
+  } else {
+    const { data: v } = await supabase.from("vendors").select("name, gstin, phone, contact").ilike("name", (po.vendor_name||"").trim()).maybeSingle();
+    if (v) vendor = { name: v.name, gstin: v.gstin || "", phone: v.phone || "", contact: v.contact || "" };
+  }
+  return { po_no: po.po_no, approval: po.approval_status || "approved", approved_by: po.approver?.full_name || "", approved_at: po.approved_at ? po.approved_at.slice(0, 10) : "", date: po.created_at?.slice(0,10), status: po.status,
+    site: po.sites?.name, site_address: po.sites?.address,
+    vendor, items: (items||[]).map(i => ({ item_name: i.item_name + (i.spec ? " — " + i.spec : ""), qty: Number(i.qty), unit: i.unit,
+      rate: Number(i.rate), list_rate: i.list_rate != null ? Number(i.list_rate) : null,
+      discount_pct: Number(i.discount_pct || 0), gst_pct: Number(i.gst_pct ?? 18) })) };
+}
+
+export async function cancelPO(poId) {
+  if (isDemo) return { ok: true };
+  // find the indent this PO belongs to
+  const { data: po } = await supabase.from("purchase_orders").select("indent_id").eq("id", poId).maybeSingle();
+  const { error } = await supabase.from("purchase_orders").update({ status: "cancelled" }).eq("id", poId);
+  if (error) return { ok: false, error: error.message };
+  // update173: recompute item coverage — cancelled PO's items REOPEN on the indent
+  if (po?.indent_id) {
+    const [{ data: allIt }, { data: cov }, { data: active }] = await Promise.all([
+      supabase.from("material_indent_items").select("id").eq("indent_id", po.indent_id),
+      supabase.from("po_items").select("indent_item_id, purchase_orders!inner(id)")
+        .eq("purchase_orders.indent_id", po.indent_id).neq("purchase_orders.status", "cancelled"),
+      supabase.from("purchase_orders").select("id").eq("indent_id", po.indent_id).neq("status", "cancelled"),
+    ]);
+    const covered = new Set((cov || []).map(x => x.indent_item_id));
+    const uncovered = (allIt || []).filter(x => !covered.has(x.id)).length;
+    if (uncovered > 0) {
+      await supabase.from("material_indents")
+        .update({ status: (active || []).length > 0 ? "quoting" : "open" }).eq("id", po.indent_id);
+    }
+  }
+  return { ok: true };
+}
