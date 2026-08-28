@@ -1,0 +1,137 @@
+"use client";
+// update223: Tally-format Delivery Note (quantity only, no pricing)
+// update215: DELIVERY CHALLAN document — ?ids=1,2,3 prints one or many
+// (each on its own A4 page). Same header style as PO / RTV / voucher documents.
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { getDeliveryChallans } from "@/lib/challan";
+
+function DcDoc({ d, hsn }) {
+  // update223: exact replica of the company's Tally Delivery Note (PSP/2026-27 series).
+  // QUANTITY ONLY — no rate / per / disc / amount / taxable value anywhere.
+  const bc = "1px solid #444";
+  const cell = { border: bc, padding: "4px 8px", verticalAlign: "top", fontSize: 11.5 };
+  const lbl = { fontSize: 9.5, color: "#555" };
+  const units = [...new Set(d.lines.map(l => l.unit || "NOS"))];
+  const totQty = d.lines.reduce((t, l) => t + Number(l.received_qty || l.ordered_qty || 0), 0);
+  return (
+    <div style={{ maxWidth: 780, margin: "0 auto", padding: 20, color: "#111", background: "#fff", pageBreakAfter: "always", fontFamily: "Arial, system-ui" }}>
+      <div style={{ textAlign: "center", fontWeight: 800, fontSize: 15, marginBottom: 4 }}>Delivery Note</div>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <tbody>
+          <tr>
+            <td style={{ ...cell, width: "50%" }} rowSpan={3}>
+              <b style={{ fontSize: 12.5 }}>Pipeskool Projects Pvt Ltd</b><br />
+              102, Darshak, Opp Shrey Hospital<br />Punjabi Hall Lane, Navrangpura, Ahmedabad<br />
+              GSTIN/UIN: 24AAMCP3389A1ZF<br />State Name : Gujarat, Code : 24<br />
+              CIN: U26956GJ2021PTC126015<br />E-Mail : pipeskoolprojects@gmail.com
+            </td>
+            <td style={{ ...cell, width: "25%" }}><div style={lbl}>Delivery Note No.</div><b>{d.dc_ref}</b></td>
+            <td style={{ ...cell, width: "25%" }}><div style={lbl}>Dated</div><b>{d.date}</b></td>
+          </tr>
+          <tr>
+            <td style={cell}><div style={lbl}>Reference No. &amp; Date.</div>{d.vendor_dc_no ? <>{d.vendor_dc_no}{d.date ? " dt. " + d.date : ""}</> : "\u00A0"}</td>
+            <td style={cell}><div style={lbl}>Buyer&apos;s Order No.</div>{d.po_no || "\u00A0"}</td>
+          </tr>
+          <tr>
+            <td style={cell}><div style={lbl}>Dispatched through</div>{d.vendor || "\u00A0"}</td>
+            <td style={cell}><div style={lbl}>Destination</div>{d.site || "\u00A0"}</td>
+          </tr>
+          <tr>
+            <td style={cell}>
+              <div style={lbl}>Consignee (Ship to)</div>
+              <b>{d.client || d.site}</b><br />{d.client ? <>Site: {d.site}<br /></> : null}State Name : Gujarat, Code : 24
+            </td>
+            <td style={cell} colSpan={2}><div style={lbl}>Terms of Delivery</div>&nbsp;</td>
+          </tr>
+          <tr>
+            <td style={cell}>
+              <div style={lbl}>Buyer (Bill to)</div>
+              <b>{d.client || d.site}</b><br />State Name : Gujarat, Code : 24
+            </td>
+            <td style={cell} colSpan={2}>&nbsp;</td>
+          </tr>
+        </tbody>
+      </table>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: -1 }}>
+        <thead>
+          <tr>
+            <th style={{ ...cell, width: 36 }}>Sl<br />No.</th>
+            <th style={{ ...cell, textAlign: "left" }}>Description of Goods</th>
+            <th style={{ ...cell, width: 90 }}>HSN/SAC</th>
+            <th style={{ ...cell, width: 110, textAlign: "right" }}>Quantity</th>
+          </tr>
+        </thead>
+        <tbody>
+          {d.lines.map((l, i) => (
+            <tr key={i}>
+              <td style={{ ...cell, textAlign: "center", borderTop: "none", borderBottom: "none" }}>{i + 1}</td>
+              <td style={{ ...cell, fontWeight: 700, borderTop: "none", borderBottom: "none" }}>{l.item_name}</td>
+              <td style={{ ...cell, textAlign: "center", borderTop: "none", borderBottom: "none" }}>{hsn[l.item_id] || ""}</td>
+              <td style={{ ...cell, textAlign: "right", borderTop: "none", borderBottom: "none" }}><b>{Number(l.received_qty || l.ordered_qty || 0).toFixed(2)} {l.unit || "NOS"}</b></td>
+            </tr>
+          ))}
+          <tr><td style={{ ...cell, borderTop: "none" }}>&nbsp;</td><td style={{ ...cell, borderTop: "none" }}>&nbsp;</td><td style={{ ...cell, borderTop: "none" }}>&nbsp;</td><td style={{ ...cell, borderTop: "none" }}>&nbsp;</td></tr>
+          <tr>
+            <td style={cell}>&nbsp;</td>
+            <td style={{ ...cell, textAlign: "right", fontWeight: 800 }}>Total</td>
+            <td style={cell}>&nbsp;</td>
+            <td style={{ ...cell, textAlign: "right", fontWeight: 800 }}>{totQty.toFixed(2)} {units.length === 1 ? units[0] : ""}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, marginTop: 2 }}><span /><span>E. &amp; O.E</span></div>
+      <div style={{ fontSize: 11.5, marginTop: 10 }}>Company&apos;s PAN : <b>AAMCP3389A</b></div>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 10 }}>
+        <tbody><tr>
+          <td style={{ ...cell, height: 74 }}><div style={lbl}>Recd. in Good Condition</div></td>
+          <td style={{ ...cell, height: 74, textAlign: "right" }}>
+            <div style={{ fontSize: 11 }}>for <b>Pipeskool Projects Pvt Ltd</b></div>
+            <div style={{ marginTop: 42, fontSize: 11 }}>Authorised Signatory</div>
+          </td>
+        </tr></tbody>
+      </table>
+      <div style={{ textAlign: "center", fontSize: 10, color: "#555", marginTop: 8 }}>This is a Computer Generated Document</div>
+    </div>
+  );
+}
+
+function DcPrint() {
+  const params = useSearchParams();
+  const ids = (params.get("ids") || "").split(",").map(Number).filter(Boolean);
+  const [docs, setDocs] = useState(null);
+  useEffect(() => {
+    if (!getSession()) { window.location.replace("/login"); return; }
+    getDeliveryChallans().then(async all => {
+      const mine = all.filter(d => ids.includes(d.id));
+      // update223: HSN codes from Item Master for the printed lines (no FK — separate lookup)
+      const itemIds = [...new Set(mine.flatMap(d => d.lines.map(l => l.item_id)).filter(Boolean))];
+      let map = {};
+      if (itemIds.length) {
+        try {
+          const { supabase } = await import("@/lib/supabase");
+          const { data } = await supabase.from("item_master").select("id, hsn_code").in("id", itemIds);
+          (data || []).forEach(r => { if (r.hsn_code) map[r.id] = r.hsn_code; });
+        } catch {}
+      }
+      setDocs({ list: mine, hsn: map });
+    });
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  if (!docs) return <div style={{ margin: 40, fontFamily: "system-ui" }}>Preparing document…</div>;
+  if (!docs.list.length) return <div style={{ margin: 40, fontFamily: "system-ui" }}>No challans found for this link.</div>;
+  return (
+    <div style={{ fontFamily: "system-ui", background: "#fff" }}>
+      <style>{`@media print { .no-print { display: none !important; } } @page { size: A4; margin: 12mm; }`}</style>
+      <div className="no-print" style={{ display: "flex", gap: 8, padding: 14, maxWidth: 780, margin: "0 auto" }}>
+        <button onClick={() => window.print()} style={{ fontWeight: 700 }}>🖨 Print / Save as PDF{docs.list.length > 1 ? ` (${docs.list.length} challans)` : ""}</button>
+        <button onClick={() => window.close()}>Close</button>
+      </div>
+      {docs.list.map(d => <DcDoc key={d.id} d={d} hsn={docs.hsn} />)}
+    </div>
+  );
+}
+
+export default function Page() {
+  return <Suspense fallback={<div style={{ margin: 40 }}>Loading…</div>}><DcPrint /></Suspense>;
+}

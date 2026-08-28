@@ -1,0 +1,132 @@
+"use client";
+// update186: printable worker attendance slip / monthly report (opened from the muster
+// worker sheet and from the web). Browser "Print" → Save as PDF.
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { getWorkerMonth } from "@/lib/mobile";
+import { fmtHM } from "@/lib/payroll";
+import { supabase, isDemo } from "@/lib/supabase";
+import { getSession } from "@/lib/auth";
+import { setPayoutStatutory } from "@/lib/payroll";
+
+const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
+function Slip() {
+  const sp = useSearchParams();
+  const workerId = sp.get("worker");
+  const [month, setMonth] = useState(sp.get("month") || new Date().toISOString().slice(0, 7));   // update194: month nav
+  const [d, setD] = useState(null); const [err, setErr] = useState("");
+  const [pay, setPay] = useState(null);   // update194: PF / PT / net from wage payout of this month
+  // update195: slip opens in REVIEW/EDIT mode for authorized people, then Preview -> Print
+  const sess = typeof window !== "undefined" ? getSession() : null;
+  const [canEdit, setCanEdit] = useState(false);
+  const [canView, setCanView] = useState(null);   // null = checking
+  const [preview, setPreview] = useState(false);
+  const [pfIn, setPfIn] = useState(""); const [ptIn, setPtIn] = useState(""); const [statMsg, setStatMsg] = useState("");
+  useEffect(() => {
+    if (!sess) return;
+    const roleOk = ["director", "it_executive", "accountant"].includes(sess.role);
+    if (roleOk) { setCanView(true); setCanEdit(true); return; }
+    if (isDemo) { setCanView(true); return; }
+    supabase.rpc("fn_has_admin", { p_cap: "edit_salary_slip" }).then(({ data }) => {
+      setCanEdit(!!data); setCanView(true);   // any logged-in staff can VIEW (muster flow); editing needs role/cap
+    }).catch(() => setCanView(true));
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPfIn(pay ? String(pay.pf_amount ?? 0) : ""); setPtIn(pay ? String(pay.pt_amount ?? 0) : ""); }, [pay]);
+  async function saveStat() {
+    if (!pay?.id) { setStatMsg("No wage payout for this month yet — generate wages first."); return; }
+    const res = await setPayoutStatutory(pay.id, pfIn, ptIn);
+    if (!res.ok) { setStatMsg(res.error); return; }
+    setStatMsg("Saved — net updated.");
+    supabase.from("wage_payouts").select("id, gross, advances_deducted, pf_amount, pt_amount, net, status")
+      .eq("worker_id", Number(workerId)).eq("pay_month", month + "-01").maybeSingle().then(({ data }) => setPay(data || null));
+  }
+  const shiftMonth = k => setMonth(m => { const dt = new Date(m + "-15"); dt.setMonth(dt.getMonth() + k); return dt.toISOString().slice(0, 7); });
+  useEffect(() => {
+    if (isDemo || !workerId) return;
+    supabase.from("wage_payouts").select("id, gross, advances_deducted, pf_amount, pt_amount, net, status")
+      .eq("worker_id", Number(workerId)).eq("pay_month", month + "-01").maybeSingle().then(({ data }) => setPay(data || null));
+  }, [workerId, month]);
+  useEffect(() => {
+    if (!getSession()) { window.location.replace("/login"); return; }
+    if (!workerId) { setErr("No worker given."); return; }
+    getWorkerMonth(Number(workerId), month).then(x => x ? setD(x) : setErr("Worker not found or no access."));
+  }, [workerId, month]);
+  if (err) return <div style={{ padding: 30 }}>{err}</div>;
+  if (!d) return <div style={{ padding: 30 }}>Loading…</div>;
+  const w = d.worker;
+  const label = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  return (
+    <div style={{ maxWidth: 820, margin: "0 auto", padding: 28, fontFamily: "var(--font)", color: "#111", background: "#fff" }}>
+      <style>{`@media print { button { display: none } body { background: #fff } }`}</style>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "2px solid #222", paddingBottom: 10 }}>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>PIPESKOOL PROJECTS PVT. LTD.</div>
+          <div style={{ fontSize: 12, color: "#555" }}>Specialist Plumbing &amp; Piping Contractors · Ahmedabad</div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>Attendance &amp; Wage Slip</div>
+          <div style={{ fontSize: 13 }}>{label}</div>
+          {canEdit && !preview && pay?.status === "draft" && (
+        <div className="no-print" style={{ border: "1px solid #d8d3c8", background: "#faf8f3", borderRadius: 8, padding: "10px 12px", margin: "0 0 12px" }}>
+          <b style={{ fontSize: 13 }}>✎ Review before print (authorized only)</b>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-end", marginTop: 6, flexWrap: "wrap" }}>
+            <div><label style={{ fontSize: 11.5, color: "#777" }}>PF / SI (₹)</label><br /><input inputMode="decimal" value={pfIn} onChange={e => setPfIn(e.target.value)} style={{ width: 110 }} /></div>
+            <div><label style={{ fontSize: 11.5, color: "#777" }}>Professional Tax (₹)</label><br /><input inputMode="decimal" value={ptIn} onChange={e => setPtIn(e.target.value)} style={{ width: 110 }} /></div>
+            <button className="primary" onClick={saveStat}>Save deductions</button>
+            {statMsg && <span style={{ fontSize: 12, color: statMsg.startsWith("Saved") ? "green" : "var(--red)" }}>{statMsg}</span>}
+          </div>
+          <div style={{ fontSize: 11.5, color: "#777", marginTop: 4 }}>Included in Net = Gross − Advances − PF/SI − P.Tax. Locked once the payout is approved/paid.</div>
+        </div>
+      )}
+      {canEdit && pay && pay.status !== "draft" && !preview && <div className="no-print" style={{ fontSize: 12, color: "#777", margin: "0 0 10px" }}>Payout is {pay.status} — deductions locked.</div>}
+      <button style={{ marginRight: 6 }} className="no-print" onClick={() => setPreview(x => !x)}>{preview ? "‹ Back to review" : "👁 Preview"}</button>
+      <button style={{ marginRight: 6 }} className="no-print" onClick={() => shiftMonth(-1)}>‹ Prev month</button><button style={{ marginRight: 12 }} className="no-print" onClick={() => shiftMonth(1)}>Next month ›</button>          <button style={{ marginTop: 6, fontSize: 12 }} onClick={() => window.print()}>🖨 Print / Save PDF</button>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 13, margin: "12px 0" }}>
+        <div><b>Worker:</b> {w.name} (ID {w.id})</div><div><b>Category:</b> {w.category} · {w.labour}</div>
+        <div><b>Home site:</b> {w.site}</div><div><b>Mobile:</b> {w.mobile}</div>
+        <div><b>Daily wage:</b> {inr(w.wage)}</div>{w.otEligible ? <div><b>OT rate:</b> {inr(w.otRate)}/h (wage ÷ {w.stdHrs} h)</div> : <div><b>OT:</b> Not eligible</div>}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6, margin: "10px 0" }}>
+        {[["Present", d.present], ["Half days", d.half], ["Absent", d.absent], ["Hours", fmtHM(d.totalHours)], ...(w.otEligible ? [["OT (approved)", fmtHM(d.otHours)]] : []), ["Sundays", d.sundays]].map(([l, v]) => (
+          <div key={l} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "6px 8px", textAlign: "center" }}><div style={{ fontSize: 10.5, color: "#666" }}>{l}</div><div style={{ fontSize: 16, fontWeight: 700 }}>{v}</div></div>
+        ))}
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+        <thead><tr style={{ background: "#f2f2ee" }}>{["Date", "Site", "In", "Out", "Hours", "Status", ...(w.otEligible ? ["OT (approved)"] : []), "Punch", "Verified"].map(h => <th key={h} style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "left" }}>{h}</th>)}</tr></thead>
+        <tbody>
+          {d.days.map(x => (
+            <tr key={x.id}>{[x.date, x.site, x.in, x.out, x.hours ? fmtHM(x.hours) : "—", x.status, ...(w.otEligible ? [x.otApproved ? fmtHM(x.otApproved) : "—"] : []), x.punch, x.verify].map((v, i) => <td key={i} style={{ border: "1px solid #ddd", padding: "3px 6px" }}>{String(v)}</td>)}</tr>
+          ))}
+          {d.days.length === 0 && <tr><td colSpan={w.otEligible ? 9 : 8} style={{ padding: 8, color: "#777" }}>No attendance recorded this month.</td></tr>}
+        </tbody>
+      </table>
+      <table style={{ marginTop: 14, fontSize: 13, borderCollapse: "collapse", minWidth: 320 }}>
+        <tbody>
+          <tr><td style={{ padding: "3px 10px 3px 0" }}>Days pay ({d.present} + {d.half}×½) × {inr(w.wage)}</td><td style={{ textAlign: "right" }}>{inr(d.earned)}</td></tr>
+          {w.otEligible && d.otHours > 0 && <tr><td style={{ padding: "3px 10px 3px 0" }}>OT {fmtHM(d.otHours)} × {inr(w.otRate)}/h</td><td style={{ textAlign: "right" }}>{inr(d.otAmt)}</td></tr>}
+          {pay && <>
+            <tr><td style={{ padding: "3px 10px 3px 0" }}>Advances deducted</td><td style={{ textAlign: "right" }}>−{inr(pay.advances_deducted)}</td></tr>
+            <tr><td style={{ padding: "3px 10px 3px 0" }}>PF / SI</td><td style={{ textAlign: "right" }}>−{inr(pay.pf_amount)}</td></tr>
+            <tr><td style={{ padding: "3px 10px 3px 0" }}>Professional Tax</td><td style={{ textAlign: "right" }}>−{inr(pay.pt_amount)}</td></tr>
+            <tr style={{ fontWeight: 700, borderTop: "1px solid #999" }}><td style={{ padding: "4px 10px 4px 0" }}>Net payable ({pay.status})</td><td style={{ textAlign: "right" }}>{inr(pay.net)}</td></tr>
+          </>}
+          <tr style={{ fontWeight: 700, borderTop: "1px solid #222" }}><td style={{ padding: "4px 10px 4px 0" }}>Gross (before advances)</td><td style={{ textAlign: "right" }}>{inr(d.gross)}</td></tr>
+        </tbody>
+      </table>
+      {d.history.length > 0 && (
+        <>
+          <div style={{ fontWeight: 700, fontSize: 13, marginTop: 16 }}>Recent payouts</div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginTop: 4 }}>
+            <thead><tr style={{ background: "#f2f2ee" }}>{["Month", "Days", "OT h", "Gross", "Advances", "Net", "Status"].map(h => <th key={h} style={{ border: "1px solid #ccc", padding: "4px 6px", textAlign: "left" }}>{h}</th>)}</tr></thead>
+            <tbody>{d.history.map(h => <tr key={h.month}>{[h.month, Number(h.days_full) + Number(h.days_half) * 0.5, h.ot_hours, inr(h.gross), inr(h.advances_deducted), inr(h.net), h.status].map((v, i) => <td key={i} style={{ border: "1px solid #ddd", padding: "3px 6px" }}>{String(v)}</td>)}</tr>)}</tbody>
+          </table>
+        </>
+      )}
+      <div style={{ fontSize: 11, color: "#666", marginTop: 18 }}>Generated {new Date().toLocaleString("en-IN")} by {getSession()?.name || ""}. Gross is indicative; final payable is per the approved wage payout (advances deducted). 📷 = proxy punch.</div>
+    </div>
+  );
+}
+export default function Page() { return <Suspense fallback={<div style={{ padding: 30 }}>Loading…</div>}><Slip /></Suspense>; }
