@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
 import { approvalRights } from "@/lib/perms";
+import { getPendingCount } from "@/lib/pending";
 import { getSites, getAttendance, getWorkers } from "@/lib/data";
 import { getProjects } from "@/lib/projects";
 import { getPettyRequestQueue, getAdvanceQueue, getExpenseClaimQueue, inr } from "@/lib/money";
@@ -154,6 +155,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   const [panel, setPanel] = useState(null);       // project explorer (mobile only — kept from 228)
   const [expId, setExpId] = useState(null);
   const [tasks, setTasks] = useState(null);
+  const [pendCount, setPendCount] = useState(0);   // update256: PO lines still awaiting delivery
 
   // on desktop the Projects TAB owns projects; on the phone the inline explorer does
   const openProjects = () => { if (onOpenProjects) onOpenProjects(); else setPanel("all"); };
@@ -173,6 +175,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
     getOpenIndents("all").then(r => setIndents(arr(r))).catch(() => {});
     getDigest(todayLocal()).then(r => setDigest(arr(r))).catch(() => setDigest([]));
     getTasks().then(r => setTasks(arr(r))).catch(() => setTasks([]));
+    getPendingCount().then(setPendCount).catch(() => setPendCount(0));   // update256
     const days = [];
     for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push(d); }
     const key = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
@@ -276,9 +279,9 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   // update238: view_all_money holders get the tile too — read-only inbox, no actions inside
   const apprTile = rights.open ? [["✅", "Approvals", R("/m/approvals", "/approvals"), apprTotal]] : [];
   const dirTiles = [...apprTile, ["💰", "Finance", "/expenses", 0], ["📊", "Analytics", R("/m/report", "/reports"), 0], ["🏗", "All Sites", null, 0],
-    ["🏢", "Vendors", "/vendors", 0], ["👥", "Team & HR", "/workers", 0], ["🗒", "Assign Task", "/tasks", 0], ["⚙", "Admin", "/admin", 0]];
+    ["🏢", "Vendors", "/vendors", 0], ["👥", "Team & HR", "/workers", 0], ["🗒", "Assign Task", "/tasks", 0], ["🚚", "Pending Del.", "/procure/pending", pendCount], ["⚙", "Admin", "/admin", 0]];
   const staffTiles = [["📁", "Projects", null, 0], ["👷", "Muster", R("/m/muster", "/attendance"), 0], ...apprTile, ["📦", "Stock", R("/m/stock", "/stock"), 0],
-    ["💳", "Expenses", R("/m/money", "/expenses"), appr.claims], ["🗒", "Tasks", null, 0], ["📋", "Reports", R("/m/report", "/reports"), 0], ["🛒", "Indents", "/procure", appr.ind]];
+    ["💳", "Expenses", R("/m/money", "/expenses"), appr.claims], ["🗒", "Tasks", null, 0], ["📋", "Reports", R("/m/report", "/reports"), 0], ["🛒", "Indents", "/procure", appr.ind], ["🚚", "Pending Del.", "/procure/pending", pendCount]];
   const tiles = companyView ? dirTiles : staffTiles;
 
   if (!sess) return null;
