@@ -166,11 +166,16 @@ export default function BoqPage() {
   const columns = [
     { key: "item_code", label: "Code", width: 72, filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.item_code || "—"}</span> },
     { key: "display", label: "Item", filter: "search", wrap: true,
-      render: r => <span title={r.description}>{r.display}{r.short_name ? <span className="muted" style={{ fontSize: 10.5 }}> ✎</span> : null}
-        {r.is_extra && r.extra_status !== "approved" && <span className="badge gray" style={{ fontSize: 10, marginLeft: 4 }}>rate pending</span>}
-        {r.is_extra && r.extra_status === "approved" && <span className="badge p" style={{ fontSize: 10, marginLeft: 4 }}>approved</span>}
+      // update260b: clamp to 2 tidy lines whatever the description length — full text on hover.
+      // Without this, a freshly imported BOQ (no short names yet) ballooned every row.
+      render: r => <span title={r.description}>
+        <span style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontSize: 12.5, lineHeight: 1.35 }}>{r.display}</span>
+        {r.short_name ? <span className="muted" style={{ fontSize: 10.5 }}>✎ </span> : null}
+        {r.is_extra && r.extra_status !== "approved" && <span className="badge gray" style={{ fontSize: 10 }}>rate pending</span>}
+        {r.is_extra && r.extra_status === "approved" && <span className="badge p" style={{ fontSize: 10 }}>approved</span>}
       </span> },
-    { key: "section", label: "Section", width: 150, wrap: true, filter: "select" },
+    { key: "section", label: "Section", width: 150, wrap: true, filter: "select",
+      render: r => <span title={r.section} style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontSize: 11.5, lineHeight: 1.3 }}>{r.section || "—"}</span> },   // update260b
     { key: "unit", label: "Unit", width: 58 },
     { key: "boq_qty", label: "BOQ qty", type: "num", render: r => r.boq_qty.toLocaleString("en-IN"), exportValue: r => r.boq_qty },
     { key: "rate", label: "Rate ₹", type: "num", render: r => r.rate != null ? r.rate.toLocaleString("en-IN") : "—", exportValue: r => r.rate ?? "" },   // update260
