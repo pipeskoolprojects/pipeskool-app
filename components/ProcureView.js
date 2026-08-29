@@ -5,12 +5,37 @@ import { getSession, can } from "@/lib/auth";
 import { canApprove } from "@/lib/perms";
 import {
   getOpenIndents, saveQuotes, getQuotes, buildComparison, createPO, getPOs, cancelPO, approvePO, getAllIndents, inr,
+  uploadQuoteProof, getQuoteProofs, deleteQuoteProof, getPOProofs,
   DELIVERY_STATUS, updatePODelivery,
 } from "@/lib/procure";
 import { getVendors } from "@/lib/vendors";
 import { createIndent, editIndent, deleteIndent, quickAddItem } from "@/lib/stock";
 import { searchIndentCatalog } from "@/lib/boq";
 import { getSites } from "@/lib/data";
+import { billUrl, isPdf } from "@/lib/bills";
+
+// update253: a rate's proof, shown as a small chip. Click opens the file in a new tab.
+function ProofChip({ proofs, onRemove }) {
+  if (!proofs?.length) return null;
+  return (
+    <span style={{ display: "inline-flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
+      {proofs.map(p => (
+        <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+          <a href={billUrl(p.path)} target="_blank" rel="noreferrer" title={p.note || "View rate proof"}
+             style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: 10.5, fontWeight: 700,
+               color: "var(--copper)", border: "1px solid var(--copper)", borderRadius: 6, padding: "1px 5px", textDecoration: "none" }}>
+            {isPdf(p.path)
+              ? "PDF"
+              : <img src={billUrl(p.path)} alt="" style={{ width: 16, height: 16, objectFit: "cover", borderRadius: 3 }} />}
+            <span>proof</span>
+          </a>
+          {onRemove && <a onClick={() => onRemove(p)} title="Remove this proof"
+            style={{ cursor: "pointer", color: "var(--red)", fontSize: 11, fontWeight: 800 }}>×</a>}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 export default function ProcureView({ siteId = null, only = "all", showHead = true }) {
   // update243: de-iframed. siteId arrives as a PROP, so a project tab cannot show another
@@ -60,6 +85,9 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   const [rates, setRates] = useState({});                // derived NET map {itemId: {vendor: net}}
   const [enqSel, setEnqSel] = useState({});              // {itemId: bool} items to include in enquiry download
   const [cmp, setCmp] = useState(null);
+  const [proofs, setProofs] = useState({});        // update253: "<itemId>|<vendor>" -> [proof]
+  const [poProofs, setPoProofs] = useState({});    // update253: indent_item_id -> [proof]
+  const [upBusy, setUpBusy] = useState("");
   const [awardVendor, setAwardVendor] = useState("");
   const [splitMode, setSplitMode] = useState(false);
   const [itemVendor, setItemVendor] = useState({});
@@ -151,9 +179,10 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     const willOpen = openId !== ind.id;
     setOpenId(willOpen ? ind.id : null);
     setCmp(null); setRates({}); setAwardVendor(""); setReason(""); setMsg(""); setErr(""); setSplitMode(false); setItemVendor({}); setItemSplits({});
-    setEnqVendors([]); setVendorPick(""); setAlloc({}); setQin({});
+    setEnqVendors([]); setVendorPick(""); setAlloc({}); setQin({}); setProofs({});
     const sel = {}; ind.items.forEach(it => sel[it.id] = true); setEnqSel(sel);
     if (willOpen) {
+      getQuoteProofs(ind.id).then(setProofs);   // update253: rate evidence, loaded alongside
       const quotes = await getQuotes(ind.id);
       if (quotes.length) {
         const vs = [], al = {}, qi = {};
@@ -167,6 +196,27 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
         setEnqVendors(vs); setAlloc(al); setQin(qi);
       }
     }
+  }
+
+  // update253: attach / remove a rate proof. Optional throughout — a rate with no proof
+  // saves and behaves exactly as before.
+  async function attachProof(indentId, itemId, vendor, file) {
+    if (!file) return;
+    const key = itemId + "|" + vendor;
+    setUpBusy(key); setErr("");
+    const r = await uploadQuoteProof({ indentId, indentItemId: itemId, vendorName: vendor, file }, session?.id);
+    setUpBusy("");
+    if (!r.ok) { setErr(r.error); return; }
+    setProofs(prev => ({ ...prev, [key]: [...(prev[key] || []), r.proof] }));
+    setMsg("Proof attached to " + vendor + "'s rate.");
+  }
+
+  async function removeProof(itemId, vendor, proof) {
+    if (!window.confirm("Remove this rate proof?")) return;
+    const r = await deleteQuoteProof(proof.id, proof.path);
+    if (!r.ok) { setErr(r.error); return; }
+    const key = itemId + "|" + vendor;
+    setProofs(prev => ({ ...prev, [key]: (prev[key] || []).filter(x => x.id !== proof.id) }));
   }
 
   function addVendor() {
@@ -548,6 +598,13 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                                           <input style={{ width: 78 }} placeholder="list ₹" value={qin[it.id]?.[v]?.list || ""} onChange={e => setQ(it.id, v, "list", e.target.value)} />
                                           <input style={{ width: 78 }} placeholder="disc %" value={qin[it.id]?.[v]?.disc || ""} onChange={e => setQ(it.id, v, "disc", e.target.value)} />
                                           <div style={{ fontSize: 11.5, fontWeight: 700, color: net != null ? "var(--copper-deep)" : "var(--muted)" }}>{net != null ? "net " + inr(net) : "—"}</div>
+                                          {/* update253: optional evidence for THIS vendor's rate on THIS item */}
+                                          <ProofChip proofs={proofs[it.id + "|" + v]} onRemove={pr => removeProof(it.id, v, pr)} />
+                                          <label style={{ fontSize: 10.5, color: "var(--muted)", cursor: "pointer", textDecoration: "underline" }}>
+                                            {upBusy === (it.id + "|" + v) ? "uploading…" : "📎 proof"}
+                                            <input type="file" accept="image/*,application/pdf" capture="environment" style={{ display: "none" }}
+                                              onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; attachProof(ind.id, it.id, v, f); }} />
+                                          </label>
                                         </div>
                                       )}
                                     </td>
@@ -583,7 +640,13 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                                     <td className="num">{it.qty} {it.unit}</td>
                                     {cmp.vendors.map(v => {
                                       const r = row[v]; const isBest = best && best.vendor === v;
-                                      return <td key={v} className="num" style={{ fontWeight: isBest ? 700 : 400, color: isBest ? "var(--copper-deep)" : (r == null ? "var(--muted)" : "inherit"), background: isBest ? "rgba(255,122,26,0.10)" : "transparent" }}>{r == null ? "—" : inr(r)}</td>;
+                                      return (
+                                        <td key={v} className="num" style={{ fontWeight: isBest ? 700 : 400, color: isBest ? "var(--copper-deep)" : (r == null ? "var(--muted)" : "inherit"), background: isBest ? "rgba(255,122,26,0.10)" : "transparent" }}>
+                                          {r == null ? "—" : inr(r)}
+                                          {/* update253: each vendor's own evidence, side by side */}
+                                          <div style={{ marginTop: 2 }}><ProofChip proofs={proofs[it.id + "|" + v]} /></div>
+                                        </td>
+                                      );
                                     })}
                                     <td>{best ? <span className="badge p">{best.vendor}</span> : <span className="muted">no quote</span>}</td>
                                   </tr>
