@@ -258,3 +258,54 @@ tr.po-void td { opacity: 0.62; }
 /* the PO number and vendor stay readable so the row is still identifiable at a glance */
 tr.po-void td:first-child, tr.po-void td:nth-child(6) { opacity: 0.8; }
 tr.po-void:hover td { opacity: 0.85; }
+
+/* ---------- update259: PIPESKOOL CALENDAR ---------- */
+.cal-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.cal-switch { display: flex; background: #fff; border: 1px solid var(--border); border-radius: 11px; padding: 4px; }
+.cal-switch button { border: none; background: none; padding: 8px 15px; font-size: 12.5px; font-weight: 700; color: var(--muted); border-radius: 8px; cursor: pointer; }
+.cal-switch button.active { background: linear-gradient(135deg, #FF9D5C, #FF5F1F); color: #fff; }
+
+.cal-filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.cal-nav { width: 34px; height: 34px; border-radius: 9px; font-size: 15px; padding: 0; }
+.cal-today { background: var(--deep); color: #fff; border: none; font-weight: 700; border-radius: 9px; padding: 8px 14px; cursor: pointer; }
+.cal-types { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.cal-type { border: 1px solid var(--border); background: #fff; border-radius: 999px; padding: 5px 10px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+
+.cal-body { display: flex; gap: 14px; align-items: flex-start; }
+.cal-card { flex: 2.4; min-width: 0; background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 14px; }
+.cal-side { flex: 1; min-width: 250px; display: flex; flex-direction: column; gap: 12px; }
+
+.cal-dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 6px; }
+.cal-dow div { text-align: center; font-size: 11px; font-weight: 800; color: var(--muted); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal-daygrid { display: block; }
+
+.cal-cell { border: 1px solid var(--border); border-radius: 10px; padding: 6px 7px; min-height: 96px; cursor: pointer; overflow: hidden; }
+.cal-daygrid .cal-cell { min-height: 220px; }
+.cal-cell.out { background: #fafbfd; opacity: 0.55; }
+.cal-cell.today { border: 2px solid var(--copper); }
+.cal-cell.sel { box-shadow: 0 0 0 2px rgba(255,122,26,0.35); }
+.cal-cell.holiday { background: linear-gradient(135deg, #FFF3E9, #FFE4CF); border-color: #FFC38A; }
+.cal-daynum { font-size: 11.5px; font-weight: 700; margin-bottom: 4px; }
+.cal-cell.holiday .cal-daynum { color: #A15C00; }
+.cal-chip { display: block; width: 100%; text-align: left; border: none; border-radius: 5px; padding: 2px 5px;
+  margin-bottom: 2px; font-size: 9.5px; font-weight: 700; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; cursor: pointer; }
+.cal-more { font-size: 9.5px; color: var(--muted); font-weight: 700; margin-top: 2px; }
+
+.cal-agrow { display: flex; gap: 9px; padding: 8px 0; border-bottom: 1px solid var(--border); align-items: center; cursor: pointer; }
+.cal-agrow:last-child { border-bottom: none; }
+.cal-agic { width: 28px; height: 28px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+
+/* phone and tablet: the side column drops under the grid, cells shrink but stay tappable */
+@media (max-width: 1000px) {
+  .cal-body { flex-direction: column; }
+  .cal-card, .cal-side { width: 100%; flex: none; }
+  .cal-types { margin-left: 0; }
+}
+@media (max-width: 640px) {
+  .cal-cell { min-height: 66px; padding: 4px; }
+  .cal-chip { font-size: 8.5px; }
+  .cal-grid, .cal-dow { gap: 3px; }
+  .cal-switch button { padding: 7px 11px; }
+}
