@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { getPODetail, getPOProofs } from "@/lib/procure";
+import { getPOItemStatus, LINE_STATUS } from "@/lib/pending";
 
 function POView() {
   const params = useSearchParams();
@@ -10,6 +11,7 @@ function POView() {
   const [po, setPo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [proofs, setProofs] = useState({ indentId: null, proofs: [] });   // update254: rate-comparison reference
+  const [recv, setRecv] = useState([]);   // update256: per-line ordered / received / pending
 
   useEffect(() => {
     if (!poId) { setLoading(false); return; }
@@ -17,6 +19,9 @@ function POView() {
     // update254: the rate-comparison proof is a SEPARATE document. We only look it up so the
     // Director preview can offer a link to it — nothing about the PO body changes.
     getPOProofs(poId).then(setProofs).catch(() => setProofs({ indentId: null, proofs: [] }));
+    // update256: delivery status per line, derived from GRNs. Screen only — the printed PO
+    // is the commercial document and must not change.
+    getPOItemStatus(poId).then(setRecv).catch(() => setRecv([]));
   }, [poId]);
 
   // update241: was a require() swallowed by try/catch — a throw silently hid the control
@@ -157,6 +162,43 @@ function POView() {
             {proofs.proofs?.length
               ? "Reference only · not part of this purchase order"
               : "No proof attached to this indent yet"}
+          </div>
+        </div>
+      )}
+
+      {/* update256: what is still outstanding on this PO. Hidden from print. */}
+      {recv.length > 0 && recv.some(r => Number(r.pending_qty) > 0 || Number(r.excess_qty) > 0) && (
+        <div className="no-print" style={{ maxWidth: 860, margin: "20px auto 0", border: "1px solid #e2d2c5", borderRadius: 10, padding: "12px 14px" }}>
+          <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 8, color: "#a4551f" }}>Delivery status — what is still outstanding</div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead><tr style={{ textAlign: "left", color: "#6b7280" }}>
+              <th style={{ padding: "4px 6px" }}>Item</th>
+              <th style={{ padding: "4px 6px", textAlign: "right" }}>Ordered</th>
+              <th style={{ padding: "4px 6px", textAlign: "right" }}>Received</th>
+              <th style={{ padding: "4px 6px", textAlign: "right" }}>Pending</th>
+              <th style={{ padding: "4px 6px" }}>Status</th>
+            </tr></thead>
+            <tbody>
+              {recv.map(r => {
+                const st = LINE_STATUS[r.line_status] || [r.line_status, "gray"];
+                const pend = Number(r.pending_qty), exc = Number(r.excess_qty);
+                return (
+                  <tr key={r.po_item_id} style={{ borderTop: "1px solid #f1e7de" }}>
+                    <td style={{ padding: "5px 6px" }}>{r.item_name}</td>
+                    <td style={{ padding: "5px 6px", textAlign: "right" }}>{Number(r.ordered_qty)} {r.unit}</td>
+                    <td style={{ padding: "5px 6px", textAlign: "right" }}>{Number(r.received_qty)} {r.unit}</td>
+                    <td style={{ padding: "5px 6px", textAlign: "right", fontWeight: 700,
+                      color: exc > 0 ? "#a4551f" : pend > 0 ? "#b91c1c" : "#15803d" }}>
+                      {exc > 0 ? "+" + exc : pend} {r.unit}</td>
+                    <td style={{ padding: "5px 6px" }}><span className={"badge " + st[1]}>{st[0]}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div style={{ marginTop: 8, fontSize: 11.5 }}>
+            <a href="/procure/pending" target="_blank" rel="noreferrer" style={{ color: "#a4551f", fontWeight: 700 }}>
+              Open the Pending deliveries register →</a>
           </div>
         </div>
       )}
