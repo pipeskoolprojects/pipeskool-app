@@ -99,10 +99,14 @@ export default function IndentScreen() {
               ))}
               {d.pos && d.pos.map((p, i) => {
                 const [dl, dc] = DELIV[p.delivery_status] || DELIV.pending;
+                // update258: a cancelled PO must not read as live on the phone either
+                const void_ = p.status === "cancelled";
+                const strike = void_ ? { textDecoration: "line-through", textDecorationColor: "var(--red)" } : undefined;
                 return (
-                  <div key={"po" + i} style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                    <span className={"badge " + dc} style={{ fontSize: 11 }}>{dl}</span>
-                    {p.expected_delivery && <span className="dt">expected {p.expected_delivery}</span>}
+                  <div key={"po" + i} style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", opacity: void_ ? 0.62 : 1 }}>
+                    <span className={"badge " + (void_ ? "gray" : dc)} style={{ fontSize: 11, ...strike }}>{dl}</span>
+                    {void_ && <span className="badge red" style={{ fontSize: 10.5 }}>✕ cancelled</span>}
+                    {p.expected_delivery && <span className="dt" style={strike}>expected {p.expected_delivery}</span>}
                     <span className="muted" style={{ fontSize: 11 }}>· {p.vendor}</span>
                   </div>
                 );

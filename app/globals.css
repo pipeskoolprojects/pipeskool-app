@@ -249,3 +249,12 @@ button.primary:disabled:hover, button.primary[disabled]:hover { background: var(
 /* iframed tabs that remain: give them real height instead of a fixed short box */
 .proj-frame { width: 100%; border: 1px solid var(--border); border-radius: 12px; background: #fff;
   height: calc(100vh - 240px); min-height: 560px; }
+
+/* ---------- update258: CANCELLED PO ROWS READ AS VOID ----------
+   A cancelled PO kept showing "Awaiting confirmation" / "Delivered" exactly like a live one.
+   Visual only — the data and the cancellation logic are untouched. */
+tr.po-void { background: #fbfafa; }
+tr.po-void td { opacity: 0.62; }
+/* the PO number and vendor stay readable so the row is still identifiable at a glance */
+tr.po-void td:first-child, tr.po-void td:nth-child(6) { opacity: 0.8; }
+tr.po-void:hover td { opacity: 0.85; }
