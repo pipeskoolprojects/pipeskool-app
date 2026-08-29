@@ -868,6 +868,19 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                             /* update221: the APPROVER must be able to review the full draft before deciding */
                             ? <a href={"/purchase/po?po=" + p.id + "&review=1"} target="_blank" rel="noreferrer"><button style={{ fontSize: 11.5, marginRight: 4, border: "1px solid var(--amber)", color: "var(--amber)", fontWeight: 700 }} title="Review the draft PO (printed copy is watermarked DRAFT)">👁 Review draft</button></a>
                             : <button style={{ fontSize: 11.5, marginRight: 4, color: "var(--muted)" }} disabled title={p.approval === "rejected" ? "Rejected — cannot be issued" : "Waiting for Director approval — cannot be issued yet"}>🔒 Print</button>}
+                        {/* update255: reach the rate-comparison proof straight from the list.
+                            Shown whenever the PO came from an indent, so "none attached" is
+                            distinguishable from "no way to look". */}
+                        {p.indent_id && (
+                          <a href={"/purchase/rate-proof?indent=" + p.indent_id} target="_blank" rel="noreferrer">
+                            <button style={{ fontSize: 11.5, marginRight: 4,
+                              border: "1px solid " + (p.proof_count > 0 ? "var(--copper)" : "var(--border)"),
+                              color: p.proof_count > 0 ? "var(--copper)" : "var(--muted)",
+                              fontWeight: p.proof_count > 0 ? 700 : 400 }}
+                              title={p.proof_count > 0 ? "Rate comparison proof — opens separately" : "No rate proof attached to this indent"}>
+                              📎 {p.proof_count > 0 ? p.proof_count : "0"}</button>
+                          </a>
+                        )}
                         {p.status !== "cancelled" && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => doCancel(p)}>Cancel</button>}
                       </td>
                     </tr>
