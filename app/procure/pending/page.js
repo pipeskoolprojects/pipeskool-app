@@ -2,14 +2,14 @@
 // update256: PENDING DELIVERIES REGISTER.
 // Purely derived — every quantity comes from v_po_item_pending (PO lines vs GRN receipts).
 // Recording a GRN or Delivery Challan updates this list on its own; nothing is typed twice.
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { getSession } from "@/lib/auth";
 import { getSites } from "@/lib/data";
 import { inr } from "@/lib/procure";
 import {
   getPendingDeliveries, getPendingSummary, getFollowups, addFollowup, shortClose,
-  ageBand, LINE_STATUS, AGE_AMBER, AGE_RED,
+  ageBand, LINE_STATUS, AGE_AMBER, AGE_RED, groupByPO,
 } from "@/lib/pending";
 
 const qty = (n, u) => Number(n || 0).toLocaleString("en-IN") + (u ? " " + u : "");
@@ -51,7 +51,9 @@ export default function PendingDeliveriesPage() {
   const [status, setStatus] = useState("open");
   const [q, setQ] = useState("");
 
-  const [panel, setPanel] = useState(null);      // { row, mode: "followup" | "close" }
+  const [open, setOpen] = useState({});          // update257: which PO rows are expanded
+  const [panel, setPanel] = useState(null);      // { row, mode: "followup" | "close" | "letter" }
+  const [letterNote, setLetterNote] = useState("");
   const [notes, setNotes] = useState([]);
   const [noteText, setNoteText] = useState("");
   const [promised, setPromised] = useState("");
@@ -72,10 +74,12 @@ export default function PendingDeliveriesPage() {
   useEffect(() => { if (session) load(); }, [session, site, vendor, from, to, status]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const vendors = useMemo(() => [...new Set((rows || []).map(r => r.vendor_name).filter(Boolean))].sort(), [rows]);
-  const shown = useMemo(() => {
+  // update257: ONE row per PO. The per-item detail moves one level down, into the expansion.
+  const groups = useMemo(() => {
     const t = q.trim().toLowerCase();
-    if (!t) return rows || [];
-    return (rows || []).filter(r => (r.po_no + " " + r.item_name + " " + r.vendor_name).toLowerCase().includes(t));
+    const filtered = !t ? (rows || [])
+      : (rows || []).filter(r => (r.po_no + " " + r.item_name + " " + r.vendor_name).toLowerCase().includes(t));
+    return groupByPO(filtered);
   }, [rows, q]);
 
   async function openPanel(row, mode) {
@@ -99,7 +103,7 @@ export default function PendingDeliveriesPage() {
     const r = await shortClose(panel.row.po_item_id, noteText);
     setBusy(false);
     if (!r.ok) { setErr(r.error); return; }
-    setPanel(null); setMsg("Short-closed \u2014 the reason is kept on the record.");
+    setPanel(null); setMsg("Short-closed — the reason is kept on the record.");
     load();
   }
 
@@ -119,11 +123,11 @@ export default function PendingDeliveriesPage() {
 
         {sum && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-            <Stat label="\u{1F4CB} PO lines pending" value={sum.lines} sub={sum.pos + " PO(s) \u00b7 " + sum.vendors + " vendor(s)"} />
-            <Stat label="\u{1F4B0} Pending value" value={inr(sum.value)} sub="at PO rate" />
-            <Stat label={"\u{1F7E2} Recent (<" + AGE_AMBER + " days)"} value={sum.green} sub="on track" color="var(--green)" />
-            <Stat label={"\u{1F7E1} Aging (" + AGE_AMBER + "\u2013" + AGE_RED + " days)"} value={sum.amber} sub="needs follow-up" color="var(--amber)" />
-            <Stat label={"\u{1F534} Overdue (" + AGE_RED + "+ days)"} value={sum.red} sub="escalate" color="var(--red)" />
+            <Stat label="📋 PO lines pending" value={sum.lines} sub={sum.pos + " PO(s) · " + sum.vendors + " vendor(s)"} />
+            <Stat label="💰 Pending value" value={inr(sum.value)} sub="at PO rate" />
+            <Stat label={"🟢 Recent (<" + AGE_AMBER + " days)"} value={sum.green} sub="on track" color="var(--green)" />
+            <Stat label={"🟡 Aging (" + AGE_AMBER + "–" + AGE_RED + " days)"} value={sum.amber} sub="needs follow-up" color="var(--amber)" />
+            <Stat label={"🔴 Overdue (" + AGE_RED + "+ days)"} value={sum.red} sub="escalate" color="var(--red)" />
           </div>
         )}
 
@@ -149,57 +153,91 @@ export default function PendingDeliveriesPage() {
               <option value="short_closed">Short-closed</option>
               <option value="all">All lines</option>
             </select>
-            <input placeholder="\u{1F50D} Search PO / item / vendor" value={q} onChange={e => setQ(e.target.value)} style={{ minWidth: 190 }} />
+            <input placeholder="🔍 Search PO / item / vendor" value={q} onChange={e => setQ(e.target.value)} style={{ minWidth: 190 }} />
             {(site !== "all" || vendor || from || to || q || status !== "open") &&
               <button onClick={() => { setSite("all"); setVendor(""); setFrom(""); setTo(""); setQ(""); setStatus("open"); }}>✕ Clear</button>}
           </div>
 
-          {rows === null ? <div className="muted">Loading…</div> : shown.length === 0
+          {rows === null ? <div className="muted">Loading…</div> : groups.length === 0
             ? <div className="muted" style={{ padding: 18, textAlign: "center" }}>
                 Nothing pending with these filters. {status === "open" && "Every ordered line has been received."}</div>
             : (
               <div style={{ overflowX: "auto" }}>
                 <table>
                   <thead><tr>
-                    <th>PO / Item</th><th>Vendor</th><th>Site</th>
-                    <th className="num">Ordered</th><th className="num">Received</th><th className="num">Pending</th>
-                    <th>Progress</th><th>Aging</th><th>Status</th><th>Actions</th>
+                    <th style={{ width: 26 }}></th>
+                    <th>PO</th><th>Vendor</th><th>Site</th>
+                    <th className="num">Items pending</th><th className="num">Pending value</th>
+                    <th>Progress</th><th>Oldest</th><th>Status</th><th>Actions</th>
                   </tr></thead>
                   <tbody>
-                    {shown.map(r => {
-                      const band = ageBand(r.days_pending);
-                      const st = LINE_STATUS[r.line_status] || [r.line_status, "gray"];
-                      const closed = r.line_status === "short_closed";
+                    {groups.map(g => {
+                      const band = ageBand(g.days_pending);
+                      const st = LINE_STATUS[g.po_status] || [g.po_status, "gray"];
+                      const isOpen = !!open[g.po_id];
                       return (
-                        <tr key={r.po_item_id} style={{ opacity: closed ? 0.6 : 1 }}>
-                          <td><b style={{ fontSize: 12.5 }}>{r.po_no}</b>
-                            <div className="muted" style={{ fontSize: 11.5 }}>{r.item_name}</div></td>
-                          <td style={{ fontSize: 12 }}>{r.vendor_name}</td>
-                          <td style={{ fontSize: 12 }}>{r.site_name || "\u2014"}</td>
-                          <td className="num">{qty(r.ordered_qty, r.unit)}</td>
-                          <td className="num">{qty(r.received_qty, r.unit)}</td>
-                          <td className="num" style={{ fontWeight: 700, color: r.excess_qty > 0 ? "var(--copper)" : r.pending_qty > 0 ? "var(--red)" : "var(--green)" }}>
-                            {r.excess_qty > 0 ? "+" + qty(r.excess_qty, r.unit) : qty(r.pending_qty, r.unit)}</td>
-                          <td><Bar pct={r.pct_received} tone={r.excess_qty > 0 ? "var(--copper)" : band.color} /></td>
-                          <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>
-                            {r.pending_qty > 0 && !closed
-                              ? <span style={{ color: band.color, fontWeight: 700 }}>● {r.days_pending} days</span>
-                              : <span className="muted">—</span>}
-                          </td>
-                          <td><span className={"badge " + st[1]}>{st[0]}</span>
-                            {closed && r.short_close_note &&
-                              <div className="muted" style={{ fontSize: 10.5, maxWidth: 180 }}>{r.short_close_note}</div>}</td>
-                          <td style={{ whiteSpace: "nowrap" }}>
-                            {r.pending_qty > 0 && !closed && (<>
-                              <a href={"/stock/grn?po=" + r.po_id} target="_blank" rel="noreferrer">
-                                <button className="primary" style={{ fontSize: 11.5, marginRight: 4 }}>Record delivery</button></a>
-                              <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => openPanel(r, "followup")}>Follow up</button>
-                              <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => openPanel(r, "close")}>Short-close</button>
-                            </>)}
-                            {closed && <button style={{ fontSize: 11.5 }} onClick={() => openPanel(r, "followup")}>History</button>}
-                            {r.pending_qty === 0 && !closed && <span className="muted" style={{ fontSize: 11.5 }}>—</span>}
-                          </td>
-                        </tr>
+                        <Fragment key={g.po_id}>
+                          {/* update257: ONE row per PO. Items live in the expansion below. */}
+                          <tr style={{ cursor: "pointer" }} onClick={() => setOpen(o => ({ ...o, [g.po_id]: !o[g.po_id] }))}>
+                            <td style={{ textAlign: "center", color: "var(--muted)" }}>{isOpen ? "▾" : "▸"}</td>
+                            <td><b style={{ fontSize: 12.5 }}>{g.po_no}</b>
+                              <div className="muted" style={{ fontSize: 11 }}>{String(g.po_date || "").slice(0, 10)}</div></td>
+                            <td style={{ fontSize: 12 }}>{g.vendor_name}</td>
+                            <td style={{ fontSize: 12 }}>{g.site_name || "—"}</td>
+                            <td className="num" style={{ fontWeight: 700, color: g.pending_lines ? "var(--red)" : "var(--green)" }}>
+                              {g.pending_lines || 0}<span className="muted" style={{ fontWeight: 400 }}> / {g.item_count}</span></td>
+                            <td className="num">{inr(g.pending_value)}</td>
+                            <td><Bar pct={g.pct_received} tone={band.color} /></td>
+                            <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>
+                              {g.pending_lines > 0
+                                ? <span style={{ color: band.color, fontWeight: 700 }}>● {g.days_pending} days</span>
+                                : <span className="muted">—</span>}</td>
+                            <td><span className={"badge " + st[1]}>{st[0]}</span></td>
+                            <td style={{ whiteSpace: "nowrap" }} onClick={e => e.stopPropagation()}>
+                              {g.pending_lines > 0 && (<>
+                                <a href={"/stock/grn?po=" + g.po_id} target="_blank" rel="noreferrer">
+                                  <button className="primary" style={{ fontSize: 11.5, marginRight: 4 }}>Record delivery</button></a>
+                                <button style={{ fontSize: 11.5, marginRight: 4 }}
+                                  onClick={() => { setLetterNote(""); setPanel({ row: g, mode: "letter" }); }}>Follow up</button>
+                              </>)}
+                              <button style={{ fontSize: 11.5 }}
+                                onClick={() => setOpen(o => ({ ...o, [g.po_id]: true }))}>Items</button>
+                            </td>
+                          </tr>
+
+                          {isOpen && g.items.map(r => {
+                            const ib = ageBand(r.days_pending);
+                            const ist = LINE_STATUS[r.line_status] || [r.line_status, "gray"];
+                            const closed = r.line_status === "short_closed";
+                            return (
+                              <tr key={r.po_item_id} style={{ background: "#fbf8f5", opacity: closed ? 0.6 : 1 }}>
+                                <td></td>
+                                <td colSpan={3} style={{ paddingLeft: 18, fontSize: 12 }}>
+                                  ↳ {r.item_name}
+                                  {closed && r.short_close_note &&
+                                    <div className="muted" style={{ fontSize: 10.5 }}>{r.short_close_note}</div>}
+                                </td>
+                                <td className="num" style={{ fontSize: 11.5 }}>
+                                  {qty(r.ordered_qty, r.unit)}<div className="muted" style={{ fontSize: 10.5 }}>received {qty(r.received_qty, r.unit)}</div></td>
+                                <td className="num" style={{ fontWeight: 700, color: r.excess_qty > 0 ? "var(--copper)" : r.pending_qty > 0 ? "var(--red)" : "var(--green)" }}>
+                                  {r.excess_qty > 0 ? "+" + qty(r.excess_qty, r.unit) : qty(r.pending_qty, r.unit)}</td>
+                                <td><Bar pct={r.pct_received} tone={r.excess_qty > 0 ? "var(--copper)" : ib.color} /></td>
+                                <td style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
+                                  {r.pending_qty > 0 && !closed
+                                    ? <span style={{ color: ib.color, fontWeight: 700 }}>{r.days_pending} d</span>
+                                    : <span className="muted">—</span>}</td>
+                                <td><span className={"badge " + ist[1]} style={{ fontSize: 10 }}>{ist[0]}</span></td>
+                                <td style={{ whiteSpace: "nowrap" }}>
+                                  {r.pending_qty > 0 && !closed && (<>
+                                    <button style={{ fontSize: 11, marginRight: 4 }} onClick={() => openPanel(r, "followup")}>Note</button>
+                                    <button style={{ fontSize: 11, color: "var(--red)" }} onClick={() => openPanel(r, "close")}>Short-close</button>
+                                  </>)}
+                                  {closed && <button style={{ fontSize: 11 }} onClick={() => openPanel(r, "followup")}>History</button>}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </Fragment>
                       );
                     })}
                   </tbody>
@@ -212,12 +250,38 @@ export default function PendingDeliveriesPage() {
           <div onClick={() => setPanel(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 90, padding: 16 }}>
             <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 520, width: "100%", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
               <h2 style={{ marginBottom: 2, fontSize: 17 }}>
-                {panel.mode === "close" ? "Short-close this line" : "Follow-up history"}</h2>
+                {panel.mode === "close" ? "Short-close this line"
+                  : panel.mode === "letter" ? "Follow-up reminder to vendor" : "Follow-up history"}</h2>
               <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
-                {panel.row.po_no} · {panel.row.item_name} · pending {qty(panel.row.pending_qty, panel.row.unit)} of {qty(panel.row.ordered_qty, panel.row.unit)}
+                {panel.mode === "letter"
+                  ? panel.row.po_no + " · " + panel.row.vendor_name + " · " + panel.row.pending_lines + " item(s) still pending"
+                  : panel.row.po_no + " · " + panel.row.item_name + " · pending " + qty(panel.row.pending_qty, panel.row.unit) + " of " + qty(panel.row.ordered_qty, panel.row.unit)}
               </div>
 
-              {panel.mode === "close" ? (
+              {/* update257: compose a note, then open the printable reminder for this PO */}
+              {panel.mode === "letter" && (
+                <>
+                  <label style={{ fontSize: 12.5, fontWeight: 700 }}>Note to the vendor (optional)</label>
+                  <textarea rows={3} value={letterNote} onChange={e => setLetterNote(e.target.value)}
+                    placeholder="e.g. Please confirm the dispatch date for the balance quantity."
+                    style={{ width: "100%", marginTop: 4 }} />
+                  <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
+                    The reminder lists every item still pending on this PO, with ordered, received and
+                    pending quantities and how long each has been outstanding.
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                    <button onClick={() => setPanel(null)}>Cancel</button>
+                    <button className="primary" onClick={() => {
+                      const url = "/procure/followup?po=" + panel.row.po_id +
+                        (letterNote.trim() ? "&note=" + encodeURIComponent(letterNote.trim()) : "");
+                      window.open(url, "_blank", "noopener");
+                      setPanel(null);
+                    }}>Open reminder</button>
+                  </div>
+                </>
+              )}
+
+              {panel.mode === "letter" ? null : panel.mode === "close" ? (
                 <>
                   <div className="note amber" style={{ fontSize: 12, marginBottom: 10 }}>
                     This closes the remaining {qty(panel.row.pending_qty, panel.row.unit)} permanently and removes the line
@@ -230,7 +294,7 @@ export default function PendingDeliveriesPage() {
                   <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "flex-end" }}>
                     <button onClick={() => setPanel(null)}>Cancel</button>
                     <button className="primary" disabled={busy || !noteText.trim()} onClick={doShortClose}>
-                      {busy ? "Saving\u2026" : "Short-close"}</button>
+                      {busy ? "Saving…" : "Short-close"}</button>
                   </div>
                 </>
               ) : (
@@ -243,7 +307,7 @@ export default function PendingDeliveriesPage() {
                         <label style={{ fontSize: 12 }} className="muted">Promised by</label>
                         <input type="date" value={promised} onChange={e => setPromised(e.target.value)} />
                         <button className="primary" style={{ marginLeft: "auto" }} disabled={busy || !noteText.trim()} onClick={saveFollowup}>
-                          {busy ? "Saving\u2026" : "Log follow-up"}</button>
+                          {busy ? "Saving…" : "Log follow-up"}</button>
                       </div>
                     </div>
                   )}
@@ -254,13 +318,13 @@ export default function PendingDeliveriesPage() {
                           <div style={{ fontSize: 12.5 }}>{n.note}</div>
                           <div className="muted" style={{ fontSize: 11 }}>
                             {n.author?.full_name || "—"} · {String(n.created_at).slice(0, 16).replace("T", " ")}
-                            {n.promised_by ? " \u00b7 promised by " + n.promised_by : ""}
+                            {n.promised_by ? " · promised by " + n.promised_by : ""}
                           </div>
                         </div>
                       ))}
                   {panel.row.line_status === "short_closed" && (
                     <div className="note" style={{ marginTop: 12, fontSize: 12 }}>
-                      <b>Short-closed</b> by {panel.row.short_closed_by_name || "\u2014"} on {String(panel.row.short_closed_at || "").slice(0, 10)}
+                      <b>Short-closed</b> by {panel.row.short_closed_by_name || "—"} on {String(panel.row.short_closed_at || "").slice(0, 10)}
                       <div style={{ marginTop: 4 }}>{panel.row.short_close_note}</div>
                     </div>
                   )}
