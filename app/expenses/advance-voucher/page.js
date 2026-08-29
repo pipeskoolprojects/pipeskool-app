@@ -158,7 +158,7 @@ function AdvVoucher() {
 
         {/* ---------- signatures ---------- */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, marginTop: 34 }}>
-          {[["Authorised By", "(Director)"], ["Paid by / Drawn on", v.payMode], ["Received by", "(Employee Signature)"]].map(([a, b]) => (
+          {[["Authorised By", "(Director)"], ["Paid by", v.payMode], ["Received by", "(Employee Signature)"]].map(([a, b]) => (
             <div key={a} style={{ textAlign: "center" }}>
               <div style={{ borderTop: "1px solid #0F1419", paddingTop: 5, fontSize: 11, fontWeight: 700 }}>{a}</div>
               <div style={{ fontSize: 10, color: "#6b7280" }}>{b}</div>

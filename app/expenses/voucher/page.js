@@ -81,7 +81,7 @@ function Voucher() {
             </div>
           </div>
           <div style={{ border: "2px solid #123a7a", borderRadius: 4, padding: "8px 14px", textAlign: "center",
-            fontSize: 15, fontWeight: 800, color: "#123a7a", lineHeight: 1.15 }}>CASH<br />VOUCHER</div>
+            fontSize: 15, fontWeight: 800, color: "#123a7a", lineHeight: 1.15 }}>VOUCHER</div>
         </div>
 
         {/* ---------- voucher head ---------- */}
@@ -94,7 +94,7 @@ function Voucher() {
             ))}
           </div>
           <div>
-            {[["Voucher No.", v.no], ["Date", dmy(v.date)]].map(([k, val]) => (
+            {[["Voucher No.", v.no], ["Date", dmy(v.date)], ["Site", v.site]].map(([k, val]) => (
               <div key={k} style={{ display: "grid", gridTemplateColumns: "92px 10px 1fr", alignItems: "end", marginBottom: 9 }}>
                 <span style={L}>{k}</span><span style={L}>:</span><span style={{ ...F, textAlign: "center" }}>{val}</span>
               </div>
@@ -138,11 +138,13 @@ function Voucher() {
           <div>
             <div style={{ fontStyle: "italic", fontWeight: 700, color: "#123a7a", fontSize: 12.5 }}>Authorised By</div>
             <div style={{ borderBottom: "1px solid #0F1419", marginTop: 26, width: "72%" }} />
+            {/* update252: the printed payment mode is fixed to Bank. The empty "Drawn on
+                Bank —" cell is gone. The internal source is still on the document: "and Debit"
+                reads Petty Cash / Own pocket, and every particulars line keeps its [Petty] /
+                [Own] marker. */}
             <div style={{ display: "flex", marginTop: 14, border: "1px solid #123a7a", borderRadius: 3, fontSize: 12 }}>
               <span style={{ padding: "6px 10px", fontStyle: "italic", fontWeight: 700, color: "#123a7a", borderRight: "1px solid #123a7a" }}>Paid by</span>
-              <span style={{ padding: "6px 12px", borderRight: "1px solid #123a7a" }}>Cash</span>
-              <span style={{ padding: "6px 10px", fontStyle: "italic", fontWeight: 700, color: "#123a7a", borderRight: "1px solid #123a7a" }}>Drawn on Bank</span>
-              <span style={{ padding: "6px 12px" }}>—</span>
+              <span style={{ padding: "6px 16px", fontWeight: 700 }}>Bank</span>
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
