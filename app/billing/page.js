@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import { isDemo } from "@/lib/supabase";
 import { getSites } from "@/lib/data";
 import {
-  BILL_STATUS, inr, lineCum, linePrev,
+  BILL_STATUS, inr, lineCum, linePrev, lineBasicDiff, getLatestPoRates,
   getRaSettings, saveRaSettings, getRaBills, createRaBill, getRaBill, saveRaBill, deleteRaBill, getRaBillTotals,
   getPaymentGroups, savePaymentGroup, assignGroupByCodes,
 } from "@/lib/billing";
@@ -45,22 +45,40 @@ export default function BillingPage() {
     setErr(""); setMsg(""); setBusy(true);
     const res = await createRaBill(site, settings.billing_mode, Number(settings.material_pct), Number(settings.install_pct));
     if (!res.ok) { setBusy(false); setErr(res.error); return; }
-    const { hdr, lines } = await getRaBill(res.billId, site);
+    const { hdr, lines, gst_pct } = await getRaBill(res.billId, site);
     setBusy(false);
     if (!lines.length) { setErr("No BOQ lines for this project — load the BOQ master first."); return; }
-    openEditor(hdr, lines);
+    openEditor(hdr, lines, gst_pct);
   }
 
   async function openExisting(bill) {
-    setBusy(true); const { hdr, lines } = await getRaBill(bill.id, site); setBusy(false);
-    openEditor(hdr, lines);
+    setBusy(true); const { hdr, lines, gst_pct } = await getRaBill(bill.id, site); setBusy(false);
+    openEditor(hdr, lines, gst_pct);
   }
 
-  function openEditor(hdr, lines) {
+  function openEditor(hdr, lines, gst) {
     setEdit({ id: hdr.id, no: hdr.bill_no, status: hdr.status, mode: hdr.billing_mode,
       matPct: Number(hdr.material_pct), instPct: Number(hdr.install_pct),
+      gst: gst != null ? Number(gst) : 18,                       // update260: for the bill's GST line
       date: hdr.bill_date, remarks: hdr.remarks || "" });
     setLines(lines); setMsg(""); setErr("");
+  }
+
+  // update260: suggest purchase rates from the latest APPROVED PO per linked item.
+  // Fills only EMPTY purchase-rate cells; the Director can overtype any of them.
+  async function fillPurchaseRates() {
+    setErr("");
+    try {
+      const map = await getLatestPoRates(site);
+      let filled = 0;
+      setLines(ls => ls.map(l => {
+        if (l.basic_rate == null || !l.item_id) return l;
+        if (l.purchase_rate != null && l.purchase_rate !== "") return l;
+        const hit = map[l.item_id]; if (!hit) return l;
+        filled++; return { ...l, purchase_rate: hit.rate };
+      }));
+      setMsg(filled ? filled + " purchase rate(s) filled from POs — review, adjust if needed, then Save." : "No PO rates found for the linked items — enter purchase rates manually.");
+    } catch (e) { setErr(e.message); }
   }
 
   async function save(status) {
@@ -84,8 +102,13 @@ export default function BillingPage() {
   const mode = edit?.mode, mp = edit?.matPct, ip = edit?.instPct;
   const totals = lines.reduce((t, l) => {
     const cum = lineCum(l, mode, mp, ip), prev = linePrev(l, mode, mp, ip);
-    t.boq += (Number(l.boq_qty) || 0) * (Number(l.rate) || 0); t.cum += cum; t.bill += (cum - prev); return t;
-  }, { boq: 0, cum: 0, bill: 0 });
+    t.boq += (Number(l.boq_qty) || 0) * (Number(l.rate) || 0); t.cum += cum; t.bill += (cum - prev);
+    t.basicDiff += lineBasicDiff(l, mode);                       // update260
+    return t;
+  }, { boq: 0, cum: 0, bill: 0, basicDiff: 0 });
+  totals.net = totals.bill - totals.basicDiff;                   // update260: LESS basic rate diff, then GST on net
+  totals.gst = totals.net * ((edit?.gst ?? 18) / 100);
+  totals.grand = totals.net + totals.gst;
 
   return (
     <div className="layout">
@@ -258,13 +281,25 @@ export default function BillingPage() {
                         <td style={{ whiteSpace: "normal", wordBreak: "break-word", verticalAlign: "top" }} title={l.description}>
                           <span style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontSize: 12, lineHeight: 1.35 }}>{l.display || l.description}</span>
                           <span className="muted" style={{ fontSize: 11 }}>({l.unit})</span>
+                          {l.is_extra && l.extra_status !== "approved" && <span className="badge gray" style={{ fontSize: 10, marginLeft: 4 }}>extra · rate pending</span>}
                         </td>
+                        {edit.mode === "staged" && (
+                          <td>{l.group_name
+                            ? <span className="badge gray" style={{ fontSize: 10.5 }}>{l.group_name}</span>
+                            : <span style={{ color: "var(--red)", fontSize: 11 }}>⚠ no group</span>}</td>
+                        )}
                         <td className="num">{l.boq_qty}</td>
-                        <td className="num">{l.rate}</td>
+                        {edit.mode !== "staged" && <td className="num">{l.rate}</td>}
                         {edit.mode === "staged" ? (
-                    <tr><th>Code</th><th>Description</th><th>Group</th><th className="num">BOQ qty</th>
-                      <th className="num">Supply cum</th><th className="num">Install cum</th><th className="num">T&C cum</th><th className="num">This bill ₹</th></tr>
-                  ) : edit.mode === "split" ? (
+                          <>
+                            <td className="num"><input style={{ width: "100%", textAlign: "right" }} value={l.cum_material_qty} onChange={e => setLine(i, "cum_material_qty", e.target.value)} />
+                              <div className="muted" style={{ fontSize: 10 }}>prev {l.prev_material_qty}</div></td>
+                            <td className="num"><input style={{ width: "100%", textAlign: "right" }} value={l.cum_install_qty} onChange={e => setLine(i, "cum_install_qty", e.target.value)} />
+                              <div className="muted" style={{ fontSize: 10 }}>prev {l.prev_install_qty}</div></td>
+                            <td className="num"><input style={{ width: "100%", textAlign: "right" }} value={l.cum_tc_qty} onChange={e => setLine(i, "cum_tc_qty", e.target.value)} />
+                              <div className="muted" style={{ fontSize: 10 }}>prev {l.prev_tc_qty}</div></td>
+                          </>
+                        ) : edit.mode === "split" ? (
                           <>
                             <td className="num"><input style={{ width: "100%", textAlign: "right" }} value={l.cum_material_qty} onChange={e => setLine(i, "cum_material_qty", e.target.value)} />
                               <div className="muted" style={{ fontSize: 10 }}>prev {l.prev_material_qty}</div></td>
@@ -289,13 +324,76 @@ export default function BillingPage() {
                     <td colSpan={edit.mode === "staged" ? 7 : 6}>This bill total</td>
                     <td className="num">{inr(totals.bill)}</td>
                   </tr>
+                  {totals.basicDiff !== 0 && (
+                    <tr>{/* update260: SOUL basic-rate deduction flows into the bill total */}
+                      <td colSpan={edit.mode === "staged" ? 7 : 6}>LESS: Basic Rate Difference</td>
+                      <td className="num" style={{ color: "var(--red)" }}>− {inr(totals.basicDiff)}</td>
+                    </tr>
+                  )}
+                  <tr style={{ fontWeight: 700 }}>
+                    <td colSpan={edit.mode === "staged" ? 7 : 6}>Net (before GST)</td>
+                    <td className="num">{inr(totals.net)}</td>
+                  </tr>
+                  <tr>
+                    <td colSpan={edit.mode === "staged" ? 7 : 6}>GST @ {edit.gst}%</td>
+                    <td className="num">{inr(totals.gst)}</td>
+                  </tr>
+                  <tr style={{ fontWeight: 800, borderTop: "2px solid var(--line)" }}>
+                    <td colSpan={edit.mode === "staged" ? 7 : 6}>Grand total — this bill (with GST)</td>
+                    <td className="num">{inr(totals.grand)}</td>
+                  </tr>
                   <tr className="muted">
-                    <td colSpan={6}>Cumulative billed to date · BOQ value {inr(totals.boq)}</td>
+                    <td colSpan={edit.mode === "staged" ? 7 : 6}>Cumulative billed to date · BOQ value {inr(totals.boq)}</td>
                     <td className="num">{inr(totals.cum)} ({totals.boq ? Math.round(totals.cum / totals.boq * 100) : 0}%)</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
+
+            {/* update260: BASIC RATE DIFFERENCE — SOUL CP/sanitary deduction.
+                Deduction = (tender basic − actual purchase) × THIS bill's installed qty.
+                Purchase rates auto-suggest from the latest approved PO; nothing applies
+                until the Director confirms and saves. */}
+            {lines.some(l => l.basic_rate != null) && (
+              <div style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12, marginTop: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                  <h3 style={{ margin: 0 }}>Basic Rate Difference</h3>
+                  <button style={{ fontSize: 12 }} disabled={busy} onClick={fillPurchaseRates}>⤓ Auto-fill purchase rates from POs</button>
+                </div>
+                <div className="muted" style={{ fontSize: 12, margin: "6px 0 8px" }}>
+                  Only lines with a tender <b>basic rate</b> appear here (set it on the BOQ master).
+                  Deduction = (basic − purchase) × this bill's installed qty. Saved rates are frozen into this bill.
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table className="dt-compact" style={{ width: "100%" }}>
+                    <thead><tr><th>Code</th><th>Item</th><th className="num">Basic ₹</th><th className="num">Purchase ₹</th>
+                      <th className="num">Diff ₹</th><th className="num">This-bill qty</th><th className="num">Deduction ₹</th></tr></thead>
+                    <tbody>
+                      {lines.map((l, i) => {
+                        if (l.basic_rate == null) return null;
+                        const thisQty = edit.mode === "simple"
+                          ? (Number(l.cum_qty) || 0) - (Number(l.prev_qty) || 0)
+                          : (Number(l.cum_install_qty) || 0) - (Number(l.prev_install_qty) || 0);
+                        const ded = lineBasicDiff(l, edit.mode);
+                        return (
+                          <tr key={"bd" + l.boq_item_id}>
+                            <td style={{ fontWeight: 600 }}>{l.item_code}</td>
+                            <td style={{ whiteSpace: "normal", fontSize: 12 }}>{l.display || l.description}
+                              {!l.item_id && <span className="muted" style={{ fontSize: 10.5 }}> · not linked to Item Master — enter purchase rate manually</span>}</td>
+                            <td className="num">{l.basic_rate}</td>
+                            <td className="num"><input style={{ width: 90, textAlign: "right" }} value={l.purchase_rate ?? ""} placeholder="—"
+                              onChange={e => setLine(i, "purchase_rate", e.target.value)} /></td>
+                            <td className="num">{l.purchase_rate !== "" && l.purchase_rate != null ? (Number(l.basic_rate) - Number(l.purchase_rate)).toLocaleString("en-IN") : "—"}</td>
+                            <td className="num">{thisQty}</td>
+                            <td className="num" style={{ fontWeight: 700, color: ded > 0 ? "var(--red)" : "inherit" }}>{ded ? inr(ded) : "—"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
               <button className="primary" disabled={busy} onClick={() => save(null)}>{busy ? "Saving…" : "Save draft"}</button>
