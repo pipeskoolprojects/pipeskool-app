@@ -142,14 +142,22 @@ function POView() {
 
       {/* update254: rate-comparison proof, opened as its own document. Screen only, so the
           printed PO is byte-for-byte what it always was. */}
-      {proofs.proofs?.length > 0 && (
+      {/* update255: always shown when the PO came from an indent. Previously this whole block
+          disappeared when the count was 0, so "no proof attached" and "the lookup failed"
+          looked identical and an uploaded proof seemed to vanish. */}
+      {proofs.indentId && (
         <div className="no-print" style={{ textAlign: "center", marginTop: 18, fontSize: 12.5 }}>
           <a href={"/purchase/rate-proof?indent=" + proofs.indentId} target="_blank" rel="noreferrer"
-             style={{ fontWeight: 700, color: "#a4551f", border: "1px solid #a4551f", borderRadius: 8,
+             style={{ fontWeight: 700, color: proofs.proofs?.length ? "#a4551f" : "#6b7280",
+               border: "1px solid " + (proofs.proofs?.length ? "#a4551f" : "#c9d0d8"), borderRadius: 8,
                padding: "6px 12px", textDecoration: "none" }}>
-            📎 Rate comparison proof ({proofs.proofs.length}) — opens separately
+            📎 Rate comparison proof ({proofs.proofs?.length || 0}) — opens separately
           </a>
-          <div className="muted" style={{ fontSize: 11, marginTop: 5 }}>Reference only · not part of this purchase order</div>
+          <div className="muted" style={{ fontSize: 11, marginTop: 5 }}>
+            {proofs.proofs?.length
+              ? "Reference only · not part of this purchase order"
+              : "No proof attached to this indent yet"}
+          </div>
         </div>
       )}
 
