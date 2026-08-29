@@ -827,8 +827,13 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
               <table className="dt-compact">
                 <thead><tr><th>PO no</th><th>Date</th><th>Indent</th><th>Raised by</th><th>Site</th><th>Vendor</th><th className="num">Amount</th><th>Approval</th><th className="num">Received</th><th>Delivery</th><th>Status</th><th>Action</th></tr></thead>
                 <tbody>
-                  {poShown.slice((poPage - 1) * PAGE, poPage * PAGE).map(p => { const [dl, dc] = DELIVERY_STATUS[p.delivery_status] || DELIVERY_STATUS.pending; return (
-                    <tr key={p.id}>
+                  {poShown.slice((poPage - 1) * PAGE, poPage * PAGE).map(p => {
+                    const [dl, dc] = DELIVERY_STATUS[p.delivery_status] || DELIVERY_STATUS.pending;
+                    // update258: a cancelled PO's delivery tracking is meaningless — the row must
+                    // not read as live. Visual only; no data or cancellation logic changes.
+                    const void_ = p.status === "cancelled";
+                    return (
+                    <tr key={p.id} className={void_ ? "po-void" : ""}>
                       <td style={{ fontWeight: 600 }}>{p.po_no}</td>
                       <td className="muted">{p.date}</td>
                       <td className="muted">{p.indent_no}</td>
@@ -854,15 +859,22 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                           </div>
                         )}
                       </td>
-                      <td className="num" style={{ whiteSpace: "nowrap" }}>{p.received_pct === null || p.received_pct === undefined ? <span className="muted">—</span> : <span style={{ color: p.received_pct >= 100 ? "var(--green)" : p.received_pct > 0 ? "var(--amber)" : "var(--muted)" }}>{p.received_pct}%<span className="muted" style={{ fontSize: 10.5 }}> {p.items_complete}/{p.item_count} items</span></span>}</td>
+                      <td className="num" style={{ whiteSpace: "nowrap" }}>{p.received_pct === null || p.received_pct === undefined ? <span className="muted">—</span> : <span style={{ color: void_ ? "var(--muted)" : p.received_pct >= 100 ? "var(--green)" : p.received_pct > 0 ? "var(--amber)" : "var(--muted)", textDecoration: void_ ? "line-through" : "none", textDecorationColor: "var(--red)", textDecorationThickness: void_ ? 2 : undefined }}>{p.received_pct}%<span className="muted" style={{ fontSize: 10.5 }}> {p.items_complete}/{p.item_count} items</span></span>}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
-                        <span className={"badge " + dc}>{dl}</span>
-                        {p.expected_delivery && <div className="muted" style={{ fontSize: 11 }}>by {p.expected_delivery}</div>}
+                        <span className={"badge " + (void_ ? "gray" : dc)}
+                              style={void_ ? { textDecoration: "line-through", textDecorationColor: "var(--red)", textDecorationThickness: 2 } : undefined}>{dl}</span>
+                        {p.expected_delivery && <div className="muted" style={{ fontSize: 11,
+                          textDecoration: void_ ? "line-through" : "none", textDecorationColor: "var(--red)" }}>by {p.expected_delivery}</div>}
                       </td>
-                      <td><span className="badge gray">{p.status}</span></td>
+                      <td><span className={"badge " + (void_ ? "red" : "gray")}>{void_ ? "✕ cancelled" : p.status}</span></td>
                       <td style={{ whiteSpace: "nowrap" }}>
-                        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => setDeliv({ id: p.id, po_no: p.po_no, expected_delivery: p.expected_delivery || "", delivery_status: p.delivery_status || "pending", delivery_note: p.delivery_note || "" })}>📦 Delivery</button>
-                        {p.approval === "approved"
+                        {/* update258: nothing to receive and nothing to send on a cancelled PO */}
+                        {void_
+                          ? <button style={{ fontSize: 11.5, marginRight: 4 }} disabled title="This PO is cancelled — delivery tracking no longer applies">📦 Delivery</button>
+                          : <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => setDeliv({ id: p.id, po_no: p.po_no, expected_delivery: p.expected_delivery || "", delivery_status: p.delivery_status || "pending", delivery_note: p.delivery_note || "" })}>📦 Delivery</button>}
+                        {void_
+                          ? <button style={{ fontSize: 11.5, marginRight: 4 }} disabled title="Cancelled — not valid for issue to the vendor">🔒 Print</button>
+                          : p.approval === "approved"
                           ? <a href={"/purchase/po?po=" + p.id} target="_blank" rel="noreferrer"><button style={{ fontSize: 11.5, marginRight: 4 }}>Print</button></a>
                           : p.approval !== "rejected" && canApprPO
                             /* update221: the APPROVER must be able to review the full draft before deciding */
