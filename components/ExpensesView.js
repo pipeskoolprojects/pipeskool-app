@@ -165,21 +165,21 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
         <span style={{ whiteSpace: "nowrap" }}>
           <button style={{ fontSize: 11.5, marginRight: 4 }} title="Approve in full" onClick={() => actAdv(r.id, "approved")}>✓</button>
           <button style={{ fontSize: 11.5, marginRight: 4 }} title="Approve a different amount"
-            onClick={() => { const v = window.prompt(`Approve how much for ${r.beneficiary_name}? (asked \u20b9${r.amount})`, String(r.amount)); if (v != null && v !== "") actAdv(r.id, "approved", v); }}>✎</button>
+            onClick={() => { const v = window.prompt(`Approve how much for ${r.beneficiary_name}? (asked ₹${r.amount})`, String(r.amount)); if (v != null && v !== "") actAdv(r.id, "approved", v); }}>✎</button>
           <button style={{ fontSize: 11.5, marginRight: 4 }} title="Send back with a question" onClick={() => actAdv(r.id, "queried")}>?</button>
           <button style={{ fontSize: 11.5 }} title="Reject" onClick={() => actAdv(r.id, "rejected")}>✕</button>
         </span>);
       if (r.status === "approved") return (
         <span style={{ whiteSpace: "nowrap" }}>
           <button style={{ fontSize: 11.5, marginRight: 4 }} title="Approve a different amount"
-            onClick={() => { const v = window.prompt(`Revised approved amount for ${r.beneficiary_name} \u20b9 (asked \u20b9${r.amount}):`, String(r.approved_amount ?? r.amount)); if (v != null && v !== "") actAdv(r.id, "approved", v); }}>✎ Change amount</button>
+            onClick={() => { const v = window.prompt(`Revised approved amount for ${r.beneficiary_name} ₹ (asked ₹${r.amount}):`, String(r.approved_amount ?? r.amount)); if (v != null && v !== "") actAdv(r.id, "approved", v); }}>✎ Change amount</button>
           <button style={{ fontSize: 11.5, color: "var(--red)" }} title="Withdraw this approval"
-            onClick={() => { if (window.confirm(`Withdraw this approval?\n\n${r.beneficiary_name} \u2014 \u20b9${r.approved_amount ?? r.amount}\n\nIt goes back to Pending and will NOT be deducted from salary. Regenerate that month's payroll afterwards.`)) actAdv(r.id, "rejected"); }}>Undo approval</button>
+            onClick={() => { if (window.confirm(`Withdraw this approval?\n\n${r.beneficiary_name} — ₹${r.approved_amount ?? r.amount}\n\nIt goes back to Pending and will NOT be deducted from salary. Regenerate that month's payroll afterwards.`)) actAdv(r.id, "rejected"); }}>Undo approval</button>
         </span>);
       return (
         <span style={{ whiteSpace: "nowrap" }}>
           <button style={{ fontSize: 11.5 }} title="Approve after all"
-            onClick={() => { const v = window.prompt(`Approve amount for ${r.beneficiary_name} \u20b9 (asked \u20b9${r.amount}):`, String(r.amount)); if (v != null && v !== "") actAdv(r.id, "approved", v); }}>Approve…</button>
+            onClick={() => { const v = window.prompt(`Approve amount for ${r.beneficiary_name} ₹ (asked ₹${r.amount}):`, String(r.amount)); if (v != null && v !== "") actAdv(r.id, "approved", v); }}>Approve…</button>
         </span>);
     } },
   ];
