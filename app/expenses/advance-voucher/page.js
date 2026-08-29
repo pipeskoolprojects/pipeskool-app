@@ -17,7 +17,7 @@ function Field({ label, value }) {
   return (
     <div style={{ minWidth: 0 }}>
       <div style={{ fontSize: 9, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
-      <div style={{ fontSize: 12, fontWeight: 700, marginTop: 2, overflowWrap: "anywhere" }}>{value || "\u2014"}</div>
+      <div style={{ fontSize: 12, fontWeight: 700, marginTop: 2, overflowWrap: "anywhere" }}>{value || "—"}</div>
     </div>
   );
 }
@@ -36,7 +36,7 @@ function AdvVoucher() {
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   if (err) return <div style={{ margin: 40, fontFamily: "system-ui" }}>{err}</div>;
-  if (!v) return <div style={{ margin: 40, fontFamily: "system-ui" }}>Loading voucher\u2026</div>;
+  if (!v) return <div style={{ margin: 40, fontFamily: "system-ui" }}>Loading voucher…</div>;
 
   return (
     <div style={{ fontFamily: "system-ui", color: "#0F1419", background: "#fff" }}>
@@ -51,7 +51,7 @@ function AdvVoucher() {
         <button onClick={() => window.print()} style={{ fontWeight: 700 }}>🖨 Print / Save as PDF</button>
         <button onClick={() => window.close()}>Close</button>
         {v.status !== "approved" && <span style={{ fontSize: 12, color: "#b45309", fontWeight: 700 }}>
-          \u26a0 This advance is <b>{v.status}</b>, not approved \u2014 the voucher is marked accordingly</span>}
+          ⚠ This advance is <b>{v.status}</b>, not approved — the voucher is marked accordingly</span>}
         {v.partial && <span style={{ fontSize: 12, color: "#2b6cb0", fontWeight: 700 }}>
           Approved {inr2(v.amount)} of {inr2(v.asked)} asked</span>}
       </div>
@@ -77,17 +77,19 @@ function AdvVoucher() {
         {/* ---------- number / date / site + amount ---------- */}
         <div style={{ display: "flex", justifyContent: "space-between", gap: 20, alignItems: "flex-start" }}>
           <div style={{ display: "grid", gap: 7 }}>
-            {[["Voucher No.", v.no], ["Date", dmy(v.date)], ["Site", v.site]].map(([k, val]) => (
-              <div key={k} style={{ display: "grid", gridTemplateColumns: "92px 1fr", gap: 8, alignItems: "baseline" }}>
+            {[["Voucher No.", v.no], ["Date", dmy(v.date)], ["Site", v.site], ["Payment mode", v.payMode]].map(([k, val]) => (
+              <div key={k} style={{ display: "grid", gridTemplateColumns: "100px 1fr", gap: 8, alignItems: "baseline" }}>
                 <span style={{ fontSize: 11, color: "#6b7280" }}>{k}</span>
-                <span style={{ fontSize: 12.5, fontWeight: 800 }}>{val || "\u2014"}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 800 }}>{val || "—"}</span>
               </div>
             ))}
+            {/* update250: the internal request number stays as the audit link, small */}
+            {v.reqNo && <div style={{ fontSize: 9.5, color: "#9aa4b2", marginTop: 2 }}>Request ref: {v.reqNo}</div>}
           </div>
           <div style={{ border: "2px solid " + NAVY, borderRadius: 6, padding: "10px 20px", textAlign: "center", minWidth: 170 }}>
             <div style={{ fontSize: 10, color: "#6b7280" }}>Advance Amount</div>
-            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 2 }}>\u20b9{inr2(v.amount)}</div>
-            {v.partial && <div style={{ fontSize: 9.5, color: "#6b7280", marginTop: 2 }}>asked \u20b9{inr2(v.asked)}</div>}
+            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 2 }}>₹{inr2(v.amount)}</div>
+            {v.partial && <div style={{ fontSize: 9.5, color: "#6b7280", marginTop: 2 }}>asked ₹{inr2(v.asked)}</div>}
           </div>
         </div>
 
@@ -96,18 +98,19 @@ function AdvVoucher() {
           <div style={{ fontSize: 9.5, fontWeight: 800, color: NAVY, letterSpacing: "0.06em", marginBottom: 8 }}>
             EMPLOYEE / WORKER DETAILS</div>
           {/* a real grid: the reference mock ran every value together on one line */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
             <Field label="Name" value={v.name} />
-            <Field label="Role" value={[v.kind, v.role].filter(Boolean).join(" \u2014 ")} />
+            <Field label="Role" value={[v.kind, v.role].filter(Boolean).join(" — ")} />
             <Field label="Site" value={v.site} />
             <Field label="Contact" value={v.contact} />
-            <Field label="Requested by" value={v.requestedBy} />
           </div>
+          {/* update251: "Requested by" and "Bank details on file" removed. Payment mode is not
+              lost — it sits in the header block and on the signature strip. Four columns kept so
+              this row lines up with the Name/Role/Site/Contact row above it. */}
           <div style={{ borderTop: "1px solid #e3e9f3", marginTop: 10, paddingTop: 8,
-            display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-            <Field label="Approved by" value={v.approvedBy ? v.approvedBy + " (Director)" : "\u2014"} />
+            display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+            <Field label="Approved by" value={v.approvedBy ? v.approvedBy + " (Director)" : "—"} />
             <Field label="Approved on" value={dmy(v.date)} />
-            <Field label="Bank details on file" value={v.bankOnFile ? "Yes" : "No \u2014 paid in cash"} />
           </div>
         </div>
 
@@ -121,7 +124,7 @@ function AdvVoucher() {
           <thead>
             <tr style={{ background: NAVY, color: "#fff" }}>
               <th style={{ textAlign: "left", padding: "8px 12px", fontSize: 11.5 }}>Particulars</th>
-              <th style={{ textAlign: "right", padding: "8px 12px", fontSize: 11.5, width: "28%" }}>Amount (\u20b9)</th>
+              <th style={{ textAlign: "right", padding: "8px 12px", fontSize: 11.5, width: "28%" }}>Amount (₹)</th>
             </tr>
           </thead>
           <tbody>
@@ -141,21 +144,21 @@ function AdvVoucher() {
         <div style={{ border: "1px solid #f0c9a4", background: "#fff7ed", borderRadius: 6, padding: "10px 14px",
           marginTop: 14, fontSize: 11.5, lineHeight: 1.7 }}>
           <b style={{ color: "#b45309" }}>Recovery terms:</b> To be recovered from wages / salary starting the next payroll
-          cycle ({v.nextCycle}). &nbsp;\u00b7&nbsp;
-          <b style={{ color: "#b45309" }}>Previously outstanding:</b> \u20b9{inr2(v.priorOutstanding)} &nbsp;\u00b7&nbsp;
-          <b style={{ color: "#b45309" }}>New outstanding balance after this advance:</b> \u20b9{inr2(v.newOutstanding)}
+          cycle ({v.nextCycle}). &nbsp;·&nbsp;
+          <b style={{ color: "#b45309" }}>Previously outstanding:</b> ₹{inr2(v.priorOutstanding)} &nbsp;·&nbsp;
+          <b style={{ color: "#b45309" }}>New outstanding balance after this advance:</b> ₹{inr2(v.newOutstanding)}
         </div>
 
         {v.status !== "approved" && (
           <div style={{ marginTop: 12, textAlign: "center", fontSize: 12, fontWeight: 800, color: "#b91c1c",
             border: "2px dashed #b91c1c", borderRadius: 6, padding: "8px 12px" }}>
-            NOT APPROVED \u2014 status: {String(v.status).toUpperCase()} \u00b7 not valid for disbursement
+            NOT APPROVED — status: {String(v.status).toUpperCase()} · not valid for disbursement
           </div>
         )}
 
         {/* ---------- signatures ---------- */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, marginTop: 34 }}>
-          {[["Authorised By", "(Director)"], ["Paid by / Drawn on", "Cash / Bank"], ["Received by", "(Employee Signature)"]].map(([a, b]) => (
+          {[["Authorised By", "(Director)"], ["Paid by / Drawn on", v.payMode], ["Received by", "(Employee Signature)"]].map(([a, b]) => (
             <div key={a} style={{ textAlign: "center" }}>
               <div style={{ borderTop: "1px solid #0F1419", paddingTop: 5, fontSize: 11, fontWeight: 700 }}>{a}</div>
               <div style={{ fontSize: 10, color: "#6b7280" }}>{b}</div>
@@ -164,7 +167,7 @@ function AdvVoucher() {
         </div>
 
         <div style={{ textAlign: "center", fontSize: 9.5, color: "#6b7280", marginTop: 20 }}>
-          This is a system generated voucher. No signature required for digital record \u00b7 Pipeskool Site Management Software
+          This is a system generated voucher. No signature required for digital record · Pipeskool Site Management Software
         </div>
       </div>
     </div>
@@ -172,5 +175,5 @@ function AdvVoucher() {
 }
 
 export default function AdvanceVoucherPage() {
-  return <Suspense fallback={<div style={{ margin: 40, fontFamily: "system-ui" }}>Loading\u2026</div>}><AdvVoucher /></Suspense>;
+  return <Suspense fallback={<div style={{ margin: 40, fontFamily: "system-ui" }}>Loading…</div>}><AdvVoucher /></Suspense>;
 }

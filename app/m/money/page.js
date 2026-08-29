@@ -169,7 +169,7 @@ export default function MoneyScreen() {
                       {l.sign > 0 ? "+" : l.sign < 0 ? "\u2212" : ""}{inr(l.amount)}</b>
                   </div>
                   <div className="muted" style={{ fontSize: 11.5 }}>
-                    {l.date} \u00b7 {l.site}{l.category ? " \u00b7 " + l.category : ""}{l.label ? " \u00b7 " + l.label : ""}
+                    {l.date} · {l.site}{l.category ? " · " + l.category : ""}{l.label ? " · " + l.label : ""}
                     {l.bills.map((b, j) => <a key={j} href={billUrl(b)} target="_blank" rel="noreferrer" style={{ marginLeft: 6 }}>📎</a>)}
                   </div>
                 </div>
