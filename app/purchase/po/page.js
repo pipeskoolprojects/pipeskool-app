@@ -2,17 +2,21 @@
 import { getSession } from "@/lib/auth";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { getPODetail } from "@/lib/procure";
+import { getPODetail, getPOProofs } from "@/lib/procure";
+import { billUrl, isPdf } from "@/lib/bills";
 
 function POView() {
   const params = useSearchParams();
   const poId = params.get("po");
   const [po, setPo] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [proofs, setProofs] = useState({});   // update253: indent_item_id -> [rate proof]
 
   useEffect(() => {
     if (!poId) { setLoading(false); return; }
     getPODetail(poId).then(d => { setPo(d); setLoading(false); });
+    // update253: the rate evidence behind each line, joined on indent_item_id + vendor_name
+    getPOProofs(poId).then(setProofs).catch(() => setProofs({}));
   }, [poId]);
 
   // update241: was a require() swallowed by try/catch — a throw silently hid the control
@@ -103,7 +107,21 @@ function POView() {
           {items.map((it, i) => (
             <tr key={i}>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{i + 1}</td>
-              <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.item_name}{it.spec ? " — " + it.spec : ""}</td>
+              <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.item_name}{it.spec ? " — " + it.spec : ""}
+                {/* update253: which vendor quote justified this price. Screen only — a
+                    link is meaningless on paper, so it is hidden from the print output. */}
+                {(proofs[it.indent_item_id] || []).length > 0 && (
+                  <span className="no-print" style={{ marginLeft: 6, display: "inline-flex", gap: 4 }}>
+                    {(proofs[it.indent_item_id] || []).map(pr => (
+                      <a key={pr.id} href={billUrl(pr.path)} target="_blank" rel="noreferrer" title="Rate proof from the vendor quote"
+                         style={{ fontSize: 10, fontWeight: 700, color: "#a4551f", border: "1px solid #a4551f",
+                           borderRadius: 5, padding: "0 5px", textDecoration: "none", whiteSpace: "nowrap" }}>
+                        {isPdf(pr.path) ? "PDF" : "📎"} proof
+                      </a>
+                    ))}
+                  </span>
+                )}
+              </td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{it.qty}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.unit}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{it.list_rate != null ? inr(it.list_rate) : inr(it.rate)}</td>
