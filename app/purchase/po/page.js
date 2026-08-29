@@ -3,20 +3,20 @@ import { getSession } from "@/lib/auth";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { getPODetail, getPOProofs } from "@/lib/procure";
-import { billUrl, isPdf } from "@/lib/bills";
 
 function POView() {
   const params = useSearchParams();
   const poId = params.get("po");
   const [po, setPo] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [proofs, setProofs] = useState({});   // update253: indent_item_id -> [rate proof]
+  const [proofs, setProofs] = useState({ indentId: null, proofs: [] });   // update254: rate-comparison reference
 
   useEffect(() => {
     if (!poId) { setLoading(false); return; }
     getPODetail(poId).then(d => { setPo(d); setLoading(false); });
-    // update253: the rate evidence behind each line, joined on indent_item_id + vendor_name
-    getPOProofs(poId).then(setProofs).catch(() => setProofs({}));
+    // update254: the rate-comparison proof is a SEPARATE document. We only look it up so the
+    // Director preview can offer a link to it — nothing about the PO body changes.
+    getPOProofs(poId).then(setProofs).catch(() => setProofs({ indentId: null, proofs: [] }));
   }, [poId]);
 
   // update241: was a require() swallowed by try/catch — a throw silently hid the control
@@ -107,21 +107,7 @@ function POView() {
           {items.map((it, i) => (
             <tr key={i}>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{i + 1}</td>
-              <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.item_name}{it.spec ? " — " + it.spec : ""}
-                {/* update253: which vendor quote justified this price. Screen only — a
-                    link is meaningless on paper, so it is hidden from the print output. */}
-                {(proofs[it.indent_item_id] || []).length > 0 && (
-                  <span className="no-print" style={{ marginLeft: 6, display: "inline-flex", gap: 4 }}>
-                    {(proofs[it.indent_item_id] || []).map(pr => (
-                      <a key={pr.id} href={billUrl(pr.path)} target="_blank" rel="noreferrer" title="Rate proof from the vendor quote"
-                         style={{ fontSize: 10, fontWeight: 700, color: "#a4551f", border: "1px solid #a4551f",
-                           borderRadius: 5, padding: "0 5px", textDecoration: "none", whiteSpace: "nowrap" }}>
-                        {isPdf(pr.path) ? "PDF" : "📎"} proof
-                      </a>
-                    ))}
-                  </span>
-                )}
-              </td>
+              <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.item_name}{it.spec ? " — " + it.spec : ""}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{it.qty}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.unit}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{it.list_rate != null ? inr(it.list_rate) : inr(it.rate)}</td>
@@ -153,6 +139,19 @@ function POView() {
         {po.approved_by && <div style={{ fontSize: 11, color: "#555" }}>Approved by {po.approved_by}{po.approved_at ? " on " + po.approved_at : ""}</div>}
         <div style={{ marginTop: 40, borderTop: "1px solid #999", display: "inline-block", paddingTop: 4 }}>Authorised Signatory</div>
       </div>
+
+      {/* update254: rate-comparison proof, opened as its own document. Screen only, so the
+          printed PO is byte-for-byte what it always was. */}
+      {proofs.proofs?.length > 0 && (
+        <div className="no-print" style={{ textAlign: "center", marginTop: 18, fontSize: 12.5 }}>
+          <a href={"/purchase/rate-proof?indent=" + proofs.indentId} target="_blank" rel="noreferrer"
+             style={{ fontWeight: 700, color: "#a4551f", border: "1px solid #a4551f", borderRadius: 8,
+               padding: "6px 12px", textDecoration: "none" }}>
+            📎 Rate comparison proof ({proofs.proofs.length}) — opens separately
+          </a>
+          <div className="muted" style={{ fontSize: 11, marginTop: 5 }}>Reference only · not part of this purchase order</div>
+        </div>
+      )}
 
       <div style={{ textAlign: "center", marginTop: 26 }} className="no-print">
         <button onClick={() => window.print()} style={{ padding: "10px 22px", fontSize: 14, background: "#FF7A1A", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>🖨 Print / Save as PDF</button>
