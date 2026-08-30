@@ -159,6 +159,12 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
 
   // on desktop the Projects TAB owns projects; on the phone the inline explorer does
   const openProjects = () => { if (onOpenProjects) onOpenProjects(); else setPanel("all"); };
+  // update262: when the explorer closes, remove any leftover #projects from the URL WITHOUT
+  // creating a history entry — phantom hash entries were what broke the phone's back button.
+  useEffect(() => {
+    if (panel === null && typeof window !== "undefined" && window.location.hash === "#projects")
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }, [panel]);
 
   useEffect(() => {
     const s = getSession();
@@ -183,8 +189,10 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
       .then(lists => setWeek(days.map((d, i) => ({ day: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()], date: key(d), rows: lists[i] }))));
     if (desk) return;
     const openFromHash = () => { if (window.location.hash === "#projects") setPanel("all"); };
+    const openFromNav = () => setPanel("all");   // update262: direct signal from the Projects tab
     openFromHash(); window.addEventListener("hashchange", openFromHash);
-    return () => window.removeEventListener("hashchange", openFromHash);
+    window.addEventListener("psk-open-projects", openFromNav);
+    return () => { window.removeEventListener("hashchange", openFromHash); window.removeEventListener("psk-open-projects", openFromNav); };
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const isDirector = sess?.role === "director";

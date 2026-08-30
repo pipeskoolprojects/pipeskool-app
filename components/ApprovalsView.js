@@ -244,7 +244,10 @@ export default function ApprovalsView({ mode = "mobile" }) {
                     <div><b>{r.po_no}</b> · {r.site}<div className="muted" style={{ fontSize: 12 }}>{r.vendor} · indent {r.indent_no || "—"} · by {r.raised_by || "—"} · {r.date}</div></div>
                     <div style={{ fontWeight: 800, fontSize: 16, whiteSpace: "nowrap" }}>{inr(r.total)}</div>
                   </div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                    {/* update262: never approve a PO blind — same watermarked review document as web (221) */}
+                    <a href={"/purchase/po?po=" + r.id} target="_blank" rel="noreferrer">
+                      <button style={{ ...noBtn, color: "var(--blue, #2b6cb0)", borderColor: "var(--blue, #2b6cb0)" }}>👁 Preview PO</button></a>
                     <button style={okBtn} disabled={busyId === r.id} onClick={() => run(r.id, () => approvePO(r.id, "approved"), `${r.po_no} approved — office can issue it now.`)}>✓ Approve</button>
                     <button style={noBtn} disabled={busyId === r.id} onClick={() => { const why = prompt(`Reason for rejecting ${r.po_no}:`); if (why !== null) run(r.id, () => approvePO(r.id, "rejected", why), `${r.po_no} rejected.`); }}>✕ Reject</button>
                   </div>

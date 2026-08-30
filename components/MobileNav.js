@@ -47,7 +47,7 @@ export default function MobileNav() {
   // update227: director tabs lead with Home (Director Dashboard) + Projects, reachable from every page.
   const primary = workerOnly ? workerPrimary : role === "director"
     ? [{ href: "/m/dashboard", ico: "🏠", key: "nav_home" },
-       { href: "/m/dashboard#projects", ico: "📁", key: "nav_projects" },   // update228: opens the inline project explorer — bottom nav never disappears
+       { href: "/m/dashboard#projects", ico: "📁", key: "nav_projects", projects: true },   // update262: opens via direct event (see below) — same-page hash never fired
        { href: "/m/approvals", ico: "✅", key: "nav_approvals" },
        { href: "/m/muster", ico: "👥", key: "nav_muster" }]
     : primaryBase.filter(tab => tab.show(sess));
@@ -102,7 +102,16 @@ export default function MobileNav() {
         </div>
       )}
       <nav className="m-nav">
-        {primary.map(tab => (
+        {primary.map(tab => tab.projects ? (
+          /* update262: same-page hash navigation fires no event, so the Projects tab talks to the
+             dashboard directly; from any other page it routes there with the hash (read on mount). */
+          <a key={tab.href} onClick={() => {
+              if (path === "/m/dashboard") window.dispatchEvent(new Event("psk-open-projects"));
+              else router.push("/m/dashboard#projects");
+            }} style={{ position: "relative", cursor: "pointer" }}>
+            <span className="ico">{tab.ico}</span>{t(lang, tab.key)}
+          </a>
+        ) : (
           <Link key={tab.href} href={tab.href} className={path === tab.href ? "active" : ""} style={{ position: "relative" }}>
             <span className="ico">{tab.ico}</span>{t(lang, tab.key)}
             {tab.key === "nav_approvals" && pendCount > 0 && (

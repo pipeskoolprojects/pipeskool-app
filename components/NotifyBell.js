@@ -52,6 +52,7 @@ export default function NotifyBell({ mobile }) {
 
   return (
     <>
+      {(!mobile || !open) && (
       <button onClick={() => { setOpen(o => !o); }} style={btnStyle} title="Notifications">
         🔔 {!mobile && "Notifications"}
         {unread > 0 && (
@@ -61,8 +62,10 @@ export default function NotifyBell({ mobile }) {
           </span>
         )}
       </button>
+      )}{/* update262: on the phone the floating bell hides while its panel is open — it used to
+            show through the transparent backdrop and look like a duplicate bell on that screen */}
       {open && (
-        <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 200 }}>
+        <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(15,23,42,0.35)" }}>
           <div onClick={e => e.stopPropagation()}
                style={{ position: "fixed", top: mobile ? 54 : 70, right: mobile ? 8 : "auto", left: mobile ? 8 : 230,
                  width: mobile ? "auto" : 360, maxHeight: "70vh", overflowY: "auto", background: "#fff",
