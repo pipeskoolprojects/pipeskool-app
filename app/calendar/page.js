@@ -7,6 +7,8 @@ import Sidebar from "@/components/Sidebar";
 import { getSession } from "@/lib/auth";
 import { getSites } from "@/lib/data";
 import { getCalendarEvents, groupByDate, monthGrid, iso, EVENT_TYPES, STATUS_META } from "@/lib/calendar";
+import { saveHoliday, deleteHoliday } from "@/lib/holidays";   // update264
+import { canAnySite } from "@/lib/auth";
 
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["January", "February", "March", "April", "May", "June",
@@ -43,6 +45,69 @@ function Agenda({ list, onClick, empty }) {
   });
 }
 
+
+// update264: MODULE scope — add / edit / delete a company holiday straight from the calendar.
+// Writes the same company_holidays rows payroll and the muster read; DB policy is the real gate.
+function HolidayModal({ init, sites, onClose, onSaved }) {
+  const [f, setF] = useState({ id: init.id || null, on_date: init.on_date, name: init.name || "", site_ids: init.site_ids || [] });
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
+  const allSites = f.site_ids.length === 0;
+  const toggleSite = id => setF(x => ({ ...x, site_ids: x.site_ids.includes(id) ? x.site_ids.filter(s => s !== id) : [...x.site_ids, id] }));
+  async function save() {
+    setErr(""); setBusy(true);
+    try {
+      const r = await saveHoliday(f);
+      if (!r.ok) { setErr(r.error); return; }
+      onSaved(f.id ? "Holiday updated." : "Holiday added — payroll, muster and attendance will treat this date as a paid holiday.");
+    } catch (e) { setErr(e.message || "Could not save."); }
+    finally { setBusy(false); }
+  }
+  async function del() {
+    if (!f.id) return;
+    if (!window.confirm(`Delete "${f.name}" (${f.on_date})? Pay for this date goes back to normal rules.`)) return;
+    setErr(""); setBusy(true);
+    try {
+      const r = await deleteHoliday(f.id);
+      if (!r.ok) { setErr(r.error); return; }
+      onSaved("Holiday deleted.");
+    } catch (e) { setErr(e.message || "Could not delete."); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--card, #fff)", borderRadius: 12, padding: 18, width: "min(480px, 96vw)", maxHeight: "88vh", overflowY: "auto", boxShadow: "0 18px 50px rgba(0,0,0,.28)" }}>
+        <h2 style={{ marginTop: 0 }}>{f.id ? "🪔 Edit holiday" : "🪔 Add holiday"}</h2>
+        <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+          Marked holidays are <b>paid</b> (27-Aug rule): absent = 1× pay, worked full day = 2×. Payroll, muster and the attendance register all read this same entry.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
+          <div><label className="muted">Date</label><input type="date" style={{ width: "100%" }} value={f.on_date} onChange={e => setF(x => ({ ...x, on_date: e.target.value }))} /></div>
+          <div><label className="muted">Holiday name</label><input style={{ width: "100%" }} placeholder="e.g. Diwali" value={f.name} onChange={e => setF(x => ({ ...x, name: e.target.value }))} /></div>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <label className="muted">Applies to</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+            <label style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+              <input type="checkbox" checked={allSites} onChange={() => setF(x => ({ ...x, site_ids: [] }))} /> All sites
+            </label>
+            {sites.map(s => (
+              <label key={s.id} style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+                <input type="checkbox" checked={f.site_ids.includes(s.id)} onChange={() => toggleSite(s.id)} /> {s.name}
+              </label>
+            ))}
+          </div>
+        </div>
+        {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+          <button className="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : f.id ? "Save changes" : "Add holiday"}</button>
+          {f.id && <button disabled={busy} onClick={del} style={{ color: "var(--red)", borderColor: "var(--red)" }}>🗑 Delete</button>}
+          <button onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CalendarPage() {
   const [session, setSession] = useState(null);
   const [view, setView] = useState("month");
@@ -53,6 +118,9 @@ export default function CalendarPage() {
   const [types, setTypes] = useState({});     // empty = show everything
   const [sel, setSel] = useState(() => iso(new Date()));
   const [err, setErr] = useState("");
+  const [hol, setHol] = useState(null);        // update264: holiday modal — null | {id?, on_date, name, site_ids}
+  const [msg, setMsg] = useState("");
+  const [bump, setBump] = useState(0);         // update264: reload events after a holiday change
 
   useEffect(() => {
     const s = getSession();
@@ -80,7 +148,7 @@ export default function CalendarPage() {
     setEvents(null);
     getCalendarEvents(range.from, range.to, { siteId: site === "all" ? null : site })
       .then(setEvents).catch(e => { setEvents([]); setErr(e.message || String(e)); });
-  }, [session, range.from, range.to, site]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [session, range.from, range.to, site, bump]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeTypes = Object.keys(types).filter(k => types[k]);
   const filtered = useMemo(() => (events || [])
@@ -101,7 +169,11 @@ export default function CalendarPage() {
     setCursor(d);
   };
 
-  const open = ev => { if (ev.href) window.open(ev.href, "_blank", "noopener"); };
+  const canManageHol = session?.role === "director" || canAnySite(session, "attendance", "manage");   // update264 (DB policy is the real gate)
+  const open = ev => {
+    if (ev.type === "holiday" && canManageHol) { setHol({ id: ev.hid, on_date: ev.date, name: ev.title, site_ids: ev.site_ids || [] }); return; }   // update264: edit/delete
+    if (ev.href) window.open(ev.href, "_blank", "noopener");
+  };
   const cells = view === "month" ? grid : view === "week" ? weekDays : [{ date: cursor, key: iso(cursor), inMonth: true }];
   const t = iso(new Date());
 
@@ -128,6 +200,9 @@ export default function CalendarPage() {
         </div>
 
         {err && <div className="error" style={{ marginBottom: 10 }}>{err}</div>}
+        {msg && <div className="demo-banner" style={{ background: "var(--green-bg, #e8f6ee)", color: "var(--green, #1a7f4b)", marginBottom: 10 }}>{msg}</div>}
+        {hol && <HolidayModal init={hol} sites={sites} onClose={() => setHol(null)}
+          onSaved={m => { setHol(null); setMsg(m); setBump(b => b + 1); }} />}{/* update264 */}
 
         <div className="cal-filters">
           <button type="button" onClick={() => step(-1)} className="cal-nav">‹</button>
@@ -138,6 +213,8 @@ export default function CalendarPage() {
           </b>
           <button type="button" onClick={() => step(1)} className="cal-nav">›</button>
           <button type="button" onClick={() => { setCursor(new Date()); setSel(t); }} className="cal-today">Today</button>
+          {canManageHol && <button type="button" onClick={() => { setMsg(""); setHol({ on_date: sel, name: "", site_ids: [] }); }}
+            style={{ marginLeft: 6 }} title="Add a paid company holiday on the selected date">🪔 ＋ Add holiday</button>}{/* update264 */}
 
           <select value={site} onChange={e => setSite(e.target.value)}>
             <option value="all">Site / Project: all</option>
