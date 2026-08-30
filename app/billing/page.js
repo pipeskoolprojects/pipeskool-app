@@ -242,8 +242,8 @@ export default function BillingPage() {
               <table className="dt-compact" style={{ width: "100%", tableLayout: "fixed" }}>
                 <colgroup>
                   {edit.mode === "staged" ? (
-                    <><col style={{ width: 64 }} /><col /><col style={{ width: 118 }} /><col style={{ width: 76 }} />
-                      <col style={{ width: 92 }} /><col style={{ width: 92 }} /><col style={{ width: 92 }} /><col style={{ width: 104 }} /></>
+                    <><col style={{ width: 64 }} /><col /><col style={{ width: 110 }} /><col style={{ width: 70 }} /><col style={{ width: 72 }} />
+                      <col style={{ width: 90 }} /><col style={{ width: 90 }} /><col style={{ width: 90 }} /><col style={{ width: 104 }} /></>
                   ) : edit.mode === "split" ? (
                     <><col style={{ width: 64 }} /><col /><col style={{ width: 76 }} /><col style={{ width: 70 }} />
                       <col style={{ width: 108 }} /><col style={{ width: 108 }} /><col style={{ width: 104 }} /></>
@@ -254,7 +254,7 @@ export default function BillingPage() {
                 </colgroup>
                 <thead>
                   {edit.mode === "staged" ? (
-                    <tr><th>Code</th><th>Description</th><th>Group</th><th className="num">BOQ qty</th>
+                    <tr><th>Code</th><th>Description</th><th>Group</th><th className="num">BOQ qty</th><th className="num">Rate ₹</th>
                       <th className="num">Supply cum</th><th className="num">Install cum</th><th className="num">T&C cum</th><th className="num">This bill ₹</th></tr>
                   ) : edit.mode === "split" ? (
                     <tr><th>Code</th><th>Description</th><th className="num">BOQ qty</th><th className="num">Rate</th>
@@ -275,7 +275,7 @@ export default function BillingPage() {
                     const cum = lineCum(l, mode, mp, ip), prev = linePrev(l, mode, mp, ip), thisBill = cum - prev;
                     return (
                       <>
-                      {showSection && <tr key={"sec" + l.boq_item_id}><td colSpan={edit.mode === "staged" ? 8 : 7} style={{ fontWeight: 800, background: "var(--bg)" }}>{l.section || "General"}</td></tr>}
+                      {showSection && <tr key={"sec" + l.boq_item_id}><td colSpan={edit.mode === "staged" ? 9 : 7} style={{ fontWeight: 800, background: "var(--bg)" }}>{l.section || "General"}</td></tr>}
                       <tr key={l.boq_item_id}>
                         <td style={{ fontWeight: 600 }}>{l.item_code}</td>
                         <td style={{ whiteSpace: "normal", wordBreak: "break-word", verticalAlign: "top" }} title={l.description}>
@@ -289,7 +289,7 @@ export default function BillingPage() {
                             : <span style={{ color: "var(--red)", fontSize: 11 }}>⚠ no group</span>}</td>
                         )}
                         <td className="num">{l.boq_qty}</td>
-                        {edit.mode !== "staged" && <td className="num">{l.rate}</td>}
+                        <td className="num">{l.rate}</td>{/* update261b: rate visible in staged too — frozen per bill */}
                         {edit.mode === "staged" ? (
                           <>
                             <td className="num"><input style={{ width: "100%", textAlign: "right" }} value={l.cum_material_qty} onChange={e => setLine(i, "cum_material_qty", e.target.value)} />
@@ -314,36 +314,36 @@ export default function BillingPage() {
                         )}
                         <td className="num" style={{ fontWeight: 600, color: thisBill < 0 ? "var(--red)" : "inherit" }}>{inr(thisBill)}</td>
                       </tr>
-                      {endSection && <tr key={"sub" + l.boq_item_id} style={{ fontWeight: 700, background: "var(--bg)" }}><td colSpan={edit.mode === "staged" ? 7 : 6}>Sub-total — {l.section || "General"}</td><td className="num">{inr(secBill)}</td></tr>}
+                      {endSection && <tr key={"sub" + l.boq_item_id} style={{ fontWeight: 700, background: "var(--bg)" }}><td colSpan={edit.mode === "staged" ? 8 : 6}>Sub-total — {l.section || "General"}</td><td className="num">{inr(secBill)}</td></tr>}
                       </>
                     );
                   })}
                 </tbody>
                 <tfoot>
                   <tr style={{ fontWeight: 700, borderTop: "2px solid var(--line)" }}>
-                    <td colSpan={edit.mode === "staged" ? 7 : 6}>This bill total</td>
+                    <td colSpan={edit.mode === "staged" ? 8 : 6}>This bill total</td>
                     <td className="num">{inr(totals.bill)}</td>
                   </tr>
                   {totals.basicDiff !== 0 && (
                     <tr>{/* update260: SOUL basic-rate deduction flows into the bill total */}
-                      <td colSpan={edit.mode === "staged" ? 7 : 6}>LESS: Basic Rate Difference</td>
+                      <td colSpan={edit.mode === "staged" ? 8 : 6}>LESS: Basic Rate Difference</td>
                       <td className="num" style={{ color: "var(--red)" }}>− {inr(totals.basicDiff)}</td>
                     </tr>
                   )}
                   <tr style={{ fontWeight: 700 }}>
-                    <td colSpan={edit.mode === "staged" ? 7 : 6}>Net (before GST)</td>
+                    <td colSpan={edit.mode === "staged" ? 8 : 6}>Net (before GST)</td>
                     <td className="num">{inr(totals.net)}</td>
                   </tr>
                   <tr>
-                    <td colSpan={edit.mode === "staged" ? 7 : 6}>GST @ {edit.gst}%</td>
+                    <td colSpan={edit.mode === "staged" ? 8 : 6}>GST @ {edit.gst}%</td>
                     <td className="num">{inr(totals.gst)}</td>
                   </tr>
                   <tr style={{ fontWeight: 800, borderTop: "2px solid var(--line)" }}>
-                    <td colSpan={edit.mode === "staged" ? 7 : 6}>Grand total — this bill (with GST)</td>
+                    <td colSpan={edit.mode === "staged" ? 8 : 6}>Grand total — this bill (with GST)</td>
                     <td className="num">{inr(totals.grand)}</td>
                   </tr>
                   <tr className="muted">
-                    <td colSpan={edit.mode === "staged" ? 7 : 6}>Cumulative billed to date · BOQ value {inr(totals.boq)}</td>
+                    <td colSpan={edit.mode === "staged" ? 8 : 6}>Cumulative billed to date · BOQ value {inr(totals.boq)}</td>
                     <td className="num">{inr(totals.cum)} ({totals.boq ? Math.round(totals.cum / totals.boq * 100) : 0}%)</td>
                   </tr>
                 </tfoot>

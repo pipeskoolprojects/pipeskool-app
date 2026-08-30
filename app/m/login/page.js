@@ -17,20 +17,26 @@ export default function MobileLogin() {
   const pick = l => { setLang(l); setLangState(l); };
   const router = useRouter();
 
+  // update263: same hardening as /login — a hung or failed lookup must show an error and
+  // re-enable the button, never hang on the spinner (hang-proof rule for every submit handler).
+  const withTimeout = (pr, ms = 15000) => Promise.race([
+    pr, new Promise((_, rej) => setTimeout(() => rej(new Error("Could not reach the server. Check your internet connection and try again.")), ms)),
+  ]);
   async function login(e) {
     e.preventDefault();
     setError(""); setIsStaff(false); setBusy(true);
-    const w = await findWorkerByMobile(mobile.trim());
-    if (!w) {
-      const staff = await isStaffMobile(mobile.trim());
-      setBusy(false);
-      if (staff) { setIsStaff(true); return; }
-      setError(t(lang, "not_found"));
-      return;
-    }
-    setBusy(false);
-    setLocalWorker(w);
-    router.push("/m");
+    try {
+      const w = await withTimeout(findWorkerByMobile(mobile.trim()));
+      if (!w) {
+        const staff = await withTimeout(isStaffMobile(mobile.trim()));
+        if (staff) { setIsStaff(true); return; }
+        setError(t(lang, "not_found"));
+        return;
+      }
+      setLocalWorker(w);
+      router.push("/m");
+    } catch (err) { setError(err.message || "Something went wrong — please try again."); }
+    finally { setBusy(false); }
   }
 
   return (

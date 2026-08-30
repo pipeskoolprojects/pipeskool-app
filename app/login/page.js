@@ -18,14 +18,23 @@ export default function Login() {
   const router = useRouter();
   const [loginAs, setLoginAs] = useState("staff");   // update225: staff | director tab (same secure login; role comes from the account)
 
+  // update263: a failed or hung request must surface as an ERROR the user can read and retry —
+  // never a forever-disabled "Please wait…" button (that is exactly what stranded the Director
+  // at midnight on 30 Aug). Every handler: try/catch/finally + a 15s network timeout.
+  const withTimeout = (pr, ms = 15000) => Promise.race([
+    pr, new Promise((_, rej) => setTimeout(() => rej(new Error("Could not reach the server. Check your internet connection and try again.")), ms)),
+  ]);
+
   async function handleNext(e) {
     e.preventDefault(); setError("");
     if (!mobile.trim()) { setError("Enter your mobile number."); return; }
     setBusy(true);
-    const st = await checkLoginState(mobile);
-    setBusy(false);
-    if (!st.ok) { setError(st.error); return; }
-    setMode(st.mode);   // 'password' (has one) or 'set' (first time)
+    try {
+      const st = await withTimeout(checkLoginState(mobile));
+      if (!st.ok) { setError(st.error); return; }
+      setMode(st.mode);   // 'password' (has one) or 'set' (first time)
+    } catch (err) { setError(err.message || "Something went wrong — please try again."); }
+    finally { setBusy(false); }
   }
 
   function lockState() {
@@ -40,16 +49,18 @@ export default function Login() {
   function clearFails() { localStorage.removeItem("psk_login_lock"); }
   async function handleLogin(e) {
     e.preventDefault(); setError("");
-    setBusy(true);
-    const ls = lockState();
+    const ls = lockState();   // update263: lockout check BEFORE busy — it used to strand the button disabled
     if (ls.until > Date.now()) { setError("Too many wrong attempts. Try again in " + Math.ceil((ls.until - Date.now()) / 60000) + " min."); return; }
-    const res = await loginByMobilePassword(mobile, password);
-    setBusy(false);
-    if (!res.ok) { noteFail(); setError(res.error); return; }
-    clearFails();
-    // update225: route by the account's REAL role — Director -> Director Dashboard
-    const isDir = res.session?.role === "director";
-    router.push(window.innerWidth <= 820 ? (isDir ? "/m/dashboard" : "/m/muster") : (isDir ? "/home" : "/dashboard"));
+    setBusy(true);
+    try {
+      const res = await withTimeout(loginByMobilePassword(mobile, password));
+      if (!res.ok) { noteFail(); setError(res.error); return; }
+      clearFails();
+      // update225: route by the account's REAL role — Director -> Director Dashboard
+      const isDir = res.session?.role === "director";
+      router.push(window.innerWidth <= 820 ? (isDir ? "/m/dashboard" : "/m/muster") : (isDir ? "/home" : "/dashboard"));
+    } catch (err) { setError(err.message || "Something went wrong — please try again."); }
+    finally { setBusy(false); }
   }
 
   async function handleCreate(e) {
@@ -57,12 +68,14 @@ export default function Login() {
     if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
     if (password !== confirm) { setError("Passwords don't match."); return; }
     setBusy(true);
-    const res = await createPasswordAndLogin(mobile, password);
-    setBusy(false);
-    if (!res.ok) { setError(res.error); return; }
-    // update225: route by the account's REAL role — Director -> Director Dashboard
-    const isDir = res.session?.role === "director";
-    router.push(window.innerWidth <= 820 ? (isDir ? "/m/dashboard" : "/m/muster") : (isDir ? "/home" : "/dashboard"));
+    try {
+      const res = await withTimeout(createPasswordAndLogin(mobile, password), 25000);   // signUp + link can be slower
+      if (!res.ok) { setError(res.error); return; }
+      // update225: route by the account's REAL role — Director -> Director Dashboard
+      const isDir = res.session?.role === "director";
+      router.push(window.innerWidth <= 820 ? (isDir ? "/m/dashboard" : "/m/muster") : (isDir ? "/home" : "/dashboard"));
+    } catch (err) { setError(err.message || "Something went wrong — please try again."); }
+    finally { setBusy(false); }
   }
 
   const back = () => { setMode("start"); setPassword(""); setConfirm(""); setError(""); };
