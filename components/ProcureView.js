@@ -418,9 +418,18 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                 </label>
                 <input style={{ flex: 1, minWidth: 180 }} placeholder="Note (optional)" value={ni.note} onChange={e => setNi(n => ({ ...n, note: e.target.value }))} />
               </div>
+              <style>{`
+                /* update270: phone layout for the indent line rows — desktop untouched */
+                @media (max-width: 700px) {
+                  .ind-line { flex-wrap: wrap; }
+                  .ind-line .ind-name { flex: 1 1 100% !important; }
+                  .ind-line .ind-qty, .ind-line .ind-unit { flex: 1 1 72px !important; width: auto !important; min-width: 0; }
+                  .ind-line .ind-spec { flex: 2 1 130px !important; width: auto !important; min-width: 0; }
+                }
+              `}</style>
               {ni.lines.map((l, i) => (
-                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-                  <div style={{ flex: 2, position: "relative" }}>
+                <div key={i} className="ind-line" style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                  <div className="ind-name" style={{ flex: 2, position: "relative" }}>
                     <input style={{ width: "100%" }} placeholder="Item / material name * (type 2+ letters to search)" value={l.item_name}
                            onChange={e => onItemType(i, e.target.value)} />
                     {sug && sug.i === i && (
@@ -443,11 +452,11 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                       </div>
                     )}
                   </div>
-                  <input style={{ width: 90 }} inputMode="numeric" placeholder="Qty *" value={l.qty}
+                  <input className="ind-qty" style={{ width: 90 }} inputMode="numeric" placeholder="Qty *" value={l.qty}
                          onChange={e => setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], qty: e.target.value }; return { ...n, lines: ls }; })} />
-                  <input style={{ width: 90 }} placeholder="Unit" value={l.unit}
+                  <input className="ind-unit" style={{ width: 90 }} placeholder="Unit" value={l.unit}
                          onChange={e => setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], unit: e.target.value }; return { ...n, lines: ls }; })} />
-                  <input style={{ width: 220 }} placeholder="Specification (e.g. ASTM A106 Gr B, Sch 40, ISI)" value={l.spec || ""}
+                  <input className="ind-spec" style={{ width: 220 }} placeholder="Specification (e.g. ASTM A106 Gr B, Sch 40, ISI)" value={l.spec || ""}
                          onChange={e => setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], spec: e.target.value }; return { ...n, lines: ls }; })} />
                   {ni.lines.length > 1 && <button onClick={() => setNi(n => ({ ...n, lines: n.lines.filter((_, j) => j !== i) }))}>✕</button>}
                 </div>
