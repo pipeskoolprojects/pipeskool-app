@@ -52,11 +52,26 @@ function POView() {
   const total = subtotal + gst;
 
   return (
-    <div style={{ maxWidth: 820, margin: "0 auto", padding: 36, background: "#fff", color: "#111", fontFamily: "Newsreader, Georgia, serif" }}>
+    <div className="po-doc" style={{ maxWidth: 820, margin: "0 auto", padding: 36, background: "#fff", color: "#111", fontFamily: "Newsreader, Georgia, serif" }}>
+      {/* update265: phone-fit rules (screen only — print/A4 untouched) + a Back control for the
+          installed app, where this document opens in the same window from Approvals. */}
+      <style>{`
+        @media screen and (max-width: 640px) {
+          .po-doc { padding: 14px 10px !important; }
+          .po-doc table { font-size: 11px !important; }
+          .po-doc table th, .po-doc table td { padding: 4px 3px !important; }
+          .po-doc .po-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          .po-doc .po-wm { font-size: 34px !important; letter-spacing: 2px !important; color: rgba(220,38,38,0.07) !important; }
+          .po-doc .po-back { display: inline-flex !important; }
+        }
+        @media print { .po-doc .po-back { display: none !important; } }
+      `}</style>
+      <button type="button" className="po-back" onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign("/m/approvals"); }}
+        style={{ display: "none", alignItems: "center", gap: 6, marginBottom: 10, padding: "8px 12px", border: "1px solid #ddd", borderRadius: 8, background: "#fff", fontSize: 13 }}>← Back to approvals</button>
       {draftReview && (<>
         {/* update221: DRAFT watermark + banner — approver's review copy of an unapproved PO */}
         <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", zIndex: 5 }}>
-          <div style={{ transform: "rotate(-30deg)", fontSize: 92, fontWeight: 900, color: "rgba(220,38,38,0.13)", letterSpacing: 6, whiteSpace: "nowrap" }}>DRAFT — NOT APPROVED</div>
+          <div className="po-wm" style={{ transform: "rotate(-30deg)", fontSize: 92, fontWeight: 900, color: "rgba(220,38,38,0.10)", letterSpacing: 6, whiteSpace: "nowrap" }}>DRAFT — NOT APPROVED</div>
         </div>
         <div style={{ background: "#fff7ed", border: "1.5px solid #f59e0b", color: "#92400e", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
           ⚠ DRAFT — NOT YET APPROVED. Review copy for the approving Director; not valid for issue to vendor.</div>
@@ -94,6 +109,7 @@ function POView() {
         </div>
       </div>
 
+      <div className="po-scroll">{/* update265 */}
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
         <thead>
           <tr style={{ background: "#FEF2EC" }}>
@@ -129,6 +145,7 @@ function POView() {
           <tr style={{ background: "#FEF2EC", fontWeight: 700 }}><td colSpan="8" style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Total</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(total)}</td></tr>
         </tbody>
       </table>
+      </div>{/* /po-scroll (update265) */}
 
       <div style={{ marginTop: 18, fontSize: 11 }}>
         <div style={{ fontWeight: 700, marginBottom: 4 }}>Terms &amp; Conditions</div>
