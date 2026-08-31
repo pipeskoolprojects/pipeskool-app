@@ -18,7 +18,7 @@ export default function DeliveryChallans() {
   const [rates, setRates] = useState({});
   const [tally, setTally] = useState(null);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
-  const [ctab, setCtab] = useState("upload");            // upload | manual
+  const [ctab, setCtab] = useState("manual");            // update272c: Upload/AI tab removed on Director instruction — manual only
   const [showNew, setShowNew] = useState(true);
 
   // ---- create state (shared preview for both paths)
@@ -178,7 +178,7 @@ export default function DeliveryChallans() {
         {canCreate && showNew && (
           <div className="panel" style={{ padding: 0 }}>
             <div style={{ display: "flex", borderBottom: "1px solid var(--border)" }}>
-              {[["upload", "📷 Upload Vendor Challan — Auto-fill"], ["manual", "✍ Manual Entry — Select PO"]].map(([k, l]) => (
+              {[["manual", "✍ Manual Entry — Select PO"]].map(([k, l]) => (   /* update272c: upload tab removed */
                 <button key={k} type="button" onClick={() => setCtab(k)}
                   style={{ flex: 1, border: "none", background: "none", padding: "12px", fontSize: 13, cursor: "pointer", fontWeight: ctab === k ? 800 : 600, color: ctab === k ? "var(--copper)" : "var(--muted)", borderBottom: ctab === k ? "3px solid var(--copper)" : "3px solid transparent" }}>{l}</button>
               ))}
