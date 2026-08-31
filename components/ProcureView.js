@@ -63,6 +63,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   const [enqSel, setEnqSel] = useState({});              // {itemId: bool} items to include in enquiry download
   const [cmp, setCmp] = useState(null);
   const [proofs, setProofs] = useState([]);        // update254: rate-comparison proofs for the open indent
+  const [proofErr, setProofErr] = useState("");    // update266: inline upload error shown under the Attach button
   const [poProofs, setPoProofs] = useState({});    // update253: indent_item_id -> [proof]
   const [upBusy, setUpBusy] = useState("");
   const [awardVendor, setAwardVendor] = useState("");
@@ -181,16 +182,18 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   // Not per item and not per vendor — a quotation is normally one document anyway.
   async function attachProof(indentId, files) {
     const list = Array.from(files || []);
-    if (!list.length) return;
-    setUpBusy("q"); setErr("");
+    if (!list.length) { setProofErr("No file was selected."); return; }   // update266: never silent
+    setUpBusy("q"); setErr(""); setProofErr("");
     let added = [], failed = "";
-    for (const f of list) {
-      const r = await uploadQuoteProof({ indentId, file: f }, session?.id);
-      if (r.ok) added.push(r.proof); else failed = r.error;
-    }
-    setUpBusy("");
+    try {
+      for (const f of list) {
+        const r = await uploadQuoteProof({ indentId, file: f }, session?.id);
+        if (r.ok) added.push(r.proof); else failed = r.error;
+      }
+    } catch (e) { failed = e.message || "Upload failed."; }
+    finally { setUpBusy(""); }
     if (added.length) setProofs(prev => [...prev, ...added]);
-    if (failed) setErr(failed);
+    if (failed) { setProofErr(failed); setErr(failed); }   // update266: inline next to the button AND page banner
     else if (added.length) setMsg(added.length + " rate-comparison proof(s) attached.");
   }
 
@@ -609,14 +612,18 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                         <label className="btn-like" style={{ marginLeft: "auto", fontSize: 12, cursor: "pointer",
                           border: "1px solid var(--copper)", color: "var(--copper)", borderRadius: 8, padding: "5px 11px", fontWeight: 700 }}>
                           {upBusy === "q" ? "Uploading…" : "+ Attach proof"}
-                          <input type="file" accept="image/*,application/pdf" capture="environment" multiple style={{ display: "none" }}
-                            onChange={e => { const f = e.target.files; e.target.value = ""; attachProof(ind.id, f); }} />
+                          {/* update266: FileList is LIVE — clearing the input first emptied it, so attachProof
+                              received zero files and returned silently. Copy first, then reset. No capture=,
+                              so Android offers camera OR gallery OR files (PDF / WhatsApp screenshots). */}
+                          <input type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }}
+                            onChange={e => { const f = Array.from(e.target.files || []); e.target.value = ""; attachProof(ind.id, f); }} />
                         </label>
                         {proofs.length > 0 && (
                           <a href={"/purchase/rate-proof?indent=" + ind.id} target="_blank" rel="noreferrer"
                             style={{ fontSize: 12, fontWeight: 700, color: "var(--copper)" }}>🖨 Print proof sheet</a>
                         )}
                       </div>
+                      {proofErr && <div className="error" style={{ fontSize: 12, marginTop: 6 }}>{proofErr}</div>}{/* update266 */}
                       {proofs.length === 0
                         ? <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>No proof attached yet — rates save fine without one.</div>
                         : <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
