@@ -287,7 +287,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   // update238: view_all_money holders get the tile too — read-only inbox, no actions inside
   const apprTile = rights.open ? [["✅", "Approvals", R("/m/approvals", "/approvals"), apprTotal]] : [];
   const dirTiles = [...apprTile, ["💰", "Finance", "/expenses", 0], ["📊", "Analytics", R("/m/report", "/reports"), 0], ["🏗", "All Sites", null, 0],
-    ["🏢", "Vendors", "/vendors", 0], ["👥", "Team & HR", "/workers", 0], ["🗒", "Assign Task", "/tasks", 0], ["🚚", "Pending Del.", "/procure/pending", pendCount], ["⚙", "Admin", "/admin", 0]];
+    ["🏢", "Vendors", "/vendors", 0], ["👥", "Team & HR", "/workers", 0], ["🗒", "Assign Task", "/tasks", 0], ["🚚", "Pending Del.", "/procure/pending", pendCount], ["⚙", "Admin", "/rights", 0]];   // update265: /admin never existed (404) — Access Rights is the admin landing
   const staffTiles = [["📁", "Projects", null, 0], ["👷", "Muster", R("/m/muster", "/attendance"), 0], ...apprTile, ["📦", "Stock", R("/m/stock", "/stock"), 0],
     ["💳", "Expenses", R("/m/money", "/expenses"), appr.claims], ["🗒", "Tasks", null, 0], ["📋", "Reports", R("/m/report", "/reports"), 0], ["🛒", "Indents", "/procure", appr.ind], ["🚚", "Pending Del.", "/procure/pending", pendCount]];
   const tiles = companyView ? dirTiles : staffTiles;
@@ -295,7 +295,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   if (!sess) return null;
 
   return (
-    <div style={{ background: "var(--bg)", minHeight: desk ? 0 : "100dvh", paddingBottom: desk ? 24 : "calc(86px + env(safe-area-inset-bottom))" }}>
+    <div style={{ background: "var(--bg)", minHeight: desk ? 0 : "100dvh", paddingBottom: desk ? 24 : "calc(128px + env(safe-area-inset-bottom))" }}>{/* update265: clears the fixed nav AND the floating chat bubble */}
       <div style={{ padding: desk ? "18px 28px 0" : "14px 12px 0", maxWidth: desk ? "none" : 1100, margin: desk ? 0 : "0 auto" }}>
         <div style={{ background: "linear-gradient(140deg, " + NAVY + " 0%, " + NAVY2 + " 100%)", color: "#fff", borderRadius: 18, padding: 17, boxShadow: "0 10px 26px rgba(15,26,46,0.28)" }}>
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
