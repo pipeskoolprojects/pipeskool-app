@@ -27,6 +27,8 @@ export default function DeliveryChallans() {
   const [head, setHead] = useState({ vendor_name: "", vendor_dc_no: "", dc_date: new Date().toISOString().slice(0, 10), po_id: null, source: "manual", confidence: null });
   const [lines, setLines] = useState([]);                // { po_item_id,item_id,item_name,unit,ordered_qty,received_qty }
   const [poQ, setPoQ] = useState("");
+  const [poSite, setPoSite] = useState("all");     // update271: PO picker filters
+  const [poVendor, setPoVendor] = useState("all");
   const [saving, setSaving] = useState(false);
   const [aiNote, setAiNote] = useState("");
 
@@ -39,9 +41,11 @@ export default function DeliveryChallans() {
 
   function pickPO(p) {
     setHead(h => ({ ...h, po_id: p.id, vendor_name: p.vendor }));
-    setLines(p.items.filter(i => i.pending_qty > 0).map(i => ({
+    // update271: prefill only what a NEW challan may carry — pending minus what is already
+    // on an unconverted challan. Fully covered lines don't appear at all.
+    setLines(p.items.filter(i => (i.remaining_qty ?? i.pending_qty) > 0).map(i => ({
       po_item_id: i.po_item_id, item_id: i.item_id, item_name: i.item_name, unit: i.unit,
-      ordered_qty: i.pending_qty, received_qty: i.pending_qty })));
+      ordered_qty: i.remaining_qty ?? i.pending_qty, received_qty: i.remaining_qty ?? i.pending_qty })));
   }
 
   async function runExtract(f) {
@@ -187,9 +191,20 @@ export default function DeliveryChallans() {
               {ctab === "manual" && (
                 <div>
                   {file && <div className="note" style={{ background: "#fff8f2" }}>📎 {file.name} attached as proof{aiNote ? " — " + aiNote : ""}</div>}
-                  <input placeholder="🔎 Search PO by number / vendor / site…" value={poQ} onChange={e => setPoQ(e.target.value)} style={{ width: "100%", marginBottom: 8 }} />
+                  <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>{/* update271: site + vendor filters */}
+                    <select value={poSite} onChange={e => setPoSite(e.target.value)} style={{ flex: "1 1 140px" }}>
+                      <option value="all">Site: all</option>
+                      {[...new Set(pos.map(p => p.site).filter(Boolean))].sort().map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <select value={poVendor} onChange={e => setPoVendor(e.target.value)} style={{ flex: "1 1 160px" }}>
+                      <option value="all">Vendor: all</option>
+                      {[...new Set(pos.map(p => p.vendor).filter(Boolean))].sort().map(v2 => <option key={v2} value={v2}>{v2}</option>)}
+                    </select>
+                    <input placeholder="🔎 Search PO number…" value={poQ} onChange={e => setPoQ(e.target.value)} style={{ flex: "2 1 200px" }} />
+                  </div>
                   <div style={{ maxHeight: 170, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 10 }}>
-                    {pos.filter(p => !poQ || (p.po_no + " " + p.vendor + " " + (p.site || "")).toLowerCase().includes(poQ.toLowerCase())).slice(0, 40).map(p => (
+                    {pos.filter(p => (poSite === "all" || p.site === poSite) && (poVendor === "all" || p.vendor === poVendor)
+                        && (!poQ || (p.po_no + " " + p.vendor + " " + (p.site || "")).toLowerCase().includes(poQ.toLowerCase()))).slice(0, 40).map(p => (
                       <div key={p.id} onClick={() => pickPO(p)}
                         style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid var(--border)", background: head.po_id === p.id ? "#fff3e8" : "#fff", display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                         <span><b>{p.po_no}</b> · {p.vendor}</span>
