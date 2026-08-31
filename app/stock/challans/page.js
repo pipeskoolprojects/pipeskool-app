@@ -3,7 +3,7 @@
 // listed + filtered, then Convert -> GRN. Print / PDF / Tally per row and in bulk.
 import { useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
-import { createDeliveryChallan, getDeliveryChallans, convertDcToGrn, uploadDcProof, dcProofUrl, priceDcLines, dcTallyXml, getChallanPOs } from "@/lib/challan";
+import { createDeliveryChallan, getDeliveryChallans, convertDcToGrn, cancelDeliveryChallan, uploadDcProof, dcProofUrl, priceDcLines, dcTallyXml, getChallanPOs } from "@/lib/challan";
 import { getTallySettings } from "@/lib/tally";
 import { getSession, canSeeModuleAnySite } from "@/lib/auth";
 
@@ -136,6 +136,15 @@ export default function DeliveryChallans() {
     setMsg("Tally file downloaded — import in Tally via Gateway → Import Data.");
   }
   const [conv, setConv] = useState(0);
+  // update272: cancel a wrong challan — reason required; converted ones are refused (cancel the GRN instead)
+  async function cancelDc(r) {
+    const reason = prompt(`Cancel ${r.dc_ref}? The challan stays on record, struck out, and its material becomes deliverable again.\n\nReason (required):`);
+    if (reason === null) return;
+    const res = await cancelDeliveryChallan(r.id, reason);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg(res.dc_ref + " cancelled."); load();
+  }
+
   async function convert(r) {
     if (!confirm("Convert " + r.dc_ref + " into a GRN? Stock will be received with these quantities.")) return;
     setConv(r.id);
@@ -145,7 +154,7 @@ export default function DeliveryChallans() {
   }
 
   const canCreate = session && (session.role === "director" || session.role === "it_executive" || canSeeModuleAnySite(session, "stock"));
-  const stBadge = { matched: ["Matched", "p"], mismatch: ["Mismatch", "red"], pending: ["No PO", "warn"] };
+  const stBadge = { matched: ["Matched", "p"], mismatch: ["Mismatch", "red"], pending: ["No PO", "warn"], cancelled: ["Cancelled", "a"] };   // update272
 
   return (
     <div className="layout">
@@ -255,7 +264,7 @@ export default function DeliveryChallans() {
             <select value={fSite} onChange={e => setFSite(e.target.value)}><option value="all">Site: all</option>{siteOpts.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select>
             <input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)} /><span className="muted" style={{ fontSize: 11 }}>to</span>
             <input type="date" value={fTo} onChange={e => setFTo(e.target.value)} />
-            <select value={fStatus} onChange={e => setFStatus(e.target.value)}><option value="all">Status: all</option><option value="matched">Matched</option><option value="mismatch">Mismatch</option><option value="pending">No PO</option><option value="pending_grn">Pending → GRN</option></select>
+            <select value={fStatus} onChange={e => setFStatus(e.target.value)}><option value="all">Status: all</option><option value="matched">Matched</option><option value="mismatch">Mismatch</option><option value="pending">No PO</option><option value="pending_grn">Pending → GRN</option><option value="cancelled">Cancelled</option></select>
             <select value={fSource} onChange={e => setFSource(e.target.value)}><option value="all">Source: all</option><option value="auto">Auto</option><option value="manual">Manual</option></select>
             <input placeholder="PO / DC / GRN no… 🔎" value={q} onChange={e => setQ(e.target.value)} style={{ width: 150 }} />
             <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
@@ -269,7 +278,7 @@ export default function DeliveryChallans() {
                 <thead><tr><th>DC Ref</th><th>Date</th><th>Site</th><th>Vendor</th><th>Against PO</th><th className="num">Qty (Recv/Ord)</th><th>Match</th><th>Source</th><th>Proof</th><th>GRN</th><th>Actions</th></tr></thead>
                 <tbody>
                   {shown.map(r => { const [sl, sc] = stBadge[r.status] || ["?", "gray"]; return (
-                    <tr key={r.id}>
+                    <tr key={r.id} style={r.status === "cancelled" ? { opacity: 0.55, textDecoration: "line-through" } : undefined} title={r.status === "cancelled" ? ("Cancelled" + (r.cancelled_by ? " by " + r.cancelled_by : "") + (r.cancel_reason ? " — " + r.cancel_reason : "")) : undefined}>{/* update272 */}
                       <td style={{ fontWeight: 700 }}>{r.dc_ref}{r.vendor_dc_no && <div className="muted" style={{ fontSize: 10.5 }}>vendor: {r.vendor_dc_no}</div>}</td>
                       <td className="muted">{r.date}</td>
                       <td>{r.site}</td>
@@ -283,7 +292,8 @@ export default function DeliveryChallans() {
                       <td style={{ whiteSpace: "nowrap" }}>
                         <a href={"/stock/dc-print?ids=" + r.id} target="_blank" rel="noreferrer" title="Print / save as PDF"><button type="button" style={{ fontSize: 11.5, marginRight: 4 }}>🖨</button></a>
                         <button type="button" style={{ fontSize: 11.5, marginRight: 4 }} title="Tally XML" disabled={!tally} onClick={() => dlTally([r], r.dc_ref.replace(/\//g, "-") + ".xml")}>📊</button>
-                        {!r.grn_no && canCreate && <button type="button" style={{ fontSize: 11.5, fontWeight: 700 }} disabled={conv === r.id} onClick={() => convert(r)}>{conv === r.id ? "…" : "Convert → GRN"}</button>}
+                        {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5, fontWeight: 700 }} disabled={conv === r.id} onClick={() => convert(r)}>{conv === r.id ? "…" : "Convert → GRN"}</button>}
+                        {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5, color: "var(--red)", borderColor: "var(--red)" }} onClick={() => cancelDc(r)}>✕ Cancel</button>}{/* update272 */}
                       </td>
                     </tr>
                   ); })}
