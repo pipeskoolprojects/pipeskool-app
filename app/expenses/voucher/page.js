@@ -57,7 +57,12 @@ function Voucher() {
         .proofbox img { width: 100%; height: auto; max-height: 105mm; object-fit: contain; display: block; }
         .proofgrid.one .proofbox img { max-height: 150mm; }
         table { border-collapse: collapse; width: 100%; }
+        /* update268: diagonal NOT APPROVED watermark — prints on EVERY page (fixed), never covers data (low opacity) */
+        .wm { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 5; }
+        .wm span { transform: rotate(-30deg); font-size: 84px; font-weight: 900; letter-spacing: 6px; white-space: nowrap; color: rgba(220,38,38,0.12); }
+        @media print { .wm { display: flex !important; } .wm span { color: rgba(220,38,38,0.16); } }
       `}</style>
+      {v.notApproved > 0 && <div className="wm"><span>NOT APPROVED</span></div>}{/* update268 */}
 
       <div className="no-print" style={{ display: "flex", gap: 8, padding: "14px 20px", alignItems: "center", flexWrap: "wrap" }}>
         <button onClick={() => window.print()} style={{ fontWeight: 700 }}>🖨 Print / Save as PDF</button>
@@ -70,6 +75,11 @@ function Voucher() {
       </div>
 
       <div className="sheet">
+        {v.notApproved > 0 && (   /* update268: printed banner — the toolbar warning above never reached paper */
+          <div style={{ border: "2px solid #b91c1c", color: "#b91c1c", background: "#fef2f2", borderRadius: 6, padding: "6px 10px", fontWeight: 800, fontSize: 12, textAlign: "center", marginBottom: 8 }}>
+            NOT APPROVED — {v.notApproved} of {v.lines.length} claim(s) on this voucher {v.notApproved === 1 ? "is" : "are"} still pending / under query · not valid for payment
+          </div>
+        )}
         {/* ---------- header: the official logo component, unmodified ---------- */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
           <div style={{ paddingTop: 2 }}><Logo height={26} /></div>

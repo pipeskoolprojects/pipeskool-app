@@ -45,7 +45,12 @@ function AdvVoucher() {
         @media print { .no-print { display: none !important; } body { background: #fff; } }
         .sheet { max-width: 182mm; margin: 0 auto; border: 1px solid #d6ddea; border-radius: 8px; padding: 16mm 12mm 12mm; }
         table { border-collapse: collapse; width: 100%; }
+        /* update268: diagonal NOT APPROVED watermark — prints on EVERY page (fixed), never covers data (low opacity) */
+        .wm { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 5; }
+        .wm span { transform: rotate(-30deg); font-size: 84px; font-weight: 900; letter-spacing: 6px; white-space: nowrap; color: rgba(220,38,38,0.12); }
+        @media print { .wm { display: flex !important; } .wm span { color: rgba(220,38,38,0.16); } }
       `}</style>
+      {v.status !== "approved" && <div className="wm"><span>NOT APPROVED</span></div>}{/* update268 */}
 
       <div className="no-print" style={{ display: "flex", gap: 8, padding: "14px 20px", alignItems: "center", flexWrap: "wrap" }}>
         <button onClick={() => window.print()} style={{ fontWeight: 700 }}>🖨 Print / Save as PDF</button>
