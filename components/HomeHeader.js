@@ -17,7 +17,7 @@ export default function HomeHeader({ sess, sites, isDirector, asSite, setAsSite,
 
   return (
     <>
-      <div style={{ background: NAVY, color: "#fff", padding: desk ? "10px 28px" : topPad + " 14px 14px" }}>
+      <div style={{ background: NAVY, color: "#fff", padding: desk ? "10px 28px" : topPad + " 14px 14px", position: "relative", zIndex: 20 }}>{/* update265b: header always paints above page content */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, maxWidth: desk ? "none" : 1100, margin: desk ? 0 : "0 auto" }}>
           {/* update237: the greeting block (crown + Good evening + name · role) is PHONE-ONLY now.
               On desktop the sidebar already shows who is logged in, so the header carries only the

@@ -28,8 +28,8 @@ function Ring({ pct, label }) {
   return (
     <svg width="78" height="78" viewBox="0 0 78 78" style={{ flexShrink: 0 }}>
       <circle cx="39" cy="39" r={R} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth="7" />
-      <circle cx="39" cy="39" r={R} fill="none" stroke={COPPER} strokeWidth="7" strokeLinecap="round"
-        strokeDasharray={(C * p / 100) + " " + C} transform="rotate(-90 39 39)" />
+      {p > 0 && <circle cx="39" cy="39" r={R} fill="none" stroke={COPPER} strokeWidth="7" strokeLinecap="round"
+        strokeDasharray={(C * p / 100) + " " + C} transform="rotate(-90 39 39)" />}{/* update265b: at 0% the rounded cap drew a stray dot at the top of the ring */}
       <text x="39" y="38" textAnchor="middle" fill="#fff" fontSize="15" fontWeight="800">{Math.round(p)}%</text>
       <text x="39" y="50" textAnchor="middle" fill="rgba(255,255,255,0.6)" fontSize="7.5">{label}</text>
     </svg>
@@ -297,7 +297,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   return (
     <div style={{ background: "var(--bg)", minHeight: desk ? 0 : "100dvh", paddingBottom: desk ? 24 : "calc(128px + env(safe-area-inset-bottom))" }}>{/* update265: clears the fixed nav AND the floating chat bubble */}
       <div style={{ padding: desk ? "18px 28px 0" : "14px 12px 0", maxWidth: desk ? "none" : 1100, margin: desk ? 0 : "0 auto" }}>
-        <div style={{ background: "linear-gradient(140deg, " + NAVY + " 0%, " + NAVY2 + " 100%)", color: "#fff", borderRadius: 18, padding: 17, boxShadow: "0 10px 26px rgba(15,26,46,0.28)" }}>
+        <div style={{ background: "linear-gradient(140deg, " + NAVY + " 0%, " + NAVY2 + " 100%)", color: "#fff", borderRadius: 18, padding: 17, boxShadow: "0 10px 26px rgba(15,26,46,0.28)", position: "relative", overflow: "hidden" }}>{/* update265b: hard containment */}
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 9.5, letterSpacing: 1.1, color: COPPER, fontWeight: 800, textTransform: "uppercase" }}>{companyView ? "Company portfolio" : "Active site"}</div>
