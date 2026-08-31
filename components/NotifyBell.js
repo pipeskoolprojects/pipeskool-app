@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getMyNotifications, markNotifRead, markAllNotifRead, subscribeNotifs } from "@/lib/notify";
-import { pushSupported, pushEnabled, enablePush } from "@/lib/push";
+import { pushSupported, enablePush, pushStatus, sendTestPush } from "@/lib/push";   // update267
 
 function timeAgo(ts) {
   const s = Math.max(1, Math.floor((Date.now() - new Date(ts).getTime()) / 1000));
@@ -19,6 +19,8 @@ function timeAgo(ts) {
 
 export default function NotifyBell({ mobile }) {
   const [open, setOpen] = useState(false);
+  const [pstat, setPstat] = useState(null);   // update267: real device push status
+  useEffect(() => { if (open) pushStatus().then(setPstat); }, [open]);   // update267
   const [rows, setRows] = useState([]);
   const [unread, setUnread] = useState(0);
   const router = useRouter();
@@ -73,10 +75,19 @@ export default function NotifyBell({ mobile }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: "1px solid var(--border)" }}>
               <b style={{ fontSize: 14 }}>Notifications</b>
               {unread > 0 && <button style={{ fontSize: 11.5 }} onClick={async () => { await markAllNotifRead(); refresh(); }}>Mark all read</button>}
-              {pushSupported() && !pushEnabled() && (
+              {/* update267: driven by the device's TRUE state — enable when this device is not
+                  registered to the logged-in user (even if permission was granted earlier). */}
+              {pushSupported() && pstat && !pstat.subscribed && (
                 <button style={{ fontSize: 11.5, marginLeft: 6 }} title="Get these on your phone even when the app is closed"
-                  onClick={async () => { const sess = getSession(); const r = await enablePush(sess?.id); alert(r.ok ? "✅ Phone notifications ON for this device." : r.error); }}>
+                  onClick={async () => { const sess = getSession(); const r = await enablePush(sess?.id);
+                    alert(r.ok ? (r.reclaimed ? "✅ This device now sends notifications to YOU (it was registered to a previous login)." : "✅ Phone notifications ON for this device.") : r.error);
+                    pushStatus().then(setPstat); }}>
                   🔔 Enable on this device</button>
+              )}
+              {pushSupported() && pstat && pstat.subscribed && (
+                <button style={{ fontSize: 11.5, marginLeft: 6 }} title="Send yourself a test notification"
+                  onClick={async () => { const sess = getSession(); await sendTestPush(sess?.id); alert("Test sent — it should arrive on this device within a few seconds (lock the phone to see it)."); }}>
+                  ✅ Push ON · Test</button>
               )}
             </div>
             {rows.length === 0 && <div className="muted" style={{ padding: 16, fontSize: 13 }}>Nothing yet.</div>}
