@@ -32,7 +32,8 @@ export default function DeliveryChallans() {
   const [saving, setSaving] = useState(false);
   const [aiNote, setAiNote] = useState("");
 
-  const load = () => getDeliveryChallans().then(async r => { setRows(r); setRates(await priceDcLines(r)); });
+  const load = () => getDeliveryChallans().then(async r => { setRows(r); setRates(await priceDcLines(r)); })
+    .catch(e => { setRows([]); setErr(e.message); });   // update272b: loader errors land in the red banner, not an empty page
   useEffect(() => {
     const s = getSession(); if (!s) { window.location.replace("/login"); return; }
     setSession(s);
