@@ -45,7 +45,7 @@ export default function NotifyBell({ mobile }) {
   }
 
   const btnStyle = mobile
-    ? { position: "fixed", top: 10, right: 12, zIndex: 140, width: 38, height: 38, borderRadius: "50%",
+    ? { position: "fixed", top: "calc(12px + env(safe-area-inset-top))", right: 12, zIndex: 140, width: 38, height: 38, borderRadius: "50%",   // update265c: clear the phone status bar (installed app draws under it)
         background: "rgba(255,255,255,0.14)", color: "#fff", border: "none", fontSize: 17, cursor: "pointer" }
     : { position: "relative", background: "rgba(255,255,255,0.08)", color: "#fff", border: "1px solid rgba(255,255,255,0.15)",
         borderRadius: 8, width: "100%", padding: "5px 8px", fontSize: 12.5, cursor: "pointer", textAlign: "left" };
@@ -67,7 +67,7 @@ export default function NotifyBell({ mobile }) {
       {open && (
         <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(15,23,42,0.35)" }}>
           <div onClick={e => e.stopPropagation()}
-               style={{ position: "fixed", top: mobile ? 54 : 70, right: mobile ? 8 : "auto", left: mobile ? 8 : 230,
+               style={{ position: "fixed", top: mobile ? "calc(58px + env(safe-area-inset-top))" : 70, right: mobile ? 8 : "auto", left: mobile ? 8 : 230,   // update265c
                  width: mobile ? "auto" : 360, maxHeight: "70vh", overflowY: "auto", background: "#fff",
                  borderRadius: 12, boxShadow: "0 8px 30px rgba(0,0,0,0.25)", zIndex: 201 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: "1px solid var(--border)" }}>
