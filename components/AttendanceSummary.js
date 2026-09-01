@@ -3,11 +3,11 @@
 // One row per (worker, site) so a worker on three sites is three rows; site filter shows only
 // that site's rows. Codes: P = present (1), H = half day (0.5), A = absent/no row (0),
 // WO = weekly off (from Settings), HOL = company holiday. Read live from attendance.
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { supabase, isDemo } from "@/lib/supabase";
 import { getPayrollSettings, weeklyOffDates } from "@/lib/payrollSettings";
 import { getHolidaysBetween } from "@/lib/holidays";
-import * as XLSX from "xlsx";
+import { exportAttendanceXlsx } from "@/lib/payrollExport";   // update278: styled workbook
 
 const CODE = { present: "P", half_day: "H", absent: "A" };
 const COLOR = { P: "#e8f6ee", H: "#fff4cc", A: "#fde8e8", WO: "#eef2f7", HOL: "#fce7f3", "": "#fff" };
@@ -31,7 +31,7 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
   ]);
   const staffMob = new Set((staffRows || []).map(u => String(u.mobile)));
   let q = supabase.from("attendance")
-    .select("worker_id, site_id, att_date, status, review_status, sites!attendance_site_id_fkey(name), workers(full_name, mobile, category, labour_type)")
+    .select("worker_id, site_id, att_date, status, review_status, ot_hours, ot_approved, ot_approved_hours, sites!attendance_site_id_fkey(name), workers(full_name, mobile, category, labour_type)")   // update278: OT row
     .gte("att_date", from).lt("att_date", to).limit(20000);
   if (siteId && siteId !== "all") q = q.eq("site_id", siteId);
   const { data, error } = await q;
@@ -48,12 +48,21 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
       category: a.workers?.category || "", cells: {}, p: 0, h: 0, review: 0 };
     const c = CODE[a.status] || "";
     r.cells[a.att_date] = c;
+    r.ot = r.ot || {};
+    const otv = a.ot_approved ? Number(a.ot_approved_hours || 0) : 0;   // update278: paid OT only (approved)
+    if (otv) r.ot[a.att_date] = otv;
     if (a.review_status === "needs_review") r.review += 1;
     if (c === "P") r.p += 1; else if (c === "H") r.h += 1;
+    // update277: a half day on Sunday is paid as a full day
+    const sun = new Date(a.att_date + "T00:00:00").getDay() === 0;
+    r.paid = (r.paid || 0) + (c === "P" ? 1 : c === "H" ? (settings.sunday_half_as_full && sun ? 1 : 0.5) : 0);
   });
-  const rows = Object.values(map).sort((x, y) => x.site.localeCompare(y.site) || x.worker.localeCompare(y.worker));
-  return { days, rows, wo, hol };
+  const rows = Object.values(map).map(r => ({ ...r, daysPaid: r.paid || 0, otTotal: +Object.values(r.ot || {}).reduce((n, v) => n + v, 0).toFixed(2) }))
+    .sort((x, y) => x.site.localeCompare(y.site) || x.worker.localeCompare(y.worker));
+  return { days, rows, wo, hol, settings };
 }
+
+export function otOf(r, d) { return (r.ot && r.ot[d.iso]) || 0; }   // update278
 
 export function cellCode(r, d, wo, hol) {
   const c = r.cells[d.iso];
@@ -69,13 +78,9 @@ export default function AttendanceSummary({ month, siteId, sites }) {
   useEffect(() => { setG(null); setErr(""); loadAttendanceGrid(month, siteId, kind).then(setG).catch(e => { setErr(e.message); setG({ days: monthDays(month), rows: [], wo: new Set(), hol: {} }); }); }, [month, siteId, kind]);
   const siteName = siteId === "all" ? "All sites" : (sites.find(s => String(s.id) === String(siteId))?.name || "");
 
-  function exportExcel() {
+  async function exportExcel() {
     if (!g) return;
-    const head = ["Sr", "Worker", "Site", ...g.days.map(d => String(d.day).padStart(2, "0") + " " + d.wd), "P", "H", "Days"];
-    const body = g.rows.map((r, i) => [i + 1, r.worker, r.site, ...g.days.map(d => cellCode(r, d, g.wo, g.hol)), r.p, r.h, r.p + r.h * 0.5]);
-    const ws = XLSX.utils.aoa_to_sheet([["Pipeskool Projects Pvt. Ltd. — Full Attendance Summary"], [siteName + " · " + month + " · " + (kind === "staff" ? "Staff" : "Labour")], [], head, ...body]);
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Attendance");
-    XLSX.writeFile(wb, `attendance_${month}_${siteName.replace(/[^\w]+/g, "_")}.xlsx`);
+    await exportAttendanceXlsx({ month, siteName, kind, days: g.days, rows: g.rows, wo: g.wo, hol: g.hol, cellCode, otOf });   // update278
   }
 
   return (
@@ -83,7 +88,7 @@ export default function AttendanceSummary({ month, siteId, sites }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <div>
           <h2 style={{ margin: 0 }}>Full Attendance Summary</h2>
-          <div className="muted" style={{ fontSize: 12 }}>{siteName} · {month} · one row per worker per site · P = 1 day, H = ½ day, A = 0, WO = weekly off, HOL = holiday</div>
+          <div className="muted" style={{ fontSize: 12 }}>{siteName} · {month} · one row per worker per site · P = 1 day, H = ½ day (Sunday half = full), A = 0, HOL = holiday · OT row = approved hours</div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button className={kind === "labour" ? "primary" : ""} onClick={() => setKind("labour")}>👷 Labour</button>
@@ -101,19 +106,31 @@ export default function AttendanceSummary({ month, siteId, sites }) {
                 <th style={{ position: "sticky", left: 36, background: "#0f1a2e", zIndex: 2, minWidth: 160, textAlign: "left" }}>Worker</th>
                 <th style={{ minWidth: 130, textAlign: "left" }}>Site</th>
                 {g.days.map(d => <th key={d.iso} style={{ minWidth: 30, padding: "4px 2px", fontSize: 10.5, textAlign: "center", background: g.wo.has(d.iso) ? "#26344d" : "#0f1a2e" }}>{String(d.day).padStart(2, "0")}<br /><span style={{ fontWeight: 400, opacity: .8 }}>{d.wd}</span></th>)}
-                <th className="num">P</th><th className="num">H</th><th className="num">Days</th>
+                <th className="num">P</th><th className="num">H</th><th className="num">Days</th><th className="num">OT h</th>
               </tr>
             </thead>
             <tbody>
               {g.rows.map((r, i) => (
-                <tr key={r.key}>
+                <Fragment key={r.key}>
+                <tr>
                   <td style={{ position: "sticky", left: 0, background: "#fff", zIndex: 1 }}>{i + 1}</td>
                   <td style={{ position: "sticky", left: 36, background: "#fff", zIndex: 1, fontWeight: 600, whiteSpace: "nowrap" }}>{r.worker}{r.review > 0 && <span title="auto-closed day(s) awaiting review" style={{ color: "#b45309", marginLeft: 4 }}>⏱</span>}</td>
                   <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{r.site}</td>
                   {g.days.map(d => { const c = cellCode(r, d, g.wo, g.hol); return <td key={d.iso} title={g.hol[d.iso] || ""} style={{ textAlign: "center", padding: "3px 2px", fontSize: 11, fontWeight: c === "P" ? 700 : 500, background: COLOR[c] || "#fff" }}>{c}</td>; })}
-                  <td className="num">{r.p}</td><td className="num">{r.h}</td><td className="num" style={{ fontWeight: 700 }}>{r.p + r.h * 0.5}</td>
+                  <td className="num">{r.p}</td><td className="num">{r.h}</td><td className="num" style={{ fontWeight: 700 }}>{r.daysPaid}</td><td className="num">{r.otTotal || "—"}</td>
                 </tr>
+                {r.otTotal > 0 && (
+                  <tr style={{ background: "#fffaf5" }}>
+                    <td style={{ position: "sticky", left: 0, background: "#fffaf5", zIndex: 1 }}></td>
+                    <td style={{ position: "sticky", left: 36, background: "#fffaf5", zIndex: 1, fontSize: 10.5, color: "#7c2d12", fontStyle: "italic" }}>OT (h)</td>
+                    <td></td>
+                    {g.days.map(d => { const v = otOf(r, d); return <td key={d.iso} style={{ textAlign: "center", fontSize: 10, color: "#7c2d12" }}>{v || ""}</td>; })}
+                    <td colSpan={4}></td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
+
             </tbody>
           </table>
         </div>
