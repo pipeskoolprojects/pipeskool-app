@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
-import { getPunchFailures, getAttendance, getSites, approveOt, verifyAttendanceRow } from "@/lib/data";
+import { getPunchFailures, getAttendance, getSites, approveOt, verifyAttendanceRow, editAttendanceRow } from "@/lib/data";   // update277
 import { getSession, canAnySite } from "@/lib/auth";
 import { todayLocal } from "@/lib/today";
 import { isDemo } from "@/lib/supabase";
@@ -102,7 +102,21 @@ export default function AttendancePage() {
         r.verify === "corrected" ? <span className="badge info">Corrected</span> :
         canVerify ? <button style={{ fontSize: 11.5 }} title="Mark this punch as verified"
           onClick={() => doVerify(r)}>✓ Verify</button> : <span className="badge warn">Pending</span> },
+    { key: "_edit", label: "", sortable: false, render: r => canVerify ? <button style={{ fontSize: 11.5 }} title="Correct in/out time or status" onClick={() => editRow(r)}>✎</button> : null },   // update277
   ];
+
+  // update277: manual correction — times (HH:MM) drive hours/status/OT; a chosen status is kept
+  async function editRow(r) {
+    const hhmm = v => (v && v !== "—") ? v : "";
+    const inT = prompt(`${r.worker} — punch-IN time (HH:MM, 24h). Leave blank to keep:`, hhmm(r.in)); if (inT === null) return;
+    const outT = prompt(`${r.worker} — punch-OUT time (HH:MM, 24h). Leave blank to keep:`, hhmm(r.out)); if (outT === null) return;
+    const st = prompt("Force status? Type present / half_day / absent — or leave blank to compute from the times:", ""); if (st === null) return;
+    const note = prompt("Reason for the correction (logged):", ""); if (note === null) return;
+    const res = await editAttendanceRow(r.id, { inHHMM: inT.trim(), outHHMM: outT.trim(), status: st.trim() || null, note });
+    if (!res.ok) { setLoadErr(res.error); return; }
+    alert(`${r.worker}: corrected → ${res.hours} h, ${String(res.status).replace("_", " ")}${res.ot > 0 ? ", OT " + res.ot + " h" : ""}.`);
+    load();
+  }
 
   return (
     <div className="layout">

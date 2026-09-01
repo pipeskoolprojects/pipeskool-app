@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { getSites, inr } from "@/lib/data";
-import { generatePayouts, generatePayoutsAll, getPayouts, setPayoutAdvance, setPayoutMode, setPayoutStatutory, fmtHM, approvePayouts, markPayoutsPaid } from "@/lib/payroll";
+import { generatePayouts, generatePayoutsAll, getPayouts, setPayoutAdvance, setPayoutMode, setPayoutStatutory, fmtHM, approvePayouts, markPayoutsPaid, reopenPayout } from "@/lib/payroll";
+import PayoutEditModal from "@/components/PayoutEditModal";   // update277
 import { generateStaffPayouts, getStaffPayouts, approveStaffPayouts, markStaffPayoutsPaid } from "@/lib/staffpay";
 import { getSession } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
@@ -41,6 +42,7 @@ export default function WagesPage() {
   const [rows, setRows] = useState(null);
   const [tab, setTab] = useState("labour");           // labour | staff
   const [sub, setSub] = useState("payroll");          // update276: payroll | attendance | settings (more in 277)
+  const [editRow, setEditRow] = useState(null);       // update277: manual payout edit
   const [srows, setSrows] = useState(null);
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState("");   // update239: live progress during a bulk run
@@ -80,7 +82,8 @@ export default function WagesPage() {
     if (site !== "all") {
       return run(() => generatePayouts(site, month),
         r => `Generated from attendance: ${r.created} new, ${r.updated} draft(s) refreshed` + tail(r) + "."
-          + (r.heldForReview ? ` ⏱ ${r.heldForReview} auto-closed day(s) with a missing punch-out were HELD OUT — confirm them in Reports → Needs attention, then regenerate.` : ""));   // update275
+          + (r.heldForReview ? ` ⏱ ${r.heldForReview} auto-closed day(s) with a missing punch-out were HELD OUT — confirm them in Reports → Needs attention, then regenerate.` : "")
+          + (r.skippedManual ? ` ✎ ${r.skippedManual} hand-edited row(s) left as-is.` : ""));   // update275/277
     }
     if (sites.length === 0) { setErr("No sites available to generate for."); return; }
     const ok = window.confirm(
@@ -187,7 +190,7 @@ export default function WagesPage() {
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table className="dt-compact">
-                <thead><tr><th>Worker</th><th>Category</th>{site === "all" && <th>Site</th>}<th className="num">Days (F+H)</th><th className="num">OT</th><th className="num">Rate</th><th className="num">Gross</th><th className="num">Advance</th><th className="num">PF</th><th className="num">P.Tax</th><th className="num">Net</th><th>Mode</th><th>Status</th></tr></thead>
+                <thead><tr><th>Worker</th><th>Category</th>{site === "all" && <th>Site</th>}<th className="num">Days (F+H)</th><th className="num">OT</th><th className="num">Rate</th><th className="num">Gross</th><th className="num">Advance</th><th className="num">PF</th><th className="num">P.Tax</th><th className="num">Other</th><th className="num">Net</th><th>Mode</th><th>Status</th><th></th></tr></thead>
                 <tbody>
                   {filt(rows).map(r => {
                     const [lbl, cls] = STATUS[r.status] || [r.status, "gray"];
@@ -208,6 +211,7 @@ export default function WagesPage() {
                         </td>
                         <td className="num">{r.status === "draft" ? <a style={{ cursor: "pointer", textDecoration: "underline" }} onClick={() => editStat(r)}>{inr(r.pf || 0)}</a> : inr(r.pf || 0)}</td>
                         <td className="num">{r.status === "draft" ? <a style={{ cursor: "pointer", textDecoration: "underline" }} onClick={() => editStat(r)}>{inr(r.pt || 0)}</a> : inr(r.pt || 0)}</td>
+                        <td className="num">{inr(r.other || 0)}</td>{/* update277 */}
                         <td className="num" style={{ fontWeight: 700 }}>{inr(r.net)}</td>
                         <td>
                           {r.status === "draft"
@@ -216,7 +220,12 @@ export default function WagesPage() {
                               </select>
                             : <span className="muted">{r.mode}</span>}
                         </td>
-                        <td><span className={"badge " + cls}>{lbl}</span></td>
+                        <td><span className={"badge " + cls}>{lbl}</span>{r.manual && <span className="badge gray" title={r.overrideNote || "manually edited"} style={{ marginLeft: 4, fontSize: 10 }}>✎ manual</span>}</td>
+                        <td style={{ whiteSpace: "nowrap" }}>{/* update277: full manual editability */}
+                          {r.status === "draft" && <button style={{ fontSize: 11.5 }} onClick={() => setEditRow(r)}>✎ Edit</button>}
+                          {r.status === "approved" && sess?.role === "director" && <button style={{ fontSize: 11.5 }} title="Back to draft for correction (paid rows never)"
+                            onClick={async () => { if (!window.confirm(`Reopen ${r.worker}'s approved payout to draft?`)) return; const x = await reopenPayout(r.id); if (!x.ok) setErr(x.error); else { setMsg(r.worker + " reopened — edit, then approve again."); load(); } }}>↺ Reopen</button>}
+                        </td>
                       </tr>
                     );
                   })}
@@ -301,6 +310,7 @@ export default function WagesPage() {
             )}
           </div>
         )}
+        {editRow && <PayoutEditModal row={editRow} onClose={() => setEditRow(null)} onDone={m => { setEditRow(null); setMsg(m); load(); }} />}{/* update277 */}
       </main>
     </div>
   );
