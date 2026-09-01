@@ -218,7 +218,7 @@ export default function PendingDeliveriesPage() {
                                     <div className="muted" style={{ fontSize: 10.5 }}>{r.short_close_note}</div>}
                                 </td>
                                 <td className="num" style={{ fontSize: 11.5 }}>
-                                  {qty(r.ordered_qty, r.unit)}<div className="muted" style={{ fontSize: 10.5 }}>received {qty(r.received_qty, r.unit)}</div></td>
+                                  {qty(r.ordered_qty, r.unit)}<div className="muted" style={{ fontSize: 10.5 }}>received {qty(r.received_qty, r.unit)}{r.dc_qty > 0 && <span title="On a delivery challan not yet converted to GRN — counts as delivered" style={{ color: "#b45309" }}> (incl. {qty(r.dc_qty, r.unit)} on challan · GRN pending)</span>}</div></td>
                                 <td className="num" style={{ fontWeight: 700, color: r.excess_qty > 0 ? "var(--copper)" : r.pending_qty > 0 ? "var(--red)" : "var(--green)" }}>
                                   {r.excess_qty > 0 ? "+" + qty(r.excess_qty, r.unit) : qty(r.pending_qty, r.unit)}</td>
                                 <td><Bar pct={r.pct_received} tone={r.excess_qty > 0 ? "var(--copper)" : ib.color} /></td>
