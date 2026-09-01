@@ -10,6 +10,8 @@ import { isDemo } from "@/lib/supabase";
 import * as XLSX from "xlsx";
 import AttendanceSummary from "@/components/AttendanceSummary";   // update276
 import PayrollSettings from "@/components/PayrollSettings";       // update276
+import PayrollSummary from "@/components/PayrollSummary";         // update278
+import SiteSummary from "@/components/SiteSummary";               // update278
 
 const STATUS = { draft: ["Draft", "gray"], approved: ["Approved", "h"], paid: ["Paid", "p"] };
 
@@ -157,12 +159,14 @@ export default function WagesPage() {
 
         {tab === "labour" && (
           <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>{/* update276: labour sub-tabs */}
-            {[["payroll", "👷 Labour Payroll"], ["attendance", "📅 Full Attendance Summary"], ["settings", "⚙ Settings / Payroll Rules"]].map(([k, l]) => (
+            {[["payroll", "👷 Labour Payroll"], ["attendance", "📅 Full Attendance Summary"], ["summary", "💰 Payroll Summary"], ["sites", "🏗 Site Summary Dashboard"], ["settings", "⚙ Settings / Payroll Rules"]].map(([k, l]) => (   /* update278 */
               <button key={k} className={sub === k ? "primary" : ""} onClick={() => setSub(k)} style={{ fontSize: 12.5 }}>{l}</button>
             ))}
           </div>
         )}
         {tab === "labour" && sub === "attendance" && <AttendanceSummary month={month} siteId={site} sites={sites} />}
+        {tab === "labour" && sub === "summary" && <PayrollSummary month={month} siteId={site} sites={sites} />}{/* update278 */}
+        {tab === "labour" && sub === "sites" && <SiteSummary month={month} siteId={site} sites={sites} />}
         {tab === "labour" && sub === "settings" && <PayrollSettings canEdit={sess?.role === "director"} />}
         {tab === "labour" && sub === "payroll" && <div className="panel">
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>

@@ -1,0 +1,95 @@
+"use client";
+// update278: PDF documents for the payroll layer — letterhead page, Print -> Save as PDF
+// (the same pattern as every Pipeskool document; works on Android via the share sheet).
+// kind = payroll (consolidated per worker) | sites (site summary dashboard) | site (single site: attendance + payroll + site line)
+import { useEffect, useState } from "react";
+import { loadPayrollSummary } from "@/lib/payrollSummary";
+import { loadAttendanceGrid, cellCode, otOf } from "@/components/AttendanceSummary";
+import { inr } from "@/lib/data";
+
+const ATT = { P: "#e8f6ee", H: "#fff4cc", A: "#fde8e8", WO: "#eef2f7", HOL: "#fce7f3" };
+const Band = ({ children }) => <div style={{ background: "#1f2a4b", color: "#fff", fontWeight: 800, padding: "8px 12px", marginTop: 14, fontSize: 13 }}>{children}</div>;
+const Note = ({ children }) => <div style={{ fontSize: 10, color: "#6b7280", fontStyle: "italic", padding: "4px 2px" }}>{children}</div>;
+const th = { background: "#f3f4f6", fontWeight: 700, fontSize: 10, padding: "5px 6px", borderBottom: "1px solid #ddd", textAlign: "right" };
+const td = { fontSize: 10.5, padding: "4px 6px", borderBottom: "1px solid #eee", textAlign: "right" };
+
+export default function WagesPrint() {
+  const [p, setP] = useState(null); const [d, setD] = useState(null); const [g, setG] = useState(null); const [err, setErr] = useState("");
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const q = { kind: sp.get("kind") || "payroll", month: sp.get("month"), site: sp.get("site") || "all" };
+    setP(q);
+    (async () => {
+      try {
+        const data = await loadPayrollSummary(q.month, q.site); setD(data);
+        if (q.kind === "site") { const [gl, gs] = await Promise.all([loadAttendanceGrid(q.month, q.site, "labour"), loadAttendanceGrid(q.month, q.site, "staff")]); setG({ gl, gs }); }
+      } catch (e) { setErr(e.message); }
+    })();
+  }, []);
+  if (!p) return null;
+  const siteName = d && p.site !== "all" ? (d.rows[0]?.site || d.sites[0]?.site || "") : "All sites";
+  const sum = (arr, k) => +arr.reduce((n, w) => n + Number(w[k] || 0), 0).toFixed(2);
+  const Grid = ({ grid, kind }) => !grid || !grid.rows.length ? null : (
+    <>
+      <Band>MONTHLY ATTENDANCE — {siteName.toUpperCase()} · {kind === "staff" ? "STAFF" : "LABOUR"}</Band>
+      <Note>P = Present (1.0) · H = Half day (0.5; Sunday half = full) · A = Absent · HOL = holiday · OT row = approved hours</Note>
+      <table style={{ borderCollapse: "collapse", width: "100%" }}>
+        <thead><tr><th style={{ ...th, textAlign: "left" }}>Worker</th>{grid.days.map(dd => <th key={dd.iso} style={{ ...th, textAlign: "center", padding: "3px 1px", fontSize: 8 }}>{String(dd.day).padStart(2, "0")}<br />{dd.wd}</th>)}<th style={th}>Days</th><th style={th}>OT</th></tr></thead>
+        <tbody>{grid.rows.map(r => (
+          <>
+            <tr key={r.key}><td style={{ ...td, textAlign: "left", fontWeight: 600, whiteSpace: "nowrap" }}>{r.worker}</td>
+              {grid.days.map(dd => { const c = cellCode(r, dd, grid.wo, grid.hol); return <td key={dd.iso} style={{ ...td, textAlign: "center", padding: "2px 1px", fontSize: 9, background: ATT[c] || "#fff" }}>{c}</td>; })}
+              <td style={{ ...td, fontWeight: 700 }}>{r.daysPaid}</td><td style={td}>{r.otTotal || ""}</td></tr>
+            {r.otTotal > 0 && <tr key={r.key + "ot"}><td style={{ ...td, textAlign: "left", fontSize: 9, fontStyle: "italic", color: "#7c2d12" }}>OT (h)</td>{grid.days.map(dd => <td key={dd.iso} style={{ ...td, textAlign: "center", fontSize: 8, color: "#7c2d12", padding: "1px" }}>{otOf(r, dd) || ""}</td>)}<td colSpan={2}></td></tr>}
+          </>
+        ))}</tbody>
+      </table>
+    </>
+  );
+  const PayrollTable = ({ workers }) => (
+    <>
+      <Band>PAYROLL SUMMARY — {siteName.toUpperCase()} · {p.month}</Band>
+      <Note>Basic = daily rate × payable days (incl. holiday pay) · OT rate = daily rate ÷ OT divisor · Gross = Basic + OT · PT once per worker above the threshold · Net = Gross − PF − PT − Other − Advance</Note>
+      <table style={{ borderCollapse: "collapse", width: "100%" }}>
+        <thead><tr>{["Sr", "Worker", "Designation", "Rate", "Days", "Basic", "OT h", "OT ₹", "Gross", "PF", "PT", "Other", "Total Ded.", "Advance", "Net Pay"].map((h, i) => <th key={h} style={{ ...th, textAlign: i < 3 ? "left" : "right" }}>{h}</th>)}</tr></thead>
+        <tbody>{workers.map((w, i) => <tr key={w.worker_id}><td style={{ ...td, textAlign: "left" }}>{i + 1}</td><td style={{ ...td, textAlign: "left", fontWeight: 600 }}>{w.worker}</td><td style={{ ...td, textAlign: "left" }}>{w.designation}</td>
+          <td style={td}>{inr(w.rate)}</td><td style={td}>{w.days}</td><td style={td}>{inr(w.basic)}</td><td style={td}>{w.otH || "—"}</td><td style={td}>{w.otAmt ? inr(w.otAmt) : "—"}</td><td style={{ ...td, fontWeight: 700 }}>{inr(w.gross)}</td>
+          <td style={td}>{inr(w.pf)}</td><td style={td}>{inr(w.pt)}</td><td style={td}>{inr(w.other)}</td><td style={td}>{inr(w.totalDed)}</td><td style={td}>{inr(w.adv)}</td><td style={{ ...td, fontWeight: 800 }}>{inr(w.net)}</td></tr>)}</tbody>
+        <tfoot><tr style={{ background: "#fff4e5", fontWeight: 800 }}><td colSpan={4} style={{ ...td, textAlign: "left" }}>TOTAL · {workers.length} workers</td><td style={td}>{sum(workers, "days")}</td><td style={td}>{inr(sum(workers, "basic"))}</td><td style={td}>{sum(workers, "otH")}</td><td style={td}>{inr(sum(workers, "otAmt"))}</td><td style={td}>{inr(sum(workers, "gross"))}</td><td style={td}>{inr(sum(workers, "pf"))}</td><td style={td}>{inr(sum(workers, "pt"))}</td><td style={td}>{inr(sum(workers, "other"))}</td><td style={td}>{inr(sum(workers, "totalDed"))}</td><td style={td}>{inr(sum(workers, "adv"))}</td><td style={td}>{inr(sum(workers, "net"))}</td></tr></tfoot>
+      </table>
+    </>
+  );
+  const SitesTable = ({ sites, grand }) => (
+    <>
+      <Band>SITE SUMMARY DASHBOARD — {p.month}</Band>
+      <Note>Total Site Labour Cost = Basic Wages + OT Amount · figures from the generated payroll for the month</Note>
+      <table style={{ borderCollapse: "collapse", width: "100%" }}>
+        <thead><tr><th style={{ ...th, textAlign: "left" }}>Site</th><th style={th}>Workers Present</th><th style={th}>Total Days</th><th style={th}>Basic Wages (₹)</th><th style={th}>OT Amount (₹)</th><th style={th}>Total Site Labour Cost (₹)</th></tr></thead>
+        <tbody>{sites.map(s => <tr key={s.site_id}><td style={{ ...td, textAlign: "left", fontWeight: 700 }}>{s.site}</td><td style={td}>{s.workers}</td><td style={td}>{s.days}</td><td style={td}>{inr(s.basic)}</td><td style={td}>{s.otAmt ? inr(s.otAmt) : "—"}</td><td style={{ ...td, fontWeight: 800 }}>{inr(s.total)}</td></tr>)}</tbody>
+        {grand && <tfoot><tr style={{ background: "#fff4e5", fontWeight: 800 }}><td style={{ ...td, textAlign: "left" }}>GRAND TOTAL</td><td style={td}>{grand.workers}</td><td style={td}>{grand.days}</td><td style={td}>{inr(grand.basic)}</td><td style={td}>{grand.otAmt ? inr(grand.otAmt) : "—"}</td><td style={td}>{inr(grand.total)}</td></tr></tfoot>}
+      </table>
+    </>
+  );
+  return (
+    <div className="wp-doc" style={{ maxWidth: 1100, margin: "0 auto", padding: 24, background: "#fff", color: "#111", fontFamily: "Inter, Arial, sans-serif" }}>
+      <style>{`@media print { .no-print { display: none !important; } body { background: #fff; } @page { size: A4 landscape; margin: 10mm; } } @media screen and (max-width: 640px) { .wp-doc { padding: 10px !important; } }`}</style>
+      <div className="no-print" style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <button className="primary" onClick={() => window.print()}>🖨 Print / Save as PDF</button>
+        <button onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign("/wages"); }}>← Back</button>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "3px solid #FF7A1A", paddingBottom: 8 }}>
+        <div><div style={{ fontSize: 22, fontWeight: 900, color: "#FF7A1A" }}>Pipeskool</div><div style={{ fontSize: 11, color: "#6b7280" }}>Pipeskool Projects Pvt. Ltd. · Specialist Plumbing & Piping Contractors · Ahmedabad</div></div>
+        <div style={{ textAlign: "right", fontSize: 12 }}><b>{p.kind === "sites" ? "Site Summary Dashboard" : p.kind === "site" ? "Site Report" : "Payroll Summary"}</b><br />{siteName} · {p.month}</div>
+      </div>
+      {err && <div style={{ color: "#b91c1c", padding: 10 }}>{err}</div>}
+      {!d ? <div style={{ padding: 10 }}>Loading…</div> : (
+        <>
+          {p.kind === "site" && g && <><Grid grid={g.gl} kind="labour" /><Grid grid={g.gs} kind="staff" /></>}
+          {(p.kind === "payroll" || p.kind === "site") && <PayrollTable workers={d.workers} />}
+          {(p.kind === "sites" || p.kind === "site") && <SitesTable sites={d.sites} grand={p.kind === "sites" ? d.grand : null} />}
+        </>
+      )}
+      <div style={{ fontSize: 9, color: "#6b7280", textAlign: "center", marginTop: 14 }}>System generated from Pipeskool attendance & payroll · {new Date().toLocaleString("en-IN")}</div>
+    </div>
+  );
+}
