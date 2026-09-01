@@ -4,6 +4,7 @@
 // logic — data loaders, permissions and behaviour are byte-for-byte what shipped in 235.
 import { useEffect, useMemo, useState } from "react";
 import { getDirectorReport, inr } from "@/lib/reports";
+import AutoCloseReview from "@/components/AutoCloseReview";   // update275
 import { isDemo } from "@/lib/supabase";
 
 const COL = { present: "#1a7f4f", half: "#e0a400", onsite: "#8a96a0", proxy: "#FF7A1A" };
@@ -127,6 +128,7 @@ export default function ReportsView() {
               <h2 style={{ marginBottom: 6 }}>{view.alerts.length ? "Needs your attention" : "All clear"}</h2>
               {view.alerts.length === 0 ? <div className="muted">No DPR gaps, no delayed deliveries, no aged indents, nothing pending verification.</div> :
                 view.alerts.map((a, i) => <div key={i} style={{ padding: "3px 0", fontSize: 13.5 }}>{a}</div>)}
+              <AutoCloseReview siteId={siteId} />{/* update275 */}
             </div>
 
             {/* KPIs */}
