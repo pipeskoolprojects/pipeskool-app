@@ -10,7 +10,7 @@ import {
   getPettyOverview, getPettyLedger, requestPettyReturn, addExpenseBills, removeExpenseBill, getPersonMoneyProfile } from "@/lib/money";
 
 // update273: MODULE scope — the person's money history (same loader as the desktop profile, update214)
-function ProfileSheet({ staffId, name, onClose }) {
+function ProfileSheet({ staffId, name, onClose, onOpen }) {
   const [pr, setPr] = useState(null); const [err, setErr] = useState("");
   useEffect(() => { getPersonMoneyProfile(staffId).then(p => setPr(p || { empty: true })).catch(e => setErr(e.message)); }, [staffId]);
   const badge = s => s === "approved" ? "green" : s === "rejected" ? "red" : s === "queried" ? "amber" : "gray";
@@ -32,15 +32,20 @@ function ProfileSheet({ staffId, name, onClose }) {
               ))}
             </div>
             <div style={{ fontWeight: 700, fontSize: 13, margin: "6px 0" }}>All transactions ({pr.txns.length})</div>
-            {pr.txns.map((t, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "7px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
+            {pr.txns.map((t, i) => {
+              const actionable = !!onOpen && t.kind === "exp" && t.edit && (t.status === "queried" || t.status === "pending");   // update274
+              return (
+              <div key={i} onClick={actionable ? () => onOpen(t.edit) : undefined}
+                style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "7px 0", borderBottom: "1px solid var(--border)", fontSize: 13,
+                  cursor: actionable ? "pointer" : "default", background: t.status === "queried" && actionable ? "#fff8e6" : "transparent", borderRadius: 6 }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 700 }}>{inr(t.amount)} — {t.type}</div>
                   <div className="muted" style={{ fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.what}{t.site ? " · " + t.site : ""} · {t.date}</div>
+                  {actionable && <div style={{ fontSize: 11, color: t.status === "queried" ? "#b45309" : "var(--muted)", fontWeight: 700 }}>{t.status === "queried" ? "❓ Queried — tap to fix" : "✎ Tap to edit"}</div>}
                 </div>
                 <span className={"badge " + badge(t.status)} style={{ alignSelf: "center", whiteSpace: "nowrap" }}>{t.status}</span>
               </div>
-            ))}
+            ); })}
           </>
         )}
         <button className="m-btn" style={{ marginTop: 10 }} onClick={onClose}>Close</button>
@@ -434,7 +439,8 @@ export default function MoneyScreen() {
           </div>
         </div>
       )}
-      {profile && <ProfileSheet staffId={profile.staffId} name={profile.name} onClose={() => setProfile(null)} />}{/* update273 */}
+      {profile && <ProfileSheet staffId={profile.staffId} name={profile.name} onClose={() => setProfile(null)}
+        onOpen={profile.staffId === userId ? (row) => { setProfile(null); setEditExp({ ...row }); setEditFiles([]); setMsg(""); setErr(""); } : undefined} />}{/* update273/274: own history rows open Edit */}
 
     </div>
   );
