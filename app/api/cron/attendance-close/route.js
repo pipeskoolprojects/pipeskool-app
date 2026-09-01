@@ -1,5 +1,5 @@
 // update275: daily job — close overdue open punches at their site's shift-end and alert supervisors.
-// Scheduled in vercel.json (20:00 IST = 14:30 UTC). Also safe to hit manually. Uses the service
+// Scheduled in vercel.json (00:15 IST = 18:45 UTC, just after the site day ends). Also safe to hit manually. Uses the service
 // role so it runs without a user session; optional CRON_SECRET must match if set.
 import { createClient } from "@supabase/supabase-js";
 
