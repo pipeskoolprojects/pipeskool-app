@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { loadPayrollSummary } from "@/lib/payrollSummary";
 import { exportPayrollXlsx } from "@/lib/payrollExport";
 import { inr } from "@/lib/data";
+import { monthLabel } from "@/components/AttendanceSummary";   // update279
 
 export default function PayrollSummary({ month, siteId, sites }) {
   const [d, setD] = useState(null); const [err, setErr] = useState("");
@@ -14,8 +15,7 @@ export default function PayrollSummary({ month, siteId, sites }) {
   return (
     <div className="panel">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-        <div><h2 style={{ margin: 0 }}>Payroll Summary</h2>
-          <div className="muted" style={{ fontSize: 12 }}>{siteName} · {month} · one row per worker, days summed across sites · Gross = Basic + OT · Net = Gross − PF − PT − Other − Advance</div></div>
+        <div className="muted" style={{ fontSize: 12.5 }}>Full per-worker breakdown — one row per worker, days summed across sites. Gross = Basic + OT · Net = Gross − PF − PT − Other − Advance.</div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => exportPayrollXlsx({ month, siteName, workers: d.workers })} disabled={!d || !d.workers.length}>⬇ Excel</button>
           <a href={`/wages/print?kind=payroll&month=${month}&site=${siteId}`} target="_blank" rel="noreferrer"><button disabled={!d || !d.workers.length}>⬇ PDF</button></a>
@@ -24,9 +24,11 @@ export default function PayrollSummary({ month, siteId, sites }) {
       {err && <div className="error" style={{ marginTop: 8 }}>{err}</div>}
       {d && d.missingSites.length > 0 && <div className="note amber" style={{ marginTop: 8, fontSize: 12 }}>Not yet generated for {month}: <b>{d.missingSites.join(", ")}</b> — use "Generate / refresh from attendance" on the Labour Payroll tab to include them.</div>}
       {!d ? <div className="muted" style={{ marginTop: 10 }}>Loading…</div> : d.workers.length === 0 ? <div className="muted" style={{ marginTop: 10 }}>No generated payroll for {siteName} in {month}.</div> : (
-        <div style={{ overflowX: "auto", marginTop: 10, border: "1px solid var(--border)", borderRadius: 10 }}>
-          <table className="dt-compact" style={{ minWidth: 1400 }}>
-            <thead><tr style={{ background: "#0f1a2e", color: "#fff" }}>
+        <div className="mw-card" style={{ marginTop: 10 }}>
+          <div className="mw-band">PAYROLL SUMMARY — {siteName.toUpperCase()} · {monthLabel(month)}</div>
+          <div style={{ overflowX: "auto" }}>
+          <table className="dt-compact mw-table" style={{ minWidth: 1400 }}>
+            <thead><tr>
               {["Sr", "Worker Name", "Designation", "Daily Rate", "Days Worked", "Basic Wages", "OT Hours", "OT Amount", "Gross Earnings", "PF Deduction", "Professional Tax", "Other Deduction", "Total Deductions", "Advance Deduction", "Net Pay"].map((h, i) => <th key={h} className={i >= 3 ? "num" : ""} style={{ whiteSpace: "nowrap" }}>{h}</th>)}
             </tr></thead>
             <tbody>
@@ -51,6 +53,7 @@ export default function PayrollSummary({ month, siteId, sites }) {
               <td className="num">{inr(sum("totalDed"))}</td><td className="num">{inr(sum("adv"))}</td><td className="num">{inr(sum("net"))}</td>
             </tr></tfoot>
           </table>
+          </div>
         </div>
       )}
     </div>

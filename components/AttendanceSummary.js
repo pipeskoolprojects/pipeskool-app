@@ -5,7 +5,7 @@
 // WO = weekly off (from Settings), HOL = company holiday. Read live from attendance.
 import { Fragment, useEffect, useState } from "react";
 import { supabase, isDemo } from "@/lib/supabase";
-import { getPayrollSettings, weeklyOffDates } from "@/lib/payrollSettings";
+import { getPayrollSettings, weeklyOffDates, isoLocal, monthBounds } from "@/lib/payrollSettings";   // update279
 import { getHolidaysBetween } from "@/lib/holidays";
 import { exportAttendanceXlsx } from "@/lib/payrollExport";   // update278: styled workbook
 
@@ -17,13 +17,13 @@ function monthDays(monthStr) {
   const n = new Date(y, m, 0).getDate();
   return Array.from({ length: n }, (_, i) => {
     const d = new Date(y, m - 1, i + 1);
-    return { day: i + 1, iso: d.toISOString().slice(0, 10), wd: ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"][d.getDay()] };
+    return { day: i + 1, iso: isoLocal(d), wd: ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"][d.getDay()] };   // update279: local date, not UTC
   });
 }
 
 export async function loadAttendanceGrid(monthStr, siteId, kind) {
   const days = monthDays(monthStr);
-  const from = days[0].iso, to = new Date(new Date(from).getFullYear(), new Date(from).getMonth() + 1, 1).toISOString().slice(0, 10);
+  const { from, to } = monthBounds(monthStr);   // update279: the old UTC math made from == to in IST -> empty grid
   if (isDemo) return { days, rows: [], wo: new Set(), hol: {} };
   const [settings, hols, { data: staffRows }] = await Promise.all([
     getPayrollSettings(), getHolidaysBetween(from, to),
@@ -87,8 +87,7 @@ export default function AttendanceSummary({ month, siteId, sites }) {
     <div className="panel">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <div>
-          <h2 style={{ margin: 0 }}>Full Attendance Summary</h2>
-          <div className="muted" style={{ fontSize: 12 }}>{siteName} · {month} · one row per worker per site · P = 1 day, H = ½ day (Sunday half = full), A = 0, HOL = holiday · OT row = approved hours</div>
+          <div className="muted" style={{ fontSize: 12.5 }}>Whole month's grid — one row per worker per site. P = 1 day, H = ½ day (Sunday half = full), A = 0, HOL = holiday · OT row = approved hours.</div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button className={kind === "labour" ? "primary" : ""} onClick={() => setKind("labour")}>👷 Labour</button>
@@ -98,14 +97,16 @@ export default function AttendanceSummary({ month, siteId, sites }) {
       </div>
       {err && <div className="error" style={{ marginTop: 8 }}>{err}</div>}
       {!g ? <div className="muted" style={{ marginTop: 10 }}>Loading…</div> : g.rows.length === 0 ? <div className="muted" style={{ marginTop: 10 }}>No {kind} attendance for {siteName} in {month}.</div> : (
-        <div style={{ overflowX: "auto", marginTop: 10, border: "1px solid var(--border)", borderRadius: 10 }}>{/* scrolls INSIDE the table only */}
-          <table className="dt-compact" style={{ borderCollapse: "collapse", minWidth: 900 + g.days.length * 30 }}>
+        <div className="mw-card" style={{ marginTop: 10 }}>{/* update279: mockup styling */}
+          <div className="mw-band">MONTHLY ATTENDANCE — {siteName.toUpperCase()} · {kind === "staff" ? "STAFF" : "LABOUR"} · {monthLabel(month)}</div>
+          <div style={{ overflowX: "auto" }}>{/* scrolls INSIDE the table only */}
+          <table className="dt-compact mw-table" style={{ borderCollapse: "collapse", minWidth: 900 + g.days.length * 30 }}>
             <thead>
-              <tr style={{ background: "#0f1a2e", color: "#fff" }}>
-                <th style={{ position: "sticky", left: 0, background: "#0f1a2e", zIndex: 2, minWidth: 36 }}>Sr</th>
-                <th style={{ position: "sticky", left: 36, background: "#0f1a2e", zIndex: 2, minWidth: 160, textAlign: "left" }}>Worker</th>
+              <tr>
+                <th style={{ position: "sticky", left: 0, zIndex: 2, minWidth: 36 }}>Sr</th>
+                <th style={{ position: "sticky", left: 36, zIndex: 2, minWidth: 160, textAlign: "left" }}>Worker</th>
                 <th style={{ minWidth: 130, textAlign: "left" }}>Site</th>
-                {g.days.map(d => <th key={d.iso} style={{ minWidth: 30, padding: "4px 2px", fontSize: 10.5, textAlign: "center", background: g.wo.has(d.iso) ? "#26344d" : "#0f1a2e" }}>{String(d.day).padStart(2, "0")}<br /><span style={{ fontWeight: 400, opacity: .8 }}>{d.wd}</span></th>)}
+                {g.days.map(d => <th key={d.iso} style={{ minWidth: 30, padding: "4px 2px", fontSize: 10.5, textAlign: "center", background: d.wd === "Su" ? "#e9edf3" : undefined }}>{String(d.day).padStart(2, "0")}<br /><span style={{ fontWeight: 400, opacity: .8 }}>{d.wd}</span></th>)}
                 <th className="num">P</th><th className="num">H</th><th className="num">Days</th><th className="num">OT h</th>
               </tr>
             </thead>
@@ -133,8 +134,10 @@ export default function AttendanceSummary({ month, siteId, sites }) {
 
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
   );
 }
+export function monthLabel(m) { const [y, mo] = m.split("-").map(Number); return new Date(y, mo - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" }).toUpperCase(); }   // update279
