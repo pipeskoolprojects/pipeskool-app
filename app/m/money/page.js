@@ -7,7 +7,47 @@ import { billUrl } from "@/lib/bills";
 import {
   EXPENSE_CATEGORIES, inr, getBeneficiaries, raiseAdvanceSalary,
   claimExpense, selfEditExpense, getMyRecentMoney, getPettyBalance, respondAdvance, respondExpense, requestPettyCash,
-  getPettyOverview, getPettyLedger, requestPettyReturn } from "@/lib/money";
+  getPettyOverview, getPettyLedger, requestPettyReturn, addExpenseBills, removeExpenseBill, getPersonMoneyProfile } from "@/lib/money";
+
+// update273: MODULE scope — the person's money history (same loader as the desktop profile, update214)
+function ProfileSheet({ staffId, name, onClose }) {
+  const [pr, setPr] = useState(null); const [err, setErr] = useState("");
+  useEffect(() => { getPersonMoneyProfile(staffId).then(p => setPr(p || { empty: true })).catch(e => setErr(e.message)); }, [staffId]);
+  const badge = s => s === "approved" ? "green" : s === "rejected" ? "red" : s === "queried" ? "amber" : "gray";
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.6)", display: "flex", alignItems: "flex-end", zIndex: 70 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "16px 16px 0 0", width: "100%", padding: 18, maxHeight: "88vh", overflowY: "auto" }}>
+        <h3 style={{ marginTop: 0 }}>👤 {name || pr?.name || "History"} <span className="muted" style={{ fontSize: 12 }}>expenses &amp; advances</span></h3>
+        {err && <div className="note red">{err}</div>}
+        {!pr ? <div className="muted">Loading…</div> : pr.empty ? <div className="muted">No money history yet.</div> : (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+              {[["Claimed (approved, all time)", pr.totals.all], ["This month", pr.totals.month],
+                ["Advances taken", pr.totals.taken], ["Recovered from salary", pr.totals.recovered],
+                ["Advance outstanding", pr.totals.outstanding], ["Petty cash in hand", pr.totals.petty]].map(([l, v]) => (
+                <div key={l} className="panel" style={{ padding: "8px 10px" }}>
+                  <div className="muted" style={{ fontSize: 10.5 }}>{l}</div>
+                  <div style={{ fontWeight: 800, fontSize: 15 }}>{inr(v)}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontWeight: 700, fontSize: 13, margin: "6px 0" }}>All transactions ({pr.txns.length})</div>
+            {pr.txns.map((t, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "7px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700 }}>{inr(t.amount)} — {t.type}</div>
+                  <div className="muted" style={{ fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.what}{t.site ? " · " + t.site : ""} · {t.date}</div>
+                </div>
+                <span className={"badge " + badge(t.status)} style={{ alignSelf: "center", whiteSpace: "nowrap" }}>{t.status}</span>
+              </div>
+            ))}
+          </>
+        )}
+        <button className="m-btn" style={{ marginTop: 10 }} onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
+}
 
 export default function MoneyScreen() {
   if (typeof window !== "undefined" && !getSession()) { window.location.replace("/m"); return null; }
@@ -37,6 +77,9 @@ export default function MoneyScreen() {
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
   const replyFileRef = useRef(null);
+  const editFileRef = useRef(null);                                  // update273
+  const [editFiles, setEditFiles] = useState([]);                    // update273: new proof for the expense being edited
+  const [profile, setProfile] = useState(null);                      // update273: { staffId, name } -> ProfileSheet
   const [reply, setReply] = useState(null);     // the queried item being answered
   const [editExp, setEditExp] = useState(null);   // update211: edit my pending expense
   const [editBusy, setEditBusy] = useState(false);
@@ -124,6 +167,8 @@ export default function MoneyScreen() {
     <div className="m-wrap">
       <div className="m-head">
         <div><div className="title">Money / Expense</div><div className="sub">Advances &amp; site expenses</div></div>
+        <button type="button" onClick={() => setProfile({ staffId: userId, name: sess?.full_name || sess?.name || "My history" })}
+          style={{ fontSize: 12, padding: "6px 10px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.35)", background: "rgba(255,255,255,0.14)", color: "#fff" }}>👤 My history</button>{/* update273 */}
       </div>
       <div className="m-body">
         {isDemo && <div className="note amber">Demo mode — sample data, resets on refresh.</div>}
@@ -343,17 +388,53 @@ export default function MoneyScreen() {
               ))}
             </div>
             <div className="muted" style={{ fontSize: 11, marginBottom: 10 }}>Switching source is safe before approval — petty cash deducts only when approved.</div>
+
+            {/* update273: proof — see what is attached, remove a wrong one, add a new/corrected one */}
+            <div style={{ border: "1px dashed var(--border)", borderRadius: 10, padding: 10, marginBottom: 10 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>📎 Bill / proof</div>
+              {(editExp.bills || []).length === 0 && !editFiles.length && <div className="muted" style={{ fontSize: 12 }}>No proof attached — this is often why a claim gets queried.</div>}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {(editExp.bills || []).map((b, j) => (
+                  <div key={j} style={{ position: "relative" }}>
+                    <a href={billUrl(b)} target="_blank" rel="noreferrer">
+                      {/\.pdf$/i.test(b) ? <div style={{ width: 64, height: 64, border: "1px solid var(--border)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>📄</div>
+                        : <img src={billUrl(b)} alt="" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 8, border: "1px solid var(--border)" }} />}
+                    </a>
+                    <button type="button" title="Remove this proof" onClick={async () => {
+                        if (!window.confirm("Remove this proof from the expense?")) return;
+                        const r = await removeExpenseBill(editExp.id, b); if (!r.ok) { setErr(r.error); return; }
+                        setEditExp(x => ({ ...x, bills: (x.bills || []).filter(y => y !== b) }));
+                      }} style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: 10, border: "none", background: "var(--red)", color: "#fff", fontSize: 11, lineHeight: "20px", padding: 0 }}>✕</button>
+                  </div>
+                ))}
+                {editFiles.map((f, j) => (
+                  <div key={"n" + j} style={{ width: 64, height: 64, border: "2px solid var(--green)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, textAlign: "center", padding: 4 }}>new<br />{f.type === "application/pdf" ? "PDF" : "photo"}</div>
+                ))}
+              </div>
+              <button type="button" className="m-btn" style={{ marginTop: 8, fontSize: 12.5 }} onClick={() => editFileRef.current?.click()}>📷 {editFiles.length ? editFiles.length + " new file(s) ready — tap to change" : "Add / replace proof — camera, gallery or PDF"}</button>
+              <input ref={editFileRef} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }}
+                onChange={e2 => { const fs = Array.from(e2.target.files || []); e2.target.value = ""; setEditFiles(fs); }} />
+              <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>New files are saved with "Save changes". <a onClick={() => setProfile({ staffId: userId, name: sess?.full_name || sess?.name || "My history" })} style={{ color: "var(--copper)", textDecoration: "underline", cursor: "pointer" }}>View my full history</a></div>
+            </div>
+
             <button className="m-btn primary" disabled={editBusy} onClick={async () => {
               setEditBusy(true); setErr("");
-              const res = await selfEditExpense(editExp.id, { amount: editExp.amount, note: editExp.note, category: editExp.category, funding_source: editExp.funding_source, expense_date: editExp.expense_date, paid_to: editExp.name });
-              setEditBusy(false);
-              if (!res.ok) { setErr(res.error); return; }
-              setEditExp(null); setMsg("Expense updated ✓"); load();
+              try {
+                const res = await selfEditExpense(editExp.id, { amount: editExp.amount, note: editExp.note, category: editExp.category, funding_source: editExp.funding_source, expense_date: editExp.expense_date, paid_to: editExp.name });
+                if (!res.ok) { setErr(res.error); return; }
+                if (editFiles.length) {   // update273: attach the corrected proof as part of the same save
+                  const up = await addExpenseBills(editExp.id, editFiles);
+                  if (!up.ok) { setErr("Details saved, but proof upload failed: " + up.error); load(); return; }
+                }
+                setEditExp(null); setEditFiles([]); setMsg("Expense updated ✓" + (editFiles.length ? " — proof attached" : "")); load();
+              } catch (e3) { setErr(e3.message || "Could not save."); }
+              finally { setEditBusy(false); }
             }}>{editBusy ? "Saving…" : "Save changes"}</button>
-            <button className="m-btn" style={{ marginTop: 6 }} onClick={() => setEditExp(null)}>Cancel</button>
+            <button className="m-btn" style={{ marginTop: 6 }} onClick={() => { setEditExp(null); setEditFiles([]); }}>Cancel</button>
           </div>
         </div>
       )}
+      {profile && <ProfileSheet staffId={profile.staffId} name={profile.name} onClose={() => setProfile(null)} />}{/* update273 */}
 
     </div>
   );
