@@ -73,7 +73,9 @@ export default function AttendancePage() {
     { key: "in", label: "In", type: "num" },
     { key: "out", label: "Out", type: "num" },
     { key: "hours", label: "Hrs", type: "num", render: r => r.hours ? fmtHM(r.hours) : "—", exportValue: r => r.hours ? fmtHM(r.hours) : "" },   // update194: exact h/m display
-    { key: "status", label: "Status", filter: "select", render: r => statusBadge(r.status), exportValue: r => r.status },
+    { key: "status", label: "Status", filter: "select", render: r => <>{statusBadge(r.status)}
+        {r.review_status === "needs_review" && <div style={{ fontSize: 10.5, color: "#b45309", fontWeight: 700 }}>⏱ Auto-closed — missing punch-out · held from payroll</div>}
+        {r.auto_closed && r.review_status === "confirmed" && <div className="muted" style={{ fontSize: 10.5 }}>⏱ auto-closed · reviewed</div>}</>, exportValue: r => r.status + (r.review_status === "needs_review" ? " (auto-closed, needs review)" : "") },   // update275
     { key: "ot", label: "OT", render: r => {
         const dev = r.otApproved && r.otApprovedHours != null && r.otApprovedHours !== r.ot;
         return (

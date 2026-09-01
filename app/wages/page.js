@@ -76,7 +76,8 @@ export default function WagesPage() {
   const generate = () => {
     if (site !== "all") {
       return run(() => generatePayouts(site, month),
-        r => `Generated from attendance: ${r.created} new, ${r.updated} draft(s) refreshed` + tail(r) + ".");
+        r => `Generated from attendance: ${r.created} new, ${r.updated} draft(s) refreshed` + tail(r) + "."
+          + (r.heldForReview ? ` ⏱ ${r.heldForReview} auto-closed day(s) with a missing punch-out were HELD OUT — confirm them in Reports → Needs attention, then regenerate.` : ""));   // update275
     }
     if (sites.length === 0) { setErr("No sites available to generate for."); return; }
     const ok = window.confirm(

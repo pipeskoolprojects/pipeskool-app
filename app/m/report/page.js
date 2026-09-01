@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import MobileNav from "@/components/MobileNav";
+import AutoCloseReview from "@/components/AutoCloseReview";   // update275
 import { getDirectorReport, inr } from "@/lib/reports";
 import { getSession } from "@/lib/auth";
 
@@ -80,7 +81,8 @@ export default function MobileReport() {
             {/* attention strip */}
             <div style={{ ...card, borderLeft: "4px solid " + (view.alerts.length ? "var(--red)" : "#1a7f4f") }}>
               <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4 }}>{view.alerts.length ? "Needs your attention" : "All clear ✓"}</div>
-              {view.alerts.length === 0 ? <div className="muted" style={{ fontSize: 12 }}>DPR filed, deliveries on track, nothing pending.</div> :
+              {view.alerts.length === 0 ? <div className="muted" style={{ fontSize: 12 }}>DPR filed, deliveries on track, nothing pending.  <AutoCloseReview siteId={siteId} compact />{/* update275 */}
+            </div> :
                 view.alerts.map((a, i) => <div key={i} style={{ fontSize: 12.5, padding: "2px 0" }}>{a}</div>)}
             </div>
 
