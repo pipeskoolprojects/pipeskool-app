@@ -43,7 +43,7 @@ export default function WagesPage() {
   const [sites, setSites] = useState([]);
   const [rows, setRows] = useState(null);
   const [tab, setTab] = useState("labour");           // labour | staff
-  const [sub, setSub] = useState("payroll");          // update276: payroll | attendance | settings (more in 277)
+  const [sub, setSub] = useState("attendance");       // update279: opens on Full Attendance Summary (mockup)
   const [editRow, setEditRow] = useState(null);       // update277: manual payout edit
   const [srows, setSrows] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -138,7 +138,8 @@ export default function WagesPage() {
       <Sidebar />
       <main className="main">
         <div className="page-head">
-          <h1>Muster roll & wages</h1>
+          <div><h1 style={{ marginBottom: 0 }}>Muster roll & wages</h1>
+            <div className="muted" style={{ fontSize: 13 }}>{new Date(month + "-01T00:00:00").toLocaleDateString("en-IN", { month: "long", year: "numeric" })} · {site === "all" ? "All sites" : (sites.find(s => String(s.id) === String(site))?.name || "")}</div></div>{/* update279 */}
           <div className="filters">
             <input type="month" value={month} onChange={e => setMonth(e.target.value)} />
             <select value={site} onChange={e => setSite(e.target.value)}>
@@ -146,24 +147,21 @@ export default function WagesPage() {
               {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             <input placeholder="🔎 Worker…" value={wq} onChange={e => setWq(e.target.value)} style={{ width: 150 }} />{/* update190 */}
+            <button title="Payroll Settings" className={sub === "settings" && tab === "labour" ? "primary" : ""} onClick={() => { setTab("labour"); setSub("settings"); }}>⚙</button>{/* update279 */}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <button className={tab === "labour" ? "primary" : ""} onClick={() => setTab("labour")}>👷 Labour payroll</button>
-          <button className={tab === "staff" ? "primary" : ""} onClick={() => setTab("staff")}>🧑‍💼 Staff salary</button>
+        {/* update279: mockup tab strip — underline tabs; Labour Payroll (generate/approve) and Staff salary kept as tabs */}
+        <div className="mw-tabs">
+          {[["attendance", "📋 Full Attendance Summary"], ["summary", "💰 Payroll Summary"], ["sites", "🏗 Site Summary Dashboard"], ["payroll", "👷 Labour Payroll"], ["staffpay", "🧑‍💼 Staff Salary"]].map(([k, l]) => (
+            <button key={k} className={(tab === "staff" ? "staffpay" : sub) === k ? "active" : ""} onClick={() => { if (k === "staffpay") setTab("staff"); else { setTab("labour"); setSub(k); } }}>{l}</button>
+          ))}
         </div>
         {isDemo && <div className="demo-banner">Demo mode — payroll needs a live database.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
         {err && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
         {loadErr && <div className="note red" style={{ marginBottom: 12 }}>⚠ {loadErr}</div>}
 
-        {tab === "labour" && (
-          <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>{/* update276: labour sub-tabs */}
-            {[["payroll", "👷 Labour Payroll"], ["attendance", "📅 Full Attendance Summary"], ["summary", "💰 Payroll Summary"], ["sites", "🏗 Site Summary Dashboard"], ["settings", "⚙ Settings / Payroll Rules"]].map(([k, l]) => (   /* update278 */
-              <button key={k} className={sub === k ? "primary" : ""} onClick={() => setSub(k)} style={{ fontSize: 12.5 }}>{l}</button>
-            ))}
-          </div>
-        )}
+
         {tab === "labour" && sub === "attendance" && <AttendanceSummary month={month} siteId={site} sites={sites} />}
         {tab === "labour" && sub === "summary" && <PayrollSummary month={month} siteId={site} sites={sites} />}{/* update278 */}
         {tab === "labour" && sub === "sites" && <SiteSummary month={month} siteId={site} sites={sites} />}

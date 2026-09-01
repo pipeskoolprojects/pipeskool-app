@@ -313,3 +313,18 @@ tr.po-void:hover td { opacity: 0.85; }
   .cal-grid, .cal-dow { gap: 3px; }
   .cal-switch button { padding: 7px 11px; }
 }
+
+
+/* update279: Muster & Wages — mockup styling */
+.mw-tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-bottom: 14px; overflow-x: auto; }
+.mw-tabs button { background: none; border: none; border-bottom: 3px solid transparent; margin-bottom: -2px; padding: 10px 14px; font-weight: 700; color: var(--muted); border-radius: 0; white-space: nowrap; }
+.mw-tabs button.active { color: var(--copper); border-bottom-color: var(--copper); }
+.mw-card { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: #fff; }
+.mw-band { background: #1f2a4b; color: #fff; font-weight: 800; letter-spacing: .4px; padding: 11px 16px; font-size: 13.5px; }
+.mw-table thead th { background: #f3f4f6; color: #4b5563; font-size: 11.5px; font-weight: 700; padding: 9px 12px; border-bottom: 1px solid var(--border); }
+.mw-table tbody td { padding: 11px 12px; border-bottom: 1px solid #f0f1f3; font-size: 13px; }
+.mw-table tfoot td { background: #fff4e5; font-weight: 800; padding: 11px 12px; border-top: 2px solid #1f2a4b; }
+.mw-xl { font-size: 11.5px; color: #1a7f4f; border-color: #1a7f4f; font-weight: 700; }
+.mw-pdf { font-size: 11.5px; color: #c0392b; border-color: #c0392b; font-weight: 700; }
+.mw-note { margin-top: 14px; border: 1px dashed #e7b27c; background: #fff9f2; border-radius: 10px; padding: 12px 16px; font-size: 13px; line-height: 1.5; }
+.mw-note b { color: #b45309; }
