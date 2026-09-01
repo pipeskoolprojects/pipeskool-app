@@ -7,6 +7,8 @@ import { generateStaffPayouts, getStaffPayouts, approveStaffPayouts, markStaffPa
 import { getSession } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
 import * as XLSX from "xlsx";
+import AttendanceSummary from "@/components/AttendanceSummary";   // update276
+import PayrollSettings from "@/components/PayrollSettings";       // update276
 
 const STATUS = { draft: ["Draft", "gray"], approved: ["Approved", "h"], paid: ["Paid", "p"] };
 
@@ -38,6 +40,7 @@ export default function WagesPage() {
   const [sites, setSites] = useState([]);
   const [rows, setRows] = useState(null);
   const [tab, setTab] = useState("labour");           // labour | staff
+  const [sub, setSub] = useState("payroll");          // update276: payroll | attendance | settings (more in 277)
   const [srows, setSrows] = useState(null);
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState("");   // update239: live progress during a bulk run
@@ -149,7 +152,16 @@ export default function WagesPage() {
         {err && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
         {loadErr && <div className="note red" style={{ marginBottom: 12 }}>⚠ {loadErr}</div>}
 
-        {tab === "labour" && <div className="panel">
+        {tab === "labour" && (
+          <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>{/* update276: labour sub-tabs */}
+            {[["payroll", "👷 Labour Payroll"], ["attendance", "📅 Full Attendance Summary"], ["settings", "⚙ Settings / Payroll Rules"]].map(([k, l]) => (
+              <button key={k} className={sub === k ? "primary" : ""} onClick={() => setSub(k)} style={{ fontSize: 12.5 }}>{l}</button>
+            ))}
+          </div>
+        )}
+        {tab === "labour" && sub === "attendance" && <AttendanceSummary month={month} siteId={site} sites={sites} />}
+        {tab === "labour" && sub === "settings" && <PayrollSettings canEdit={sess?.role === "director"} />}
+        {tab === "labour" && sub === "payroll" && <div className="panel">
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
             <button className="primary" disabled={busy} onClick={generate}
               title={site === "all" ? "Generates for every site you can see" : ""}>
