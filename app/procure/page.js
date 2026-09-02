@@ -12,6 +12,9 @@ export default function ProcurePage() {
   const [mobile, setMobile] = useState(false);
   const [mtab, setMtab] = useState("indents");   // indents | po
   useEffect(() => {
+    // update284: deep links from the Home tiles — /procure?tab=po | ?tab=indents
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "po" || t === "indents") setMtab(t);
     const mq = window.matchMedia("(max-width: 820px)");
     const on = () => setMobile(mq.matches);
     on(); mq.addEventListener("change", on);

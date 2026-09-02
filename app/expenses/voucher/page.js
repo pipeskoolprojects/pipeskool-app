@@ -148,6 +148,7 @@ function Voucher() {
           <div>
             <div style={{ fontStyle: "italic", fontWeight: 700, color: "#123a7a", fontSize: 12.5 }}>Authorised By</div>
             <div style={{ borderBottom: "1px solid #0F1419", marginTop: 26, width: "72%" }} />
+            {v.approvedBy && <div style={{ fontWeight: 700, fontSize: 12.5, marginTop: 3 }}>{v.approvedBy} <span style={{ fontWeight: 400, color: "#555" }}>(Approved)</span></div>}{/* update284: the actual approver, never hardcoded */}
             {/* update252: the printed payment mode is fixed to Bank. The empty "Drawn on
                 Bank —" cell is gone. The internal source is still on the document: "and Debit"
                 reads Petty Cash / Own pocket, and every particulars line keeps its [Petty] /
