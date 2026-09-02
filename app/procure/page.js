@@ -1,16 +1,33 @@
 "use client";
-// update243: thin route wrapper. The page body now lives in components/ProcureView.js so the
-// SAME component renders here (full page, all sites) and inside a project tab (scoped to that
-// project by a siteId PROP, split into its indents half and its POs half). No iframes.
+// update243: thin route wrapper. The page body lives in components/ProcureView.js so the SAME
+// component renders here and inside a project tab. No iframes.
+// update283: on PHONES the page splits into two tabs — Indents | Purchase Orders — mirroring the
+// project workspace's separation (the `only` prop ProcureView has supported since 243). Desktop
+// stays exactly as it was: one page, both sections. Same for Director and Staff.
+import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import ProcureView from "@/components/ProcureView";
 
 export default function ProcurePage() {
+  const [mobile, setMobile] = useState(false);
+  const [mtab, setMtab] = useState("indents");   // indents | po
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 820px)");
+    const on = () => setMobile(mq.matches);
+    on(); mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
   return (
     <div className="layout">
       <Sidebar />
       <main className="main">
-        <ProcureView />
+        {mobile && (
+          <div className="mw-tabs" style={{ marginBottom: 10 }}>
+            <button className={mtab === "indents" ? "active" : ""} onClick={() => setMtab("indents")}>📝 Indents</button>
+            <button className={mtab === "po" ? "active" : ""} onClick={() => setMtab("po")}>📄 Purchase Orders</button>
+          </div>
+        )}
+        <ProcureView key={mobile ? mtab : "all"} only={mobile ? mtab : "all"} />
       </main>
     </div>
   );

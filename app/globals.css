@@ -328,3 +328,38 @@ tr.po-void:hover td { opacity: 0.85; }
 .mw-pdf { font-size: 11.5px; color: #c0392b; border-color: #c0392b; font-weight: 700; }
 .mw-note { margin-top: 14px; border: 1px dashed #e7b27c; background: #fff9f2; border-radius: 10px; padding: 12px 16px; font-size: 13px; line-height: 1.5; }
 .mw-note b { color: #b45309; }
+
+
+/* update283: procurement on phones — the SAME table markup renders as stacked cards (no
+   horizontal scroll). Desktop keeps the table exactly as before. */
+@media (max-width: 820px) {
+  .po-wrap { overflow-x: visible !important; }
+  .po-tbl, .po-tbl tbody { display: block; width: 100%; }
+  .po-tbl thead { display: none; }
+  .po-tbl tr { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline;
+    border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px;
+    background: #fff; box-shadow: 0 1px 4px rgba(15,26,46,0.06); }
+  .po-tbl td { display: block; border: none !important; padding: 0 !important; }
+  .po-tbl td.pc-no { font-size: 15px; font-weight: 800; order: -3; flex: 1 1 auto; }
+  .po-tbl td.pc-amt { order: -2; margin-left: auto; font-size: 15px; font-weight: 800; }
+  .po-tbl td.pc-amt::before { content: none; }
+  .po-tbl td.pc-vendor { order: -1; flex: 1 1 100%; font-weight: 600; }
+  .po-tbl td.pc-vendor::before { content: none; }
+  .po-tbl td.pc-status { order: -1; }
+  .po-tbl td.pc-d { flex: 1 1 45%; font-size: 12px; white-space: normal !important; }
+  .po-tbl td.pc-d::before { content: attr(data-l); display: block; font-size: 10px; font-weight: 700;
+    letter-spacing: .4px; text-transform: uppercase; color: var(--muted); }
+  .po-tbl td.pc-appr, .po-tbl td[data-l="Delivery"] { flex: 1 1 100%; }
+  .po-tbl td.pc-actions { flex: 1 1 100%; order: 99; border-top: 1px dashed var(--border) !important;
+    padding-top: 8px !important; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; white-space: normal !important; }
+  .po-tbl td.pc-actions button { font-size: 12px !important; }
+
+  .req-tbl, .req-tbl tbody { display: block; width: 100%; }
+  .req-tbl thead { display: none; }
+  .req-tbl tr { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px;
+    border-bottom: 1px solid var(--border); padding: 7px 2px; }
+  .req-tbl td { border: none !important; padding: 0 !important; white-space: normal !important; }
+  .req-tbl td:nth-child(2) { grid-column: 2 / 4; }        /* item name wraps full width */
+  .req-tbl td.rq-qty { grid-column: 2; text-align: left !important; font-weight: 700; }
+  .req-tbl td.rq-pur { grid-column: 3; text-align: right; font-size: 11.5px; }
+}
