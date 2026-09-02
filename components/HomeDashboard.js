@@ -4,7 +4,7 @@
 // The greeting bar / View-as picker now live in HomeHeader (parent owns asSite), because on
 // desktop they sit above the Home tab strip and must survive tab switches.
 // Same live loaders, routes and permissions as 229/230 — nothing invented, nothing removed.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
 import { approvalRights } from "@/lib/perms";
@@ -158,7 +158,25 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   const [pendCount, setPendCount] = useState(0);   // update256: PO lines still awaiting delivery
 
   // on desktop the Projects TAB owns projects; on the phone the inline explorer does
-  const openProjects = () => { if (onOpenProjects) onOpenProjects(); else setPanel("all"); };
+  // update284: the explorer is an OVERLAY. Opening it now pushes a history entry, so the phone's
+  // back button closes the panel instead of leaving the page (leaving looked like a logout — the
+  // session was never touched, but the app exited to the login screen). UI closes pop that entry.
+  const panelRef = useRef(null);
+  useEffect(() => { panelRef.current = panel; }, [panel]);
+  useEffect(() => {
+    const onPop = () => { if (panelRef.current) { setPanel(null); setExpId(null); } };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const closePanel = () => {
+    if (typeof window !== "undefined" && window.history.state && window.history.state.pskPanel) window.history.back();
+    else { setPanel(null); setExpId(null); }
+  };
+  const openProjects = () => {
+    if (onOpenProjects) { onOpenProjects(); return; }
+    setPanel("all");
+    try { window.history.pushState({ pskPanel: 1 }, ""); } catch {}
+  };
   // update262: when the explorer closes, remove any leftover #projects from the URL WITHOUT
   // creating a history entry — phantom hash entries were what broke the phone's back button.
   useEffect(() => {
@@ -287,9 +305,10 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   // update238: view_all_money holders get the tile too — read-only inbox, no actions inside
   const apprTile = rights.open ? [["✅", "Approvals", R("/m/approvals", "/approvals"), apprTotal]] : [];
   const dirTiles = [...apprTile, ["💰", "Finance", "/expenses", 0], ["📊", "Analytics", R("/m/report", "/reports"), 0], ["🏗", "All Sites", null, 0],
+    ["📄", "PO", "/procure?tab=po", 0], ["🛒", "Indents", "/procure?tab=indents", 0],   // update284: direct tabs (mock item 1/4)
     ["🏢", "Vendors", "/vendors", 0], ["👥", "Team & HR", "/workers", 0], ["🗒", "Assign Task", "/tasks", 0], ["🚚", "Pending Del.", "/procure/pending", pendCount], ["⚙", "Admin", "/rights", 0]];   // update265: /admin never existed (404) — Access Rights is the admin landing
   const staffTiles = [["📁", "Projects", null, 0], ["👷", "Muster", R("/m/muster", "/attendance"), 0], ...apprTile, ["📦", "Stock", R("/m/stock", "/stock"), 0],
-    ["💳", "Expenses", R("/m/money", "/expenses"), appr.claims], ["🗒", "Tasks", null, 0], ["📋", "Reports", R("/m/report", "/reports"), 0], ["🛒", "Indents", "/procure", appr.ind], ["🚚", "Pending Del.", "/procure/pending", pendCount]];
+    ["💳", "Expenses", R("/m/money", "/expenses"), appr.claims], ["🗒", "Tasks", null, 0], ["📋", "Reports", R("/m/report", "/reports"), 0], ["🛒", "Indents", "/procure?tab=indents", appr.ind], ["🚚", "Pending Del.", "/procure/pending", pendCount]];   // update284: Indents tile lands on its tab
   const tiles = companyView ? dirTiles : staffTiles;
 
   if (!sess) return null;
@@ -438,9 +457,9 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
       {!desk && panel && (
         <div style={{ position: "fixed", left: 0, right: 0, top: 0, bottom: "calc(62px + env(safe-area-inset-bottom))", background: "var(--bg)", zIndex: 60, display: "flex", flexDirection: "column" }}>
           <div style={{ background: "linear-gradient(115deg, " + NAVY + ", " + NAVY2 + ")", color: "#fff", padding: "calc(10px + env(safe-area-inset-top)) 14px 12px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <button type="button" onClick={() => { setPanel(null); setExpId(null); }} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 10, padding: "7px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>← Back</button>
+            <button type="button" onClick={closePanel} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 10, padding: "7px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>← Back</button>{/* update284 */}
             <b style={{ fontSize: 15, flex: 1 }}>📁 Projects</b>
-            <button type="button" onClick={() => { setPanel(null); setExpId(null); }} style={{ background: "none", border: "none", color: "#fff", fontSize: 17, cursor: "pointer", padding: 6 }}>✕</button>
+            <button type="button" onClick={closePanel} style={{ background: "none", border: "none", color: "#fff", fontSize: 17, cursor: "pointer", padding: 6 }}>✕</button>{/* update284 */}
           </div>
           <div style={{ display: "flex", gap: 6, padding: "10px 12px 4px", overflowX: "auto", flexShrink: 0 }}>
             {[["all", "All", pj.total], ["active", "Active", pj.active], ["hold", "On hold", pj.hold + pj.delayed], ["completed", "Completed", pj.done], ["upcoming", "Upcoming", pj.all.filter(p => p.status === "upcoming" || p.status === "idea").length]].map(([k, l, n]) => (
@@ -480,7 +499,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
                     </div>
                     <div style={{ display: "flex", gap: 12, marginTop: 10, flexWrap: "wrap" }}>
                       <Link href={"/projects/" + p.id} onClick={e => e.stopPropagation()} style={{ color: COPPER, fontWeight: 800, fontSize: 12.5 }}>Open full workspace →</Link>
-                      {isDirector && <a onClick={e => { e.stopPropagation(); setAsSite(Number(p.id)); setPanel(null); }} style={{ color: "#2b6cb0", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>👁 View as site manager</a>}
+                      {isDirector && <a onClick={e => { e.stopPropagation(); setAsSite(Number(p.id)); closePanel(); }} style={{ color: "#2b6cb0", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>👁 View as site manager</a>}
                     </div>
                   </div>
                 )}
