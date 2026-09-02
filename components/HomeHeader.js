@@ -35,7 +35,7 @@ export default function HomeHeader({ sess, sites, isDirector, asSite, setAsSite,
               style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)", color: "#fff", borderRadius: 999, padding: "7px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", flexShrink: 0, maxWidth: 155, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {asSite ? siteName : "View as Site Mgr"} ▾</button>
           )}
-          <Link href="/notices" style={{ color: "#fff", fontSize: 19, textDecoration: "none", padding: 6, flexShrink: 0 }}>🔔</Link>
+          <Link href="/notices" title="Notice Board" style={{ color: "#fff", fontSize: 19, textDecoration: "none", padding: 6, flexShrink: 0 }}>📢</Link>{/* update283: was a second 🔔 sitting beside the floating notification bell */}
         </div>
         {pickSite && (
           <div style={{ marginTop: 10, background: NAVY2, borderRadius: 12, padding: 8, maxHeight: 220, overflowY: "auto", maxWidth: desk ? 420 : 1100, margin: desk ? "10px 0 0 auto" : "10px auto 0" }}>

@@ -498,15 +498,15 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                     {/* requirement — always visible */}
                     <div style={{ background: "var(--bg)", borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
                       <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Requirement — {ind.items.length} item{ind.items.length !== 1 ? "s" : ""}{ind.required_by ? " · need by " + ind.required_by : ""}</div>
-                      <table className="dt-compact" style={{ width: "100%" }}>
+                      <table className="dt-compact req-tbl" style={{ width: "100%" }}>{/* update283: stacks on phones */}
                         <thead><tr><th>#</th><th>Item</th><th className="num">Qty</th><th>Purpose</th></tr></thead>
                         <tbody>
                           {ind.items.map((it, idx) => (
                             <tr key={it.id}>
                               <td className="muted">{idx + 1}</td>
                               <td style={{ fontWeight: 600, opacity: it.ordered ? 0.55 : 1 }}>{it.item_name}{it.spec ? <span className="muted" style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}{it.ordered ? <span className="badge p" style={{ marginLeft: 6, fontSize: 10.5 }}>🔒 PO issued</span> : ""}</td>
-                              <td className="num">{it.qty} {it.unit}</td>
-                              <td className="muted">{it.purpose || "—"}</td>
+                              <td className="num rq-qty">{it.qty} {it.unit}</td>
+                              <td className="muted rq-pur">{it.purpose || "—"}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -839,8 +839,8 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
           </div>
           {pos.length === 0 ? <span className="muted">No POs yet.</span> : poShown.length === 0 ? <span className="muted">No POs match these filters.</span> : (
             <>{pager(poPage, setPoPage, poShown.length)}
-              <div style={{ overflowX: "auto" }}>
-              <table className="dt-compact">
+              <div className="po-wrap" style={{ overflowX: "auto" }}>{/* update283: table on desktop, stacked cards on phones */}
+              <table className="dt-compact po-tbl">
                 <thead><tr><th>PO no</th><th>Date</th><th>Indent</th><th>Raised by</th><th>Site</th><th>Vendor</th><th className="num">Amount</th><th>Approval</th><th className="num">Received</th><th>Delivery</th><th>Status</th><th>Action</th></tr></thead>
                 <tbody>
                   {poShown.slice((poPage - 1) * PAGE, poPage * PAGE).map(p => {
@@ -850,14 +850,14 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                     const void_ = p.status === "cancelled";
                     return (
                     <tr key={p.id} className={void_ ? "po-void" : ""}>
-                      <td style={{ fontWeight: 600 }}>{p.po_no}</td>
-                      <td className="muted">{p.date}</td>
-                      <td className="muted">{p.indent_no}</td>
-                      <td className="muted">{p.raised_by || "—"}</td>
-                      <td className="muted">{p.site || "—"}</td>
-                      <td>{p.vendor}</td>
-                      <td className="num">{inr(p.total)}</td>
-                      <td style={{ whiteSpace: "nowrap" }}>{/* update198: Director approval */}
+                      <td className="pc-no" style={{ fontWeight: 600 }}>{p.po_no}</td>
+                      <td className="muted pc-d" data-l="Date">{p.date}</td>
+                      <td className="muted pc-d" data-l="Indent">{p.indent_no}</td>
+                      <td className="muted pc-d" data-l="Raised by">{p.raised_by || "—"}</td>
+                      <td className="muted pc-d" data-l="Site">{p.site || "—"}</td>
+                      <td className="pc-vendor" data-l="Vendor">{p.vendor}</td>
+                      <td className="num pc-amt" data-l="Amount">{inr(p.total)}</td>
+                      <td className="pc-d pc-appr" data-l="Approval" style={{ whiteSpace: "nowrap" }}>{/* update198: Director approval */}
                         {p.approval === "approved"
                           ? <span className="badge p" title={p.approved_by ? "Approved by " + p.approved_by + (p.approved_at ? " on " + p.approved_at : "") : "Approved"}>✓ Approved by Director</span>
                           : p.approval === "rejected"
@@ -875,15 +875,15 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                           </div>
                         )}
                       </td>
-                      <td className="num" style={{ whiteSpace: "nowrap" }}>{p.received_pct === null || p.received_pct === undefined ? <span className="muted">—</span> : <span style={{ color: void_ ? "var(--muted)" : p.received_pct >= 100 ? "var(--green)" : p.received_pct > 0 ? "var(--amber)" : "var(--muted)", textDecoration: void_ ? "line-through" : "none", textDecorationColor: "var(--red)", textDecorationThickness: void_ ? 2 : undefined }}>{p.received_pct}%<span className="muted" style={{ fontSize: 10.5 }}> {p.items_complete}/{p.item_count} items</span></span>}</td>
-                      <td style={{ whiteSpace: "nowrap" }}>
+                      <td className="num pc-d" data-l="Received" style={{ whiteSpace: "nowrap" }}>{p.received_pct === null || p.received_pct === undefined ? <span className="muted">—</span> : <span style={{ color: void_ ? "var(--muted)" : p.received_pct >= 100 ? "var(--green)" : p.received_pct > 0 ? "var(--amber)" : "var(--muted)", textDecoration: void_ ? "line-through" : "none", textDecorationColor: "var(--red)", textDecorationThickness: void_ ? 2 : undefined }}>{p.received_pct}%<span className="muted" style={{ fontSize: 10.5 }}> {p.items_complete}/{p.item_count} items</span></span>}</td>
+                      <td className="pc-d" data-l="Delivery" style={{ whiteSpace: "nowrap" }}>
                         <span className={"badge " + (void_ ? "gray" : dc)}
                               style={void_ ? { textDecoration: "line-through", textDecorationColor: "var(--red)", textDecorationThickness: 2 } : undefined}>{dl}</span>
                         {p.expected_delivery && <div className="muted" style={{ fontSize: 11,
                           textDecoration: void_ ? "line-through" : "none", textDecorationColor: "var(--red)" }}>by {p.expected_delivery}</div>}
                       </td>
-                      <td><span className={"badge " + (void_ ? "red" : "gray")}>{void_ ? "✕ cancelled" : p.status}</span></td>
-                      <td style={{ whiteSpace: "nowrap" }}>
+                      <td className="pc-status" data-l="Status"><span className={"badge " + (void_ ? "red" : "gray")}>{void_ ? "✕ cancelled" : p.status}</span></td>
+                      <td className="pc-actions" style={{ whiteSpace: "nowrap" }}>
                         {/* update258: nothing to receive and nothing to send on a cancelled PO */}
                         {void_
                           ? <button style={{ fontSize: 11.5, marginRight: 4 }} disabled title="This PO is cancelled — delivery tracking no longer applies">📦 Delivery</button>
