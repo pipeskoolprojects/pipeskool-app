@@ -21,7 +21,7 @@ export default function WorkerProxyPage() {
     const w = getLocalWorker();
     if (!w?.id) { setFlag(false); return; }
     setWorker(w);
-    getWorkerProxyFlag(w.id).then(setFlag).catch(() => setFlag(false));
+    getWorkerProxyFlag(w.id).then(setFlag).catch(e => { setFlag(false); setErr(e.message); });   // update289: loud
     getWorkerSiteOptions(w).then(s => { setWsites(s); setSite(Number(w.site_id) || s[0]?.id || null); });
   }, []);
   useEffect(() => { if (site) { setRows(null); getMuster([Number(site)]).then(setRows).catch(e => { setRows([]); setErr(e.message); }); } }, [site, msg]);
@@ -52,7 +52,8 @@ export default function WorkerProxyPage() {
       </div>
       <div className="m-body">
         {flag === null && <div className="muted">Checking your authority…</div>}
-        {flag === false && <div className="note amber">Your profile does not carry <b>Proxy Attendance Authority</b>. Ask the office to grant it on your labour profile in Workers Master.</div>}
+        {flag === false && !err && <div className="note amber">Your profile does not carry <b>Proxy Attendance Authority</b>. Ask the office to grant it on your labour profile in Workers Master.</div>}
+        {flag === false && err && <div className="note red">🛡 Could not check your authority: {err}</div>}{/* update289 */}
         {flag && (
           <>
             {msg && <div className="note green">{msg}</div>}

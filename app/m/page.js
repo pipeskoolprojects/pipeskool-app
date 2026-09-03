@@ -17,7 +17,8 @@ export default function PunchScreen() {
   const router = useRouter();
   const [worker, setWorker] = useState(null);
   const [proxyAuth, setProxyAuth] = useState(false);   // update288
-  useEffect(() => { if (worker?.id) getWorkerProxyFlag(worker.id).then(setProxyAuth).catch(() => setProxyAuth(false)); }, [worker?.id]);
+  const [proxyErr, setProxyErr] = useState("");        // update289: the check is never silent
+  useEffect(() => { if (worker?.id) getWorkerProxyFlag(worker.id).then(f => { setProxyAuth(f); setProxyErr(""); }).catch(e => { setProxyAuth(false); setProxyErr(e.message); }); }, [worker?.id]);
   const [wSites, setWSites] = useState([]);   // update168: labour multi-site allotments
   useEffect(() => { if (worker?.id) getWorkerSiteOptions(worker).then(setWSites); else setWSites([]); }, [worker?.id]);
   const [mQuote, setMQuote] = useState(null);
@@ -213,6 +214,7 @@ export default function PunchScreen() {
             🛡 Mark attendance for your team →
           </a>
         )}{/* update288: visible only to workers granted Proxy Attendance Authority */}
+        {proxyErr && <div className="note amber" style={{ marginTop: 8, fontSize: 11.5 }}>🛡 Proxy-authority check failed: {proxyErr}</div>}{/* update289 */}
 
         {showCam && <CameraCapture facing="user" title="Live selfie for punch" onCapture={onSelfie} onCancel={() => setShowCam(false)} />}
 
@@ -224,6 +226,7 @@ export default function PunchScreen() {
           <div className="stat-box"><div className="k">Hours</div><div className="v">{today.hours_worked != null ? Math.floor(today.hours_worked) + "h " + String(Math.round((today.hours_worked % 1) * 60)).padStart(2, "0") + "m" : "\u2014"}</div></div>
         </div>
 
+        <div className="muted" style={{ textAlign: "center", fontSize: 10, marginTop: 10 }}>Pipeskool v289</div>{/* update289: visible build tag — if this line is missing on the phone, the deploy is not live */}
         {worker.profile_complete === false && (
           <div className="note amber" style={{ textAlign: "left" }}>
             ⚠ Profile incomplete — bank details pending. Show this to your supervisor.
