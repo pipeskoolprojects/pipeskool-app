@@ -5,7 +5,7 @@
 // so revoking the checkbox stops this instantly. No verify/OT here — that stays supervisor work.
 import { useEffect, useState } from "react";
 import CameraCapture from "@/components/CameraCapture";
-import { getLocalWorker, getWorkerSiteOptions, getMuster, proxyPunch, getWorkerProxyFlag } from "@/lib/mobile";
+import { getLocalWorker, getWorkerSiteOptions, getProxyTeam, proxyPunch, getWorkerProxyFlag } from "@/lib/mobile";   // update290: RPC-only list
 
 export default function WorkerProxyPage() {
   const [worker, setWorker] = useState(null);
@@ -24,7 +24,13 @@ export default function WorkerProxyPage() {
     getWorkerProxyFlag(w.id).then(setFlag).catch(e => { setFlag(false); setErr(e.message); });   // update289: loud
     getWorkerSiteOptions(w).then(s => { setWsites(s); setSite(Number(w.site_id) || s[0]?.id || null); });
   }, []);
-  useEffect(() => { if (site) { setRows(null); getMuster([Number(site)]).then(setRows).catch(e => { setRows([]); setErr(e.message); }); } }, [site, msg]);
+  useEffect(() => {
+    if (!site || !worker?.id) return;
+    setRows(null);
+    // update290: the worker app is RPC-only — the server verifies the grant AND returns the site's team
+    getProxyTeam(worker.id, Number(site)).then(t => { if (!t.authorized) setFlag(false); setRows(t.rows); })
+      .catch(e => { setRows([]); setErr(e.message); });
+  }, [site, worker?.id, msg]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   async function onPhoto(file) {
     setShowCam(false);
@@ -60,20 +66,20 @@ export default function WorkerProxyPage() {
             {err && <div className="note red">{err}</div>}
             {!rows ? <div className="muted">Loading team…</div> : (
               <>
-                {rows.filter(r => r.id !== worker.id).map(r => (
+                {rows.map(r => (
                   <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 700 }}>{r.name}</div>
-                      <div className="muted" style={{ fontSize: 11.5 }}>{r.cat} · {r.lab}{r.in ? ` · In ${r.in}` : ""}{r.proxyBy ? ` · by ${r.proxyBy}` : ""}</div>
-                      {r.attSiteId && Number(r.attSiteId) !== Number(site) && <div className="flag">📍 Present at {r.attSite}</div>}
+                      <div className="muted" style={{ fontSize: 11.5 }}>{r.category} · {r.labour}{r.in ? ` · In ${r.in}` : ""}{r.proxy_by ? ` · by ${r.proxy_by}` : ""}</div>
+                      {r.att_site_id && Number(r.att_site_id) !== Number(site) && <div className="flag">📍 Present at {r.att_site}</div>}
                     </div>
-                    {r.attId ? <span className={"badge " + (r.status === "present" ? "p" : r.status === "half_day" ? "h" : "gray")}>{r.status === "present" ? "P" : r.status === "half_day" ? "½" : "In"}</span>
-                      : r.absentMark ? <span className="badge a">Absent</span>
+                    {r.att_id && (!r.att_site_id || Number(r.att_site_id) === Number(site)) ? <span className={"badge " + (r.status === "present" ? "p" : r.status === "half_day" ? "h" : "gray")}>{r.status === "present" ? "P" : r.status === "half_day" ? "½" : "In"}</span>
+                      : r.att_id ? <span className="badge gray">Elsewhere</span>
                       : <button style={{ fontSize: 12.5, background: "var(--brand)", color: "#fff", border: 0, borderRadius: 10, padding: "8px 12px", fontWeight: 700 }}
                           onClick={() => { setTarget(r); setErr(""); setMsg(""); setShowCam(true); }}>📷 Mark present</button>}
                   </div>
                 ))}
-                {rows.filter(r => r.id !== worker.id).length === 0 && <div className="muted">No other workers at this site.</div>}
+                {rows.length === 0 && <div className="muted">No other workers at this site.</div>}
               </>
             )}
             <div className="note amber" style={{ marginTop: 14, fontSize: 12 }}>
