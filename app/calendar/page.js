@@ -49,7 +49,7 @@ function Agenda({ list, onClick, empty }) {
 // update264: MODULE scope — add / edit / delete a company holiday straight from the calendar.
 // Writes the same company_holidays rows payroll and the muster read; DB policy is the real gate.
 function HolidayModal({ init, sites, onClose, onSaved }) {
-  const [f, setF] = useState({ id: init.id || null, on_date: init.on_date, name: init.name || "", site_ids: init.site_ids || [] });
+  const [f, setF] = useState({ id: init.id || null, on_date: init.on_date, name: init.name || "", site_ids: init.site_ids || [], applies_to: init.applies_to || "both", note: init.note || "" });   // update293
   const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
   const allSites = f.site_ids.length === 0;
   const toggleSite = id => setF(x => ({ ...x, site_ids: x.site_ids.includes(id) ? x.site_ids.filter(s => s !== id) : [...x.site_ids, id] }));
@@ -77,6 +77,16 @@ function HolidayModal({ init, sites, onClose, onSaved }) {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: "var(--card, #fff)", borderRadius: 12, padding: 18, width: "min(480px, 96vw)", maxHeight: "88vh", overflowY: "auto", boxShadow: "0 18px 50px rgba(0,0,0,.28)" }}>
         <h2 style={{ marginTop: 0 }}>{f.id ? "🪔 Edit holiday" : "🪔 Add holiday"}</h2>
+        {/* update293: who it applies to + optional note */}
+        <label className="muted">Applies to</label>
+        <select value={f.applies_to} onChange={e => setF(x => ({ ...x, applies_to: e.target.value }))} style={{ width: "100%", marginBottom: 8 }}>
+          <option value="both">🏢 Office/Staff + 👷 Workers/Labour — paid for both</option>
+          <option value="staff">🏢 Office/Staff only</option>
+          <option value="labour">👷 Workers/Labour only</option>
+          <option value="none">📿 Observance — calendar only, NOT a paid day</option>
+        </select>
+        <label className="muted">Note (optional)</label>
+        <input value={f.note} onChange={e => setF(x => ({ ...x, note: e.target.value }))} placeholder="e.g. Only for Odisha workers" style={{ width: "100%", marginBottom: 8 }} />
         <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
           Marked holidays are <b>paid</b> (27-Aug rule): absent = 1× pay, worked full day = 2×. Payroll, muster and the attendance register all read this same entry.
         </div>
@@ -116,6 +126,7 @@ export default function CalendarPage() {
   const [sites, setSites] = useState([]);
   const [site, setSite] = useState("all");
   const [types, setTypes] = useState({});     // empty = show everything
+  const [holWho, setHolWho] = useState("all");   // update293: all | both | staff | labour | none
   const [sel, setSel] = useState(() => iso(new Date()));
   const [err, setErr] = useState("");
   const [hol, setHol] = useState(null);        // update264: holiday modal — null | {id?, on_date, name, site_ids}
@@ -152,7 +163,8 @@ export default function CalendarPage() {
 
   const activeTypes = Object.keys(types).filter(k => types[k]);
   const filtered = useMemo(() => (events || [])
-    .filter(e => activeTypes.length === 0 || activeTypes.includes(e.type)), [events, types]);   // eslint-disable-line react-hooks/exhaustive-deps
+    .filter(e => activeTypes.length === 0 || activeTypes.includes(e.type))
+    .filter(e => e.type !== "holiday" || holWho === "all" || (e.applies_to || "both") === holWho), [events, types, holWho]);   // eslint-disable-line react-hooks/exhaustive-deps
   const byDate = useMemo(() => groupByDate(filtered), [filtered]);
 
   const grid = useMemo(() => monthGrid(cursor.getFullYear(), cursor.getMonth()), [cursor]);
@@ -233,6 +245,11 @@ export default function CalendarPage() {
               );
             })}
             {activeTypes.length > 0 && <button type="button" className="cal-type" onClick={() => setTypes({})}>✕ clear</button>}
+            <span style={{ width: 1, alignSelf: "stretch", background: "var(--border)", margin: "0 4px" }} />{/* update293: holiday audience filter */}
+            {[["all", "🪔 All holidays"], ["both", "🏢+👷 Both"], ["staff", "🏢 Office"], ["labour", "👷 Workers"], ["none", "📿 Observances"]].map(([k, l]) => (
+              <button key={"hw" + k} type="button" onClick={() => setHolWho(k)} className={"cal-type" + (holWho === k ? " on" : "")}
+                style={holWho === k ? { background: "#FF6A1F", color: "#fff", borderColor: "#FF6A1F" } : undefined}>{l}</button>
+            ))}
           </div>
         </div>
 
