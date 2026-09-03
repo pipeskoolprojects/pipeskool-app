@@ -6,7 +6,7 @@ import MobileNav from "@/components/MobileNav";
 import CameraCapture from "@/components/CameraCapture";
 import { isDemo } from "@/lib/supabase";
 import { Fragment } from "react";   // update286
-import { getMuster, proxyPunch, proxyPunchOut, getSiteGeo, getPosition, distanceMeters, verifyDay, verifyOne, markAbsent, unmarkAbsent, getWorkerMonth } from "@/lib/mobile";
+import { getMuster, proxyPunch, proxyPunchOut, getSiteGeo, getPosition, distanceMeters, verifyDay, verifyOne, markAbsent, unmarkAbsent, getWorkerMonth, getMyProxyAuthority } from "@/lib/mobile";   // update287
 import { approveOt } from "@/lib/data";
 import { otRound, fmtHM } from "@/lib/payroll";
 import { getSession, setCurrentSite, can } from "@/lib/auth";
@@ -49,7 +49,9 @@ export default function MusterScreen() {
   const viewIds = multi && msite === "all" ? mySites.map(s => Number(s.id)) : [Number(multi ? msite : siteId) || Number(siteId)];
   const combined = viewIds.length > 1;
   const [selSite, setSelSite] = useState({});   // workerId -> site chosen for manual marking
-  const canProxyAt = sid => sess && (isDirector || can(sess, "attendance", "create", Number(sid)));
+  const [myAuth, setMyAuth] = useState(false);   // update287: worker-level Proxy Attendance Authority
+  useEffect(() => { getMyProxyAuthority().then(setMyAuth); }, []);
+  const canProxyAt = sid => sess && (isDirector || can(sess, "attendance", "create", Number(sid)) || myAuth);
   const canVerifyAt = sid => sess && (isDirector || can(sess, "attendance", "verify", Number(sid)) || can(sess, "attendance", "manage", Number(sid)) || can(sess, "attendance", "approve", Number(sid)));
   const isDirector = sess?.role === "director";
   const canProxy = sess && (isDirector || can(sess, "attendance", "create", siteId));
@@ -231,7 +233,7 @@ export default function MusterScreen() {
               <div className="info" onClick={() => setSheet({ workerId: r.id, name: r.name })} style={{ cursor: "pointer" }}>
                 <div className="nm">{r.name} <span className="muted" style={{ fontWeight: 400 }}>›</span></div>
                 <div className="dt">{r.cat} · {r.lab}{r.in ? ` · In ${r.in}` : ""}{r.out ? ` — Out ${r.out}` : ""}{r.hours ? ` · ${fmtHM(r.hours)}` : ""}{r.otEligible === false ? "" : r.otApproved ? ` · OT ${fmtHM(r.otApprovedHours)} ✓` : r.ot ? ` · extra ${fmtHM(r.ot)} after shift (no OT unless approved)` : ""}</div>
-                {r.punch === "proxy" && <div className="flag">📷 Proxy punch — photo on file</div>}
+                {r.punch === "proxy" && <div className="flag">📷 Proxy punch — photo on file{r.proxyBy ? " · by " + r.proxyBy : ""}</div>}{/* update287: audit */}
                 {r.siteManual && <div className="flag">📍 Site set manually by supervisor</div>}{/* update286: audit tag */}
                 {r.attSiteId && Number(r.attSiteId) !== Number(r.homeSiteId) && !r.elsewhere && <div className="flag">📍 Present at {r.attSite}</div>}
                 {r.elsewhere && <div style={{ fontSize: 12, color: "var(--green)", marginTop: 2 }}>🟢 Present at another site<br /><span className="muted">Site: {r.elsewhere.site} | Time: {r.elsewhere.time}</span></div>}

@@ -10,7 +10,7 @@ import { getSession } from "@/lib/auth";
 import { isDemo, supabase } from "@/lib/supabase";
 
 const ADD_NEW = "__add_new__";
-const EMPTY = { full_name: "", mobile: "", category: "plumber", labour_type: "own", contractor_id: "", site_id: "", daily_wage: "", is_active: true, ot_eligible: true };
+const EMPTY = { full_name: "", mobile: "", category: "plumber", labour_type: "own", contractor_id: "", site_id: "", daily_wage: "", is_active: true, ot_eligible: true, proxy_authority: false };   // update287
 // roles load dynamically from the Role Master (staff_roles table)
 const S_EMPTY = { full_name: "", mobile: "", role: "supervisor", site_id: "", is_active: true };
 
@@ -197,6 +197,12 @@ export default function WorkersPage() {
                   <div style={{ flex: 1, display: "flex", alignItems: "flex-end", paddingBottom: 4 }}>
                     <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }} title="OFF = extra hours are never paid as OT; the + OT button disappears everywhere for this worker.">
                       <input type="checkbox" checked={modal.ot_eligible !== false} onChange={e => set("ot_eligible", e.target.checked)} style={{ accentColor: "var(--copper)" }} /> OT eligible
+                    </label>
+                  </div>
+                  <div style={{ flex: 1, display: "flex", alignItems: "flex-end", paddingBottom: 4 }}>{/* update287 */}
+                    <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }}
+                      title="Grants this worker the right to Mark present for OTHERS at their site(s), with the same mandatory live photo. Revoke any time by unticking — effective immediately. Needs a login linked to this worker (same mobile).">
+                      <input type="checkbox" checked={!!modal.proxy_authority} onChange={e => set("proxy_authority", e.target.checked)} style={{ accentColor: "var(--copper)" }} /> 🛡 Proxy Attendance Authority
                     </label>
                   </div>
                 </div>
