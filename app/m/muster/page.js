@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import CameraCapture from "@/components/CameraCapture";
 import { isDemo } from "@/lib/supabase";
+import { Fragment } from "react";   // update286
 import { getMuster, proxyPunch, proxyPunchOut, getSiteGeo, getPosition, distanceMeters, verifyDay, verifyOne, markAbsent, unmarkAbsent, getWorkerMonth } from "@/lib/mobile";
 import { approveOt } from "@/lib/data";
 import { otRound, fmtHM } from "@/lib/payroll";
@@ -40,6 +41,16 @@ export default function MusterScreen() {
   const sess = typeof window !== "undefined" ? getSession() : null;
   useEffect(() => { if (typeof window !== "undefined" && !getSession()) window.location.replace("/m"); }, []);
   const siteId = sess?.currentSite || sess?.sites?.[0]?.id || 1;
+  // update286: combined multi-site muster. Supervisors on 2+ sites open on ALL their sites,
+  // grouped by site; the dropdown narrows to one. Single-site users see no change.
+  const mySites = sess?.sites || [];
+  const multi = mySites.length > 1;
+  const [msite, setMsite] = useState("all");
+  const viewIds = multi && msite === "all" ? mySites.map(s => Number(s.id)) : [Number(multi ? msite : siteId) || Number(siteId)];
+  const combined = viewIds.length > 1;
+  const [selSite, setSelSite] = useState({});   // workerId -> site chosen for manual marking
+  const canProxyAt = sid => sess && (isDirector || can(sess, "attendance", "create", Number(sid)));
+  const canVerifyAt = sid => sess && (isDirector || can(sess, "attendance", "verify", Number(sid)) || can(sess, "attendance", "manage", Number(sid)) || can(sess, "attendance", "approve", Number(sid)));
   const isDirector = sess?.role === "director";
   const canProxy = sess && (isDirector || can(sess, "attendance", "create", siteId));
   const canVerify = sess && (isDirector || can(sess, "attendance", "verify", siteId) || can(sess, "attendance", "manage", siteId) || can(sess, "attendance", "approve", siteId));
@@ -47,14 +58,14 @@ export default function MusterScreen() {
   const siteName = sess?.sites?.find(x => x.id === siteId)?.name || "";
   const markedBy = sess?.name || "Supervisor";
 
-  const load = () => getMuster(siteId).then(setRows);
+  const load = () => getMuster(viewIds).then(setRows);   // update286
   // update246: supervisors see the holiday on the muster before they mark anyone absent
   const [holName, setHolName] = useState("");
   useEffect(() => {
     const t = todayLocal(); const n = new Date(t + "T00:00:00"); n.setDate(n.getDate() + 1);
     getHolidayMap(siteId, t, n.toLocaleDateString("en-CA"))
       .then(m => setHolName(m[t] || "")).catch(() => setHolName(""));
-  }, [siteId]);
+  }, [siteId, msite]);   // update286
   useEffect(() => { load(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     let alive = true;
@@ -73,7 +84,7 @@ export default function MusterScreen() {
 
   function flash(ok, text) { if (ok) { setMsg(text); setErr(""); } else { setErr(text); setMsg(""); } }
   function startProxy(r, m) {
-    if (!canProxy) { flash(false, "Only the site supervisor / incharge can mark on behalf."); return; }
+    if (!canProxyAt(m === "out" ? (r.attSiteId ?? r.homeSiteId) : (selSite[r.id] ?? r.homeSiteId))) { flash(false, "Only the site supervisor / incharge can mark on behalf."); return; }   // update286: per-site right
     if (m === "in" && r.elsewhere) { flash(false, `${r.name} is already present at ${r.elsewhere.site} (in ${r.elsewhere.time}).`); return; }
     setTarget(r); setMode(m); setErr(""); setMsg("");
     setShowCam(true);   // live camera only — locked rule
@@ -81,7 +92,12 @@ export default function MusterScreen() {
   async function onPhoto(file) {
     setShowCam(false);
     if (!file || !target) return;
-    const res = mode === "out" ? await proxyPunchOut(target.id, siteId, file) : await proxyPunch(target.id, siteId, file, markedBy);
+    // update286: actions attribute to the RIGHT site — out goes to the site punched in at;
+    // present goes to the site the supervisor picked (tagged manual when it isn't the home site).
+    const inSite = Number(selSite[target.id] ?? target.homeSiteId ?? siteId);
+    const outSite = Number(target.attSiteId ?? siteId);
+    const manual = combined || inSite !== Number(target.homeSiteId);
+    const res = mode === "out" ? await proxyPunchOut(target.id, outSite, file) : await proxyPunch(target.id, inSite, file, markedBy, manual && inSite !== Number(target.homeSiteId));
     if (!res.ok) { flash(false, res.error); return; }
     flash(true, `Proxy punch-${mode} saved for ${target.name} — photo attached, flagged in records.`);
     setTarget(null); load();
@@ -94,10 +110,18 @@ export default function MusterScreen() {
   }
   async function doVerifyAll() {
     const n = pending.length;
-    if (!n || !confirm(`Verify all ${n} pending record(s) for today at ${siteName}? They lock after this.`)) return;
-    setBusy(true); const res = await verifyDay(siteId, rows); setBusy(false);
-    if (!res.ok) { flash(false, res.error); return; }
-    flash(true, `${res.count ?? n} record(s) verified and locked.`); load();
+    if (!n || !confirm(`Verify all ${n} pending record(s) for today${combined ? " across your sites" : " at " + siteName}? They lock after this.`)) return;
+    setBusy(true);
+    // update286: in the combined view, verify site by site so each record locks at its own site
+    let done = 0, fail = null;
+    for (const sid of [...new Set(pending.map(r => r.attSiteId ?? r.homeSiteId))]) {
+      const res = await verifyDay(Number(sid), rows.filter(r => (r.attSiteId ?? r.homeSiteId) === sid));
+      if (!res.ok) { fail = res.error; break; }
+      done += res.count ?? 0;
+    }
+    setBusy(false);
+    if (fail) { flash(false, fail); return; }
+    flash(true, `${done || n} record(s) verified and locked.`); load();
   }
   async function saveOt() {
     const h = Number(otHrs);
@@ -107,7 +131,7 @@ export default function MusterScreen() {
     flash(true, `OT ${h} h approved for ${otFor.name}.`); setOtFor(null); setOtHrs(""); load();
   }
   async function saveAbsent() {
-    setBusy(true); const res = await markAbsent(absFor.id, siteId, sess?.id, absReason.trim() || null); setBusy(false);
+    setBusy(true); const res = await markAbsent(absFor.id, Number(selSite[absFor.id] ?? absFor.homeSiteId ?? siteId), sess?.id, absReason.trim() || null); setBusy(false);   // update286
     if (!res.ok) { flash(false, res.error); return; }
     flash(true, `${absFor.name} marked absent for today.`); setAbsFor(null); setAbsReason(""); load();
   }
@@ -117,7 +141,19 @@ export default function MusterScreen() {
     flash(true, `Absent mark removed for ${r.name}.`); load();
   }
 
-  const shown = useMemo(() => (rows || []).filter(r => !q || r.name.toLowerCase().includes(q.toLowerCase()) || (r.cat || "").toLowerCase().includes(q.toLowerCase())), [rows, q]);
+  const shown = useMemo(() => (rows || []).filter(r => !q || r.name.toLowerCase().includes(q.toLowerCase()) || (r.cat || "").toLowerCase().includes(q.toLowerCase()))
+    .sort((x, y) => combined ? ((x.homeSite || "").localeCompare(y.homeSite || "") || x.name.localeCompare(y.name)) : x.name.localeCompare(y.name)), [rows, q, combined]);
+  // update286: per-site mini counts for the group headers
+  const grpCounts = useMemo(() => {
+    const g = {};
+    (shown || []).forEach(r => {
+      const k = r.homeSiteId; const c = g[k] = g[k] || { n: 0, p: 0, h: 0, a: 0, pend: 0 };
+      c.n++;
+      if (r.status === "present") c.p++; else if (r.status === "half_day") c.h++;
+      else if (r.status === "absent" || r.absentMark) c.a++; else if (!r.attId) c.pend++;
+    });
+    return g;
+  }, [shown]);
   const counts = (rows || []).reduce((c, r) => {
     if (r.elsewhere) c.else++;
     else if (r.status === "present" || (r.in && !r.out)) c.p++;
@@ -146,8 +182,9 @@ export default function MusterScreen() {
         <div>
           <div className="title">Daily muster</div>
           {sess?.sites?.length > 1 ? (
-            <select value={siteId} onChange={e => { setCurrentSite(e.target.value); window.location.reload(); }}
+            <select value={msite} onChange={e => { const v = e.target.value; setMsite(v); if (v !== "all") setCurrentSite(v); }}
               style={{ marginTop: 2, fontSize: 12.5, background: "rgba(255,255,255,0.12)", color: "#fff", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 8, padding: "3px 8px" }}>
+              <option value="all" style={{ color: "#000" }}>All my sites ({mySites.length})</option>{/* update286 */}
               {sess.sites.map(s => <option key={s.id} value={s.id} style={{ color: "#000" }}>{s.name}</option>)}
             </select>
           ) : (
@@ -178,15 +215,25 @@ export default function MusterScreen() {
         {err && <div className="note red">{err}</div>}
         {rows?.[0]?.marksUnavailable && canProxy && <div className="note amber">Absent marking not enabled yet — run pipeskool_muster_absent.sql (update 186).</div>}
 
-        {!rows ? <div className="muted">Loading…</div> : shown.length === 0 ? <div className="muted">No workers match.</div> : shown.map(r => {
+        {!rows ? <div className="muted">Loading…</div> : shown.length === 0 ? <div className="muted">No workers match.</div> : shown.map((r, ri) => {
           const locked = r.verify === "verified";
+          const gc = grpCounts[r.homeSiteId] || {};
           return (
+            <Fragment key={"f" + r.id}>
+            {combined && (ri === 0 || shown[ri - 1].homeSiteId !== r.homeSiteId) && (
+              <div className="grp-head">{/* update286: site group header with its own subtotal */}
+                <span>🏗 {r.homeSite || "Site"} · {gc.n} worker{gc.n !== 1 ? "s" : ""}</span>
+                <span className="muted" style={{ fontSize: 11 }}>P {gc.p} · ½ {gc.h} · A {gc.a} · {gc.pend} pending</span>
+              </div>
+            )}
             <div className="m-row" key={r.id} style={{ flexWrap: "wrap", rowGap: 6 }}>
               <div className="avatar" onClick={() => setSheet({ workerId: r.id, name: r.name })} style={{ cursor: "pointer" }}>{initials(r.name)}</div>
               <div className="info" onClick={() => setSheet({ workerId: r.id, name: r.name })} style={{ cursor: "pointer" }}>
                 <div className="nm">{r.name} <span className="muted" style={{ fontWeight: 400 }}>›</span></div>
                 <div className="dt">{r.cat} · {r.lab}{r.in ? ` · In ${r.in}` : ""}{r.out ? ` — Out ${r.out}` : ""}{r.hours ? ` · ${fmtHM(r.hours)}` : ""}{r.otEligible === false ? "" : r.otApproved ? ` · OT ${fmtHM(r.otApprovedHours)} ✓` : r.ot ? ` · extra ${fmtHM(r.ot)} after shift (no OT unless approved)` : ""}</div>
                 {r.punch === "proxy" && <div className="flag">📷 Proxy punch — photo on file</div>}
+                {r.siteManual && <div className="flag">📍 Site set manually by supervisor</div>}{/* update286: audit tag */}
+                {r.attSiteId && Number(r.attSiteId) !== Number(r.homeSiteId) && !r.elsewhere && <div className="flag">📍 Present at {r.attSite}</div>}
                 {r.elsewhere && <div style={{ fontSize: 12, color: "var(--green)", marginTop: 2 }}>🟢 Present at another site<br /><span className="muted">Site: {r.elsewhere.site} | Time: {r.elsewhere.time}</span></div>}
                 {r.absentMark && !r.attId && <div style={{ fontSize: 12, color: "var(--red)", marginTop: 2 }}>Marked absent{r.absentMark.by ? ` by ${r.absentMark.by}` : ""} · {r.absentMark.at}{r.absentMark.reason ? ` · ${r.absentMark.reason}` : ""}</div>}
                 {r.absentMark && r.attId && <div className="muted" style={{ fontSize: 11.5 }}>(Was marked absent, later punched — punch wins)</div>}
@@ -208,7 +255,13 @@ export default function MusterScreen() {
                     {r.attId && canVerify && !locked && <button style={{ ...btn, borderColor: "var(--green)", color: "var(--green)" }} disabled={busy} onClick={() => doVerify(r)}>✓ Verify</button>}
                     {r.otEligible !== false && r.attId && (canVerify || canProxy) && (!locked || canEditLocked) && <button style={btn} onClick={() => { setOtFor(r); setOtHrs(String(r.otApprovedHours ?? otRound(r.ot))); }}>+ OT</button>}
                     {r.in && !r.out && canProxy && <button style={btn} onClick={() => startProxy(r, "out")}>Mark out</button>}
-                    {!r.attId && canProxy && <button style={{ ...btn, background: "var(--brand)", color: "#fff", border: 0 }} onClick={() => startProxy(r, "in")}>📷 Mark present</button>}
+                    {!r.attId && multi && canProxyAt(selSite[r.id] ?? r.homeSiteId) && (
+                      <select value={selSite[r.id] ?? r.homeSiteId} onChange={e => setSelSite(s => ({ ...s, [r.id]: Number(e.target.value) }))}
+                        title="Site this worker is at today — for workers without a phone" style={{ fontSize: 11.5, padding: "5px 6px", borderRadius: 8, border: "1px solid var(--border)", maxWidth: 130 }}>
+                        {mySites.map(s => <option key={s.id} value={s.id}>{Number(s.id) === Number(r.homeSiteId) ? s.name + " (home)" : s.name}</option>)}
+                      </select>
+                    )}{/* update286: manual site assignment */}
+                    {!r.attId && canProxyAt(selSite[r.id] ?? r.homeSiteId) && <button style={{ ...btn, background: "var(--brand)", color: "#fff", border: 0 }} onClick={() => startProxy(r, "in")}>📷 Mark present</button>}
                     {!r.attId && !r.absentMark && canProxy && <button style={{ ...btn, borderColor: "var(--red)", color: "var(--red)" }} onClick={() => { setAbsFor(r); setAbsReason(""); }}>Absent</button>}
                     {!r.attId && r.absentMark && canProxy && <button style={btn} onClick={() => undoAbsent(r)}>Undo absent</button>}
                     {locked && !canEditLocked && <span className="muted" style={{ fontSize: 11 }}>Locked after verification — office can edit.</span>}
@@ -216,6 +269,7 @@ export default function MusterScreen() {
                 )}
               </div>
             </div>
+            </Fragment>
           );
         })}
 

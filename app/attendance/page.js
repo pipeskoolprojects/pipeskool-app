@@ -93,6 +93,7 @@ export default function AttendancePage() {
       render: r => (
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
           {r.punch === "proxy" ? <span className="badge warn">Proxy</span> : <span className="badge gray">Self</span>}
+          {r.site_manual && <div style={{ fontSize: 10, color: "#b45309", fontWeight: 700 }}>📍 site set by supervisor</div>}{/* update286 */}
           {photoThumb(r.photoIn, "punch-in") || <span className="muted" style={{ fontSize: 11 }}>no photo</span>}
           {photoThumb(r.photoOut, "punch-out")}
         </span>
