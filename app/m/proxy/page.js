@@ -6,7 +6,7 @@
 // + OT stay with staff permissions (they lock records / set pay) — deliberately not here.
 import { useEffect, useMemo, useState } from "react";
 import CameraCapture from "@/components/CameraCapture";
-import { getLocalWorker, getWorkerSiteOptions, getProxyTeam, proxyPunch, proxyMarkOut, proxyMarkAbsent, proxyUnmarkAbsent, getWorkerProxyFlag } from "@/lib/mobile";
+import { getLocalWorker, getWorkerSiteOptions, getProxyTeam, proxyPunch, proxyMarkOut, proxyMarkAbsent, proxyUnmarkAbsent, getWorkerProxyFlag, proxySearchWorkers } from "@/lib/mobile";   // update292
 
 const btn = { fontSize: 12.5, borderRadius: 10, padding: "8px 12px", fontWeight: 700, border: "1px solid var(--border)", background: "#fff" };
 
@@ -24,6 +24,8 @@ export default function WorkerProxyPage() {
   const [absReason, setAbsReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
+  const [found, setFound] = useState(null);   // update292: company-wide matches (null = not searching)
+  const [manualTarget, setManualTarget] = useState(null);   // a searched worker being marked (manual-site tag)
 
   useEffect(() => {
     const w = getLocalWorker();
@@ -36,12 +38,21 @@ export default function WorkerProxyPage() {
   useEffect(() => { setRows(null); load(); }, [site, worker?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const flash = (ok, text) => { if (ok) { setMsg(text); setErr(""); } else { setErr(text); setMsg(""); } };
+  // update292: 3+ characters -> search ALL workers (debounced); below 3 the section disappears
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 3 || !worker?.id) { setFound(null); return; }
+    const t = setTimeout(() => {
+      proxySearchWorkers(worker.id, term).then(res => setFound(res.rows)).catch(e => { setFound([]); setErr(e.message); });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q, worker?.id, msg]);   // eslint-disable-line react-hooks/exhaustive-deps
   async function onPhoto(file) {
     setShowCam(false);
     if (!file || !target) return;
     const res = mode === "out"
       ? await proxyMarkOut(worker.id, target.id, Number(site), file)
-      : await proxyPunch(target.id, Number(site), file, worker.full_name, false, worker.id);
+      : await proxyPunch(target.id, Number(site), file, worker.full_name, !!target._manualSite, worker.id);   // update292: searched workers marked away from home carry the manual-site tag
     if (!res.ok) { flash(false, res.error); return; }
     flash(true, `${target.name} — punch-${mode} saved ✓ (photo attached, marked by you).`);
     setTarget(null); load();
@@ -121,7 +132,31 @@ export default function WorkerProxyPage() {
                 </div>
               );
             })}
-            {rows && shown.length === 0 && <div className="muted">No workers match.</div>}
+            {rows && shown.length === 0 && (!found || found.length === 0) && <div className="muted">No workers match{q.trim().length >= 3 ? " here or company-wide" : ""}.{q.trim().length > 0 && q.trim().length < 3 ? " Type 3+ letters to search all workers…" : ""}</div>}
+            {q.trim().length >= 3 && found && (() => {   /* update292: company-wide section, only searched-for names */
+              const localIds = new Set((rows || []).map(r => r.id));
+              const extra = found.filter(f => !localIds.has(f.id));
+              if (!extra.length) return null;
+              return (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontWeight: 800, fontSize: 12.5, color: "var(--muted)", letterSpacing: ".4px", marginBottom: 4 }}>🔍 ALL WORKERS — from other sites</div>
+                  {extra.map(f => (
+                    <div key={"s" + f.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 800 }}>{f.name}</div>
+                        <div className="muted" style={{ fontSize: 12 }}>{f.category} · {f.labour} · home: <b>{f.home_site || "—"}</b></div>
+                        {f.att_site_id && <div className="flag">📍 Already present at {f.att_site}{f.att_in ? " (in " + f.att_in + ")" : ""}</div>}
+                      </div>
+                      {f.att_site_id
+                        ? <span className="badge gray">Marked today</span>
+                        : <button style={{ fontSize: 12.5, background: "var(--brand)", color: "#fff", border: 0, borderRadius: 10, padding: "8px 12px", fontWeight: 700 }}
+                            onClick={() => { setTarget({ id: f.id, name: f.name, _manualSite: Number(f.home_site_id) !== Number(site) }); setMode("in"); setErr(""); setMsg(""); setShowCam(true); }}>📷 Mark here</button>}
+                    </div>
+                  ))}
+                  <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Marking here records the day at <b>{wsites.find(s => Number(s.id) === Number(site))?.name || "this site"}</b> with a "site set manually" tag.</div>
+                </div>
+              );
+            })()}
             <div className="note amber" style={{ marginTop: 14, fontSize: 12 }}>
               "Mark present" and "Mark out" need a live photo at site and are recorded as <b>marked by {worker?.full_name}</b>. Verify and OT approval remain supervisor functions. The office can revoke this authority any time.
             </div>
