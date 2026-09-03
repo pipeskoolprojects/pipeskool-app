@@ -5,6 +5,7 @@
 // WO = weekly off (from Settings), HOL = company holiday. Read live from attendance.
 import { Fragment, useEffect, useState } from "react";
 import { supabase, isDemo } from "@/lib/supabase";
+import { getSession, can } from "@/lib/auth";   // update297
 import { getPayrollSettings, weeklyOffDates, isoLocal, monthBounds } from "@/lib/payrollSettings";   // update279
 import { getHolidaysBetween } from "@/lib/holidays";
 import { exportAttendanceXlsx } from "@/lib/payrollExport";   // update278: styled workbook
@@ -44,8 +45,8 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
     if (kind === "staff" && !isStaff) return;
     if (kind === "labour" && isStaff) return;
     const key = a.worker_id + ":" + a.site_id;
-    const r = map[key] = map[key] || { key, worker: a.workers?.full_name || ("#" + a.worker_id), site: a.sites?.name || ("Site " + a.site_id),
-      category: a.workers?.category || "", cells: {}, p: 0, h: 0, review: 0 };
+    const r = map[key] = map[key] || { key, wid: a.worker_id, sid: a.site_id, worker: a.workers?.full_name || ("#" + a.worker_id), site: a.sites?.name || ("Site " + a.site_id),
+      category: a.workers?.category || "", cells: {}, p: 0, h: 0, review: 0 };   // update297: wid/sid for cell edits
     const c = CODE[a.status] || "";
     r.cells[a.att_date] = c;
     r.ot = r.ot || {};
@@ -73,6 +74,12 @@ export function cellCode(r, d, wo, hol) {
 }
 
 export default function AttendanceSummary({ month, siteId, sites }) {
+  // update297: admins edit cells in place — click cycles P -> H -> A (blank/HOL/WO -> P).
+  // The server function re-checks the right and the paid-month lock on every save.
+  const sess = typeof window !== "undefined" ? getSession() : null;
+  const canEdit = !!sess && (sess.role === "director" || sess.role === "it_executive" || can(sess, "attendance", "manage"));
+  const [saving, setSaving] = useState("");   // "wid:iso" while a cell saves
+  const [cellErr, setCellErr] = useState("");
   const [kind, setKind] = useState("labour");
   const [g, setG] = useState(null); const [err, setErr] = useState("");
   useEffect(() => { setG(null); setErr(""); loadAttendanceGrid(month, siteId, kind).then(setG).catch(e => { setErr(e.message); setG({ days: monthDays(month), rows: [], wo: new Set(), hol: {} }); }); }, [month, siteId, kind]);
@@ -93,6 +100,7 @@ export default function AttendanceSummary({ month, siteId, sites }) {
           <button className={kind === "labour" ? "primary" : ""} onClick={() => setKind("labour")}>👷 Labour</button>
           <button className={kind === "staff" ? "primary" : ""} onClick={() => setKind("staff")}>🧑‍💼 Staff</button>
           <button onClick={exportExcel} disabled={!g || !g.rows.length}>⬇ Excel</button>
+          {cellErr && <span className="note red" style={{ padding: "4px 10px", fontSize: 12 }}>{cellErr}</span>}{/* update297 */}
         </div>
       </div>
       {err && <div className="error" style={{ marginTop: 8 }}>{err}</div>}
@@ -117,7 +125,23 @@ export default function AttendanceSummary({ month, siteId, sites }) {
                   <td style={{ position: "sticky", left: 0, background: "#fff", zIndex: 1 }}>{i + 1}</td>
                   <td style={{ position: "sticky", left: 36, background: "#fff", zIndex: 1, fontWeight: 600, whiteSpace: "nowrap" }}>{r.worker}{r.review > 0 && <span title="auto-closed day(s) awaiting review" style={{ color: "#b45309", marginLeft: 4 }}>⏱</span>}</td>
                   <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{r.site}</td>
-                  {g.days.map(d => { const c = cellCode(r, d, g.wo, g.hol); return <td key={d.iso} title={g.hol[d.iso] || ""} style={{ textAlign: "center", padding: "3px 2px", fontSize: 11, fontWeight: c === "P" ? 700 : 500, background: COLOR[c] || "#fff" }}>{c}</td>; })}
+                  {g.days.map(d => {
+                    const c = cellCode(r, d, g.wo, g.hol);
+                    const busyCell = saving === r.wid + ":" + d.iso;
+                    const click = async () => {   // update297
+                      if (!canEdit || busyCell) return;
+                      const next = c === "P" ? "half_day" : c === "H" ? "absent" : "present";
+                      setSaving(r.wid + ":" + d.iso); setCellErr("");
+                      const { data: res, error } = await supabase.rpc("fn_grid_set_status", { p_worker_id: r.wid, p_site_id: r.sid, p_att_date: d.iso, p_status: next });
+                      setSaving("");
+                      if (error) { setCellErr(/fn_grid_set_status|schema cache/i.test(error.message) ? "Run pipeskool_grid_edit.sql (update 297) first." : error.message); return; }
+                      if (!res?.ok) { setCellErr(res?.error || "Could not save."); return; }
+                      loadAttendanceGrid(month, siteId, kind).then(setG).catch(e => setCellErr(e.message));
+                    };
+                    return <td key={d.iso} onClick={click}
+                      title={(g.hol[d.iso] ? g.hol[d.iso] + " · " : "") + (canEdit ? "Click: P → H → A" + (c === "HOL" || c === "WO" || c === "A" ? " (click sets P)" : "") : "")}
+                      style={{ textAlign: "center", padding: "3px 2px", fontSize: 11, fontWeight: c === "P" ? 700 : 500, background: busyCell ? "#dbeafe" : COLOR[c] || "#fff", cursor: canEdit ? "pointer" : "default" }}>{busyCell ? "…" : c}</td>;
+                  })}
                   <td className="num">{r.p}</td><td className="num">{r.h}</td><td className="num" style={{ fontWeight: 700 }}>{r.daysPaid}</td><td className="num">{r.otTotal || "—"}</td>
                 </tr>
                 {r.otTotal > 0 && (
