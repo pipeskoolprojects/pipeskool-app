@@ -108,7 +108,7 @@ export default function WorkersPage() {
   }
 
   const columns = [
-    { key: "name", label: "Worker", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    { key: "name", label: "Worker", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.name}{r.raw?.proxy_authority && <span title="Proxy Attendance Authority — can mark others present" style={{ marginLeft: 5 }}>🛡</span>}</span> },   // update288
     { key: "mobile", label: "Mobile", filter: "search", render: r => <span className="muted">{r.mobile}</span> },
     { key: "category", label: "Category", filter: "select" },
     { key: "type", label: "Labour type", filter: "select",

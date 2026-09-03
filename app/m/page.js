@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { getWorkerProxyFlag } from "@/lib/mobile";   // update288
 import { useRouter } from "next/navigation";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
@@ -15,6 +16,8 @@ import { getTodayQuote } from "@/lib/notices";
 export default function PunchScreen() {
   const router = useRouter();
   const [worker, setWorker] = useState(null);
+  const [proxyAuth, setProxyAuth] = useState(false);   // update288
+  useEffect(() => { if (worker?.id) getWorkerProxyFlag(worker.id).then(setProxyAuth).catch(() => setProxyAuth(false)); }, [worker?.id]);
   const [wSites, setWSites] = useState([]);   // update168: labour multi-site allotments
   useEffect(() => { if (worker?.id) getWorkerSiteOptions(worker).then(setWSites); else setWSites([]); }, [worker?.id]);
   const [mQuote, setMQuote] = useState(null);
@@ -205,6 +208,11 @@ export default function PunchScreen() {
           {busy ? t(lang, "saving") : phase === "in" ? t(lang, "punch_in") : phase === "out" ? t(lang, "punch_out") : t(lang, "done_today")}
         </button>
         <div className="sub">📷 Selfie is captured with every punch</div>
+        {proxyAuth && (
+          <a href="/m/proxy" style={{ display: "block", textAlign: "center", margin: "12px 16px 0", padding: "12px 14px", borderRadius: 12, background: "var(--deep)", color: "#fff", fontWeight: 800, textDecoration: "none" }}>
+            🛡 Mark attendance for your team →
+          </a>
+        )}{/* update288: visible only to workers granted Proxy Attendance Authority */}
 
         {showCam && <CameraCapture facing="user" title="Live selfie for punch" onCapture={onSelfie} onCancel={() => setShowCam(false)} />}
 
