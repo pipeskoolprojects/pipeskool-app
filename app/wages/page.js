@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import { getSites, inr } from "@/lib/data";
 import { generatePayouts, generatePayoutsAll, getPayouts, setPayoutAdvance, setPayoutMode, setPayoutStatutory, fmtHM, approvePayouts, markPayoutsPaid, reopenPayout } from "@/lib/payroll";
 import PayoutEditModal from "@/components/PayoutEditModal";   // update277
-import { generateStaffPayouts, getStaffPayouts, approveStaffPayouts, markStaffPayoutsPaid } from "@/lib/staffpay";
+import { generateStaffPayouts, getStaffPayouts, approveStaffPayouts, markStaffPayoutsPaid, setStaffAdvance } from "@/lib/staffpay";   // update295
 import { getSession } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
 import * as XLSX from "xlsx";
@@ -272,7 +272,7 @@ export default function WagesPage() {
               }}>⬇ Export Excel</button>
             </div>
             <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-              Per-day = salary ÷ 30 (fixed) · Sundays paid · leave year Apr–Mar · max 50% of leaves usable Apr–Sep · max 10 leaves at a stretch · absences beyond these limits deduct <b>OT eligible</b> (approved hours, per-day ÷ 8) · approved salary advances auto-deducted · approved/paid rows never change.
+              Per-day = salary ÷ 30 (fixed) · Sundays paid · leave year Apr–Mar · max 50% of leaves usable Apr–Sep · max 10 leaves at a stretch · absences beyond these limits deduct <b>OT eligible</b> (approved hours, per-day ÷ 8) · <b>advance recovery is entered per month</b> (click the Advances figure on a draft row — the rest carries forward on the ledger) · approved/paid rows never change.
             </div>
             {!srows ? <div className="muted">Loading…</div> : srows.length === 0 ? (
               <div className="muted">{prog ? "⏳ " + prog : <>No staff salary rows for {month}. Set <b>Monthly salary</b> on staff (Workers &amp; Staff Master → Edit) and click <b>Generate from attendance</b>.</>}</div>
@@ -295,7 +295,18 @@ export default function WagesPage() {
                         <td className="num">{inr(r.deduction)}</td>
                         <td className="num">{r.ot ? fmtHM(r.ot) : "—"}</td>
                         <td className="num">{inr(r.otAmt)}</td>
-                        <td className="num">{inr(r.adv)}</td>
+                        <td className="num">{r.status === "draft"
+                          ? <a style={{ cursor: "pointer", textDecoration: "underline" }} title="Enter how much advance to recover THIS month — the rest stays outstanding and carries forward"
+                              onClick={async () => {
+                                const v = prompt(`Advance to recover from ${r.name} this month (outstanding ${inr(r.outstanding || 0)}):`, r.adv || 0);
+                                if (v === null) return;
+                                const res = await setStaffAdvance(r.id, v);
+                                if (!res.ok) { setErr(res.error); return; }
+                                setMsg(`${r.name}: ₹${Number(v || 0).toLocaleString("en-IN")} will be recovered this month — ${inr(res.remaining)} stays outstanding on the ledger.`);
+                                load();
+                              }}>{inr(r.adv)}</a>
+                          : inr(r.adv)}
+                          {r.outstanding > 0 && <div className="muted" style={{ fontSize: 10 }}>out {inr(r.outstanding)}</div>}</td>{/* update295 */}
                         <td className="num" style={{ fontWeight: 700 }}>{inr(r.net)}</td>
                         <td><span className={"badge " + cls}>{lbl}</span></td>
                       </tr> ); })}
