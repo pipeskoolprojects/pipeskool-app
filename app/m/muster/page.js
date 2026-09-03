@@ -58,7 +58,7 @@ export default function MusterScreen() {
   const siteName = sess?.sites?.find(x => x.id === siteId)?.name || "";
   const markedBy = sess?.name || "Supervisor";
 
-  const load = () => getMuster(viewIds).then(setRows);   // update286
+  const load = () => getMuster(viewIds).then(setRows).catch(e => { setRows([]); setErr(e.message); });   // update286b: never silently empty
   // update246: supervisors see the holiday on the muster before they mark anyone absent
   const [holName, setHolName] = useState("");
   useEffect(() => {
