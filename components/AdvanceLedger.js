@@ -27,7 +27,7 @@ export default function AdvanceLedger({ onTotals }) {
     const m = {};
     rows.forEach(r => {
       const g = m[r.pkey] = m[r.pkey] || { name: r.employee, kind: r.kind, taken: 0, advances: [] };
-      if (r.status === "approved") g.taken += r.amount;   // update294: r.amount is already the APPROVED figure
+      if (r.status === "approved") g.taken += r.amount;
       g.advances.push(r);
     });
     Object.entries(m).forEach(([k, g]) => {
@@ -91,7 +91,7 @@ export default function AdvanceLedger({ onTotals }) {
               <table className="dt-compact" style={{ width: "100%", marginBottom: 12 }}>
                 <thead><tr><th>Date</th><th>Site</th><th className="num">₹</th><th>Reason</th><th>Status</th></tr></thead>
                 <tbody>{pg.advances.map(a => (
-                  <tr key={a.id}><td>{a.date}</td><td>{a.site}</td><td className="num">{inr(a.amount)}{a.partial && <div className="muted" style={{ fontSize: 10.5 }}>of {inr(a.requested)} asked</div>}</td>{/* update294 */}
+                  <tr key={a.id}><td>{a.date}</td><td>{a.site}</td><td className="num">{inr(a.amount)}</td>
                     <td className="muted">{a.reason || "—"}</td>
                     <td><span className={"badge " + (STATUS_BADGE[a.status] || "gray")}>{a.status}</span></td></tr>
                 ))}</tbody>
