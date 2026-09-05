@@ -10,7 +10,8 @@ import {
   getBeneficiaries, raiseAdvanceSalary,
   getPettyReturnQueue, confirmPettyReturn, getPettyLedger,
   getPettyReconciliation, catLabel, inr, markAdvancePosted, markExpensePosted,
-  getPettyRequestQueue, reviewPettyRequest, requestPettyCash , selfEditExpense, EXPENSE_CATEGORIES, getPersonMoneyProfile } from "@/lib/money";
+  getPettyRequestQueue, reviewPettyRequest, requestPettyCash , selfEditExpense, EXPENSE_CATEGORIES, getPersonMoneyProfile, claimExpense } from "@/lib/money";   // update300
+import { getSites } from "@/lib/data";
 import { getSession, canAnySite } from "@/lib/auth";
 import { canApprove } from "@/lib/perms";
 
@@ -251,6 +252,31 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
   ];
   // update212: six sections as TABS — one fixed-height scroll panel, page never grows
   const [mtab, setMtab] = useState("claims");
+  // update300: the web now files expense claims too — same fields, same lib call as mobile,
+  // so both surfaces write the identical record (date, site, source, bills, approvals flow).
+  const [claimF, setClaimF] = useState(null);   // null = closed
+  const [claimBusy, setClaimBusy] = useState(false);
+  const [sitesList, setSitesList] = useState([]);
+  const openClaim = async () => {
+    if (!sitesList.length) { try { setSitesList(await getSites()); } catch {} }
+    setClaimF({ site_id: session?.currentSite || "", expense_date: new Date().toLocaleDateString("en-CA"),
+      funding_source: "own_pocket", category: "local_material", amount: "", paid_to: "", note: "", files: null });
+  };
+  async function submitWebClaim() {
+    const f = claimF;
+    if (!f.site_id) { setErr("Choose the site."); return; }
+    if (!(Number(f.amount) > 0)) { setErr("Enter the amount."); return; }
+    if (!f.paid_to.trim()) { setErr("Who was paid?"); return; }
+    if (f.funding_source === "own_pocket" && !(f.files && f.files.length)) { setErr("Attach the bill(s) — proof is mandatory for reimbursement."); return; }
+    setClaimBusy(true); setErr("");
+    const res = await claimExpense({ site_id: Number(f.site_id), user_id: session?.id, category: f.category,
+      amount: Number(f.amount), paid_to: f.paid_to.trim(), funding_source: f.funding_source, note: f.note.trim(),
+      expense_date: f.expense_date || undefined, billFiles: f.files || [], bank_on_file: true });
+    setClaimBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg("Claim submitted for approval — it appears in the Expenses ledger as pending.");
+    setClaimF(null); load();
+  }
   const [fullView, setFullView] = useState(false);
   // update214: clickable claimant profile (live from the same tables — zero duplicate data)
   const AV_COLORS = ["#e07020", "#2b6cb0", "#15803d", "#6b46c1", "#b91c1c", "#0e7490", "#a16207"];
@@ -477,6 +503,44 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
         </div>
 
         <div className={mtab === "claims" ? "money-sec" : undefined} style={{ display: mtab === "claims" ? "flex" : "none", overflowY: "auto" }}>
+          <div style={{ marginBottom: 8 }}>{/* update300 */}
+            <button className="primary" onClick={openClaim}>＋ Claim expense / create voucher</button>
+          </div>
+          {claimF && (
+            <div onClick={() => !claimBusy && setClaimF(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div onClick={ev => ev.stopPropagation()} style={{ background: "#fff", borderRadius: 14, padding: 20, width: "min(480px, 94vw)", maxHeight: "90vh", overflowY: "auto" }}>
+                <h3 style={{ marginTop: 0 }}>Claim site expense</h3>
+                <label className="muted">Voucher date *</label>
+                <input type="date" value={claimF.expense_date} max={new Date().toLocaleDateString("en-CA")} onChange={ev => setClaimF(x => ({ ...x, expense_date: ev.target.value }))} style={{ width: "100%", marginBottom: 8 }} />
+                <label className="muted">Site *</label>
+                <select value={claimF.site_id} onChange={ev => setClaimF(x => ({ ...x, site_id: ev.target.value }))} style={{ width: "100%", marginBottom: 8 }}>
+                  <option value="">— choose site —</option>
+                  {sitesList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <label className="muted">Paid from *</label>
+                <select value={claimF.funding_source} onChange={ev => setClaimF(x => ({ ...x, funding_source: ev.target.value }))} style={{ width: "100%", marginBottom: 8 }}>
+                  <option value="own_pocket">My own pocket (reimburse me to bank)</option>
+                  <option value="petty_cash">Site petty cash I hold</option>
+                </select>
+                <label className="muted">Category</label>
+                <select value={claimF.category} onChange={ev => setClaimF(x => ({ ...x, category: ev.target.value }))} style={{ width: "100%", marginBottom: 8 }}>
+                  {Object.entries(EXPENSE_CATEGORIES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+                <label className="muted">Amount ₹ *</label>
+                <input type="number" min="1" value={claimF.amount} onChange={ev => setClaimF(x => ({ ...x, amount: ev.target.value }))} style={{ width: "100%", marginBottom: 8 }} />
+                <label className="muted">Paid to *</label>
+                <input value={claimF.paid_to} placeholder="Shop / person" onChange={ev => setClaimF(x => ({ ...x, paid_to: ev.target.value }))} style={{ width: "100%", marginBottom: 8 }} />
+                <label className="muted">Note</label>
+                <input value={claimF.note} placeholder="What was it for" onChange={ev => setClaimF(x => ({ ...x, note: ev.target.value }))} style={{ width: "100%", marginBottom: 8 }} />
+                <label className="muted">Bill(s) — photo or PDF{claimF.funding_source === "own_pocket" ? " *" : ""}</label>
+                <input type="file" accept="image/*,application/pdf" multiple onChange={ev => setClaimF(x => ({ ...x, files: ev.target.files }))} style={{ width: "100%", marginBottom: 12 }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="primary" disabled={claimBusy} onClick={submitWebClaim}>{claimBusy ? "Submitting…" : "Submit claim"}</button>
+                  <button disabled={claimBusy} onClick={() => setClaimF(null)}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
           {/* update247: the voucher bar only appears once something is ticked */}
           {selIds.length > 0 && (
             <div className="note" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
