@@ -76,7 +76,7 @@ export default function MoneyScreen() {
   // advance form
   const [a, setA] = useState({ beneficiary: "", amount: "", reason: "" });
   // expense form
-  const [e, setE] = useState({ category: "local_material", amount: "", paid_to: "", funding_source: "own_pocket", note: "" });
+  const [e, setE] = useState({ category: "local_material", amount: "", paid_to: "", funding_source: "own_pocket", note: "", expense_date: new Date().toLocaleDateString("en-CA") });   // update300: voucher date, default today
   const [photo, setPhoto] = useState(null);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -137,7 +137,7 @@ export default function MoneyScreen() {
     if (e.funding_source === "own_pocket" && !photo) { setErr("Please attach a bill photo as proof for reimbursement."); return; }
     setBusy(true);
     const res = await claimExpense({
-      site_id: Number(claimSite), user_id: userId, category: e.category, amount: Number(e.amount),
+      site_id: Number(claimSite), user_id: userId, category: e.category, amount: Number(e.amount), expense_date: e.expense_date || undefined,   // update300
       paid_to: e.paid_to, funding_source: e.funding_source, note: e.note,
       billFiles: photo || [], bank_on_file: true,
     });
@@ -267,6 +267,8 @@ export default function MoneyScreen() {
         {mode === "expense" && (
           <div style={{ background: "var(--bg)", borderRadius: 12, padding: 12, margin: "12px 0" }}>
             <h3 style={{ fontSize: 14, marginBottom: 10 }}>Claim site expense</h3>
+            <label className="muted">Voucher date *</label>{/* update300: defaults to today, changeable */}
+            <input type="date" value={e.expense_date} max={new Date().toLocaleDateString("en-CA")} onChange={ev => setE(x => ({ ...x, expense_date: ev.target.value }))} style={{ width: "100%", marginBottom: 8 }} />
             <div className="m-field"><label>Site *</label>
               <select value={claimSite} onChange={e => setClaimSite(e.target.value)}>
                 {mySites.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}

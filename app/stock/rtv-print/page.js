@@ -2,6 +2,7 @@
 // update205: VENDOR RETURN RECEIPT — print-ready A4, same header as PO / vouchers.
 // Web + Android: browser Print → Save as PDF.
 import { useEffect, useState, Suspense } from "react";
+import { getCompanyGstin } from "@/lib/data";   // update300
 import { useSearchParams } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getVendorReturnHistory, setRtvStatus } from "@/lib/stock";
@@ -13,6 +14,8 @@ function RtvReceipt() {
   const params = useSearchParams();
   const ref = params.get("ref");
   const [r, setR] = useState(null); const [miss, setMiss] = useState(false);
+  const [gstin, setGstin] = useState("");   // update300: the real saved GSTIN — never a mask
+  useEffect(() => { getCompanyGstin().then(setGstin); }, []);
   useEffect(() => {
     if (!getSession()) { window.location.replace("/login"); return; }
     getVendorReturnHistory({}).then(res => {
@@ -42,7 +45,7 @@ function RtvReceipt() {
           </svg>
           <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>PIPESKOOL PROJECTS PVT. LTD.</div>
           <div style={{ fontSize: 12, color: "#555", marginTop: 2 }}>Specialist Plumbing &amp; Piping Contractors</div>
-          <div style={{ fontSize: 11.5, color: "#555" }}>Ahmedabad, Gujarat · GSTIN: 24XXXXXXXXXXXZX</div>
+          <div style={{ fontSize: 11.5, color: "#555" }}>Ahmedabad, Gujarat{gstin ? ` · GSTIN: ${gstin}` : ""}</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 18, fontWeight: 700 }}>VENDOR RETURN RECEIPT</div>

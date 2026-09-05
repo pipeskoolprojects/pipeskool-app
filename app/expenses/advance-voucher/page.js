@@ -82,7 +82,7 @@ function AdvVoucher() {
         {/* ---------- number / date / site + amount ---------- */}
         <div style={{ display: "flex", justifyContent: "space-between", gap: 20, alignItems: "flex-start" }}>
           <div style={{ display: "grid", gap: 7 }}>
-            {[["Voucher No.", v.no], ["Date", dmy(v.date)], ["Site", v.site], ["Payment mode", v.payMode]].map(([k, val]) => (
+            {[["Voucher No.", v.no], ["Voucher Date", dmy(v.date)], ["Generated", dmy(new Date().toLocaleDateString("en-CA"))], ["Site", v.site], ["Payment mode", v.payMode]].map(([k, val]) => (
               <div key={k} style={{ display: "grid", gridTemplateColumns: "100px 1fr", gap: 8, alignItems: "baseline" }}>
                 <span style={{ fontSize: 11, color: "#6b7280" }}>{k}</span>
                 <span style={{ fontSize: 12.5, fontWeight: 800 }}>{val || "—"}</span>

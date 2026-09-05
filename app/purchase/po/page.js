@@ -1,6 +1,7 @@
 "use client";
 import { getSession } from "@/lib/auth";
 import { useEffect, useState, Suspense } from "react";
+import { getCompanyGstin } from "@/lib/data";   // update300
 import { useSearchParams } from "next/navigation";
 import { getPODetail, getPOProofs } from "@/lib/procure";
 import { getPOItemStatus, LINE_STATUS } from "@/lib/pending";
@@ -9,6 +10,8 @@ function POView() {
   const params = useSearchParams();
   const poId = params.get("po");
   const [po, setPo] = useState(null);
+  const [gstin, setGstin] = useState("");   // update300: the real saved GSTIN — never a mask
+  useEffect(() => { getCompanyGstin().then(setGstin); }, []);
   const [loading, setLoading] = useState(true);
   const [proofs, setProofs] = useState({ indentId: null, proofs: [] });   // update254: rate-comparison reference
   const [recv, setRecv] = useState([]);   // update256: per-line ordered / received / pending
@@ -85,7 +88,7 @@ function POView() {
           </svg>
           <div style={{ fontSize: 22, fontWeight: 800, color: "#0F1419", letterSpacing: "-0.02em" }}>PIPESKOOL PROJECTS PVT. LTD.</div>
           <div style={{ fontSize: 12, color: "#555", marginTop: 2 }}>Specialist Plumbing &amp; Piping Contractors</div>
-          <div style={{ fontSize: 11.5, color: "#555" }}>Ahmedabad, Gujarat · GSTIN: 24XXXXXXXXXXXZX</div>
+          <div style={{ fontSize: 11.5, color: "#555" }}>Ahmedabad, Gujarat{gstin ? ` · GSTIN: ${gstin}` : ""}</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 18, fontWeight: 700 }}>PURCHASE ORDER</div>
