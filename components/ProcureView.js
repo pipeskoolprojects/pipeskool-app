@@ -4,7 +4,7 @@ import { isDemo } from "@/lib/supabase";
 import { getSession, can } from "@/lib/auth";
 import { canApprove } from "@/lib/perms";
 import {
-  getOpenIndents, saveQuotes, getQuotes, buildComparison, createPO, getPOs, cancelPO, approvePO, getAllIndents, inr,
+  getOpenIndents, saveQuotes, getQuotes, buildComparison, createPO, getPOs, cancelPO, approvePO, getAllIndents, inr, getRateSuggestions,
   uploadQuoteProof, getQuoteProofs, deleteQuoteProof, getPOProofs,
   DELIVERY_STATUS, updatePODelivery,
 } from "@/lib/procure";
@@ -57,12 +57,24 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   const [enqVendors, setEnqVendors] = useState([]);     // vendor names added to this enquiry
   const [vendorPick, setVendorPick] = useState("");      // master select before "Add"
   const [alloc, setAlloc] = useState({});                // {itemId: {vendor: true}}  which vendor quotes which item
+  // update299: quote-panel typing mirrors to this device per indent — refresh/app-switch/crash
+  // never loses entered rates; the mirror clears once saved or the PO is created.
+  const draftKey = id => "psk_qdraft_" + id;
+  const saveDraft = (id, obj) => { try { localStorage.setItem(draftKey(id), JSON.stringify(obj)); } catch {} };
+  const readDraft = id => { try { return JSON.parse(localStorage.getItem(draftKey(id)) || "null"); } catch { return null; } };
+  const clearDraft = id => { try { localStorage.removeItem(draftKey(id)); } catch {} };
   const [qin, setQin] = useState({});                    // {itemId: {vendor: {list, disc}}}
   const [gstSel, setGstSel] = useState({});              // update178: per-item GST % (default 18)
   const [rates, setRates] = useState({});                // derived NET map {itemId: {vendor: net}}
   const [enqSel, setEnqSel] = useState({});              // {itemId: bool} items to include in enquiry download
   const [cmp, setCmp] = useState(null);
   const [proofs, setProofs] = useState([]);        // update254: rate-comparison proofs for the open indent
+  const [rateSug, setRateSug] = useState({});      // update299: item_key -> last remembered price+vendor
+  const sugLine = name => {
+    const s = rateSug[(name || "").trim().toLowerCase()];
+    if (!s) return null;
+    return `Last: ${inr(s.rate)}${s.discount_pct ? ` (−${s.discount_pct}%)` : ""}${s.vendor_name ? " · " + s.vendor_name : ""} · ${(s.noted_at || "").slice(0, 10)}${s.source === "po" ? " (PO)" : ""}`;
+  };
   const [proofErr, setProofErr] = useState("");    // update266: inline upload error shown under the Attach button
   const [poProofs, setPoProofs] = useState({});    // update253: indent_item_id -> [proof]
   const [upBusy, setUpBusy] = useState("");
@@ -87,6 +99,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   }
   function pickSug(i, opt) {
     setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], item_name: opt.label, unit: opt.unit || ls[i].unit, item_id: opt.item_id || null }; return { ...n, lines: ls }; });
+    getRateSuggestions([opt.label]).then(m => setRateSug(s => ({ ...s, ...m }))).catch(() => {});   // update299
     setSug(null);
   }
   async function addToMaster(i) {
@@ -110,6 +123,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     if (!res.ok && res.duplicate && window.confirm(res.error + "\n\nRaise it anyway as a separate indent?")) res = await createIndent({ ...header, allow_duplicate: true }, outLines);
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
+    clearDraft(ind.id);   // update299
     setNi(null); setMsg(editingId ? "Indent " + editingNo + " updated — quotes were cleared, status back to open." : "Indent " + res.indent_no + " raised.");
     setEditingId(null); setEditingNo("");
     getOpenIndents(scope).then(setIndents);
@@ -150,6 +164,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     const res = await updatePODelivery(deliv.id, { expected_delivery: deliv.expected_delivery, delivery_status: deliv.delivery_status, delivery_note: deliv.delivery_note });
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
+    clearDraft(ind.id);   // update299
     setDeliv(null); setMsg("Delivery updated for " + deliv.po_no + " — site can see it now."); getPOs(scope).then(setPos);
   }
 
@@ -162,6 +177,11 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     if (willOpen) {
       getQuoteProofs(ind.id).then(setProofs);   // update253: rate evidence, loaded alongside
       const quotes = await getQuotes(ind.id);
+      getRateSuggestions((ind.items || []).map(it => it.item_name)).then(setRateSug).catch(() => {});   // update299
+      if (!quotes.length) {   // update299: nothing saved yet — restore any typed draft from this device
+        const d0 = readDraft(ind.id);
+        if (d0 && d0.qin) { setQin(d0.qin); setAlloc(d0.alloc || {}); if (Array.isArray(d0.vendors)) setEnqVendors(v => [...new Set([...v, ...d0.vendors])]); }
+      }
       if (quotes.length) {
         const vs = [], al = {}, qi = {};
         quotes.forEach(q => {
@@ -172,6 +192,8 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
           (qi[q.indent_item_id] = qi[q.indent_item_id] || {})[q.vendor_name] = { list: String(list), disc: String(disc) };
         });
         setEnqVendors(vs); setAlloc(al); setQin(qi);
+        const d = readDraft(ind.id);   // update299: unsaved typing from this device wins over the last save
+        if (d && d.qin) { setQin(q => ({ ...q, ...d.qin })); if (d.alloc) setAlloc(a2 => ({ ...a2, ...d.alloc })); if (Array.isArray(d.vendors) && d.vendors.length) setEnqVendors(v => [...new Set([...v, ...d.vendors])]); }
       }
     }
   }
@@ -214,8 +236,8 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     const strip = obj => { const n = { ...obj }; Object.keys(n).forEach(k => { if (n[k]) { const m = { ...n[k] }; delete m[v]; n[k] = m; } }); return n; };
     setAlloc(strip); setQin(strip);
   }
-  const toggleAlloc = (itemId, v) => setAlloc(a => ({ ...a, [itemId]: { ...(a[itemId] || {}), [v]: !a[itemId]?.[v] } }));
-  const setQ = (itemId, v, k, val) => setQin(q => ({ ...q, [itemId]: { ...(q[itemId] || {}), [v]: { ...(q[itemId]?.[v] || {}), [k]: val } } }));
+  const toggleAlloc = (itemId, v) => setAlloc(a => { const n = { ...a, [itemId]: { ...(a[itemId] || {}), [v]: !a[itemId]?.[v] } }; if (openId) saveDraft(openId, { qin, alloc: n, vendors: enqVendors, t: Date.now() }); return n; });   // update299
+  const setQ = (itemId, v, k, val) => setQin(q => { const n = { ...q, [itemId]: { ...(q[itemId] || {}), [v]: { ...(q[itemId]?.[v] || {}), [k]: val } } }; if (openId) saveDraft(openId, { qin: n, alloc, vendors: enqVendors, t: Date.now() }); return n; });
   const netOf = (itemId, v) => {
     const c = qin[itemId]?.[v]; if (!c) return null;
     const list = Number(c.list); if (!list) return null;
@@ -297,6 +319,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
       rows.push({ indent_item_id: it.id, vendor_name: v, list_rate: c.list || null, discount_pct: c.disc || null, rate: netOf(it.id, v) });
     }));
     const res = await saveQuotes(ind.id, rows);
+    if (res.ok) clearDraft(ind.id);   // update299: saved to DB — the device mirror has done its job
     setMsg(res.ok ? "Allocation & rates saved for " + ind.indent_no : res.error);
     if (res.ok) load();
   }
@@ -432,6 +455,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                   <div className="ind-name" style={{ flex: 2, position: "relative" }}>
                     <input style={{ width: "100%" }} placeholder="Item / material name * (type 2+ letters to search)" value={l.item_name}
                            onChange={e => onItemType(i, e.target.value)} />
+                    {sugLine(l.item_name) && <div style={{ fontSize: 10.5, color: "#0e7a3d", marginTop: 2 }}>💡 {sugLine(l.item_name)}</div>}{/* update299: last price + vendor */}
                     {sug && sug.i === i && (
                       <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 40, background: "#fff",
                                     border: "1px solid var(--border)", borderRadius: 8, boxShadow: "0 8px 20px rgba(0,0,0,.12)", maxHeight: 220, overflowY: "auto" }}>
@@ -667,7 +691,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                                 const best = cmp.splitChoice[it.id];
                                 return (
                                   <tr key={it.id}>
-                                    <td style={{ fontWeight: 600, opacity: it.ordered ? 0.55 : 1 }}>{it.item_name}{it.spec ? <span className="muted" style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}{it.ordered ? <span className="badge p" style={{ marginLeft: 6, fontSize: 10.5 }}>🔒 PO issued</span> : ""}<div className="muted">{it.qty} {it.unit}</div></td>
+                                    <td style={{ fontWeight: 600, opacity: it.ordered ? 0.55 : 1 }}>{it.item_name}{it.spec ? <span className="muted" style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}{it.ordered ? <span className="badge p" style={{ marginLeft: 6, fontSize: 10.5 }}>🔒 PO issued</span> : ""}<div className="muted">{it.qty} {it.unit}</div>{sugLine(it.item_name) && <div style={{ fontWeight: 500, fontSize: 10.5, color: "#0e7a3d" }}>💡 {sugLine(it.item_name)}</div>}</td>
                                     <td className="num">{it.qty} {it.unit}</td>
                                     {cmp.vendors.map(v => {
                                       const r = row[v]; const isBest = best && best.vendor === v;
