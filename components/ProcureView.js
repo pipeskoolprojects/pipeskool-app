@@ -4,7 +4,7 @@ import { isDemo } from "@/lib/supabase";
 import { getSession, can } from "@/lib/auth";
 import { canApprove } from "@/lib/perms";
 import {
-  getOpenIndents, saveQuotes, getQuotes, buildComparison, createPO, getPOs, cancelPO, approvePO, getAllIndents, inr, getRateSuggestions,
+  getOpenIndents, saveQuotes, getQuotes, buildComparison, createPO, getPOs, cancelPO, approvePO, getAllIndents, inr, getRateSuggestions, getItemPriceMap,
   uploadQuoteProof, getQuoteProofs, deleteQuoteProof, getPOProofs,
   DELIVERY_STATUS, updatePODelivery,
 } from "@/lib/procure";
@@ -70,6 +70,15 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   const [cmp, setCmp] = useState(null);
   const [proofs, setProofs] = useState([]);        // update254: rate-comparison proofs for the open indent
   const [rateSug, setRateSug] = useState({});      // update299: item_key -> last remembered price+vendor
+  const [priceMap, setPriceMap] = useState({});    // update303: item_id -> Price Master resolution
+  // unit-aware view of a Price-Master row: Rmt lines price per metre, others per piece
+  const priceFor = it => {
+    const p = priceMap[Number(it.item_id)];
+    if (!p || !p.ok) return null;
+    const perM = (it.unit || "").toLowerCase() === "rmt" && p.priced_length_m > 0;
+    return { list: perM ? +(p.list_pcs / p.priced_length_m).toFixed(2) : +p.list_pcs,
+             disc: +p.discount_pct, net: perM ? p.per_mtr : p.net_pcs, per: perM ? "mtr" : "pc", from: p.list_date };
+  };
   const sugLine = name => {
     const s = rateSug[(name || "").trim().toLowerCase()];
     if (!s) return null;
@@ -178,6 +187,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
       getQuoteProofs(ind.id).then(setProofs);   // update253: rate evidence, loaded alongside
       const quotes = await getQuotes(ind.id);
       getRateSuggestions((ind.items || []).map(it => it.item_name)).then(setRateSug).catch(() => {});   // update299
+      getItemPriceMap(ind.items || []).then(setPriceMap).catch(() => setPriceMap({}));   // update303
       if (!quotes.length) {   // update299: nothing saved yet — restore any typed draft from this device
         const d0 = readDraft(ind.id);
         if (d0 && d0.qin) { setQin(d0.qin); setAlloc(d0.alloc || {}); if (Array.isArray(d0.vendors)) setEnqVendors(v => [...new Set([...v, ...d0.vendors])]); }
@@ -236,6 +246,31 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     const strip = obj => { const n = { ...obj }; Object.keys(n).forEach(k => { if (n[k]) { const m = { ...n[k] }; delete m[v]; n[k] = m; } }); return n; };
     setAlloc(strip); setQin(strip);
   }
+  // update303: the ask — rates appear AUTOMATICALLY. Only EMPTY inputs are filled (typed
+  // values and restored drafts are never overwritten); revoking is one keystroke.
+  useEffect(() => {
+    if (!openId || !enqVendors.length || !Object.keys(priceMap).length) return;
+    const ind = (indents || []).find(x => x.id === openId);
+    if (!ind) return;
+    setQin(q => {
+      let changed = false;
+      const n = { ...q };
+      (ind.items || []).forEach(it => {
+        const pr = priceFor(it);
+        if (!pr) return;
+        enqVendors.forEach(v => {
+          const cur = n[it.id]?.[v] || {};
+          if ((cur.list == null || cur.list === "") && (cur.disc == null || cur.disc === "")) {
+            n[it.id] = { ...(n[it.id] || {}), [v]: { ...cur, list: String(pr.list), disc: String(pr.disc) } };
+            changed = true;
+          }
+        });
+      });
+      if (changed && openId) saveDraft(openId, { qin: n, alloc, vendors: enqVendors, t: Date.now() });
+      return changed ? n : q;
+    });
+  }, [priceMap, enqVendors, openId]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   const toggleAlloc = (itemId, v) => setAlloc(a => { const n = { ...a, [itemId]: { ...(a[itemId] || {}), [v]: !a[itemId]?.[v] } }; if (openId) saveDraft(openId, { qin, alloc: n, vendors: enqVendors, t: Date.now() }); return n; });   // update299
   const setQ = (itemId, v, k, val) => setQin(q => { const n = { ...q, [itemId]: { ...(q[itemId] || {}), [v]: { ...(q[itemId]?.[v] || {}), [k]: val } } }; if (openId) saveDraft(openId, { qin: n, alloc, vendors: enqVendors, t: Date.now() }); return n; });
   const netOf = (itemId, v) => {
@@ -691,7 +726,8 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                                 const best = cmp.splitChoice[it.id];
                                 return (
                                   <tr key={it.id}>
-                                    <td style={{ fontWeight: 600, opacity: it.ordered ? 0.55 : 1 }}>{it.item_name}{it.spec ? <span className="muted" style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}{it.ordered ? <span className="badge p" style={{ marginLeft: 6, fontSize: 10.5 }}>🔒 PO issued</span> : ""}<div className="muted">{it.qty} {it.unit}</div>{sugLine(it.item_name) && <div style={{ fontWeight: 500, fontSize: 10.5, color: "#0e7a3d" }}>💡 {sugLine(it.item_name)}</div>}</td>
+                                    <td style={{ fontWeight: 600, opacity: it.ordered ? 0.55 : 1 }}>{it.item_name}{it.spec ? <span className="muted" style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}{it.ordered ? <span className="badge p" style={{ marginLeft: 6, fontSize: 10.5 }}>🔒 PO issued</span> : ""}<div className="muted">{it.qty} {it.unit}</div>{priceFor(it) && <div style={{ fontWeight: 600, fontSize: 10.5, color: "#0b5cad" }}>📗 Price list: {inr(priceFor(it).list)} − {priceFor(it).disc}% = {inr(priceFor(it).net)}/{priceFor(it).per} <span style={{ fontWeight: 400, color: "var(--muted)" }}>({priceFor(it).from})</span></div>}{/* update303 */}
+                                {sugLine(it.item_name) && <div style={{ fontWeight: 500, fontSize: 10.5, color: "#0e7a3d" }}>💡 {sugLine(it.item_name)}</div>}</td>
                                     <td className="num">{it.qty} {it.unit}</td>
                                     {cmp.vendors.map(v => {
                                       const r = row[v]; const isBest = best && best.vendor === v;
