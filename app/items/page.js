@@ -74,6 +74,60 @@ export default function ItemsPage() {
   }
   const openEditRow = r => { setForm({ ...r, min_stock: r.min_stock || "", sub_type: r.sub_type || "", size: r.size || "", item_class: r.item_class || "", make: r.make || "", hsn_code: r.hsn_code || "" }); setMsg(""); setErr(""); };
 
+  // update305: Bulk Discount Update — pick make+category, preview affected count, apply.
+  // One dated discount row does the whole category; every screen recalculates instantly.
+  const sess = typeof window !== "undefined" ? getSession() : null;
+  const isDirector = sess?.role === "director";
+  const [tab, setTab] = useState("items");           // items | discount
+  const [dMakes, setDMakes] = useState([]);          // [{make, categories:[{category, pct, from, items}]}]
+  const [dMake, setDMake] = useState("");
+  const [dCat, setDCat] = useState("");
+  const [dPct, setDPct] = useState("");
+  const [dPrev, setDPrev] = useState(null);          // preview object
+  const [dBusy, setDBusy] = useState(false);
+  const [dMsg, setDMsg] = useState(""); const [dErr, setDErr] = useState("");
+  useEffect(() => {
+    if (tab !== "discount") return;
+    (async () => {
+      const { data: rates } = await supabase.from("price_list_rates").select("discount_category, price_lists(make)");
+      const { data: discs } = await supabase.from("make_category_discounts").select("make, category, discount_pct, effective_from, id").order("effective_from", { ascending: false }).order("id", { ascending: false });
+      const cur = {};
+      (discs || []).forEach(d => { const k = d.make + "|" + d.category; if (!cur[k]) cur[k] = d; });
+      const map = {};
+      (rates || []).forEach(r => {
+        const mk = r.price_lists?.make; if (!mk) return;
+        const k = mk + "|" + r.discount_category;
+        map[k] = map[k] || { make: mk, category: r.discount_category, items: 0, pct: cur[k]?.discount_pct ?? null, from: cur[k]?.effective_from || null };
+        map[k].items++;
+      });
+      const byMake = {};
+      Object.values(map).forEach(x => { (byMake[x.make] = byMake[x.make] || []).push(x); });
+      const list = Object.entries(byMake).map(([make, categories]) => ({ make, categories: categories.sort((a2, b2) => a2.category.localeCompare(b2.category)) }));
+      setDMakes(list);
+      if (!dMake && list.length) { setDMake(list[0].make); setDCat(list[0].categories[0]?.category || ""); }
+    })();
+  }, [tab]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const dCats = (dMakes.find(m => m.make === dMake)?.categories) || [];
+  const dSel = dCats.find(c => c.category === dCat) || null;
+  const doPreview = () => {
+    setDErr(""); setDMsg("");
+    const pct = Number(dPct);
+    if (!dMake || !dCat) { setDErr("Pick the make and category."); return; }
+    if (!(pct >= 0 && pct < 100)) { setDErr("Enter a discount between 0 and 99.99."); return; }
+    setDPrev({ make: dMake, category: dCat, pct, items: dSel?.items || 0, oldPct: dSel?.pct });
+  };
+  const doApply = async () => {
+    setDBusy(true); setDErr("");
+    const { data: res, error } = await supabase.rpc("fn_set_category_discount", { p_make: dPrev.make, p_category: dPrev.category, p_pct: dPrev.pct });
+    setDBusy(false);
+    if (error) { setDErr(/fn_set_category_discount|schema cache/i.test(error.message) ? "Run pipeskool_bulk_discount.sql (update 305) first." : error.message); return; }
+    if (!res?.ok) { setDErr(res?.error || "Refused."); return; }
+    setDMsg(`${dPrev.make} · ${dPrev.category}: discount is now ${dPrev.pct}% — ${res.affected} priced item(s) recalculated everywhere (dated today; history preserved).`);
+    setDPrev(null); setDPct(""); setTabRefresh(x => x + 1);
+  };
+  const [tabRefresh, setTabRefresh] = useState(0);
+  useEffect(() => { if (tabRefresh) setTab(t => t); }, [tabRefresh]);
+
   const columns = [
     { key: "display_name", label: "Item", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.display_name}</span> },
     { key: "item_type", label: "Type", filter: "select" },
@@ -102,6 +156,12 @@ export default function ItemsPage() {
       <main className="main">
         <div className="page-head">
           <h1>Item / Material master</h1>
+          {isDirector && (
+            <div className="mw-tabs" style={{ margin: "0 12px" }}>{/* update305 */}
+              <button className={tab === "items" ? "active" : ""} onClick={() => setTab("items")}>📦 Items</button>
+              <button className={tab === "discount" ? "active" : ""} onClick={() => setTab("discount")}>💸 Bulk Discount Update</button>
+            </div>
+          )}
           {canManage && <button className="primary" onClick={() => { setForm({ ...BLANK }); setMsg(""); setErr(""); }}>＋ Add item</button>}
         </div>
         {loadErr && <div className="demo-banner" style={{ background: "#fdecea", color: "var(--red)" }}>
@@ -167,10 +227,48 @@ export default function ItemsPage() {
           </div>
         )}
 
-        <div className="panel">
+        {tab === "items" && <div className="panel">
           {!rows ? <div className="muted">Loading…</div> :
             <DataTable columns={columns} rows={rows} exportName="item_master" />}
-        </div>
+        </div>}
+          {tab === "discount" && isDirector && (
+            <div className="card" style={{ maxWidth: 620, padding: 18, marginTop: 10 }}>{/* update305 */}
+              <h3 style={{ marginTop: 0 }}>💸 Bulk Discount Update</h3>
+              <p className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
+                Pick a category, enter the discount — it applies to every priced item in that category at once,
+                dated today. Net Rate recalculates instantly on this page, in indent auto-fill and on new POs;
+                past dates keep the discount that ruled then.
+              </p>
+              {dMakes.length === 0 && <div className="note amber">No priced categories yet — load a category into the Price Master first (CPVC pipes are round 1).</div>}
+              {dMakes.length > 0 && (
+                <>
+                  <label className="muted">Make</label>
+                  <select value={dMake} onChange={e => { setDMake(e.target.value); const m2 = dMakes.find(x => x.make === e.target.value); setDCat(m2?.categories[0]?.category || ""); setDPrev(null); }} style={{ width: "100%", marginBottom: 8 }}>
+                    {dMakes.map(m2 => <option key={m2.make} value={m2.make}>{m2.make}</option>)}
+                  </select>
+                  <label className="muted">Category</label>
+                  <select value={dCat} onChange={e => { setDCat(e.target.value); setDPrev(null); }} style={{ width: "100%", marginBottom: 8 }}>
+                    {dCats.map(c => <option key={c.category} value={c.category}>{c.category} — {c.items} priced item(s){c.pct != null ? ` · current ${c.pct}%` : " · no discount yet"}</option>)}
+                  </select>
+                  <label className="muted">New discount %</label>
+                  <input type="number" min="0" max="99.99" step="0.5" value={dPct} onChange={e => { setDPct(e.target.value); setDPrev(null); }} style={{ width: "100%", marginBottom: 10 }} placeholder={dSel?.pct != null ? "current " + dSel.pct + "%" : "e.g. 62"} />
+                  {!dPrev && <button className="primary" onClick={doPreview}>👁 Preview</button>}
+                  {dPrev && (
+                    <div className="note" style={{ background: "var(--copper-soft)", border: "1px solid var(--copper)", padding: 12, marginBottom: 8 }}>
+                      <b>{dPrev.make} · {dPrev.category}</b>: {dPrev.items} priced item(s) will move
+                      {dPrev.oldPct != null ? ` from ${dPrev.oldPct}%` : ""} to <b>{dPrev.pct}%</b> — Net Rates recalculate everywhere immediately.
+                      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                        <button className="primary" disabled={dBusy} onClick={doApply}>{dBusy ? "Applying…" : "✓ Confirm & apply"}</button>
+                        <button disabled={dBusy} onClick={() => setDPrev(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                  {dMsg && <div className="note green" style={{ marginTop: 8 }}>{dMsg}</div>}
+                  {dErr && <div className="note red" style={{ marginTop: 8 }}>{dErr}</div>}
+                </>
+              )}
+            </div>
+          )}
       </main>
     </div>
   );
