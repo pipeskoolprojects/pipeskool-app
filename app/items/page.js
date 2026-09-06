@@ -80,6 +80,12 @@ export default function ItemsPage() {
     { key: "unit", label: "Unit", filter: "select" },
     { key: "hsn_code", label: "HSN", render: r => <span className="muted">{r.hsn_code || "—"}</span> },
     { key: "min_stock", label: "Min stock", type: "num", render: r => Number(r.min_stock) ? Number(r.min_stock) : <span className="muted">—</span>, exportValue: r => r.min_stock },
+    { key: "rate", label: "Rate ₹", type: "num", render: r => r.rate != null ? <span style={{ fontFamily: "var(--mono, monospace)" }}>{Number(r.rate).toLocaleString("en-IN")}</span> : <span className="muted">—</span>, exportValue: r => r.rate ?? "" },   // update304
+    { key: "disc_pct", label: "Disc %", type: "num", render: r => r.disc_pct != null && r.rate != null ? r.disc_pct + "%" : <span className="muted">—</span>, exportValue: r => r.rate != null ? r.disc_pct : "" },
+    { key: "net_rate", label: "Net Rate ₹", type: "num", render: r => r.net_rate != null ? (
+        <span style={{ fontFamily: "var(--mono, monospace)", fontWeight: 700 }}>{Number(r.net_rate).toLocaleString("en-IN")}
+          {r.per_mtr != null && <div className="muted" style={{ fontSize: 10, fontWeight: 400 }}>₹{Number(r.per_mtr).toLocaleString("en-IN")}/mtr</div>}
+        </span>) : <span className="muted">—</span>, exportValue: r => r.net_rate ?? "" },
     { key: "is_active", label: "Status", filter: "select", optionLabel: o => o ? "Active" : "Inactive",
       render: r => r.is_active ? <span className="badge p">Active</span> : <span className="badge gray">Inactive</span>, exportValue: r => r.is_active ? "Active" : "Inactive" },
     { key: "_action", label: "Action", sortable: false, render: r => canManage ? (
