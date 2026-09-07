@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
-import { isDemo } from "@/lib/supabase";
+import { supabase, isDemo, fetchAll } from "@/lib/supabase";   // update324: supabase was NEVER imported here — every discount-tab query crashed silently
 import { ITEM_TYPES, getItemTypes, addItemType, getAllItems, addItem, updateItem, toggleItemActive, deleteItem, approveItem } from "@/lib/stock";
 import { getSession, canAnySite } from "@/lib/auth";
 import { canApprove } from "@/lib/perms";
@@ -89,13 +89,20 @@ export default function ItemsPage() {
   useEffect(() => {
     if (tab !== "discount") return;
     (async () => {
-      const { data: rates } = await supabase.from("price_list_rates").select("discount_category, price_lists(make)");
-      const { data: discs } = await supabase.from("make_category_discounts").select("make, category, discount_pct, effective_from, id").order("effective_from", { ascending: false }).order("id", { ascending: false });
+      // update324: PAGED (rates passed 1,000 rows — one request clamps there), no nested-join
+      // shape dependence, and every failure is SHOWN, never an empty screen.
+      const { data: rates, error: re } = await fetchAll(() => supabase.from("price_list_rates").select("id, discount_category, price_list_id").order("id"));
+      if (re) { setDErr("Could not load materials: " + re.message); return; }
+      const { data: lists, error: le } = await supabase.from("price_lists").select("id, make");
+      if (le) { setDErr("Could not load price lists: " + le.message); return; }
+      const listMake = {}; (lists || []).forEach(l => { listMake[l.id] = l.make; });
+      const { data: discs, error: de } = await supabase.from("make_category_discounts").select("make, category, discount_pct, effective_from, id").order("effective_from", { ascending: false }).order("id", { ascending: false });
+      if (de) { setDErr("Could not load discounts: " + de.message); return; }
       const cur = {};
       (discs || []).forEach(d => { const k = d.make + "|" + d.category; if (!cur[k]) cur[k] = d; });
       const map = {};
       (rates || []).forEach(r => {
-        const mk = r.price_lists?.make; if (!mk) return;
+        const mk = listMake[r.price_list_id]; if (!mk) return;   // update324: joined client-side
         const k = mk + "|" + r.discount_category;
         map[k] = map[k] || { make: mk, category: r.discount_category, items: 0, pct: cur[k]?.discount_pct ?? null, from: cur[k]?.effective_from || null };
         map[k].items++;
