@@ -163,7 +163,23 @@ export default function ItemsPage() {
     { key: "hsn_code", label: "HSN", render: r => <span className="muted">{r.hsn_code || "—"}</span> },
     { key: "min_stock", label: "Min stock", type: "num", render: r => Number(r.min_stock) ? Number(r.min_stock) : <span className="muted">—</span>, exportValue: r => r.min_stock },
     { key: "rate", label: "Rate ₹", type: "num", render: r => r.rate != null ? <span style={{ fontFamily: "var(--mono, monospace)" }}>{Number(r.rate).toLocaleString("en-IN")}</span> : <span className="muted">—</span>, exportValue: r => r.rate ?? "" },   // update304
-    { key: "disc_pct", label: "Disc %", type: "num", render: r => r.disc_pct != null && r.rate != null ? r.disc_pct + "%" : <span className="muted">—</span>, exportValue: r => r.rate != null ? r.disc_pct : "" },
+    { key: "disc_pct", label: "Disc %", type: "num", render: r => r.disc_pct != null && r.rate != null
+        ? <span onClick={isDirector ? async e => {   /* update325: item override — wins over the group % */
+              e.stopPropagation();
+              const v = prompt("Discount override for: " + r.display_name + String.fromCharCode(10) + (r.overridden ? "Currently OVERRIDDEN at " + r.disc_pct + "%." : "Group gives " + r.disc_pct + "%.") + String.fromCharCode(10) + "Enter a % for THIS item only, or leave empty to follow the group:", r.overridden ? String(r.disc_pct) : "");
+              if (v === null) return;
+              const pct = v.trim() === "" ? null : Number(v);
+              if (pct !== null && !(pct >= 0 && pct < 100)) { alert("Enter 0-99.99, or empty to clear."); return; }
+              const { data: res, error } = await supabase.rpc("fn_set_item_discount_override", { p_item_id: r.id, p_pct: pct });
+              if (error) { alert(/fn_set_item_discount_override|schema cache/i.test(error.message) ? "Run pipeskool_item_discount_override.sql (update 325) first." : error.message); return; }
+              if (!res?.ok) { alert(res?.error || "Refused."); return; }
+              load();
+            } : undefined}
+            title={isDirector ? (r.overridden ? "Overridden — click to change or clear (empty = follow group)" : "Click to set an item-level override") : (r.overridden ? "Item-level override" : "")}
+            style={{ cursor: isDirector ? "pointer" : "default", textDecoration: isDirector ? "underline dotted" : "none", fontWeight: r.overridden ? 800 : 400, color: r.overridden ? "var(--copper)" : undefined }}>
+            {r.disc_pct}%{r.overridden ? "*" : ""}
+          </span>
+        : <span className="muted">—</span>, exportValue: r => r.rate != null ? String(r.disc_pct) + (r.overridden ? " (override)" : "") : "" },
     { key: "net_rate", label: "Net Rate ₹", type: "num", render: r => r.net_rate != null ? (
         <span style={{ fontFamily: "var(--mono, monospace)", fontWeight: 700 }}>{Number(r.net_rate).toLocaleString("en-IN")}
           {r.per_mtr != null && <div className="muted" style={{ fontSize: 10, fontWeight: 400 }}>₹{Number(r.per_mtr).toLocaleString("en-IN")}/mtr</div>}
@@ -263,11 +279,11 @@ export default function ItemsPage() {
             <div style={{ maxWidth: 860, marginTop: 10 }}>{/* update323: Material Discount Management — table + search */}
               <div className="card" style={{ padding: 16, marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
                 <div style={{ flex: "1 1 240px" }}>
-                  <div style={{ fontWeight: 800, fontSize: 16 }}>💸 Material Discount Management</div>
-                  <div className="muted" style={{ fontSize: 12 }}>Set discount percentage per material, or apply one to all. Changes are dated — history is kept.</div>
+                  <div style={{ fontWeight: 800, fontSize: 16 }}>💸 Group Discount Management</div>
+                  <div className="muted" style={{ fontSize: 12 }}>One % per material group (pipes + fittings together) — CPVC, UPVC, SWR… managed separately, dated, history kept. Item-level overrides: click any Disc % on the Items tab.</div>
                 </div>
                 <div>
-                  <label className="muted" style={{ fontSize: 11.5 }}>Global Discount (%)</label>
+                  <label className="muted" style={{ fontSize: 11.5 }}>All groups at once (%)</label>
                   <input type="number" min="0" max="99.99" step="0.5" value={dGlobal} onChange={e => { setDGlobal(e.target.value); setDConfirmAll(false); }}
                     style={{ width: 110, fontSize: 15, fontWeight: 700, textAlign: "center", display: "block" }} placeholder="e.g. 61" />
                 </div>
@@ -297,7 +313,7 @@ export default function ItemsPage() {
                         <thead>
                           <tr style={{ background: "var(--navy)", color: "#fff", textAlign: "left" }}>
                             <th style={{ padding: "10px 14px", width: 44 }}>#</th>
-                            <th style={{ padding: "10px 14px" }}>Material Name</th>
+                            <th style={{ padding: "10px 14px" }}>Material Group</th>
                             <th style={{ padding: "10px 14px", width: 190 }}>Discount (%)</th>
                             <th style={{ padding: "10px 14px", width: 110 }}>Action</th>
                           </tr>
@@ -325,7 +341,7 @@ export default function ItemsPage() {
                                 </td>
                                 <td style={{ padding: "9px 14px" }}>
                                   {changed
-                                    ? <button className="primary" disabled={dBusy || !validPct(val)} onClick={() => applyOne(c)}>✓ Save</button>
+                                    ? <button className="primary" disabled={dBusy || !validPct(val)} onClick={() => applyOne(c)}>✓ Apply to Group</button>
                                     : <span className="muted" style={{ fontSize: 11.5 }}>saved</span>}
                                 </td>
                               </tr>
