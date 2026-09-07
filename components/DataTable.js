@@ -31,7 +31,10 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
   const [page, setPage] = useState(0);
-  useEffect(() => { setPage(0); }, [search, selects, from, to, rows]);
+  // update310: reset to page 1 only when FILTERS change. A data refresh (rows array
+  // replaced after approve / mark-posted / any action reload) keeps the current page —
+  // render already clamps via curPage if the list shrinks below it.
+  useEffect(() => { setPage(0); }, [search, selects, from, to]);
 
   // build select options from data
   const selectCols = columns.filter(c => c.filter === "select");
