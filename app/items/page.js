@@ -109,22 +109,42 @@ export default function ItemsPage() {
   }, [tab]);   // eslint-disable-line react-hooks/exhaustive-deps
   const dCats = (dMakes.find(m => m.make === dMake)?.categories) || [];
   const dSel = dCats.find(c => c.category === dCat) || null;
-  const doPreview = () => {
-    setDErr(""); setDMsg("");
-    const pct = Number(dPct);
-    if (!dMake || !dCat) { setDErr("Pick the make and category."); return; }
-    if (!(pct >= 0 && pct < 100)) { setDErr("Enter a discount between 0 and 99.99."); return; }
-    setDPrev({ make: dMake, category: dCat, pct, items: dSel?.items || 0, oldPct: dSel?.pct });
-  };
-  const doApply = async () => {
-    setDBusy(true); setDErr("");
-    const { data: res, error } = await supabase.rpc("fn_set_category_discount", { p_make: dPrev.make, p_category: dPrev.category, p_pct: dPrev.pct });
+  // update322: Material Discount Management — per-row edits + Global "Apply to All"
+  // (one inline confirm kept: a global % reprices every item in every category).
+  const [dEdits, setDEdits] = useState({});          // "make|cat" -> typed %
+  const [dGlobal, setDGlobal] = useState("");
+  const [dConfirmAll, setDConfirmAll] = useState(false);
+  const allCats = dMakes.flatMap(m => m.categories.map(c => ({ ...c, make: m.make })));
+  const validPct = v => v !== "" && Number(v) >= 0 && Number(v) < 100;
+  async function saveOne(make, category, pct) {
+    setDBusy(true); setDErr(""); setDMsg("");
+    const { data: res, error } = await supabase.rpc("fn_set_category_discount", { p_make: make, p_category: category, p_pct: Number(pct) });
     setDBusy(false);
-    if (error) { setDErr(/fn_set_category_discount|schema cache/i.test(error.message) ? "Run pipeskool_bulk_discount.sql (update 305) first." : error.message); return; }
-    if (!res?.ok) { setDErr(res?.error || "Refused."); return; }
-    setDMsg(`${dPrev.make} · ${dPrev.category}: discount is now ${dPrev.pct}% — ${res.affected} priced item(s) recalculated everywhere (dated today; history preserved).`);
-    setDPrev(null); setDPct(""); setTabRefresh(x => x + 1);
-  };
+    if (error) { setDErr(/fn_set_category_discount|schema cache/i.test(error.message) ? "Run pipeskool_bulk_discount.sql (update 305) first." : error.message); return false; }
+    if (!res?.ok) { setDErr(res?.error || "Refused."); return false; }
+    return true;
+  }
+  async function applyOne(c) {
+    const v = dEdits[c.make + "|" + c.category];
+    if (!validPct(v)) { setDErr("Enter a discount between 0 and 99.99."); return; }
+    if (await saveOne(c.make, c.category, v)) {
+      setDMsg(`${c.make} · ${c.category} → ${v}% (${c.items} item(s) repriced everywhere; dated today, history kept).`);
+      setDEdits(x => { const y = { ...x }; delete y[c.make + "|" + c.category]; return y; });
+      setTabRefresh(x => x + 1);
+    }
+  }
+  async function applyAll() {
+    if (!validPct(dGlobal)) { setDErr("Enter a global discount between 0 and 99.99."); return; }
+    setDConfirmAll(false); setDBusy(true); setDErr("");
+    let done = 0;
+    for (const c of allCats) {
+      if (!(await saveOne(c.make, c.category, dGlobal))) { setDBusy(false); setDMsg(done ? `${done} categor(ies) updated before the error.` : ""); return; }
+      done++;
+    }
+    setDBusy(false); setDEdits({});
+    setDMsg(`Global ${dGlobal}% applied — all ${done} categories repriced everywhere (dated today; history kept).`);
+    setTabRefresh(x => x + 1);
+  }
   const [tabRefresh, setTabRefresh] = useState(0);
   useEffect(() => { if (tabRefresh) setTab(t => t); }, [tabRefresh]);
 
@@ -232,40 +252,56 @@ export default function ItemsPage() {
             <DataTable columns={columns} rows={rows} exportName="item_master" />}
         </div>}
           {tab === "discount" && isDirector && (
-            <div className="card" style={{ maxWidth: 620, padding: 18, marginTop: 10 }}>{/* update305 */}
-              <h3 style={{ marginTop: 0 }}>💸 Bulk Discount Update</h3>
-              <p className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
-                Pick a category, enter the discount — it applies to every priced item in that category at once,
-                dated today. Net Rate recalculates instantly on this page, in indent auto-fill and on new POs;
-                past dates keep the discount that ruled then.
-              </p>
-              {dMakes.length === 0 && <div className="note amber">No priced categories yet — load a category into the Price Master first (CPVC pipes are round 1).</div>}
-              {dMakes.length > 0 && (
-                <>
-                  <label className="muted">Make</label>
-                  <select value={dMake} onChange={e => { setDMake(e.target.value); const m2 = dMakes.find(x => x.make === e.target.value); setDCat(m2?.categories[0]?.category || ""); setDPrev(null); }} style={{ width: "100%", marginBottom: 8 }}>
-                    {dMakes.map(m2 => <option key={m2.make} value={m2.make}>{m2.make}</option>)}
-                  </select>
-                  <label className="muted">Category</label>
-                  <select value={dCat} onChange={e => { setDCat(e.target.value); setDPrev(null); }} style={{ width: "100%", marginBottom: 8 }}>
-                    {dCats.map(c => <option key={c.category} value={c.category}>{c.category} — {c.items} priced item(s){c.pct != null ? ` · current ${c.pct}%` : " · no discount yet"}</option>)}
-                  </select>
-                  <label className="muted">New discount %</label>
-                  <input type="number" min="0" max="99.99" step="0.5" value={dPct} onChange={e => { setDPct(e.target.value); setDPrev(null); }} style={{ width: "100%", marginBottom: 10 }} placeholder={dSel?.pct != null ? "current " + dSel.pct + "%" : "e.g. 62"} />
-                  {!dPrev && <button className="primary" onClick={doPreview}>👁 Preview</button>}
-                  {dPrev && (
-                    <div className="note" style={{ background: "var(--copper-soft)", border: "1px solid var(--copper)", padding: 12, marginBottom: 8 }}>
-                      <b>{dPrev.make} · {dPrev.category}</b>: {dPrev.items} priced item(s) will move
-                      {dPrev.oldPct != null ? ` from ${dPrev.oldPct}%` : ""} to <b>{dPrev.pct}%</b> — Net Rates recalculate everywhere immediately.
-                      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                        <button className="primary" disabled={dBusy} onClick={doApply}>{dBusy ? "Applying…" : "✓ Confirm & apply"}</button>
-                        <button disabled={dBusy} onClick={() => setDPrev(null)}>Cancel</button>
+            <div style={{ maxWidth: 760, marginTop: 10 }}>{/* update322: Material Discount Management */}
+              <div className="card" style={{ padding: 16, marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
+                <div style={{ flex: "1 1 220px" }}>
+                  <div style={{ fontWeight: 800, fontSize: 16 }}>💸 Material Discount Management</div>
+                  <div className="muted" style={{ fontSize: 12 }}>Set a percentage per material range, or apply one globally. Every change is dated — history is kept.</div>
+                </div>
+                <div>
+                  <label className="muted" style={{ fontSize: 11.5 }}>Global discount %</label>
+                  <input type="number" min="0" max="99.99" step="0.5" value={dGlobal} onChange={e => { setDGlobal(e.target.value); setDConfirmAll(false); }}
+                    style={{ width: 110, fontSize: 15, fontWeight: 700, textAlign: "center" }} placeholder="e.g. 61" />
+                </div>
+                {!dConfirmAll && <button className="primary" disabled={dBusy || !allCats.length} onClick={() => { setDErr(""); setDMsg(""); validPct(dGlobal) ? setDConfirmAll(true) : setDErr("Enter a global discount between 0 and 99.99."); }}>✨ Apply to All</button>}
+                {dConfirmAll && (
+                  <span style={{ display: "inline-flex", gap: 8, alignItems: "center", background: "var(--copper-soft)", border: "1px solid var(--copper)", borderRadius: 10, padding: "8px 12px" }}>
+                    <b style={{ fontSize: 12.5 }}>Set {dGlobal}% on all {allCats.length} categories?</b>
+                    <button className="primary" disabled={dBusy} onClick={applyAll}>{dBusy ? "Applying…" : "✓ Confirm"}</button>
+                    <button disabled={dBusy} onClick={() => setDConfirmAll(false)}>Cancel</button>
+                  </span>
+                )}
+              </div>
+              {dMsg && <div className="note green" style={{ marginBottom: 8 }}>{dMsg}</div>}
+              {dErr && <div className="note red" style={{ marginBottom: 8 }}>{dErr}</div>}
+              {allCats.length === 0 && <div className="note amber">No priced categories yet — load a category into the Price Master first.</div>}
+              <div style={{ display: "grid", gap: 8 }}>
+                {allCats.map(c => {
+                  const k = c.make + "|" + c.category;
+                  const val = dEdits[k] ?? "";
+                  const changed = val !== "" && Number(val) !== Number(c.pct ?? -1);
+                  return (
+                    <div key={k} className="card" style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                      <div style={{ flex: "1 1 180px", minWidth: 0 }}>
+                        <div style={{ fontWeight: 800, letterSpacing: 0.3 }}>{c.category}</div>
+                        <div className="muted" style={{ fontSize: 11.5 }}>{c.make} · {c.items} priced item(s)</div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <input type="number" min="0" max="99.99" step="0.5" value={val} placeholder={c.pct != null ? String(c.pct) : "—"}
+                          onChange={e => { setDEdits(x => ({ ...x, [k]: e.target.value })); setDErr(""); }}
+                          style={{ width: 92, textAlign: "center", fontWeight: 700, fontSize: 15,
+                            border: changed ? "2px solid var(--copper)" : undefined, borderRadius: 8 }} />
+                        <span className="muted" style={{ fontWeight: 700 }}>%</span>
+                        {changed && <button className="primary" disabled={dBusy || !validPct(val)} onClick={() => applyOne(c)}>✓ Save</button>}
                       </div>
                     </div>
-                  )}
-                  {dMsg && <div className="note green" style={{ marginTop: 8 }}>{dMsg}</div>}
-                  {dErr && <div className="note red" style={{ marginTop: 8 }}>{dErr}</div>}
-                </>
+                  );
+                })}
+              </div>
+              {allCats.length > 0 && (
+                <div className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
+                  {allCats.length} material categories · current discounts shown as placeholders · new ranges appear here automatically when their prices are loaded.
+                </div>
               )}
             </div>
           )}
