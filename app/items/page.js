@@ -112,6 +112,7 @@ export default function ItemsPage() {
   // update322: Material Discount Management — per-row edits + Global "Apply to All"
   // (one inline confirm kept: a global % reprices every item in every category).
   const [dEdits, setDEdits] = useState({});          // "make|cat" -> typed %
+  const [dSearch, setDSearch] = useState("");        // update323: material search
   const [dGlobal, setDGlobal] = useState("");
   const [dConfirmAll, setDConfirmAll] = useState(false);
   const allCats = dMakes.flatMap(m => m.categories.map(c => ({ ...c, make: m.make })));
@@ -252,21 +253,21 @@ export default function ItemsPage() {
             <DataTable columns={columns} rows={rows} exportName="item_master" />}
         </div>}
           {tab === "discount" && isDirector && (
-            <div style={{ maxWidth: 760, marginTop: 10 }}>{/* update322: Material Discount Management */}
+            <div style={{ maxWidth: 860, marginTop: 10 }}>{/* update323: Material Discount Management — table + search */}
               <div className="card" style={{ padding: 16, marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
-                <div style={{ flex: "1 1 220px" }}>
+                <div style={{ flex: "1 1 240px" }}>
                   <div style={{ fontWeight: 800, fontSize: 16 }}>💸 Material Discount Management</div>
-                  <div className="muted" style={{ fontSize: 12 }}>Set a percentage per material range, or apply one globally. Every change is dated — history is kept.</div>
+                  <div className="muted" style={{ fontSize: 12 }}>Set discount percentage per material, or apply one to all. Changes are dated — history is kept.</div>
                 </div>
                 <div>
-                  <label className="muted" style={{ fontSize: 11.5 }}>Global discount %</label>
+                  <label className="muted" style={{ fontSize: 11.5 }}>Global Discount (%)</label>
                   <input type="number" min="0" max="99.99" step="0.5" value={dGlobal} onChange={e => { setDGlobal(e.target.value); setDConfirmAll(false); }}
-                    style={{ width: 110, fontSize: 15, fontWeight: 700, textAlign: "center" }} placeholder="e.g. 61" />
+                    style={{ width: 110, fontSize: 15, fontWeight: 700, textAlign: "center", display: "block" }} placeholder="e.g. 61" />
                 </div>
                 {!dConfirmAll && <button className="primary" disabled={dBusy || !allCats.length} onClick={() => { setDErr(""); setDMsg(""); validPct(dGlobal) ? setDConfirmAll(true) : setDErr("Enter a global discount between 0 and 99.99."); }}>✨ Apply to All</button>}
                 {dConfirmAll && (
                   <span style={{ display: "inline-flex", gap: 8, alignItems: "center", background: "var(--copper-soft)", border: "1px solid var(--copper)", borderRadius: 10, padding: "8px 12px" }}>
-                    <b style={{ fontSize: 12.5 }}>Set {dGlobal}% on all {allCats.length} categories?</b>
+                    <b style={{ fontSize: 12.5 }}>Set {dGlobal}% on all {allCats.length} materials?</b>
                     <button className="primary" disabled={dBusy} onClick={applyAll}>{dBusy ? "Applying…" : "✓ Confirm"}</button>
                     <button disabled={dBusy} onClick={() => setDConfirmAll(false)}>Cancel</button>
                   </span>
@@ -274,35 +275,67 @@ export default function ItemsPage() {
               </div>
               {dMsg && <div className="note green" style={{ marginBottom: 8 }}>{dMsg}</div>}
               {dErr && <div className="note red" style={{ marginBottom: 8 }}>{dErr}</div>}
-              {allCats.length === 0 && <div className="note amber">No priced categories yet — load a category into the Price Master first.</div>}
-              <div style={{ display: "grid", gap: 8 }}>
-                {allCats.map(c => {
-                  const k = c.make + "|" + c.category;
-                  const val = dEdits[k] ?? "";
-                  const changed = val !== "" && Number(val) !== Number(c.pct ?? -1);
-                  return (
-                    <div key={k} className="card" style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                      <div style={{ flex: "1 1 180px", minWidth: 0 }}>
-                        <div style={{ fontWeight: 800, letterSpacing: 0.3 }}>{c.category}</div>
-                        <div className="muted" style={{ fontSize: 11.5 }}>{c.make} · {c.items} priced item(s)</div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <input type="number" min="0" max="99.99" step="0.5" value={val} placeholder={c.pct != null ? String(c.pct) : "—"}
-                          onChange={e => { setDEdits(x => ({ ...x, [k]: e.target.value })); setDErr(""); }}
-                          style={{ width: 92, textAlign: "center", fontWeight: 700, fontSize: 15,
-                            border: changed ? "2px solid var(--copper)" : undefined, borderRadius: 8 }} />
-                        <span className="muted" style={{ fontWeight: 700 }}>%</span>
-                        {changed && <button className="primary" disabled={dBusy || !validPct(val)} onClick={() => applyOne(c)}>✓ Save</button>}
-                      </div>
+              {allCats.length === 0 && <div className="note amber">No priced materials yet — load a category into the Price Master first.</div>}
+              {allCats.length > 0 && (() => {
+                const q = dSearch.trim().toLowerCase();
+                const list = allCats.filter(c => !q || c.category.toLowerCase().includes(q) || c.make.toLowerCase().includes(q));
+                return (
+                  <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+                    <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--border)" }}>
+                      <input value={dSearch} onChange={e => setDSearch(e.target.value)} placeholder="🔍 Search material name…"
+                        style={{ width: "min(340px, 100%)" }} />
                     </div>
-                  );
-                })}
-              </div>
-              {allCats.length > 0 && (
-                <div className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
-                  {allCats.length} material categories · current discounts shown as placeholders · new ranges appear here automatically when their prices are loaded.
-                </div>
-              )}
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+                        <thead>
+                          <tr style={{ background: "var(--navy)", color: "#fff", textAlign: "left" }}>
+                            <th style={{ padding: "10px 14px", width: 44 }}>#</th>
+                            <th style={{ padding: "10px 14px" }}>Material Name</th>
+                            <th style={{ padding: "10px 14px", width: 190 }}>Discount (%)</th>
+                            <th style={{ padding: "10px 14px", width: 110 }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {list.map((c, idx) => {
+                            const k = c.make + "|" + c.category;
+                            const val = dEdits[k] ?? "";
+                            const changed = val !== "" && Number(val) !== Number(c.pct ?? -1);
+                            return (
+                              <tr key={k} style={{ borderBottom: "1px solid var(--border)" }}>
+                                <td style={{ padding: "9px 14px" }} className="muted">{idx + 1}</td>
+                                <td style={{ padding: "9px 14px" }}>
+                                  <div style={{ fontWeight: 800, letterSpacing: 0.3 }}>{c.category}</div>
+                                  <div className="muted" style={{ fontSize: 11 }}>{c.make} · {c.items} item(s)</div>
+                                </td>
+                                <td style={{ padding: "9px 14px" }}>
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                    <input type="number" min="0" max="99.99" step="0.5" value={val} placeholder={c.pct != null ? String(c.pct) : "—"}
+                                      onChange={e => { setDEdits(x => ({ ...x, [k]: e.target.value })); setDErr(""); }}
+                                      style={{ width: 84, textAlign: "center", fontWeight: 700, fontSize: 14.5,
+                                        border: changed ? "2px solid var(--copper)" : undefined, borderRadius: 8 }} />
+                                    <span className="muted" style={{ fontWeight: 700 }}>%</span>
+                                  </span>
+                                </td>
+                                <td style={{ padding: "9px 14px" }}>
+                                  {changed
+                                    ? <button className="primary" disabled={dBusy || !validPct(val)} onClick={() => applyOne(c)}>✓ Save</button>
+                                    : <span className="muted" style={{ fontSize: 11.5 }}>saved</span>}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {!list.length && <tr><td colSpan={4} className="muted" style={{ padding: 16 }}>No materials match "{dSearch}".</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 16, padding: "10px 14px", borderTop: "1px solid var(--border)", fontSize: 12 }} className="muted">
+                      <span>📊 Total Materials: <b>{allCats.length}</b></span>
+                      <span>％ Current Global: <b>{[...new Set(allCats.map(c => c.pct))].length === 1 && allCats[0].pct != null ? allCats[0].pct + "%" : "mixed"}</b></span>
+                      <span>New ranges appear automatically when their prices are loaded.</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
       </main>
