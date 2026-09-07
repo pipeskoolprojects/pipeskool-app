@@ -87,7 +87,7 @@ function Slip() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 13, margin: "12px 0" }}>
         <div><b>Worker:</b> {w.name} (ID {w.id})</div><div><b>Category:</b> {w.category} · {w.labour}</div>
         <div><b>Home site:</b> {w.site}</div><div><b>Mobile:</b> {w.mobile}</div>
-        <div><b>Daily wage:</b> {inr(w.wage)}</div>{w.otEligible ? <div><b>OT rate:</b> {inr(w.otRate)}/h (wage ÷ {w.stdHrs} h)</div> : <div><b>OT:</b> Not eligible</div>}
+        <div><b>Daily wage:</b> {w.staffPay ? <>Staff — salary {inr(w.staffPay.salary)}/month (≈ {inr(w.staffPay.perDay)}/day)</> : inr(w.wage)}</div>{/* update309 */}{w.otEligible ? <div><b>OT rate:</b> {inr(w.otRate)}/h (wage ÷ {w.stdHrs} h)</div> : <div><b>OT:</b> Not eligible</div>}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6, margin: "10px 0" }}>
         {[["Present", d.present], ["Half days", d.half], ["Absent", d.absent], ["Hours", fmtHM(d.totalHours)], ...(w.otEligible ? [["OT (approved)", fmtHM(d.otHours)]] : []), ["Sundays", d.sundays]].map(([l, v]) => (
@@ -103,6 +103,9 @@ function Slip() {
           {d.days.length === 0 && <tr><td colSpan={w.otEligible ? 9 : 8} style={{ padding: 8, color: "#777" }}>No attendance recorded this month.</td></tr>}
         </tbody>
       </table>
+      {w.staffPay && <div style={{ marginTop: 14, fontSize: 12.5, background: "#fff7ed", border: "1px solid #fdba74", borderRadius: 8, padding: "8px 12px" }}>
+        Staff member — pay is computed on the <b>Staff Salary</b> sheet (salary ÷ 30 per day, paid-leave &amp; Sunday rules applied there). The wage lines below are the labour view and stay ₹0 by design.
+      </div>}{/* update309 */}
       <table style={{ marginTop: 14, fontSize: 13, borderCollapse: "collapse", minWidth: 320 }}>
         <tbody>
           <tr><td style={{ padding: "3px 10px 3px 0" }}>Days pay ({d.present} + {d.half}×½) × {inr(w.wage)}</td><td style={{ textAlign: "right" }}>{inr(d.earned)}</td></tr>
