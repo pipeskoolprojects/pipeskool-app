@@ -41,7 +41,8 @@ function ProfileSheet({ staffId, name, onClose, onOpen }) {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 700 }}>{inr(t.amount)} — {t.type}</div>
                   <div className="muted" style={{ fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.what}{t.site ? " · " + t.site : ""} · {t.date}</div>
-                  {actionable && <div style={{ fontSize: 11, color: t.status === "queried" ? "#b45309" : "var(--muted)", fontWeight: 700 }}>{t.status === "queried" ? "❓ Queried — tap to fix" : "✎ Tap to edit"}</div>}
+                  {t.status === "queried" && t.edit?.query && <div style={{ fontSize: 11.5, color: "#b45309", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>❓ {t.edit.query}</div>}{/* update313: the approver's reason, right on the card */}
+                  {actionable && <div style={{ fontSize: 11, color: t.status === "queried" ? "#b45309" : "var(--muted)", fontWeight: 700 }}>{t.status === "queried" ? "Tap to fix" : "✎ Tap to edit"}</div>}
                 </div>
                 <span className={"badge " + badge(t.status)} style={{ alignSelf: "center", whiteSpace: "nowrap" }}>{t.status}</span>
               </div>
@@ -377,6 +378,7 @@ export default function MoneyScreen() {
         <div onClick={() => setEditExp(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.6)", display: "flex", alignItems: "flex-end", zIndex: 60 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "16px 16px 0 0", width: "100%", padding: 18, maxHeight: "85vh", overflowY: "auto" }}>
             <h3 style={{ marginTop: 0 }}>✎ Edit expense <span className="muted" style={{ fontSize: 12 }}>(until approved)</span></h3>
+            {editExp.status === "queried" && <div className="note amber" style={{ fontSize: 12.5 }}>❓ <b>Approver's query:</b> {editExp.query || "No reason was written — fix what you can and resubmit."}</div>}{/* update313 */}
             {err && <div className="note red">{err}</div>}
             <label className="muted" style={{ fontSize: 12 }}>Amount ₹</label>
             <input inputMode="decimal" style={{ width: "100%", marginBottom: 8 }} value={editExp.amount} onChange={e2 => setEditExp(x => ({ ...x, amount: e2.target.value }))} />
