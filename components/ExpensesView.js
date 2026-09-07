@@ -316,6 +316,12 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
   // returns queue + person ledger (update167)
   const [pettyReturns, setPettyReturns] = useState([]);
   const [ledgerFor, setLedgerFor] = useState("");        // "userId|name"
+  // update312: switching tabs closes every open detail view / overlay from the previous
+  // tab — a stale "Petty ledger — [name]" panel must never overlap the next tab's content.
+  const switchTab = k => {
+    setLedgerFor(""); setProfile(null); setEditExp(null); setBillsFor(null); setViewExp(null); setClaimF(null);
+    setMtab(k);
+  };
   const [ledgerRows, setLedgerRows] = useState(null);
   const [lf, setLf] = useState({ site: "all", from: "", to: "", category: "all", type: "all" });
   useEffect(() => { getPettyReturnQueue(scope).then(setPettyReturns); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -363,7 +369,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
             ["🔺 Outstanding advances", inr(advTotals.out), "to be recovered", advTotals.out > 0 ? "var(--red)" : "var(--green)", "advled"],
             ["⏳ Advance requests pending", inr(sumBy(advPending, a => a.amount)), advPending.length + " waiting", advPending.length ? "var(--amber)" : null, "advreq"]].map(([l, v, sub2, c, sec]) => (
             <div key={l} className="panel" role="button" tabIndex={0} style={{ padding: "10px 14px", margin: 0, cursor: "pointer" }}
-              onClick={() => setMtab(sec)}>
+              onClick={() => switchTab(sec)}>
               <div className="muted" style={{ fontSize: 11.5 }}>{l}</div>
               <div style={{ fontWeight: 800, fontSize: 19, color: c || "var(--text)" }}>{v}</div>
               <div className="muted" style={{ fontSize: 10.5 }}>{sub2} · <span style={{ color: "var(--copper)" }}>View details →</span></div>
@@ -378,7 +384,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
               so it can never be scrolled away, clipped, or overlapped at any width or zoom. */}
           <div style={{ flex: 1, minWidth: 0, display: "flex", gap: 2, overflowX: "auto", whiteSpace: "nowrap" }}>
             {MT.map(([k, ic, l, cnt]) => { const n = cnt(); return (
-              <button key={k} type="button" onClick={() => setMtab(k)}
+              <button key={k} type="button" onClick={() => switchTab(k)}
                 style={embedded
                   ? { flexShrink: 0, borderRadius: 999, padding: "6px 13px", fontSize: 12.5, cursor: "pointer", margin: "6px 3px",
                       border: mtab === k ? "2px solid var(--copper)" : "1px solid var(--border)",
