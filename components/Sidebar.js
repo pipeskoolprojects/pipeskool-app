@@ -94,7 +94,7 @@ export default function Sidebar() {
     if (!s) { router.push("/login"); return; }
     setSession(s);
     // live rights: re-pull from DB so Access Rights changes apply without re-login
-    refreshSessionRights().then(ns => { if (ns) setSession(ns); else router.push("/login"); });
+    refreshSessionRights().then(ns => { if (ns) setSession(ns); else router.push("/login"); }).catch(() => {});   // update311: a thrown refresh never logs out
   }, [router]);
 
   // auto-expand the group that holds the current page
