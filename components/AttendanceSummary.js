@@ -4,7 +4,7 @@
 // that site's rows. Codes: P = present (1), H = half day (0.5), A = absent/no row (0),
 // WO = weekly off (from Settings), HOL = company holiday. Read live from attendance.
 import { Fragment, useEffect, useState } from "react";
-import { supabase, isDemo } from "@/lib/supabase";
+import { supabase, isDemo, fetchAll } from "@/lib/supabase";   // update320
 import { getSession, can } from "@/lib/auth";   // update297
 import { getPayrollSettings, weeklyOffDates, isoLocal, monthBounds } from "@/lib/payrollSettings";   // update279
 import { getHolidaysBetween } from "@/lib/holidays";
@@ -31,11 +31,13 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
     supabase.from("app_users").select("mobile").eq("is_active", true),
   ]);
   const staffMob = new Set((staffRows || []).map(u => String(u.mobile)));
-  let q = supabase.from("attendance")
+  const mk = () => { let q = supabase.from("attendance")
     .select("worker_id, site_id, att_date, status, review_status, ot_hours, ot_approved, ot_approved_hours, sites!attendance_site_id_fkey(name), workers(full_name, mobile, category, labour_type)")   // update278: OT row
-    .gte("att_date", from).lt("att_date", to).limit(20000);
+    .gte("att_date", from).lt("att_date", to).order("id");
   if (siteId && siteId !== "all") q = q.eq("site_id", siteId);
-  const { data, error } = await q;
+    return q; };   // update320: factory — a fresh query per page
+  const { data, error } = await fetchAll(mk);   // update320: no row ceiling — pages until complete
+  
   if (error) throw new Error("Could not load attendance: " + error.message);
   const wo = new Set(settings.wo_paid ? weeklyOffDates(from, to, settings.wo_weekday) : []);
   const hol = {}; (hols || []).forEach(h => { hol[h.on_date] = h.name; });
