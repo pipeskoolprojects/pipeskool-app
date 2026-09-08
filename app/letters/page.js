@@ -221,7 +221,10 @@ export default function LettersPage() {
   }
 
   return (
-    <>
+    // update329b: .layout is the flex shell (display:flex; height:100vh; overflow:hidden).
+    // Without it .sidebar and .main — both height:100vh, overflow-y:auto — stack as block
+    // siblings: two nested scrollers and the page content pushed a screen down.
+    <div className="layout">
       <Sidebar />
       <main className="main">
         <div className="page-head">
@@ -479,6 +482,6 @@ export default function LettersPage() {
 
         {hist && <HistoryList title={hist.title} rows={hist.rows} onClose={() => setHist(null)} />}
       </main>
-    </>
+    </div>
   );
 }
