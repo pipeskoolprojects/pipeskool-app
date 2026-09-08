@@ -4,7 +4,7 @@
 // kind = payroll (consolidated per worker) | sites (site summary dashboard) | site (single site: attendance + payroll + site line)
 import { useEffect, useState } from "react";
 import { loadPayrollSummary } from "@/lib/payrollSummary";
-import { loadAttendanceGrid, cellCode, otOf } from "@/components/AttendanceSummary";
+import { loadAttendanceGrid, cellCode, cellValue, otOf } from "@/components/AttendanceSummary";   // update332: numeric cells
 import { inr } from "@/lib/data";
 import Logo from "@/components/Logo";   // update331c: the real logo, not a text wordmark
 
@@ -33,13 +33,13 @@ export default function WagesPrint() {
   const Grid = ({ grid, kind }) => !grid || !grid.rows.length ? null : (
     <>
       <Band>MONTHLY ATTENDANCE — {siteName.toUpperCase()} · {kind === "staff" ? "STAFF" : "LABOUR"}</Band>
-      <Note>P = Present (1.0) · H = Half day (0.5; Sunday half = full) · A = Absent · HOL = holiday · OT row = approved hours</Note>
+      <Note>1 = Present · 0.5 = Half day (Sunday half counts as a full paid day) · 0 = Absent · HOL = company holiday · OT row = approved hours</Note>
       <table style={{ borderCollapse: "collapse", width: "100%" }}>
         <thead><tr><th style={{ ...th, textAlign: "left" }}>Worker</th>{grid.days.map(dd => <th key={dd.iso} style={{ ...th, textAlign: "center", padding: "3px 1px", fontSize: 8 }}>{String(dd.day).padStart(2, "0")}<br />{dd.wd}</th>)}<th style={th}>Days</th><th style={th}>OT</th></tr></thead>
         <tbody>{grid.rows.map(r => (
           <>
             <tr key={r.key}><td style={{ ...td, textAlign: "left", fontWeight: 600, whiteSpace: "nowrap" }}>{r.worker}</td>
-              {grid.days.map(dd => { const c = cellCode(r, dd, grid.wo, grid.hol); return <td key={dd.iso} style={{ ...td, textAlign: "center", padding: "2px 1px", fontSize: 9, background: ATT[c] || "#fff" }}>{c}</td>; })}
+              {grid.days.map(dd => { const c = cellCode(r, dd, grid.wo, grid.hol); return <td key={dd.iso} style={{ ...td, textAlign: "center", padding: "2px 1px", fontSize: 9, background: ATT[c] || "#fff" }}>{cellValue(c)}</td>; })}
               <td style={{ ...td, fontWeight: 700 }}>{r.daysPaid}</td><td style={td}>{r.otTotal || ""}</td></tr>
             {r.otTotal > 0 && <tr key={r.key + "ot"}><td style={{ ...td, textAlign: "left", fontSize: 9, fontStyle: "italic", color: "#7c2d12" }}>OT (h)</td>{grid.days.map(dd => <td key={dd.iso} style={{ ...td, textAlign: "center", fontSize: 8, color: "#7c2d12", padding: "1px" }}>{otOf(r, dd) || ""}</td>)}<td colSpan={2}></td></tr>}
           </>
