@@ -14,15 +14,23 @@
 // `height` keeps its old meaning — the visual size of the wordmark — so all nine
 // existing call sites render at the size they always did. LOGO_RATIO converts that
 // to the height of the full lockup, which includes the rules above the word.
+// update331c: TWO official files, same artwork. The wordmark is knocked out to white
+// for dark surfaces; the orange rules and every outline are byte-identical between them.
+// This is the standard light/dark pair of one logo, not a recolour or a second logo —
+// nothing else about the mark changes, and neither file carries a background.
+//   variant "dark"  -> #0F1419 wordmark, for white document pages (the default)
+//   variant "white" -> #FFFFFF wordmark, for the navy sidebar and any dark background
+const SRC = { dark: "/pipeskool-logo.svg", white: "/pipeskool-logo-white.svg" };
+
 const LOGO_RATIO = 1.32;      // full lockup height / wordmark cap size
 const ASPECT = 450.6 / 113.6; // from the official file's artwork bounds
 
-export default function Logo({ height = 30, align = "left", className, style }) {
+export default function Logo({ height = 30, align = "left", variant = "dark", className, style }) {
   const h = Math.round(height * LOGO_RATIO);
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src="/pipeskool-logo.svg"
+      src={SRC[variant] || SRC.dark}
       alt="Pipeskool"
       className={className}
       width={Math.round(h * ASPECT)}
