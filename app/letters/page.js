@@ -14,6 +14,7 @@
 // letter records that it was hand-edited.
 import { useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
+import Logo from "@/components/Logo";   // update331c: preview shows the same letterhead that prints
 import { getSession, canAnySite } from "@/lib/auth";
 import {
   getCompany, saveCompany, getClauses, saveClause, getClauseHistory,
@@ -110,7 +111,8 @@ function Paper({ heading, text, company }) {
   return (
     <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 10, padding: "24px 28px" }}>
       <div style={{ borderBottom: "3px solid " + ORANGE, paddingBottom: 8, marginBottom: 16 }}>
-        <div style={{ fontWeight: 800, fontSize: 15, color: NAVY }}>{company?.name || "PIPESKOOL PROJECTS PVT LTD."}</div>
+        <Logo height={17} />
+        <div style={{ fontWeight: 800, fontSize: 15, color: NAVY, marginTop: 6 }}>{company?.name || "PIPESKOOL PROJECTS PVT LTD."}</div>
         <div className="muted" style={{ fontSize: 10.5, fontStyle: "italic" }}>{company?.address}</div>
       </div>
       <div style={{ textAlign: "center", fontWeight: 800, fontSize: 15, color: NAVY, letterSpacing: "0.02em", marginBottom: 16 }}>{heading}</div>

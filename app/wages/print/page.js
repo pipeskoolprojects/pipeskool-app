@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { loadPayrollSummary } from "@/lib/payrollSummary";
 import { loadAttendanceGrid, cellCode, otOf } from "@/components/AttendanceSummary";
 import { inr } from "@/lib/data";
+import Logo from "@/components/Logo";   // update331c: the real logo, not a text wordmark
 
 const ATT = { P: "#e8f6ee", H: "#fff4cc", A: "#fde8e8", WO: "#eef2f7", HOL: "#fce7f3" };
 const Band = ({ children }) => <div style={{ background: "#1f2a4b", color: "#fff", fontWeight: 800, padding: "8px 12px", marginTop: 14, fontSize: 13 }}>{children}</div>;
@@ -78,7 +79,7 @@ export default function WagesPrint() {
         <button onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign("/wages"); }}>← Back</button>
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "3px solid #FF7A1A", paddingBottom: 8 }}>
-        <div><div style={{ fontSize: 22, fontWeight: 900, color: "#FF7A1A" }}>Pipeskool</div><div style={{ fontSize: 11, color: "#6b7280" }}>Pipeskool Projects Pvt. Ltd. · Specialist Plumbing & Piping Contractors · Ahmedabad</div></div>
+        <div><Logo height={20} /><div style={{ fontSize: 11, color: "#6b7280", marginTop: 5 }}>Pipeskool Projects Pvt. Ltd. · Specialist Plumbing & Piping Contractors · Ahmedabad</div></div>
         <div style={{ textAlign: "right", fontSize: 12 }}><b>{p.kind === "sites" ? "Site Summary Dashboard" : p.kind === "site" ? "Site Report" : "Payroll Summary"}</b><br />{siteName} · {p.month}</div>
       </div>
       {err && <div style={{ color: "#b91c1c", padding: 10 }}>{err}</div>}

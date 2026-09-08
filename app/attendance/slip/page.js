@@ -7,6 +7,7 @@ import { getWorkerMonth } from "@/lib/mobile";
 import { fmtHM } from "@/lib/payroll";
 import { supabase, isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
+import Logo from "@/components/Logo";   // update331c
 import { setPayoutStatutory } from "@/lib/payroll";
 
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -61,7 +62,8 @@ function Slip() {
       <style>{`@media print { button { display: none } body { background: #fff } }`}</style>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "2px solid #222", paddingBottom: 10 }}>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 800 }}>PIPESKOOL PROJECTS PVT. LTD.</div>
+          <Logo height={19} />
+          <div style={{ fontSize: 20, fontWeight: 800, marginTop: 6 }}>PIPESKOOL PROJECTS PVT. LTD.</div>
           <div style={{ fontSize: 12, color: "#555" }}>Specialist Plumbing &amp; Piping Contractors · Ahmedabad</div>
         </div>
         <div style={{ textAlign: "right" }}>
