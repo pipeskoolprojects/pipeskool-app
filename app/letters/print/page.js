@@ -62,9 +62,7 @@ export default function LetterPrint() {
 
       {/* -------- letterhead -------- */}
       <div style={{ display: "flex", gap: 18, alignItems: "flex-start", borderBottom: "3px solid #FF7A1A", paddingBottom: 10 }}>
-        <div style={{ border: "1px solid #d7dbe0", borderRadius: 4, padding: "10px 14px", background: "#f7f8f9" }}>
-          <Logo height={26} />
-        </div>
+        <Logo height={26} />
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 800, fontSize: 19, color: "#1f2a4b", letterSpacing: "-0.01em" }}>{c.name}</div>
           <div style={{ fontSize: 11.5, color: "#6b7280", fontStyle: "italic", lineHeight: 1.5, marginTop: 2 }}>{c.address}</div>
