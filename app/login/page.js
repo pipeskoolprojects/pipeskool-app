@@ -84,7 +84,7 @@ export default function Login() {
     <div className="login-wrap">
       <form className="login-card" onSubmit={mode === "start" ? handleNext : mode === "set" ? handleCreate : handleLogin}>
         <div style={{ marginBottom: 18 }}>
-          <Logo height={30} color="#FF7A1A" wordColor="#0F1419" />
+          <Logo height={30} />
           <p style={{ margin: "10px 0 0", color: "var(--muted)", fontSize: 13 }}>Site Management</p>
         <div style={{ display: "flex", gap: 8, margin: "10px 0 2px" }}>
           {[["staff", "👷 Staff Login"], ["director", "🎩 Director Login"]].map(([k, l]) => (

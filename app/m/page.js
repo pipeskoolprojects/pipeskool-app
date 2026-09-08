@@ -171,7 +171,7 @@ export default function PunchScreen() {
       </div>
       <div className="m-body" style={{ textAlign: "center" }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
-          <Logo height={20} color="#FF7A1A" wordColor="#0F1419" align="center" />
+          <Logo height={20} align="center" />
         </div>
         {mQuote && <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 8px 8px", fontStyle: "italic" }}>💡 {mQuote}</div>}
         {isDemo && <div className="note amber">Demo mode — punches save on this phone only.</div>}

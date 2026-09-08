@@ -43,7 +43,7 @@ export default function MobileLogin() {
     <div className="login-wrap">
       <form className="login-card" onSubmit={login}>
         <div style={{ marginBottom: 18 }}>
-          <Logo height={30} color="#FF7A1A" wordColor="#0F1419" />
+          <Logo height={30} />
           <p style={{ margin: "10px 0 0", color: "var(--muted)", fontSize: 13 }}>{t(lang, "worker_app")}</p>
           <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
             {LANGS.map(([code, label]) => (
