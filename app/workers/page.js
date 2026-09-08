@@ -169,7 +169,7 @@ export default function WorkersPage() {
                         : Number(u.monthly_salary) > 0
                           ? <span className="badge warn">Pending</span>
                           : <span className="muted">—</span>}</td>
-                      <td style={{ textAlign: "right" }}>{staffAdmin && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const us = await getUserSites(u.id); const ids = us.map(x => Number(x.id)); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible, annual_paid_leaves: u.annual_paid_leaves || "", joining_date: u.joining_date || "", requires_punch: u.requires_punch !== false, bank_account_no: u.bank_account_no || "", bank_ifsc: u.bank_ifsc || "", pan_no: u.pan_no || "", siteIds: ids, origSiteIds: [...ids] }); }}>✎ Edit</button>}</td>
+                      <td style={{ textAlign: "right" }}>{staffAdmin && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const us = await getUserSites(u.id); const ids = us.map(x => Number(x.id)); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible, annual_paid_leaves: u.annual_paid_leaves || "", joining_date: u.joining_date || "", requires_punch: u.requires_punch !== false, bank_account_no: u.bank_account_no || "", bank_ifsc: u.bank_ifsc || "", pan_no: u.pan_no || "", last_working_day: u.last_working_day || "", exit_reason: u.exit_reason || "", siteIds: ids, origSiteIds: [...ids] }); }}>✎ Edit</button>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -204,6 +204,15 @@ export default function WorkersPage() {
                       title="Grants this worker the right to Mark present for OTHERS at their site(s), with the same mandatory live photo. Revoke any time by unticking — effective immediately. Needs a login linked to this worker (same mobile).">
                       <input type="checkbox" checked={!!modal.proxy_authority} onChange={e => set("proxy_authority", e.target.checked)} style={{ accentColor: "var(--copper)" }} /> 🛡 Proxy Attendance Authority
                     </label>
+                  </div>
+                  {/* update329: dates the Labour letters read (Engagement / Experience / Relieving / Termination) */}
+                  <div style={{ flex: "1 1 100%", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", borderTop: "1px solid var(--border)", paddingTop: 10, marginTop: 4 }}>
+                    <div style={{ width: 145 }}><label className="muted">Joining date</label>
+                      <input type="date" style={{ width: "100%" }} value={modal.joining_date || ""} onChange={e => set("joining_date", e.target.value)} /></div>
+                    <div style={{ width: 145 }}><label className="muted">Last working day</label>
+                      <input type="date" style={{ width: "100%" }} value={modal.last_working_day || ""} onChange={e => set("last_working_day", e.target.value)} /></div>
+                    <div style={{ flex: 1, minWidth: 170 }}><label className="muted">Reason for exit</label>
+                      <input style={{ width: "100%" }} placeholder="only for leavers" value={modal.exit_reason || ""} onChange={e => set("exit_reason", e.target.value)} /></div>
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>
@@ -314,6 +323,15 @@ export default function WorkersPage() {
                     </label>
                   </div>
                   <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Salary 0 = not on the Staff Salary sheet · joining date only for staff who joined after 1 April · leaves e.g. 20.</div>
+                  {/* update329: exit details — Relieving, Experience and Termination letters read these.
+                      Unticking Active does NOT record a date, so without this the letters have nothing to print. */}
+                  <div style={{ fontWeight: 700, fontSize: 12.5, margin: "12px 0 6px" }}>Exit details <span className="muted" style={{ fontWeight: 400 }}>(only for leavers — used by Relieving / Experience / Termination letters)</span></div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+                    <div style={{ width: 145 }}><label className="muted">Last working day</label>
+                      <input type="date" style={{ width: "100%" }} value={smodal.last_working_day || ""} onChange={e => sset("last_working_day", e.target.value)} /></div>
+                    <div style={{ flex: 1, minWidth: 180 }}><label className="muted">Reason</label>
+                      <input style={{ width: "100%" }} placeholder="e.g. Resignation" value={smodal.exit_reason || ""} onChange={e => sset("exit_reason", e.target.value)} /></div>
+                  </div>
                   <label style={{ display: "inline-flex", gap: 7, alignItems: "center", fontSize: 13, cursor: "pointer", marginTop: 8 }}>
                     <input type="checkbox" checked={smodal.requires_punch !== false} onChange={e => sset("requires_punch", e.target.checked)} style={{ accentColor: "var(--copper)" }} />
                     Marks attendance (punch) — untick for pure office/billing staff; no worker profile will be created
