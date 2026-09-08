@@ -134,14 +134,12 @@ export default function Sidebar() {
       <button className="sidebar-hide" title="Hide menu (more screen space)" onClick={() => toggleHidden(true)}>⟨</button>
       <div className="brand">
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {/* update331: the official wordmark is near-black (#0F1419), so on the navy
-              sidebar it sits on a white plate — exactly as it does on the company
-              letterhead. The alternative would be recolouring the logo, which is not
-              allowed. Say the word if you'd rather have an official white/knockout
-              version of the file instead. */}
-          <span style={{ background: "#fff", borderRadius: 6, padding: "6px 9px", display: "inline-flex" }}>
-            <Logo height={20} />
-          </span>
+          {/* update331b: Director instruction — the logo renders on a transparent
+              background with no plate, box, border or shadow anywhere. NOTE: the official
+              wordmark is near-black (#0F1419) and this sidebar is navy, so it will read
+              faintly here until an official white/knockout version of the logo file
+              exists. Recolouring this file is not permitted. */}
+          <Logo height={22} />
           <span style={{ fontSize: 10, fontWeight: 400, color: "#6E7780", letterSpacing: "0.02em" }}>Site Management Software</span>
         </div>
       </div>
