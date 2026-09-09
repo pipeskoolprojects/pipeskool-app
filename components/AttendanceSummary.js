@@ -1,24 +1,24 @@
 "use client";
-// update332: FULL ATTENDANCE SUMMARY — the Excel-style monthly grid.
+// update333: FULL ATTENDANCE SUMMARY — tabbed, de-duplicated, expandable.
 //
-// One row per (worker, site): a person who worked three sites this month is three rows,
-// under the same name, exactly as the reference workbook does it. Nothing is merged.
+// THE DUPLICATE PROBLEM 332 HAD: rows were grouped by (person, site) and then split into
+// sections by the SITE on each row. Satyendra Rai has attendance at HEAD OFFICE and at
+// ATOS, so he appeared once in each section — the same man twice on one screen.
 //
-// update332 changes:
-//   · VALUES ARE NUMERIC — 1 = present, 0.5 = half day, 0 = absent. Holidays keep the
-//     HOL marker and their own tint so the day is unmistakable; payroll applies the
-//     holiday rule itself, the grid only shows it.
-//   · TWO SECTIONS — Office Staff, and Site Staff & Workers. A row is "office" when its
-//     site is an office site (see OFFICE_SITE_RE).
-//   · FILTERS — name (instant), ID/mobile, site, role/category, attendance state, OT.
-//     They combine; every filter narrows both sections at once.
-//   · CLICK A NAME — opens that person's whole month: every site they worked, days and
-//     OT per site, the totals, and the real payroll row for the month if one has been
-//     generated. No payroll number is invented here.
+// 333 groups by PERSON. Each employee appears exactly ONCE, in exactly one tab, decided
+// by their MASTER ASSIGNMENT (user_sites for staff, workers.site_id for labour), not by
+// where they happened to punch:
+//     assigned to Head Office  ->  OFFICE STAFF tab
+//     everyone else            ->  SITE STAFF & WORKERS tab
+// Their sites hang underneath, one expandable row per site, each with its own month of
+// dates — so you can still see which site he was present at on which day. No attendance
+// record is dropped, merged or counted twice.
 //
-// NOT changed by 332: the payroll engines, the pay rules, self-punch, the supervisor
-// muster, proxy attendance, or the cell-edit gate (Director / attendance-manage, still
-// re-checked server-side by fn_grid_set_status on every save).
+// Cell values: 1 = present · 0.5 = half day · 0 = absent · L = approved leave · HOL = company
+// holiday. Payroll applies the holiday and Sunday rules itself; the grid only shows them.
+//
+// NOT changed by 333: the payroll engines, the pay rules, self-punch, the supervisor muster,
+// proxy attendance, or the cell-edit gate (fn_grid_set_status re-checks rights server-side).
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { supabase, isDemo, fetchAll } from "@/lib/supabase";   // update320
 import { getSession, can } from "@/lib/auth";   // update297
@@ -27,14 +27,13 @@ import { getHolidaysBetween } from "@/lib/holidays";
 import { exportAttendanceXlsx } from "@/lib/payrollExport";   // update278: styled workbook
 
 const CODE = { present: "P", half_day: "H", absent: "A" };
-const COLOR = { P: "#e8f6ee", H: "#fff4cc", A: "#fde8e8", WO: "#eef2f7", HOL: "#fce7f3", "": "#fff" };
-// update332: what the cell PRINTS. The internal code stays P/H/A so the edit cycle, the
-// export and wages/print keep working unchanged.
-const NUM = { P: "1", H: "0.5", A: "0", WO: "0", HOL: "HOL", "": "0" };
+const COLOR = { P: "#e8f6ee", H: "#fff4cc", A: "#fde8e8", L: "#e6f0fd", WO: "#eef2f7", HOL: "#fce7f3", "": "#fff" };
+// What the cell PRINTS. The internal code stays P/H/A so the edit cycle, the export and
+// /wages/print keep working unchanged.
+const NUM = { P: "1", H: "0.5", A: "0", L: "L", WO: "0", HOL: "HOL", "": "0" };
 
-// update332: which sites count as "office" for the Office Staff section. Head office is a
-// site row in Site Master (SITE-12 "The Office" in the reference workbook), so it is matched
-// by name. Ask the Director to confirm before this becomes a stored flag on sites.
+// Which sites count as "office". Head office is a site row in Site Master, so it is matched
+// by name until the Director confirms whether this should become a stored flag on sites.
 const OFFICE_SITE_RE = /head\s*office|^\s*the\s+office\s*$|^\s*office\s*$/i;
 
 function monthDays(monthStr) {
@@ -46,18 +45,41 @@ function monthDays(monthStr) {
   });
 }
 
+function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ") : ""; }
+function prettyRole(code) { return String(code || "").split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "); }
+function eachDate(from, to, fn) {
+  const a = new Date(from + "T00:00:00"), b = new Date(to + "T00:00:00");
+  for (let d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) fn(isoLocal(d));
+}
+
 export async function loadAttendanceGrid(monthStr, siteId, kind) {
   const days = monthDays(monthStr);
   const { from, to } = monthBounds(monthStr);   // update279: the old UTC math made from == to in IST -> empty grid
-  if (isDemo) return { days, rows: [], wo: new Set(), hol: {} };
-  const [settings, hols, { data: staffRows }] = await Promise.all([
+  if (isDemo) return { days, rows: [], people: [], wo: new Set(), hol: {} };
+  const [settings, hols, { data: staffRows }, { data: siteRows }, { data: userSites }, { data: leaves }] = await Promise.all([
     getPayrollSettings(), getHolidaysBetween(from, to),
-    // update332: role comes along so the grid can show a designation and filter on it
     supabase.from("app_users").select("id, mobile, role, monthly_salary").eq("is_active", true),
+    supabase.from("sites").select("id, name"),
+    supabase.from("user_sites").select("user_id, site_id"),                       // update333: master assignment
+    supabase.from("leave_requests").select("staff_id, from_date, to_date, status, leave_type")
+      .eq("status", "approved").lte("from_date", to).gte("to_date", from),        // update333: L in the grid
   ]);
+
+  // office sites, by name, from Site Master
+  const officeSiteIds = new Set((siteRows || []).filter(s => OFFICE_SITE_RE.test(s.name || "")).map(s => s.id));
+
   const staffBy = {}; (staffRows || []).forEach(u => { staffBy[String(u.mobile)] = u; });
+  // uid -> assigned site ids
+  const assigned = {}; (userSites || []).forEach(r => { (assigned[r.user_id] = assigned[r.user_id] || new Set()).add(r.site_id); });
+  // uid -> set of ISO dates on approved leave
+  const leaveBy = {}; (leaves || []).forEach(l => {
+    const s = l.from_date < from ? from : l.from_date;
+    const e = l.to_date >= to ? days[days.length - 1].iso : l.to_date;
+    eachDate(s, e, iso => { (leaveBy[l.staff_id] = leaveBy[l.staff_id] || new Set()).add(iso); });
+  });
+
   const mk = () => { let q = supabase.from("attendance")
-    .select("worker_id, site_id, att_date, status, review_status, ot_hours, ot_approved, ot_approved_hours, sites!attendance_site_id_fkey(name), workers(full_name, mobile, category, labour_type, daily_wage)")   // update278: OT row
+    .select("worker_id, site_id, att_date, status, review_status, ot_hours, ot_approved, ot_approved_hours, sites!attendance_site_id_fkey(name), workers(full_name, mobile, category, labour_type, daily_wage, site_id)")   // update278: OT row
     .gte("att_date", from).lt("att_date", to).order("id");
   if (siteId && siteId !== "all") q = q.eq("site_id", siteId);
     return q; };   // update320: factory — a fresh query per page
@@ -66,6 +88,7 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
   if (error) throw new Error("Could not load attendance: " + error.message);
   const wo = new Set(settings.wo_paid ? weeklyOffDates(from, to, settings.wo_weekday) : []);
   const hol = {}; (hols || []).forEach(h => { hol[h.on_date] = h.name; });
+
   const map = {};
   (data || []).forEach(a => {
     const mob = String(a.workers?.mobile);
@@ -74,19 +97,18 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
     if (kind === "staff" && !isStaff) return;
     if (kind === "labour" && isStaff) return;
     const key = a.worker_id + ":" + a.site_id;
-    const siteName = a.sites?.name || ("Site " + a.site_id);
     const r = map[key] = map[key] || {
       key, wid: a.worker_id, sid: a.site_id,
-      worker: a.workers?.full_name || ("#" + a.worker_id), site: siteName,
+      worker: a.workers?.full_name || ("#" + a.worker_id), site: a.sites?.name || ("Site " + a.site_id),
       category: a.workers?.category || "", cells: {}, p: 0, h: 0, a: 0, review: 0,
-      // update332: classification + filter fields
       isStaff, mobile: mob === "undefined" ? "" : mob,
-      uid: su?.id || null,   // update332: app_users.id — staff_payouts is keyed by THIS, not workers.id
+      uid: su?.id || null,                        // app_users.id — staff_payouts is keyed by THIS
       role: su?.role || "",
       designation: isStaff ? prettyRole(su.role) : cap(a.workers?.category || ""),
       dailyWage: Number(a.workers?.daily_wage) || 0,
       monthlySalary: Number(su?.monthly_salary) || 0,
-      group: OFFICE_SITE_RE.test(siteName) ? "office" : (isStaff ? "site_staff" : "labour"),
+      masterSite: isStaff ? null : (a.workers?.site_id ?? null),
+      leave: (isStaff && su?.id && leaveBy[su.id]) || null,   // update333
     };
     const c = CODE[a.status] || "";
     r.cells[a.att_date] = c;
@@ -99,13 +121,34 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
     const sun = new Date(a.att_date + "T00:00:00").getDay() === 0;
     r.paid = (r.paid || 0) + (c === "P" ? 1 : c === "H" ? (settings.sunday_half_as_full && sun ? 1 : 0.5) : 0);
   });
+
   const rows = Object.values(map).map(r => ({ ...r, daysPaid: r.paid || 0, otTotal: +Object.values(r.ot || {}).reduce((n, v) => n + v, 0).toFixed(2) }))
     .sort((x, y) => x.site.localeCompare(y.site) || x.worker.localeCompare(y.worker));
-  return { days, rows, wo, hol, settings };
-}
 
-function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ") : ""; }
-function prettyRole(code) { return String(code || "").split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "); }
+  // ---- update333: ONE entry per person, tab decided by the master assignment ----
+  const pmap = {};
+  rows.forEach(r => {
+    const p = pmap[r.wid] = pmap[r.wid] || {
+      wid: r.wid, worker: r.worker, isStaff: r.isStaff, mobile: r.mobile, uid: r.uid,
+      designation: r.designation, category: r.category, rows: [],
+      p: 0, h: 0, a: 0, review: 0, daysPaid: 0, otTotal: 0,
+    };
+    p.rows.push(r);
+    p.p += r.p; p.h += r.h; p.a += r.a; p.review += r.review;
+    p.daysPaid = +(p.daysPaid + r.daysPaid).toFixed(2);
+    p.otTotal = +(p.otTotal + r.otTotal).toFixed(2);
+  });
+  const people = Object.values(pmap).map(p => {
+    // assignment first; only if the master says nothing do we fall back to where they punched
+    let office;
+    if (p.isStaff && p.uid && assigned[p.uid]) office = [...assigned[p.uid]].some(id => officeSiteIds.has(id));
+    else if (!p.isStaff && p.rows[0].masterSite != null) office = officeSiteIds.has(p.rows[0].masterSite);
+    else office = p.rows.some(r => OFFICE_SITE_RE.test(r.site));
+    return { ...p, group: office ? "office" : "field", siteNames: p.rows.map(r => r.site) };
+  }).sort((x, y) => x.worker.localeCompare(y.worker));
+
+  return { days, rows, people, wo, hol, settings };
+}
 
 // update332: ONE definition of what a cell prints, shared by the screen, the printed
 // grid (/wages/print) and the Excel export — they can never drift apart again.
@@ -116,6 +159,7 @@ export function otOf(r, d) { return (r.ot && r.ot[d.iso]) || 0; }   // update278
 export function cellCode(r, d, wo, hol) {
   const c = r.cells[d.iso];
   if (c) return c;
+  if (r.leave && r.leave.has(d.iso)) return "L";   // update333: approved leave, only where nothing was punched
   if (hol[d.iso]) return "HOL";
   if (wo.has(d.iso)) return "WO";
   return "A";
@@ -123,163 +167,187 @@ export function cellCode(r, d, wo, hol) {
 
 // ---- module scope: never define a component inside a component (update204) ----
 
-function Toolbar({ f, setF, sites, roles, cats, onExport, canExport, children }) {
+function Toolbar({ f, setF, sites, roles, cats }) {
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
   const sel = { fontSize: 12, padding: "5px 7px" };
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 10, marginBottom: 4 }}>
-      <input placeholder="🔍 Search name…" value={f.q} onChange={e => set("q", e.target.value)}
-             style={{ ...sel, minWidth: 170 }} />
-      <input placeholder="ID / mobile" value={f.id} onChange={e => set("id", e.target.value)}
-             style={{ ...sel, width: 120 }} />
+      <input placeholder="🔍 Search name…" value={f.q} onChange={e => set("q", e.target.value)} style={{ ...sel, minWidth: 170 }} />
+      <input placeholder="ID / mobile" value={f.id} onChange={e => set("id", e.target.value)} style={{ ...sel, width: 118 }} />
       <select style={sel} value={f.site} onChange={e => set("site", e.target.value)}>
-        <option value="">All sites</option>
-        {sites.map(s => <option key={s} value={s}>{s}</option>)}
+        <option value="">All sites</option>{sites.map(s => <option key={s} value={s}>{s}</option>)}
       </select>
       <select style={sel} value={f.role} onChange={e => set("role", e.target.value)}>
-        <option value="">All designations</option>
-        {roles.map(r => <option key={r} value={r}>{r}</option>)}
+        <option value="">All designations</option>{roles.map(r => <option key={r} value={r}>{r}</option>)}
       </select>
       <select style={sel} value={f.cat} onChange={e => set("cat", e.target.value)}>
-        <option value="">All categories</option>
-        {cats.map(c => <option key={c} value={c}>{c}</option>)}
+        <option value="">All categories</option>{cats.map(c => <option key={c} value={c}>{c}</option>)}
       </select>
       <select style={sel} value={f.status} onChange={e => set("status", e.target.value)}>
         <option value="">Any attendance</option>
         <option value="present">Has full days</option>
         <option value="half">Has half days</option>
         <option value="absent">Has absences</option>
+        <option value="leave">On leave</option>
         <option value="review">Needs review ⏱</option>
       </select>
       <select style={sel} value={f.ot} onChange={e => set("ot", e.target.value)}>
-        <option value="">OT: any</option>
-        <option value="yes">With OT</option>
-        <option value="no">Without OT</option>
+        <option value="">OT: any</option><option value="yes">With OT</option><option value="no">Without OT</option>
       </select>
-      {(f.q || f.id || f.site || f.role || f.cat || f.status || f.ot) && (
-        <button style={sel} onClick={() => setF({ q: "", id: "", site: "", role: "", cat: "", status: "", ot: "" })}>✕ Clear</button>
+      <select style={sel} value={f.multi} onChange={e => set("multi", e.target.value)}>
+        <option value="">All employees</option><option value="yes">Multi-site only</option>
+      </select>
+      {Object.values(f).some(Boolean) && (
+        <button style={sel} onClick={() => setF({ q: "", id: "", site: "", role: "", cat: "", status: "", ot: "", multi: "" })}>✕ Clear</button>
       )}
-      <span style={{ flex: 1 }} />
-      <button style={sel} onClick={onExport} disabled={!canExport}>⬇ Excel</button>
-      {children}
     </div>
   );
 }
 
-function Legend() {
+function DateCells({ r, g, editMode, savingAll, pending, setPending }) {
+  const NEXT = { P: ["H", "half_day"], H: ["A", "absent"], A: ["P", "present"], "": ["P", "present"], WO: ["P", "present"], HOL: ["P", "present"], L: ["P", "present"] };
+  return g.days.map(d => {
+    const base = cellCode(r, d, g.wo, g.hol);
+    const pk = r.wid + "|" + r.sid + "|" + d.iso;
+    const pend = pending[pk];
+    const c = pend ? pend.code : base;   // update298: pending edits shown before saving
+    const click = () => {
+      if (!editMode || savingAll) return;
+      const [code, status] = NEXT[c] || NEXT[""];
+      setPending(x => { const y = { ...x }; if (code === base) delete y[pk]; else y[pk] = { code, status }; return y; });
+    };
+    return <td key={d.iso} onClick={click}
+      title={(g.hol[d.iso] ? g.hol[d.iso] + " · " : "") + (c === "L" ? "Approved leave · " : "") + (editMode ? "Click: 1 → 0.5 → 0" : "")}
+      style={{ textAlign: "center", padding: "3px 2px", fontSize: 11, fontWeight: c === "P" || pend ? 700 : 500,
+        background: COLOR[c] || "#fff", cursor: editMode ? "pointer" : "default",
+        outline: pend ? "2px solid #FF6A1F" : "none", outlineOffset: -2 }}>{NUM[c]}</td>;
+  });
+}
+
+function OtRow({ r, g, indent }) {
+  if (!r.otTotal) return null;
   return (
-    <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
-      <b>1</b> = present · <b>0.5</b> = half day · <b>0</b> = absent · <b>HOL</b> = company holiday (payroll applies the holiday rule) · shaded column = Sunday · OT row = approved hours.
-    </div>
+    <tr style={{ background: "#fffaf5" }}>
+      <td style={{ position: "sticky", left: 0, background: "#fffaf5", zIndex: 1 }}></td>
+      <td style={{ position: "sticky", left: 36, background: "#fffaf5", zIndex: 1, fontSize: 10.5, color: "#7c2d12", fontStyle: "italic", paddingLeft: indent }}>OT (h)</td>
+      <td colSpan={2}></td>
+      {g.days.map(d => { const v = otOf(r, d); return <td key={d.iso} style={{ textAlign: "center", fontSize: 10, color: "#7c2d12" }}>{v || ""}</td>; })}
+      <td colSpan={2}></td>
+    </tr>
   );
 }
 
-function Section({ title, rows, g, editMode, savingAll, pending, setPending, onOpen, startSr }) {
-  if (!rows.length) return (
-    <div className="mw-card" style={{ marginTop: 12 }}>
-      <div className="mw-band">{title}</div>
-      <div className="muted" style={{ padding: 12, fontSize: 12.5 }}>No rows match the filters.</div>
-    </div>
-  );
-  const NEXT = { P: ["H", "half_day"], H: ["A", "absent"], A: ["P", "present"], "": ["P", "present"], WO: ["P", "present"], HOL: ["P", "present"] };
+function PeopleTable({ people, g, editMode, savingAll, pending, setPending, open, toggle, onOpen }) {
+  if (!people.length) return <div className="muted" style={{ padding: 12, fontSize: 12.5 }}>No employees match the filters.</div>;
   return (
-    <div className="mw-card" style={{ marginTop: 12 }}>
-      <div className="mw-band">{title} · {rows.length} row{rows.length > 1 ? "s" : ""}</div>
-      <div style={{ overflowX: "auto" }}>{/* scrolls INSIDE the table only */}
-        <table className="dt-compact mw-table" style={{ borderCollapse: "collapse", minWidth: 960 + g.days.length * 30 }}>
-          <thead>
-            <tr>
-              <th style={{ position: "sticky", left: 0, zIndex: 2, minWidth: 36 }}>Sr</th>
-              <th style={{ position: "sticky", left: 36, zIndex: 2, minWidth: 160, textAlign: "left" }}>Employee</th>
-              <th style={{ minWidth: 120, textAlign: "left" }}>Site</th>
-              <th style={{ minWidth: 110, textAlign: "left" }}>Designation</th>
-              {g.days.map(d => <th key={d.iso} style={{ minWidth: 30, padding: "4px 2px", fontSize: 10.5, textAlign: "center", background: d.wd === "Su" ? "#e9edf3" : undefined }}>{String(d.day).padStart(2, "0")}<br /><span style={{ fontWeight: 400, opacity: .8 }}>{d.wd}</span></th>)}
-              <th className="num">Days</th><th className="num">OT h</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <Fragment key={r.key}>
-                <tr>
-                  <td style={{ position: "sticky", left: 0, background: "#fff", zIndex: 1 }}>{startSr + i + 1}</td>
-                  <td style={{ position: "sticky", left: 36, background: "#fff", zIndex: 1, fontWeight: 600, whiteSpace: "nowrap" }}>
-                    <a onClick={() => onOpen(r)} style={{ cursor: "pointer", color: "var(--copper)" }} title="Open this person's full month">{r.worker}</a>
-                    {r.review > 0 && <span title="auto-closed day(s) awaiting review" style={{ color: "#b45309", marginLeft: 4 }}>⏱</span>}
-                  </td>
-                  <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{r.site}</td>
-                  <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{r.designation || "—"}</td>
-                  {g.days.map(d => {
-                    const base = cellCode(r, d, g.wo, g.hol);
-                    const pk = r.wid + "|" + r.sid + "|" + d.iso;
-                    const pend = pending[pk];
-                    const c = pend ? pend.code : base;   // update298: pending edits shown before saving
-                    const click = () => {
-                      if (!editMode || savingAll) return;
-                      const [code, status] = NEXT[c] || NEXT[""];
-                      setPending(x => {
-                        const y = { ...x };
-                        if (code === base) delete y[pk]; else y[pk] = { code, status };
-                        return y;
-                      });
-                    };
-                    return <td key={d.iso} onClick={click}
-                      title={(g.hol[d.iso] ? g.hol[d.iso] + " · " : "") + (editMode ? "Click: 1 → 0.5 → 0" : "")}
-                      style={{ textAlign: "center", padding: "3px 2px", fontSize: 11, fontWeight: c === "P" || pend ? 700 : 500,
-                        background: COLOR[c] || "#fff", cursor: editMode ? "pointer" : "default",
-                        outline: pend ? "2px solid #FF6A1F" : "none", outlineOffset: -2 }}>{NUM[c]}</td>;
-                  })}
-                  <td className="num" style={{ fontWeight: 700 }}>{r.daysPaid}</td>
-                  <td className="num">{r.otTotal || "—"}</td>
-                </tr>
-                {r.otTotal > 0 && (
-                  <tr style={{ background: "#fffaf5" }}>
-                    <td style={{ position: "sticky", left: 0, background: "#fffaf5", zIndex: 1 }}></td>
-                    <td style={{ position: "sticky", left: 36, background: "#fffaf5", zIndex: 1, fontSize: 10.5, color: "#7c2d12", fontStyle: "italic" }}>OT (h)</td>
-                    <td colSpan={2}></td>
-                    {g.days.map(d => { const v = otOf(r, d); return <td key={d.iso} style={{ textAlign: "center", fontSize: 10, color: "#7c2d12" }}>{v || ""}</td>; })}
-                    <td colSpan={2}></td>
+    <div style={{ overflowX: "auto" }}>{/* scrolls INSIDE the table only */}
+      <table className="dt-compact mw-table" style={{ borderCollapse: "collapse", minWidth: 960 + g.days.length * 30 }}>
+        <thead>
+          <tr>
+            <th style={{ position: "sticky", left: 0, zIndex: 2, minWidth: 36 }}>Sr</th>
+            <th style={{ position: "sticky", left: 36, zIndex: 2, minWidth: 190, textAlign: "left" }}>Employee</th>
+            <th style={{ minWidth: 130, textAlign: "left" }}>Site</th>
+            <th style={{ minWidth: 110, textAlign: "left" }}>Designation</th>
+            {g.days.map(d => <th key={d.iso} style={{ minWidth: 30, padding: "4px 2px", fontSize: 10.5, textAlign: "center", background: d.wd === "Su" ? "#e9edf3" : undefined }}>{String(d.day).padStart(2, "0")}<br /><span style={{ fontWeight: 400, opacity: .8 }}>{d.wd}</span></th>)}
+            <th className="num">Days</th><th className="num">OT h</th>
+          </tr>
+        </thead>
+        <tbody>
+          {people.map((p, i) => {
+            const multi = p.rows.length > 1;
+            const isOpen = !!open[p.wid];
+            const nameCell = (
+              <>
+                <a onClick={() => onOpen(p)} style={{ cursor: "pointer", color: "var(--copper)", fontWeight: 600 }} title="Open this person's full month">{p.worker}</a>
+                {p.review > 0 && <span title="auto-closed day(s) awaiting review" style={{ color: "#b45309", marginLeft: 4 }}>⏱</span>}
+              </>
+            );
+            if (!multi) {
+              const r = p.rows[0];
+              return (
+                <Fragment key={p.wid}>
+                  <tr>
+                    <td style={{ position: "sticky", left: 0, background: "#fff", zIndex: 1 }}>{i + 1}</td>
+                    <td style={{ position: "sticky", left: 36, background: "#fff", zIndex: 1, whiteSpace: "nowrap" }}>{nameCell}</td>
+                    <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{r.site}</td>
+                    <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{p.designation || "—"}</td>
+                    <DateCells r={r} g={g} editMode={editMode} savingAll={savingAll} pending={pending} setPending={setPending} />
+                    <td className="num" style={{ fontWeight: 700 }}>{r.daysPaid}</td>
+                    <td className="num">{r.otTotal || "—"}</td>
                   </tr>
-                )}
+                  <OtRow r={r} g={g} indent={0} />
+                </Fragment>
+              );
+            }
+            return (
+              <Fragment key={p.wid}>
+                <tr style={{ background: "#f7f9fc" }}>
+                  <td style={{ position: "sticky", left: 0, background: "#f7f9fc", zIndex: 1 }}>{i + 1}</td>
+                  <td style={{ position: "sticky", left: 36, background: "#f7f9fc", zIndex: 1, whiteSpace: "nowrap" }}>
+                    <span onClick={() => toggle(p.wid)} style={{ cursor: "pointer", marginRight: 6, fontSize: 11, color: "#475569" }}>{isOpen ? "▾" : "▸"}</span>
+                    {nameCell}
+                  </td>
+                  <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>
+                    <span onClick={() => toggle(p.wid)} style={{ cursor: "pointer", fontWeight: 600, color: "#475569" }}>{p.rows.length} sites</span>
+                  </td>
+                  <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{p.designation || "—"}</td>
+                  <td colSpan={g.days.length} style={{ fontSize: 11, color: "#64748b", paddingLeft: 8 }}>
+                    {isOpen ? "Month shown per site below" : p.siteNames.join(" · ")}
+                  </td>
+                  <td className="num" style={{ fontWeight: 800 }}>{p.daysPaid}</td>
+                  <td className="num" style={{ fontWeight: 700 }}>{p.otTotal || "—"}</td>
+                </tr>
+                {isOpen && p.rows.map(r => (
+                  <Fragment key={r.key}>
+                    <tr>
+                      <td style={{ position: "sticky", left: 0, background: "#fff", zIndex: 1 }}></td>
+                      <td style={{ position: "sticky", left: 36, background: "#fff", zIndex: 1, fontSize: 11.5, color: "#64748b", paddingLeft: 22, whiteSpace: "nowrap" }}>↳ at</td>
+                      <td style={{ whiteSpace: "nowrap", fontSize: 12, fontWeight: 600 }}>{r.site}</td>
+                      <td></td>
+                      <DateCells r={r} g={g} editMode={editMode} savingAll={savingAll} pending={pending} setPending={setPending} />
+                      <td className="num" style={{ fontWeight: 700 }}>{r.daysPaid}</td>
+                      <td className="num">{r.otTotal || "—"}</td>
+                    </tr>
+                    <OtRow r={r} g={g} indent={22} />
+                  </Fragment>
+                ))}
               </Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-// update332: one person, whole month, every site. Days and OT are summed from the grid the
-// user is looking at; the payroll figures are READ from the generated payout rows — nothing
-// is recomputed here, so this panel can never disagree with the payroll engine.
-function PersonPanel({ person, g, month, onClose }) {
+// One person, whole month, every site. Days and OT are summed from the grid; the payroll
+// figures are READ from the generated payout rows — nothing is recomputed here, so this
+// panel can never disagree with the payroll engine.
+function PersonPanel({ person, month, onClose }) {
   const [pay, setPay] = useState(null);
-  const mine = g.rows.filter(r => r.wid === person.wid);
   useEffect(() => {
     let dead = false;
     (async () => {
-      if (isDemo) { setPay({ rows: [], kind: person.isStaff ? "staff" : "labour" }); return; }
-      const { from, to } = monthBounds(month);
-      try {
-        if (person.isStaff) {
-          if (!person.uid) { if (!dead) setPay({ kind: "staff", rows: [] }); return; }
-          const { data } = await supabase.from("staff_payouts")
-            .select("month, days_present, days_absent, deduction, ot_hours, ot_amount, monthly_salary, net, status")
-            .eq("user_id", person.uid).gte("month", from).lt("month", to);
-          if (!dead) setPay({ kind: "staff", rows: data || [] });
-        } else {
-          const { data } = await supabase.from("wage_payouts")
-            .select("site_id, days_total, ot_hours, daily_rate, ot_rate, gross, net, status, sites(name)")
-            .eq("worker_id", person.wid).gte("month", from).lt("month", to);
-          if (!dead) setPay({ kind: "labour", rows: data || [] });
-        }
-      } catch { if (!dead) setPay({ kind: "x", rows: [] }); }
+      if (isDemo) { setPay({ kind: "x", rows: [] }); return; }
+      const { from } = monthBounds(month);
+      // update333: the column is pay_month, not month — 332 queried the wrong one and always
+      // reported "not generated" for staff.
+      if (person.isStaff) {
+        if (!person.uid) { if (!dead) setPay({ kind: "staff", rows: [] }); return; }
+        const { data } = await supabase.from("staff_payouts")
+          .select("pay_month, days_present, days_absent, deduction, ot_hours, ot_amount, monthly_salary, net, status")
+          .eq("user_id", person.uid).eq("pay_month", from);
+        if (!dead) setPay({ kind: "staff", rows: data || [] });
+      } else {
+        const { data } = await supabase.from("wage_payouts")
+          .select("site_id, days_total, ot_hours, daily_rate, ot_rate, gross, net, status, sites(name)")
+          .eq("worker_id", person.wid).eq("pay_month", from);
+        if (!dead) setPay({ kind: "labour", rows: data || [] });
+      }
     })();
     return () => { dead = true; };
   }, [person.wid, person.uid, person.isStaff, month]);
 
-  const totDays = mine.reduce((n, r) => n + r.daysPaid, 0);
-  const totOt = +mine.reduce((n, r) => n + r.otTotal, 0).toFixed(2);
   const th = { textAlign: "left", fontSize: 11.5, padding: "6px 8px", background: "#f3f4f6" };
   const td = { fontSize: 12.5, padding: "6px 8px", borderBottom: "1px solid #f0f1f3" };
 
@@ -295,7 +363,7 @@ function PersonPanel({ person, g, month, onClose }) {
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
           <thead><tr><th style={th}>Site</th><th style={{ ...th, textAlign: "right" }}>Full</th><th style={{ ...th, textAlign: "right" }}>Half</th><th style={{ ...th, textAlign: "right" }}>Absent</th><th style={{ ...th, textAlign: "right" }}>Paid days</th><th style={{ ...th, textAlign: "right" }}>OT h</th></tr></thead>
           <tbody>
-            {mine.map(r => (
+            {person.rows.map(r => (
               <tr key={r.key}>
                 <td style={{ ...td, fontWeight: 600 }}>{r.site}</td>
                 <td style={{ ...td, textAlign: "right" }}>{r.p}</td>
@@ -306,10 +374,12 @@ function PersonPanel({ person, g, month, onClose }) {
               </tr>
             ))}
             <tr style={{ background: "#fff4e5", fontWeight: 800 }}>
-              <td style={td}>TOTAL · {mine.length} site{mine.length > 1 ? "s" : ""}</td>
-              <td colSpan={3}></td>
-              <td style={{ ...td, textAlign: "right" }}>{totDays}</td>
-              <td style={{ ...td, textAlign: "right" }}>{totOt || "—"}</td>
+              <td style={td}>TOTAL · {person.rows.length} site{person.rows.length > 1 ? "s" : ""}</td>
+              <td style={{ ...td, textAlign: "right" }}>{person.p}</td>
+              <td style={{ ...td, textAlign: "right" }}>{person.h}</td>
+              <td style={{ ...td, textAlign: "right" }}>{person.a}</td>
+              <td style={{ ...td, textAlign: "right" }}>{person.daysPaid}</td>
+              <td style={{ ...td, textAlign: "right" }}>{person.otTotal || "—"}</td>
             </tr>
           </tbody>
         </table>
@@ -360,57 +430,62 @@ export default function AttendanceSummary({ month, siteId, sites }) {
   // update297: admins edit cells in place — click cycles 1 -> 0.5 -> 0.
   // The server function re-checks the right and the paid-month lock on every save.
   const sess = typeof window !== "undefined" ? getSession() : null;
-  // update298: mirrors the server gate — Director, or granted "Attendance & muster -> manage"
-  // by the Director in Admin -> Access Rights. No role gets it implicitly.
+  // update298: mirrors the server gate — Director, or granted "Attendance & muster -> manage".
   const canEdit = !!sess && (sess.role === "director" || can(sess, "attendance", "manage"));
   const [editMode, setEditMode] = useState(false);
-  const [pending, setPending] = useState({});   // "wid|sid|iso" -> { code, status }
+  const [pending, setPending] = useState({});
   const [savingAll, setSavingAll] = useState(false);
   const [cellErr, setCellErr] = useState("");
   const [g, setG] = useState(null); const [err, setErr] = useState("");
   const [person, setPerson] = useState(null);
-  const [f, setF] = useState({ q: "", id: "", site: "", role: "", cat: "", status: "", ot: "" });
+  const [tab, setTab] = useState("office");
+  const [open, setOpen] = useState({});
+  const [f, setF] = useState({ q: "", id: "", site: "", role: "", cat: "", status: "", ot: "", multi: "" });
 
-  // update332: ONE load for everybody — the sections and filters slice it client-side, so
-  // switching between Office and Site never re-queries.
   useEffect(() => {
     setG(null); setErr("");
-    loadAttendanceGrid(month, siteId).then(setG).catch(e => { setErr(e.message); setG({ days: monthDays(month), rows: [], wo: new Set(), hol: {} }); });
+    loadAttendanceGrid(month, siteId).then(setG).catch(e => { setErr(e.message); setG({ days: monthDays(month), rows: [], people: [], wo: new Set(), hol: {} }); });
   }, [month, siteId]);
 
   const siteName = siteId === "all" ? "All sites" : (sites.find(s => String(s.id) === String(siteId))?.name || "");
 
   const opts = useMemo(() => {
     const s = new Set(), r = new Set(), c = new Set();
-    (g?.rows || []).forEach(x => { s.add(x.site); if (x.designation) (x.isStaff ? r : c).add(x.designation); });
+    (g?.people || []).forEach(p => { p.siteNames.forEach(n => s.add(n)); if (p.designation) (p.isStaff ? r : c).add(p.designation); });
     return { sites: [...s].sort(), roles: [...r].sort(), cats: [...c].sort() };
   }, [g]);
 
   // every filter narrows the same list; name search is plain substring, instant
   const filtered = useMemo(() => {
     const q = f.q.trim().toLowerCase(), id = f.id.trim().toLowerCase();
-    return (g?.rows || []).filter(r => {
-      if (q && !r.worker.toLowerCase().includes(q)) return false;
-      if (id && !(String(r.mobile).toLowerCase().includes(id) || String(r.wid) === id)) return false;
-      if (f.site && r.site !== f.site) return false;
-      if (f.role && r.designation !== f.role) return false;
-      if (f.cat && r.designation !== f.cat) return false;
-      if (f.status === "present" && r.p === 0) return false;
-      if (f.status === "half" && r.h === 0) return false;
-      if (f.status === "absent" && r.a === 0) return false;
-      if (f.status === "review" && r.review === 0) return false;
-      if (f.ot === "yes" && !r.otTotal) return false;
-      if (f.ot === "no" && r.otTotal) return false;
+    return (g?.people || []).filter(p => {
+      if (q && !p.worker.toLowerCase().includes(q)) return false;
+      if (id && !(String(p.mobile).toLowerCase().includes(id) || String(p.wid) === id)) return false;
+      if (f.site && !p.siteNames.includes(f.site)) return false;
+      if (f.role && p.designation !== f.role) return false;
+      if (f.cat && p.designation !== f.cat) return false;
+      if (f.status === "present" && p.p === 0) return false;
+      if (f.status === "half" && p.h === 0) return false;
+      if (f.status === "absent" && p.a === 0) return false;
+      if (f.status === "leave" && !p.rows.some(r => r.leave && r.leave.size)) return false;
+      if (f.status === "review" && p.review === 0) return false;
+      if (f.ot === "yes" && !p.otTotal) return false;
+      if (f.ot === "no" && p.otTotal) return false;
+      if (f.multi === "yes" && p.rows.length < 2) return false;
       return true;
     });
   }, [g, f]);
 
-  const office = filtered.filter(r => r.group === "office");
-  const field = filtered.filter(r => r.group !== "office");
+  const office = filtered.filter(p => p.group === "office");
+  const field = filtered.filter(p => p.group !== "office");
+  const shown = tab === "office" ? office : field;
 
   async function exportExcel() {
     if (!g) return;
-    await exportAttendanceXlsx({ month, siteName, kind: "all", days: g.days, rows: filtered, wo: g.wo, hol: g.hol, cellCode, otOf });   // update278/332: exports what is on screen
+    // export the site rows behind whichever employees are on screen — one row per person per site
+    const wids = new Set(shown.map(p => p.wid));
+    const rows = g.rows.filter(r => wids.has(r.wid));
+    await exportAttendanceXlsx({ month, siteName, kind: tab === "office" ? "staff" : "all", days: g.days, rows, wo: g.wo, hol: g.hol, cellCode, otOf });
   }
 
   async function saveAll() {
@@ -430,15 +505,21 @@ export default function AttendanceSummary({ month, siteId, sites }) {
     loadAttendanceGrid(month, siteId).then(setG).catch(e => setCellErr(e.message));
   }
 
+  const tabBtn = on => ({ fontSize: 12.5, fontWeight: on ? 800 : 600, padding: "8px 16px", border: "none", borderRadius: 0,
+    borderBottom: on ? "3px solid var(--copper)" : "3px solid transparent", background: "transparent", color: on ? "var(--copper)" : "#475569", cursor: "pointer" });
+
   return (
     <div className="panel">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <div>
           <b style={{ fontSize: 13 }}>Full Attendance Summary — {siteName} · {monthLabel(month)}</b>
-          <Legend />
+          <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
+            <b>1</b> = present · <b>0.5</b> = half day · <b>0</b> = absent · <b>L</b> = approved leave · <b>HOL</b> = company holiday · shaded column = Sunday. Each employee appears once; expand a multi-site name to see each site's month.
+          </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {canEdit && !editMode && <button className="primary" onClick={() => { setEditMode(true); setCellErr(""); }}>✎ Edit Attendance</button>}{/* update298 */}
+          <button onClick={exportExcel} disabled={!g || !shown.length}>⬇ Excel</button>
+          {canEdit && !editMode && <button className="primary" onClick={() => { setEditMode(true); setCellErr(""); }}>✎ Edit Attendance</button>}
           {editMode && (
             <>
               <button className="primary" disabled={savingAll || !Object.keys(pending).length} onClick={saveAll}>
@@ -451,26 +532,30 @@ export default function AttendanceSummary({ month, siteId, sites }) {
         </div>
       </div>
 
-      <Toolbar f={f} setF={setF} sites={opts.sites} roles={opts.roles} cats={opts.cats}
-               onExport={exportExcel} canExport={!!g && filtered.length > 0} />
+      <Toolbar f={f} setF={setF} sites={opts.sites} roles={opts.roles} cats={opts.cats} />
 
       {err && <div className="error" style={{ marginTop: 8 }}>{err}</div>}
 
-      {!g ? <div className="muted" style={{ marginTop: 10 }}>Loading…</div> : g.rows.length === 0 ? (
+      {!g ? <div className="muted" style={{ marginTop: 10 }}>Loading…</div> : !g.people.length ? (
         <div className="muted" style={{ marginTop: 10 }}>No attendance for {siteName} in {monthLabel(month)}.</div>
       ) : (
         <>
-          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-            Showing {filtered.length} of {g.rows.length} rows · one row per person per site — click a name for their whole month.
+          <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border)", marginTop: 12 }}>
+            <button style={tabBtn(tab === "office")} onClick={() => setTab("office")}>🏢 Office Staff · {office.length}</button>
+            <button style={tabBtn(tab === "field")} onClick={() => setTab("field")}>👷 Site Staff &amp; Workers · {field.length}</button>
           </div>
-          <Section title="OFFICE STAFF" rows={office} g={g} editMode={editMode} savingAll={savingAll}
-                   pending={pending} setPending={setPending} onOpen={setPerson} startSr={0} />
-          <Section title="SITE STAFF & WORKERS" rows={field} g={g} editMode={editMode} savingAll={savingAll}
-                   pending={pending} setPending={setPending} onOpen={setPerson} startSr={0} />
+          <div className="muted" style={{ fontSize: 12, margin: "8px 0" }}>
+            {shown.length} employee{shown.length === 1 ? "" : "s"}, each listed once
+            {shown.filter(p => p.rows.length > 1).length > 0 && ` · ${shown.filter(p => p.rows.length > 1).length} working across multiple sites`}
+          </div>
+          <div className="mw-card">
+            <PeopleTable people={shown} g={g} editMode={editMode} savingAll={savingAll} pending={pending} setPending={setPending}
+                         open={open} toggle={wid => setOpen(o => ({ ...o, [wid]: !o[wid] }))} onOpen={setPerson} />
+          </div>
         </>
       )}
 
-      {person && g && <PersonPanel person={person} g={g} month={month} onClose={() => setPerson(null)} />}
+      {person && <PersonPanel person={person} month={month} onClose={() => setPerson(null)} />}
     </div>
   );
 }
