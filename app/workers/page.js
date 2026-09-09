@@ -10,7 +10,35 @@ import { getSession } from "@/lib/auth";
 import { isDemo, supabase } from "@/lib/supabase";
 
 const ADD_NEW = "__add_new__";
-const EMPTY = { full_name: "", mobile: "", category: "plumber", labour_type: "own", contractor_id: "", site_id: "", daily_wage: "", is_active: true, ot_eligible: true, proxy_authority: false };   // update287
+// update336: the worker form's layout. Kept as one stylesheet rather than inline styles so
+// the two-column grid can collapse to one column on a phone, which inline styles cannot do.
+const WORKER_FORM_CSS = `
+.wf-modal { background:#fff; border-radius:14px; width:100%; max-width:820px; max-height:92vh;
+            display:flex; flex-direction:column; overflow:hidden; }
+.wf-head { padding:18px 24px 14px; border-bottom:1px solid var(--border); flex:0 0 auto; }
+.wf-body { padding:18px 24px; overflow-y:auto; overflow-x:hidden; flex:1 1 auto; }
+.wf-foot { padding:14px 24px; border-top:1px solid var(--border); flex:0 0 auto;
+           display:flex; gap:8px; align-items:center; flex-wrap:wrap; background:#fafbfc; }
+.wf-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px 18px; align-items:start; }
+.wf-grid > .wf-full, .wf-full { grid-column:1 / -1; }
+.wf-body label.muted { display:block; font-size:11.5px; margin-bottom:3px; }
+.wf-body input, .wf-body select, .wf-body textarea { width:100%; box-sizing:border-box; }
+.wf-body textarea { font-family:inherit; font-size:13px; resize:vertical; }
+.wf-sub { font-weight:700; font-size:12.5px; color:#1f2a4b; border-top:1px solid var(--border);
+          padding-top:12px; margin-top:4px; }
+.wf-check { display:flex; align-items:flex-end; padding-bottom:6px; }
+.wf-allot { display:flex; flex-wrap:wrap; gap:5px 14px; margin-top:4px;
+            max-height:150px; overflow-y:auto; padding:6px 8px;
+            border:1px solid var(--border); border-radius:6px; background:#fafbfc; }
+@media (max-width: 700px) {
+  .wf-modal { max-height:96vh; }
+  .wf-grid { grid-template-columns:1fr; gap:10px; }
+  .wf-head, .wf-body, .wf-foot { padding-left:16px; padding-right:16px; }
+  .wf-foot button { flex:1 1 auto; }
+}
+`;
+
+const EMPTY = { full_name: "", mobile: "", category: "plumber", labour_type: "own", contractor_id: "", site_id: "", daily_wage: "", is_active: true, ot_eligible: true, proxy_authority: false, emergency_name: "", emergency_relation: "", emergency_mobile: "", emergency_alt_mobile: "", emergency_address: "" };   // update287 · update336
 // roles load dynamically from the Role Master (staff_roles table)
 const S_EMPTY = { full_name: "", mobile: "", role: "supervisor", site_id: "", is_active: true };
 
@@ -60,6 +88,18 @@ export default function WorkersPage() {
   }, [modal?.id]);
 
   async function save() {
+    // update336: emergency contact is REQUIRED for a new worker — that is the moment the
+    // details are actually to hand. For the 81 workers already on file it is a warning, not
+    // a block: refusing to save would mean nobody could fix a wage until they had tracked
+    // down a next-of-kin. Say the word and I will make it mandatory for everyone.
+    if (!modal.id) {
+      const miss = [
+        !String(modal.emergency_name || "").trim() && "contact name",
+        !String(modal.emergency_relation || "").trim() && "relationship",
+        !String(modal.emergency_mobile || "").trim() && "mobile number",
+      ].filter(Boolean);
+      if (miss.length) { setErr("Emergency contact needs a " + miss.join(", ") + "."); return; }
+    }
     setBusy(true); setErr("");
     const res = await saveWorker(modal.id || null, modal);
     setBusy(false);
@@ -181,53 +221,63 @@ export default function WorkersPage() {
 
         {modal && (
           <div onClick={() => setModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}>
-            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, maxWidth: 460, width: "100%", padding: 22, maxHeight: "90vh", overflowY: "auto" }}>
-              <h2 style={{ marginBottom: 12 }}>{modal.id ? "Edit worker" : "Add worker"}</h2>
-              <div style={{ display: "grid", gap: 10 }}>
-                <div><label className="muted">Full name *</label><input style={{ width: "100%" }} value={modal.full_name} onChange={e => set("full_name", e.target.value)} /></div>
-                <div><label className="muted">Mobile *</label><input style={{ width: "100%" }} inputMode="numeric" value={modal.mobile} onChange={e => set("mobile", e.target.value)} /></div>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <div style={{ flex: 1 }}><label className="muted">Category</label>
+            {/* update336: the old shell was 460px wide with a four-item flex row inside it —
+                Category collapsed to a 40px sliver and the whole dialog scrolled sideways.
+                Now: a comfortable fixed width, a two-column grid, a sticky header and a
+                sticky footer, and ONLY the middle scrolls, so Save is never out of reach. */}
+            <div onClick={e => e.stopPropagation()} className="wf-modal">
+              <style>{WORKER_FORM_CSS}</style>
+              <div className="wf-head"><h2 style={{ margin: 0 }}>{modal.id ? "Edit worker" : "Add worker"}</h2></div>
+              <div className="wf-body">
+              <div className="wf-grid">
+                <div><label className="muted">Full name *</label><input value={modal.full_name} onChange={e => set("full_name", e.target.value)} /></div>
+                <div><label className="muted">Mobile *</label><input inputMode="numeric" value={modal.mobile} onChange={e => set("mobile", e.target.value)} /></div>
+                <div className="wf-full wf-sub">Work details</div>
+                <div className="wf-grid wf-full">
+                  <div><label className="muted">Category</label>
                     <select style={{ width: "100%" }} value={modal.category} onChange={e => pickCategory(e.target.value)}>
                       {cats.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
                       {!cats.some(c => c.code === modal.category) && modal.category ? <option value={modal.category}>{modal.category}</option> : null}
                       <option value={ADD_NEW}>➕ Add new category…</option>
                     </select></div>
-                  <div style={{ flex: 1 }}><label className="muted">Daily wage ₹ *</label><input style={{ width: "100%" }} inputMode="numeric" value={modal.daily_wage} onChange={e => set("daily_wage", e.target.value)} /></div>
-                  <div style={{ flex: 1, display: "flex", alignItems: "flex-end", paddingBottom: 4 }}>
+                  <div><label className="muted">Daily wage ₹ *</label><input inputMode="numeric" value={modal.daily_wage} onChange={e => set("daily_wage", e.target.value)} /></div>
+                  <div className="wf-check">
                     <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }} title="OFF = extra hours are never paid as OT; the + OT button disappears everywhere for this worker.">
                       <input type="checkbox" checked={modal.ot_eligible !== false} onChange={e => set("ot_eligible", e.target.checked)} style={{ accentColor: "var(--copper)" }} /> OT eligible
                     </label>
                   </div>
-                  <div style={{ flex: 1, display: "flex", alignItems: "flex-end", paddingBottom: 4 }}>{/* update287 */}
+                  <div className="wf-check">{/* update287 */}
                     <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }}
                       title="Grants this worker the right to Mark present for OTHERS at their site(s), with the same mandatory live photo. Revoke any time by unticking — effective immediately. Needs a login linked to this worker (same mobile).">
                       <input type="checkbox" checked={!!modal.proxy_authority} onChange={e => set("proxy_authority", e.target.checked)} style={{ accentColor: "var(--copper)" }} /> 🛡 Proxy Attendance Authority
                     </label>
                   </div>
                   {/* update329: dates the Labour letters read (Engagement / Experience / Relieving / Termination) */}
-                  <div style={{ flex: "1 1 100%", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", borderTop: "1px solid var(--border)", paddingTop: 10, marginTop: 4 }}>
-                    <div style={{ width: 145 }}><label className="muted">Joining date</label>
-                      <input type="date" style={{ width: "100%" }} value={modal.joining_date || ""} onChange={e => set("joining_date", e.target.value)} /></div>
-                    <div style={{ width: 145 }}><label className="muted">Last working day</label>
-                      <input type="date" style={{ width: "100%" }} value={modal.last_working_day || ""} onChange={e => set("last_working_day", e.target.value)} /></div>
-                    <div style={{ flex: 1, minWidth: 170 }}><label className="muted">Reason for exit</label>
-                      <input style={{ width: "100%" }} placeholder="only for leavers" value={modal.exit_reason || ""} onChange={e => set("exit_reason", e.target.value)} /></div>
-                  </div>
                 </div>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <div style={{ flex: 1 }}><label className="muted">Labour type</label>
+                <div className="wf-full wf-sub">Joining &amp; exit</div>
+                <div className="wf-grid wf-full">
+                  <div><label className="muted">Joining date</label>
+                    <input type="date" value={modal.joining_date || ""} onChange={e => set("joining_date", e.target.value)} /></div>
+                  <div><label className="muted">Last working day</label>
+                    <input type="date" value={modal.last_working_day || ""} onChange={e => set("last_working_day", e.target.value)} /></div>
+                  <div className="wf-full"><label className="muted">Reason for exit</label>
+                    <input placeholder="only for leavers" value={modal.exit_reason || ""} onChange={e => set("exit_reason", e.target.value)} /></div>
+                </div>
+                <div className="wf-full wf-sub">Posting</div>
+                <div className="wf-grid wf-full">
+                  <div><label className="muted">Labour type</label>
                     <select style={{ width: "100%" }} value={modal.labour_type} onChange={e => set("labour_type", e.target.value)}>
                       <option value="own">Own</option><option value="contractor">Contractor</option>
                     </select></div>
-                  <div style={{ flex: 1 }}><label className="muted">Site *</label>
-                    <select style={{ width: "100%" }} value={modal.site_id || ""} onChange={e => set("site_id", e.target.value)}>
+                  <div><label className="muted">Site *</label>
+                    <select value={modal.site_id || ""} onChange={e => set("site_id", e.target.value)}>
                       <option value="">Select…</option>
                       {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
-                    {modal.id ? (<>
-                      <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>Also allotted to (multi-site worker — can self-punch there):</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", marginTop: 2 }}>
+                    </div>
+                    {modal.id ? (<div className="wf-full">
+                      <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>Also allotted to (multi-site worker — can self-punch there):</div>
+                      <div className="wf-allot">
                         {sites.filter(x => String(x.id) !== String(modal.site_id || "")).map(x => (
                           <label key={x.id} style={{ fontSize: 12, display: "flex", gap: 4, alignItems: "center", cursor: "pointer" }}>
                             <input type="checkbox" checked={allot.map(String).includes(String(x.id))}
@@ -236,15 +286,13 @@ export default function WorkersPage() {
                           </label>
                         ))}
                       </div>
-                    </>) : null}</div>
+                    </div>) : null}
                 </div>
-                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 6 }}>KYC & bank <span className="muted" style={{ fontWeight: 400 }}>(all three needed for "Complete" profile)</span></div>
-                  <div style={{ display: "flex", gap: 10 }}>
-                    <div style={{ flex: 1.4 }}><label className="muted">Bank account no</label><input style={{ width: "100%" }} inputMode="numeric" value={modal.bank_account_no || ""} onChange={e => set("bank_account_no", e.target.value)} /></div>
-                    <div style={{ flex: 1 }}><label className="muted">IFSC</label><input style={{ width: "100%" }} value={modal.bank_ifsc || ""} onChange={e => set("bank_ifsc", e.target.value.toUpperCase())} placeholder="e.g. SBIN0001234" /></div>
-                  </div>
-                  <div style={{ marginTop: 8 }}>
+                <div className="wf-full wf-sub">KYC &amp; bank <span className="muted" style={{ fontWeight: 400 }}>(all three needed for a &quot;Complete&quot; profile)</span></div>
+                <div className="wf-grid wf-full">
+                  <div><label className="muted">Bank account no</label><input inputMode="numeric" value={modal.bank_account_no || ""} onChange={e => set("bank_account_no", e.target.value)} /></div>
+                  <div><label className="muted">IFSC</label><input value={modal.bank_ifsc || ""} onChange={e => set("bank_ifsc", e.target.value.toUpperCase())} placeholder="e.g. SBIN0001234" /></div>
+                  <div className="wf-full">
                     <label className="muted">Aadhaar copy {modal.aadhaar_doc_url && <a href={modal.aadhaar_doc_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
                     <input type="file" accept="image/*,.pdf" onChange={async e => {
                       const f = e.target.files?.[0]; if (!f) return;
@@ -257,21 +305,39 @@ export default function WorkersPage() {
                   </div>
                 </div>
                 {modal.labour_type === "contractor" && (
-                  <div><label className="muted">Contractor</label>
-                    <select style={{ width: "100%" }} value={modal.contractor_id || ""} onChange={e => set("contractor_id", e.target.value)}>
+                  <div className="wf-full"><label className="muted">Contractor</label>
+                    <select value={modal.contractor_id || ""} onChange={e => set("contractor_id", e.target.value)}>
                       <option value="">Select contractor…</option>
                       {contractors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select></div>
                 )}
+
+                {/* update336: emergency contact — who to call if something happens on site */}
+                <div className="wf-full wf-sub">Emergency contact
+                  {modal.id && !String(modal.emergency_mobile || "").trim() &&
+                    <span style={{ fontWeight: 600, fontSize: 11, color: "#9a3412", marginLeft: 8 }}>· not on file yet</span>}
+                </div>
+                <div><label className="muted">Contact name *</label>
+                  <input value={modal.emergency_name || ""} onChange={e => set("emergency_name", e.target.value)} /></div>
+                <div><label className="muted">Relationship *</label>
+                  <input placeholder="e.g. Father, Wife, Brother" value={modal.emergency_relation || ""} onChange={e => set("emergency_relation", e.target.value)} /></div>
+                <div><label className="muted">Mobile number *</label>
+                  <input inputMode="numeric" value={modal.emergency_mobile || ""} onChange={e => set("emergency_mobile", e.target.value.replace(/[^0-9+ ]/g, ""))} /></div>
+                <div><label className="muted">Alternate mobile</label>
+                  <input inputMode="numeric" value={modal.emergency_alt_mobile || ""} onChange={e => set("emergency_alt_mobile", e.target.value.replace(/[^0-9+ ]/g, ""))} /></div>
+                <div className="wf-full"><label className="muted">Address</label>
+                  <textarea rows={2} value={modal.emergency_address || ""} onChange={e => set("emergency_address", e.target.value)} /></div>
+
                 {modal.id && (
-                  <label style={{ display: "inline-flex", gap: 7, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+                  <label className="wf-full" style={{ display: "inline-flex", gap: 7, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
                     <input type="checkbox" checked={modal.is_active !== false} onChange={e => set("is_active", e.target.checked)} style={{ accentColor: "var(--copper)" }} />
                     Active (untick to deactivate — they can no longer log in or punch)
                   </label>
                 )}
               </div>
               {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
-              <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              </div>{/* /wf-body */}
+              <div className="wf-foot">
                 {modal.id && isDirector && (
                   <button style={{ color: "var(--red)", borderColor: "var(--red)" }} disabled={busy}
                     onClick={async () => {
@@ -281,9 +347,12 @@ export default function WorkersPage() {
                       else setErr(r.error);
                     }}>🗑 Delete</button>
                 )}
+                {modal.id && (
+                  <button onClick={() => window.open("/workers/profile?id=" + modal.id, "_blank")}>⬇ Employee PDF</button>
+                )}
+                <span style={{ flex: 1 }} />
+                <button onClick={() => setModal(null)} disabled={busy}>Cancel</button>
                 <button className="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : modal.id ? "Save changes" : "Add worker"}</button>
-                {err && <div className="note red" style={{ width: "100%", marginTop: 8 }}>{err}</div>}
-                <button onClick={() => setModal(null)}>Cancel</button>
               </div>
             </div>
           </div>
