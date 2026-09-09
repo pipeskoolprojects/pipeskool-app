@@ -85,6 +85,13 @@ export default function SiteSummary({ month, siteId, sites }) {
             {board.grand.reconciled ? "✓ Reconciled" : "✗ NOT reconciled"} — Σ site cost {inr(board.grand.total)} {board.grand.reconciled ? "=" : "≠"} labour gross {inr(d.grand.workerGross)} + staff earned {inr(board.grand.staffEarned)}
             {board.grand.unattributed > 0 && <span style={{ color: "var(--red)" }}> · {inr(board.grand.unattributed)} could not be attributed to any site</span>}
           </div>
+          {board.grand.awaitingPayroll?.length > 0 && (
+            <div className="note amber" style={{ marginTop: 6, fontSize: 12 }}>
+              {/* update343: their DAYS are counted, their COST cannot be until salary is generated.
+                  Saying so beats a total that quietly under-reports the month. */}
+              Worked this month but staff salary not generated yet: <b>{board.grand.awaitingPayroll.join(", ")}</b> — their days are counted above, their cost is not. Generate on the Staff Salary tab.
+            </div>
+          )}
           <div className="muted" style={{ marginTop: 6, fontSize: 11.5 }}>
             How staff cost lands on a site: <b>basic</b> is split pro-rata by paid days at each site (earned = salary − deduction); <b>OT</b> is split by the actual OT hours recorded at each site, not apportioned. Anyone who worked one site all month is charged 100% to it.
           </div>
