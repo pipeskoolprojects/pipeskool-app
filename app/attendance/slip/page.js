@@ -92,7 +92,9 @@ function Slip() {
         <div><b>Daily wage:</b> {w.staffPay ? <>Staff — salary {inr(w.staffPay.salary)}/month (≈ {inr(w.staffPay.perDay)}/day)</> : inr(w.wage)}</div>{/* update309 */}{w.otEligible ? <div><b>OT rate:</b> {inr(w.otRate)}/h (wage ÷ {w.stdHrs} h)</div> : <div><b>OT:</b> Not eligible</div>}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6, margin: "10px 0" }}>
-        {[["Present", d.present], ["Half days", d.half], ["Absent", d.absent], ["Hours", fmtHM(d.totalHours)], ...(w.otEligible ? [["OT (approved)", fmtHM(d.otHours)]] : []), ["Sundays", d.sundays]].map(([l, v]) => (
+        {/* update345: Present / Half / Absent / Holidays are each their own line item, and
+            Absent no longer swallows Sundays, holidays or the current day. */}
+        {[["Present", d.present], ["Half days", d.half], ["Absent", d.absent], ["Holidays", d.holidayDays ?? 0], ["Hours", fmtHM(d.totalHours)], ...(w.otEligible ? [["OT (approved)", fmtHM(d.otHours)]] : []), ["Sundays", d.sundays]].map(([l, v]) => (
           <div key={l} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "6px 8px", textAlign: "center" }}><div style={{ fontSize: 10.5, color: "#666" }}>{l}</div><div style={{ fontSize: 16, fontWeight: 700 }}>{v}</div></div>
         ))}
       </div>
