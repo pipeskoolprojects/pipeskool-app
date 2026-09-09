@@ -237,7 +237,7 @@ function OtRow({ r, g, indent }) {
   );
 }
 
-function PeopleTable({ people, g, editMode, savingAll, pending, setPending, open, toggle, onOpen }) {
+function PeopleTable({ people, g, editMode, savingAll, pending, setPending, onOpen }) {
   if (!people.length) return <div className="muted" style={{ padding: 12, fontSize: 12.5 }}>No employees match the filters.</div>;
   return (
     <div style={{ overflowX: "auto" }}>{/* scrolls INSIDE the table only */}
@@ -255,7 +255,6 @@ function PeopleTable({ people, g, editMode, savingAll, pending, setPending, open
         <tbody>
           {people.map((p, i) => {
             const multi = p.rows.length > 1;
-            const isOpen = !!open[p.wid];
             const nameCell = (
               <>
                 <a onClick={() => onOpen(p)} style={{ cursor: "pointer", color: "var(--copper)", fontWeight: 600 }} title="Open this person's full month">{p.worker}</a>
@@ -281,23 +280,20 @@ function PeopleTable({ people, g, editMode, savingAll, pending, setPending, open
             }
             return (
               <Fragment key={p.wid}>
+                {/* update334: no expander. The name row carries the person's totals, and every
+                    site they worked is printed underneath it, always — nothing to click open. */}
                 <tr style={{ background: "#f7f9fc" }}>
                   <td style={{ position: "sticky", left: 0, background: "#f7f9fc", zIndex: 1 }}>{i + 1}</td>
-                  <td style={{ position: "sticky", left: 36, background: "#f7f9fc", zIndex: 1, whiteSpace: "nowrap" }}>
-                    <span onClick={() => toggle(p.wid)} style={{ cursor: "pointer", marginRight: 6, fontSize: 11, color: "#475569" }}>{isOpen ? "▾" : "▸"}</span>
-                    {nameCell}
-                  </td>
-                  <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>
-                    <span onClick={() => toggle(p.wid)} style={{ cursor: "pointer", fontWeight: 600, color: "#475569" }}>{p.rows.length} sites</span>
-                  </td>
+                  <td style={{ position: "sticky", left: 36, background: "#f7f9fc", zIndex: 1, whiteSpace: "nowrap" }}>{nameCell}</td>
+                  <td style={{ whiteSpace: "nowrap", fontSize: 12, fontWeight: 600, color: "#475569" }}>{p.rows.length} sites</td>
                   <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{p.designation || "—"}</td>
                   <td colSpan={g.days.length} style={{ fontSize: 11, color: "#64748b", paddingLeft: 8 }}>
-                    {isOpen ? "Month shown per site below" : p.siteNames.join(" · ")}
+                    Month by site below · total across {p.rows.length} sites →
                   </td>
                   <td className="num" style={{ fontWeight: 800 }}>{p.daysPaid}</td>
                   <td className="num" style={{ fontWeight: 700 }}>{p.otTotal || "—"}</td>
                 </tr>
-                {isOpen && p.rows.map(r => (
+                {p.rows.map(r => (
                   <Fragment key={r.key}>
                     <tr>
                       <td style={{ position: "sticky", left: 0, background: "#fff", zIndex: 1 }}></td>
@@ -439,7 +435,6 @@ export default function AttendanceSummary({ month, siteId, sites }) {
   const [g, setG] = useState(null); const [err, setErr] = useState("");
   const [person, setPerson] = useState(null);
   const [tab, setTab] = useState("office");
-  const [open, setOpen] = useState({});
   const [f, setF] = useState({ q: "", id: "", site: "", role: "", cat: "", status: "", ot: "", multi: "" });
 
   useEffect(() => {
@@ -514,7 +509,7 @@ export default function AttendanceSummary({ month, siteId, sites }) {
         <div>
           <b style={{ fontSize: 13 }}>Full Attendance Summary — {siteName} · {monthLabel(month)}</b>
           <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
-            <b>1</b> = present · <b>0.5</b> = half day · <b>0</b> = absent · <b>L</b> = approved leave · <b>HOL</b> = company holiday · shaded column = Sunday. Each employee appears once; expand a multi-site name to see each site's month.
+            <b>1</b> = present · <b>0.5</b> = half day · <b>0</b> = absent · <b>L</b> = approved leave · <b>HOL</b> = company holiday · shaded column = Sunday. Each employee appears once, with every site they worked listed underneath their name.
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -549,8 +544,7 @@ export default function AttendanceSummary({ month, siteId, sites }) {
             {shown.filter(p => p.rows.length > 1).length > 0 && ` · ${shown.filter(p => p.rows.length > 1).length} working across multiple sites`}
           </div>
           <div className="mw-card">
-            <PeopleTable people={shown} g={g} editMode={editMode} savingAll={savingAll} pending={pending} setPending={setPending}
-                         open={open} toggle={wid => setOpen(o => ({ ...o, [wid]: !o[wid] }))} onOpen={setPerson} />
+            <PeopleTable people={shown} g={g} editMode={editMode} savingAll={savingAll} pending={pending} setPending={setPending} onOpen={setPerson} />
           </div>
         </>
       )}
