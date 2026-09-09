@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { loadPayrollSummary } from "@/lib/payrollSummary";
 import { getStaffPayouts } from "@/lib/staffpay";
 import { filtersFromQuery, filtersActive, allowedPeople, staffRowsFor, mergeStaffIntoSites } from "@/lib/payrollBoard";   // update340
-import { loadAttendanceGrid, cellCode, cellValue, otOf } from "@/components/AttendanceSummary";   // update332: numeric cells
+import { loadAttendanceGrid, cellCode, cellValue, otOf, outSiteOf } from "@/components/AttendanceSummary";   // update332/344
 import { inr } from "@/lib/data";
 import Logo from "@/components/Logo";   // update331c: the real logo, not a text wordmark
 
@@ -76,7 +76,7 @@ export default function WagesPrint() {
   const Grid = ({ grid, kind }) => !grid || !grid.rows.length ? null : (
     <>
       <Band>MONTHLY ATTENDANCE — {siteName.toUpperCase()} · {kind === "staff" ? "STAFF" : "LABOUR"}</Band>
-      <Note>1 = Present · 0.5 = Half day (Sunday half counts as a full paid day) · 0 = Absent · HOL = company holiday · OT row = approved hours</Note>
+      <Note>1 = Present · 0.5 = Half day (Sunday half counts as a full paid day) · 0 = Absent · HOL = company holiday · OT row = approved hours · a &quot;Punched out at&quot; row appears only on days the worker punched out at a different site from where they punched in</Note>
       <table style={{ borderCollapse: "collapse", width: "100%" }}>
         <thead><tr><th style={{ ...th, textAlign: "left" }}>Worker</th>{grid.days.map(dd => <th key={dd.iso} style={{ ...th, textAlign: "center", padding: "3px 1px", fontSize: 8 }}>{String(dd.day).padStart(2, "0")}<br />{dd.wd}</th>)}<th style={th}>Days</th><th style={th}>OT</th></tr></thead>
         <tbody>{grid.rows.map(r => (
@@ -85,6 +85,8 @@ export default function WagesPrint() {
               {grid.days.map(dd => { const c = cellCode(r, dd, grid.wo, grid.hol); return <td key={dd.iso} style={{ ...td, textAlign: "center", padding: "2px 1px", fontSize: 9, background: ATT[c] || "#fff" }}>{cellValue(c)}</td>; })}
               <td style={{ ...td, fontWeight: 700 }}>{r.daysPaid}</td><td style={td}>{r.otTotal || ""}</td></tr>
             {r.otTotal > 0 && <tr key={r.key + "ot"}><td style={{ ...td, textAlign: "left", fontSize: 9, fontStyle: "italic", color: "#7c2d12" }}>OT (h)</td>{grid.days.map(dd => <td key={dd.iso} style={{ ...td, textAlign: "center", fontSize: 8, color: "#7c2d12", padding: "1px" }}>{otOf(r, dd) || ""}</td>)}<td colSpan={2}></td></tr>}
+            {/* update344 */}
+            {r.outSites && Object.keys(r.outSites).length > 0 && <tr key={r.key + "out"}><td style={{ ...td, textAlign: "left", fontSize: 9, fontStyle: "italic", color: "#1d4ed8" }}>Punched out at</td>{grid.days.map(dd => <td key={dd.iso} style={{ ...td, textAlign: "center", fontSize: 7, color: "#1d4ed8", padding: "1px" }}>{outSiteOf(r, dd) || ""}</td>)}<td colSpan={2}></td></tr>}
           </>
         ))}</tbody>
       </table>
