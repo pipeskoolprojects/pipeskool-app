@@ -25,6 +25,7 @@ import { getSession, can } from "@/lib/auth";   // update297
 import { getPayrollSettings, weeklyOffDates, isoLocal, monthBounds } from "@/lib/payrollSettings";   // update279
 import { getHolidaysBetween } from "@/lib/holidays";
 import { exportAttendanceXlsx } from "@/lib/payrollExport";   // update278: styled workbook
+import { setAttendanceOverride, getAttendanceAudit, OVERRIDE_STATES } from "@/lib/attendanceOverride";   // update335
 
 const CODE = { present: "P", half_day: "H", absent: "A" };
 const COLOR = { P: "#e8f6ee", H: "#fff4cc", A: "#fde8e8", L: "#e6f0fd", WO: "#eef2f7", HOL: "#fce7f3", "": "#fff" };
@@ -79,7 +80,7 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
   });
 
   const mk = () => { let q = supabase.from("attendance")
-    .select("worker_id, site_id, att_date, status, review_status, ot_hours, ot_approved, ot_approved_hours, sites!attendance_site_id_fkey(name), workers(full_name, mobile, category, labour_type, daily_wage, site_id)")   // update278: OT row
+    .select("worker_id, site_id, att_date, status, review_status, ot_hours, ot_approved, ot_approved_hours, override_by, override_by_name, override_at, override_reason, override_marker, sites!attendance_site_id_fkey(name), workers(full_name, mobile, category, labour_type, daily_wage, site_id)")   // update278: OT row · update335: override markers
     .gte("att_date", from).lt("att_date", to).order("id");
   if (siteId && siteId !== "all") q = q.eq("site_id", siteId);
     return q; };   // update320: factory — a fresh query per page
@@ -110,13 +111,18 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
       masterSite: isStaff ? null : (a.workers?.site_id ?? null),
       leave: (isStaff && su?.id && leaveBy[su.id]) || null,   // update333
     };
-    const c = CODE[a.status] || "";
+    // update335: a manual day carries who/when/why, and a 'leave' marker prints L.
+    const c = a.override_marker === "leave" ? "L" : (CODE[a.status] || "");
     r.cells[a.att_date] = c;
+    if (a.override_by) {
+      r.ovr = r.ovr || {};
+      r.ovr[a.att_date] = { by: a.override_by_name || "someone", at: a.override_at, reason: a.override_reason || "" };
+    }
     r.ot = r.ot || {};
     const otv = a.ot_approved ? Number(a.ot_approved_hours || 0) : 0;   // update278: paid OT only (approved)
     if (otv) r.ot[a.att_date] = otv;
     if (a.review_status === "needs_review") r.review += 1;
-    if (c === "P") r.p += 1; else if (c === "H") r.h += 1; else if (c === "A") r.a += 1;
+    if (c === "P") r.p += 1; else if (c === "H") r.h += 1; else r.a += 1;   // update335: L counts with absent for payroll, and payroll reads status, not this
     // update277: a half day on Sunday is paid as a full day
     const sun = new Date(a.att_date + "T00:00:00").getDay() === 0;
     r.paid = (r.paid || 0) + (c === "P" ? 1 : c === "H" ? (settings.sunday_half_as_full && sun ? 1 : 0.5) : 0);
@@ -155,6 +161,8 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
 export function cellValue(code) { return NUM[code] ?? "0"; }
 
 export function otOf(r, d) { return (r.ot && r.ot[d.iso]) || 0; }   // update278
+// update335: null unless this day was entered by hand
+export function overrideOf(r, d) { return (r.ovr && r.ovr[d.iso]) || null; }
 
 export function cellCode(r, d, wo, hol) {
   const c = r.cells[d.iso];
@@ -204,23 +212,35 @@ function Toolbar({ f, setF, sites, roles, cats }) {
   );
 }
 
-function DateCells({ r, g, editMode, savingAll, pending, setPending }) {
+function DateCells({ r, g, editMode, savingAll, pending, setPending, canOverride, onOverride }) {
   const NEXT = { P: ["H", "half_day"], H: ["A", "absent"], A: ["P", "present"], "": ["P", "present"], WO: ["P", "present"], HOL: ["P", "present"], L: ["P", "present"] };
   return g.days.map(d => {
     const base = cellCode(r, d, g.wo, g.hol);
     const pk = r.wid + "|" + r.sid + "|" + d.iso;
     const pend = pending[pk];
     const c = pend ? pend.code : base;   // update298: pending edits shown before saving
+    const ovr = overrideOf(r, d);   // update335
     const click = () => {
-      if (!editMode || savingAll) return;
+      if (savingAll) return;
+      // update335: with the Override right, a cell opens the editor — which can create a day
+      // that has no punch at all. Without it, the old cycle still applies.
+      if (canOverride && editMode) { onOverride(r, d, base); return; }
+      if (!editMode) return;
       const [code, status] = NEXT[c] || NEXT[""];
       setPending(x => { const y = { ...x }; if (code === base) delete y[pk]; else y[pk] = { code, status }; return y; });
     };
-    return <td key={d.iso} onClick={click}
-      title={(g.hol[d.iso] ? g.hol[d.iso] + " · " : "") + (c === "L" ? "Approved leave · " : "") + (editMode ? "Click: 1 → 0.5 → 0" : "")}
+    const title = (g.hol[d.iso] ? g.hol[d.iso] + " · " : "")
+      + (ovr ? `MANUAL OVERRIDE by ${ovr.by}${ovr.at ? " on " + new Date(ovr.at).toLocaleString("en-IN") : ""}${ovr.reason ? " — " + ovr.reason : ""} · ` : "")
+      + (c === "L" && !ovr ? "Approved leave · " : "")
+      + (editMode ? (canOverride ? "Click to set this day" : "Click: 1 → 0.5 → 0") : "");
+    return <td key={d.iso} onClick={click} title={title}
       style={{ textAlign: "center", padding: "3px 2px", fontSize: 11, fontWeight: c === "P" || pend ? 700 : 500,
-        background: COLOR[c] || "#fff", cursor: editMode ? "pointer" : "default",
-        outline: pend ? "2px solid #FF6A1F" : "none", outlineOffset: -2 }}>{NUM[c]}</td>;
+        background: COLOR[c] || "#fff", cursor: editMode ? "pointer" : "default", position: "relative",
+        outline: pend ? "2px solid #FF6A1F" : "none", outlineOffset: -2 }}>
+      {NUM[c]}
+      {ovr && <span style={{ position: "absolute", top: 0, right: 0, width: 0, height: 0,
+        borderTop: "6px solid #FF6A1F", borderLeft: "6px solid transparent" }} />}
+    </td>;
   });
 }
 
@@ -237,7 +257,7 @@ function OtRow({ r, g, indent }) {
   );
 }
 
-function PeopleTable({ people, g, editMode, savingAll, pending, setPending, onOpen }) {
+function PeopleTable({ people, g, editMode, savingAll, pending, setPending, onOpen, canOverride, onOverride }) {
   if (!people.length) return <div className="muted" style={{ padding: 12, fontSize: 12.5 }}>No employees match the filters.</div>;
   return (
     <div style={{ overflowX: "auto" }}>{/* scrolls INSIDE the table only */}
@@ -270,7 +290,7 @@ function PeopleTable({ people, g, editMode, savingAll, pending, setPending, onOp
                     <td style={{ position: "sticky", left: 36, background: "#fff", zIndex: 1, whiteSpace: "nowrap" }}>{nameCell}</td>
                     <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{r.site}</td>
                     <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{p.designation || "—"}</td>
-                    <DateCells r={r} g={g} editMode={editMode} savingAll={savingAll} pending={pending} setPending={setPending} />
+                    <DateCells r={r} g={g} editMode={editMode} savingAll={savingAll} pending={pending} setPending={setPending} canOverride={canOverride} onOverride={onOverride} />
                     <td className="num" style={{ fontWeight: 700 }}>{r.daysPaid}</td>
                     <td className="num">{r.otTotal || "—"}</td>
                   </tr>
@@ -300,7 +320,7 @@ function PeopleTable({ people, g, editMode, savingAll, pending, setPending, onOp
                       <td style={{ position: "sticky", left: 36, background: "#fff", zIndex: 1, fontSize: 11.5, color: "#64748b", paddingLeft: 22, whiteSpace: "nowrap" }}>↳ at</td>
                       <td style={{ whiteSpace: "nowrap", fontSize: 12, fontWeight: 600 }}>{r.site}</td>
                       <td></td>
-                      <DateCells r={r} g={g} editMode={editMode} savingAll={savingAll} pending={pending} setPending={setPending} />
+                      <DateCells r={r} g={g} editMode={editMode} savingAll={savingAll} pending={pending} setPending={setPending} canOverride={canOverride} onOverride={onOverride} />
                       <td className="num" style={{ fontWeight: 700 }}>{r.daysPaid}</td>
                       <td className="num">{r.otTotal || "—"}</td>
                     </tr>
@@ -420,6 +440,116 @@ function PersonPanel({ person, month, onClose }) {
   );
 }
 
+// update335: the override editor. One day, one employee, one site — saved immediately so
+// every change is its own audited event. It can create a day that has no punch at all,
+// which is the whole point: a forgotten Punch-In is fixed here.
+function OverrideModal({ ctx, month, onClose, onSaved }) {
+  const { r, d, base } = ctx;
+  const initial = base === "L" ? "leave" : base === "H" ? "half_day" : base === "P" ? "present" : "absent";
+  const [state, setState] = useState(initial);
+  const [ot, setOt] = useState(String(otOf(r, d) || ""));
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const existing = !!r.cells[d.iso];
+
+  async function save() {
+    setBusy(true); setErr("");
+    const st = OVERRIDE_STATES.find(x => x.key === state);
+    const res = await setAttendanceOverride({
+      workerId: r.wid, siteId: r.sid, date: d.iso,
+      status: st.status, marker: st.marker, otHours: ot === "" ? null : ot, reason,
+    });
+    setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    onSaved(res.action);
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 110, padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 460, padding: 22 }}>
+        <h2 style={{ marginBottom: 2 }}>Set attendance</h2>
+        <div className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
+          {r.worker} · {r.site} · {d.iso.split("-").reverse().join("/")}
+          {!existing && <><br /><b style={{ color: "#9a3412" }}>No punch on this day</b> — saving will create the day manually.</>}
+        </div>
+
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+          {OVERRIDE_STATES.map(x => (
+            <button key={x.key} className={state === x.key ? "primary" : ""} style={{ fontSize: 12.5, flex: "1 0 auto" }}
+                    onClick={() => setState(x.key)}>{x.label}</button>
+          ))}
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontSize: 11.5, fontWeight: 700, marginBottom: 3 }}>OT hours (approved)</label>
+          <input inputMode="decimal" style={{ width: "100%" }} value={ot} placeholder="0"
+                 onChange={e => setOt(e.target.value.replace(/[^0-9.]/g, ""))} />
+          <div className="muted" style={{ fontSize: 10.5, marginTop: 2 }}>Saved as approved OT — it is paid at the OT rate on the next payroll run.</div>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "block", fontSize: 11.5, fontWeight: 700, marginBottom: 3 }}>Reason (kept in the audit log)</label>
+          <input style={{ width: "100%" }} value={reason} placeholder="e.g. forgot to punch out"
+                 onChange={e => setReason(e.target.value)} />
+        </div>
+
+        {state === "leave" && (
+          <div className="muted" style={{ fontSize: 11, background: "#f3f4f6", padding: 8, borderRadius: 6, marginBottom: 12 }}>
+            Leave marks the day <b>L</b> on the grid and records the day as an absence for payroll — staff absences convert to paid leave against the annual balance, labour absences are unpaid. It does not change any pay rule.
+          </div>
+        )}
+        {err && <div className="error" style={{ marginBottom: 10, whiteSpace: "pre-wrap" }}>{err}</div>}
+
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save override"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AuditModal({ onClose }) {
+  const [rows, setRows] = useState(null); const [err, setErr] = useState("");
+  useEffect(() => { getAttendanceAudit({ limit: 300 }).then(setRows).catch(e => { setErr(e.message); setRows([]); }); }, []);
+  const th = { textAlign: "left", fontSize: 11, padding: "6px 8px", background: "#f3f4f6", whiteSpace: "nowrap" };
+  const td = { fontSize: 11.5, padding: "5px 8px", borderBottom: "1px solid #f0f1f3", whiteSpace: "nowrap" };
+  const v = (st, mk) => mk === "leave" ? "L" : st === "present" ? "1" : st === "half_day" ? "0.5" : st === "absent" ? "0" : "—";
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 110, padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 900, padding: 22, maxHeight: "88vh", overflowY: "auto" }}>
+        <h2 style={{ marginBottom: 2 }}>Attendance audit log</h2>
+        <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>Every manual change, newest first. Entries can never be edited or deleted.</div>
+        {err && <div className="error" style={{ marginBottom: 10 }}>{err}</div>}
+        {!rows ? <div className="muted">Loading…</div> : !rows.length ? <div className="muted">No manual changes recorded yet.</div> : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr><th style={th}>When</th><th style={th}>Employee</th><th style={th}>Site</th><th style={th}>Date</th><th style={th}>Old</th><th style={th}>New</th><th style={th}>OT</th><th style={th}>By</th><th style={th}>Reason</th></tr></thead>
+              <tbody>
+                {rows.map(a => (
+                  <tr key={a.id}>
+                    <td style={td}>{new Date(a.changed_at).toLocaleString("en-IN")}</td>
+                    <td style={{ ...td, fontWeight: 600 }}>{a.employee_name}</td>
+                    <td style={td}>{a.site_name || "—"}</td>
+                    <td style={td}>{String(a.att_date).split("-").reverse().join("/")}</td>
+                    <td style={{ ...td, color: "#b91c1c" }}>{a.action === "created" ? "no punch" : v(a.old_status, a.old_marker)}</td>
+                    <td style={{ ...td, color: "#15803d", fontWeight: 700 }}>{v(a.new_status, a.new_marker)}</td>
+                    <td style={td}>{Number(a.old_ot_hours || 0)} → {Number(a.new_ot_hours || 0)}</td>
+                    <td style={td}>{a.changed_by_name || "—"}</td>
+                    <td style={{ ...td, whiteSpace: "normal" }}>{a.reason || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div style={{ marginTop: 14, textAlign: "right" }}><button onClick={onClose}>Close</button></div>
+      </div>
+    </div>
+  );
+}
+
 const inr = n => (n === null || n === undefined || n === "") ? "—" : "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
 export default function AttendanceSummary({ month, siteId, sites }) {
@@ -428,6 +558,8 @@ export default function AttendanceSummary({ month, siteId, sites }) {
   const sess = typeof window !== "undefined" ? getSession() : null;
   // update298: mirrors the server gate — Director, or granted "Attendance & muster -> manage".
   const canEdit = !!sess && (sess.role === "director" || can(sess, "attendance", "manage"));
+  // update335: a SEPARATE right. Only this one allows entering a day that never had a punch.
+  const canOverride = !!sess && (sess.role === "director" || can(sess, "attendance_override", "manage"));
   const [editMode, setEditMode] = useState(false);
   const [pending, setPending] = useState({});
   const [savingAll, setSavingAll] = useState(false);
@@ -435,6 +567,9 @@ export default function AttendanceSummary({ month, siteId, sites }) {
   const [g, setG] = useState(null); const [err, setErr] = useState("");
   const [person, setPerson] = useState(null);
   const [tab, setTab] = useState("office");
+  const [ovr, setOvr] = useState(null);       // update335: the cell being overridden
+  const [audit, setAudit] = useState(false);
+  const [okMsg, setOkMsg] = useState("");
   const [f, setF] = useState({ q: "", id: "", site: "", role: "", cat: "", status: "", ot: "", multi: "" });
 
   useEffect(() => {
@@ -509,13 +644,24 @@ export default function AttendanceSummary({ month, siteId, sites }) {
         <div>
           <b style={{ fontSize: 13 }}>Full Attendance Summary — {siteName} · {monthLabel(month)}</b>
           <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
-            <b>1</b> = present · <b>0.5</b> = half day · <b>0</b> = absent · <b>L</b> = approved leave · <b>HOL</b> = company holiday · shaded column = Sunday. Each employee appears once, with every site they worked listed underneath their name.
+            <b>1</b> = present · <b>0.5</b> = half day · <b>0</b> = absent · <b>L</b> = approved leave · <b>HOL</b> = company holiday · shaded column = Sunday. Each employee appears once, with every site they worked listed underneath their name. An orange corner on a day means it was set by hand — hover it for who, when and why.
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button onClick={exportExcel} disabled={!g || !shown.length}>⬇ Excel</button>
-          {canEdit && !editMode && <button className="primary" onClick={() => { setEditMode(true); setCellErr(""); }}>✎ Edit Attendance</button>}
-          {editMode && (
+          {(canOverride || canEdit) && <button onClick={() => setAudit(true)}>🕘 Audit log</button>}{/* update335 */}
+          {(canEdit || canOverride) && !editMode && (
+            <button className="primary" onClick={() => { setEditMode(true); setCellErr(""); setOkMsg(""); }}>
+              {canOverride ? "✎ Override Attendance" : "✎ Edit Attendance"}
+            </button>
+          )}
+          {editMode && canOverride && (
+            <>
+              <span className="muted" style={{ fontSize: 11.5 }}>Click any day to set it — each change saves and is logged on its own.</span>
+              <button onClick={() => { setEditMode(false); setOkMsg(""); }}>✓ Done</button>
+            </>
+          )}
+          {editMode && !canOverride && (
             <>
               <button className="primary" disabled={savingAll || !Object.keys(pending).length} onClick={saveAll}>
                 {savingAll ? "Saving…" : `💾 Save Changes${Object.keys(pending).length ? " (" + Object.keys(pending).length + ")" : ""}`}
@@ -530,6 +676,7 @@ export default function AttendanceSummary({ month, siteId, sites }) {
       <Toolbar f={f} setF={setF} sites={opts.sites} roles={opts.roles} cats={opts.cats} />
 
       {err && <div className="error" style={{ marginTop: 8 }}>{err}</div>}
+      {okMsg && <div style={{ background: "#ecfdf5", border: "1px solid #6ee7b7", color: "#065f46", padding: "7px 11px", borderRadius: 6, marginTop: 8, fontSize: 12.5 }}>{okMsg}</div>}
 
       {!g ? <div className="muted" style={{ marginTop: 10 }}>Loading…</div> : !g.people.length ? (
         <div className="muted" style={{ marginTop: 10 }}>No attendance for {siteName} in {monthLabel(month)}.</div>
@@ -544,12 +691,22 @@ export default function AttendanceSummary({ month, siteId, sites }) {
             {shown.filter(p => p.rows.length > 1).length > 0 && ` · ${shown.filter(p => p.rows.length > 1).length} working across multiple sites`}
           </div>
           <div className="mw-card">
-            <PeopleTable people={shown} g={g} editMode={editMode} savingAll={savingAll} pending={pending} setPending={setPending} onOpen={setPerson} />
+            <PeopleTable people={shown} g={g} editMode={editMode} savingAll={savingAll} pending={pending} setPending={setPending} onOpen={setPerson}
+                         canOverride={canOverride} onOverride={(r, d, base) => setOvr({ r, d, base })} />
           </div>
         </>
       )}
 
       {person && <PersonPanel person={person} month={month} onClose={() => setPerson(null)} />}
+      {ovr && (
+        <OverrideModal ctx={ovr} month={month} onClose={() => setOvr(null)}
+          onSaved={action => {
+            setOvr(null);
+            setOkMsg(action === "created" ? "Day created manually and logged." : "Attendance overridden and logged.");
+            loadAttendanceGrid(month, siteId).then(setG).catch(e => setCellErr(e.message));
+          }} />
+      )}
+      {audit && <AuditModal onClose={() => setAudit(false)} />}
     </div>
   );
 }
