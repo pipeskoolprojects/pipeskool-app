@@ -4,7 +4,8 @@
 // kind = payroll (consolidated per worker) | sites (site summary dashboard) | site (single site: attendance + payroll + site line)
 import { useEffect, useState } from "react";
 import { loadPayrollSummary } from "@/lib/payrollSummary";
-import { buildSiteBoard, filtersFromQuery, filtersActive } from "@/lib/siteBoard";   // update339
+import { getStaffPayouts } from "@/lib/staffpay";
+import { filtersFromQuery, filtersActive, allowedPeople } from "@/lib/payrollBoard";   // update340
 import { loadAttendanceGrid, cellCode, cellValue, otOf } from "@/components/AttendanceSummary";   // update332: numeric cells
 import { inr } from "@/lib/data";
 import Logo from "@/components/Logo";   // update331c: the real logo, not a text wordmark
@@ -17,20 +18,31 @@ const td = { fontSize: 10.5, padding: "4px 6px", borderBottom: "1px solid #eee",
 
 export default function WagesPrint() {
   const [p, setP] = useState(null); const [d, setD] = useState(null); const [g, setG] = useState(null); const [err, setErr] = useState("");
-  const [board, setBoard] = useState(null);   // update339: the filtered site board
+  const [board, setBoard] = useState(null);   // update340: the filtered payroll rows
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
-    // update339: the dashboard hands its tab and filters over in the URL so the PDF is
-    // exactly the board that was on screen, not a fresh unfiltered one.
+    // update340: Payroll Summary hands its tab and filters over in the URL so the PDF is
+    // exactly the list that was on screen, not a fresh unfiltered one.
     const { filters, tab } = filtersFromQuery(sp);
     const q = { kind: sp.get("kind") || "payroll", month: sp.get("month"), site: sp.get("site") || "all", filters, tab };
     setP(q);
     (async () => {
       try {
         const data = await loadPayrollSummary(q.month, q.site); setD(data);
-        if (q.kind === "sites") {
+        if (q.kind === "payroll") {
           const grid = await loadAttendanceGrid(q.month, q.site);
-          setBoard(buildSiteBoard({ tab: q.tab, filters: q.filters, people: grid.people, pay: data }));
+          const allowed = allowedPeople(grid.people, q.tab, q.filters);
+          if (q.tab === "labour") {
+            const ids = new Set(allowed.map(x => x.wid));
+            setBoard({ tab: q.tab, isLabour: true, rows: data.workers.filter(w => ids.has(w.worker_id)) });
+          } else {
+            const st = await getStaffPayouts(q.month, q.site);
+            const uids = new Set(allowed.map(x => x.uid).filter(Boolean));
+            setBoard({ tab: q.tab, isLabour: false,
+              rows: (st || []).filter(x => uids.has(Number(x.user_id)))
+                .map(x => ({ ...x, name: x.staff?.full_name || ("#" + x.user_id), role: x.staff?.role || "" }))
+                .sort((a, b) => a.name.localeCompare(b.name)) });
+          }
         }
         if (q.kind === "site") { const [gl, gs] = await Promise.all([loadAttendanceGrid(q.month, q.site, "labour"), loadAttendanceGrid(q.month, q.site, "staff")]); setG({ gl, gs }); }
       } catch (e) { setErr(e.message); }
@@ -59,7 +71,7 @@ export default function WagesPrint() {
   const PayrollTable = ({ workers }) => (
     <>
       <Band>PAYROLL SUMMARY — {siteName.toUpperCase()} · {p.month}</Band>
-      <Note>Basic = daily rate × payable days (incl. holiday pay) · OT rate = daily rate ÷ OT divisor · Gross = Basic + OT · PT once per worker above the threshold · Net = Gross − PF − PT − Other − Advance</Note>
+      <Note>Basic = daily rate × payable days (incl. holiday pay) · OT rate = daily rate ÷ OT divisor · Gross = Basic + OT · PT once per worker above the threshold · Net = Gross − PF − PT − Other − Advance{filtersActive(p.filters) ? " · FILTERED VIEW — only the rows matching the filters on screen" : ""}</Note>
       <table style={{ borderCollapse: "collapse", width: "100%" }}>
         <thead><tr>{["Sr", "Worker", "Designation", "Rate", "Days", "Basic", "OT h", "OT ₹", "Gross", "PF", "PT", "Other", "Total Ded.", "Advance", "Net Pay"].map((h, i) => <th key={h} style={{ ...th, textAlign: i < 3 ? "left" : "right" }}>{h}</th>)}</tr></thead>
         <tbody>{workers.map((w, i) => <tr key={w.worker_id}><td style={{ ...td, textAlign: "left" }}>{i + 1}</td><td style={{ ...td, textAlign: "left", fontWeight: 600 }}>{w.worker}</td><td style={{ ...td, textAlign: "left" }}>{w.designation}</td>
@@ -69,40 +81,41 @@ export default function WagesPrint() {
       </table>
     </>
   );
-  // update339: prints the SAME board object the screen built — same tab, same filters, same
-  // zero rows for quiet sites. Money columns only on the labour tab, for the reason in
-  // lib/siteBoard.js.
-  const TABNAME = { office: "OFFICE STAFF", site_staff: "SITE STAFF", labour: "WORKERS / LABOUR" };
-  const SitesTable = ({ sites, grand, isLabour = true, tab = "labour", filters }) => (
+  // update340: staff payroll for the Office Staff / Site Staff tabs
+  const StaffTable = ({ rows, tab }) => (
     <>
-      <Band>SITE SUMMARY — {TABNAME[tab] || "WORKERS / LABOUR"} · {p.month}</Band>
-      <Note>
-        {isLabour
-          ? "Total Site Labour Cost = Basic Wages + OT Amount · figures from the generated payroll for the month"
-          : "Days and OT hours per site, taken from attendance. Staff salary is a single monthly figure with no site attached and is not split across sites."}
-        {" · every active site is listed, showing zeros where nothing was recorded"}
-        {filtersActive(filters) ? " · FILTERED VIEW" : ""}
-      </Note>
+      <Band>PAYROLL SUMMARY — {tab === "office" ? "OFFICE STAFF" : "SITE STAFF"} · {siteName.toUpperCase()} · {p.month}</Band>
+      <Note>Net = Monthly Salary − Deduction + OT Amount − Advance · figures from the generated staff salary for the month{filtersActive(p.filters) ? " · FILTERED VIEW — only the rows matching the filters on screen" : ""}</Note>
       <table style={{ borderCollapse: "collapse", width: "100%" }}>
-        <thead><tr>
-          <th style={{ ...th, textAlign: "left" }}>Site</th>
-          <th style={th}>{isLabour ? "Workers Present" : "Staff Present"}</th>
-          <th style={th}>Total Days</th>
-          <th style={th}>OT Hours</th>
-          {isLabour && <><th style={th}>Basic Wages (₹)</th><th style={th}>OT Amount (₹)</th><th style={th}>Total Site Labour Cost (₹)</th></>}
-        </tr></thead>
-        <tbody>{sites.map(s => (
-          <tr key={s.site_id}>
-            <td style={{ ...td, textAlign: "left", fontWeight: 700 }}>{s.site}</td>
-            <td style={td}>{s.workers}</td><td style={td}>{s.days}</td><td style={td}>{s.otH || "—"}</td>
-            {isLabour && <><td style={td}>{inr(s.basic)}</td><td style={td}>{s.otAmt ? inr(s.otAmt) : "—"}</td><td style={{ ...td, fontWeight: 800 }}>{inr(s.total)}</td></>}
+        <thead><tr>{["Sr", "Staff Name", "Designation", "Salary", "Work Days", "Present", "Absent", "Deduction", "OT h", "OT ₹", "Advance", "Net Pay", "Status"].map((h, i) => <th key={h} style={{ ...th, textAlign: i < 3 ? "left" : "right" }}>{h}</th>)}</tr></thead>
+        <tbody>{rows.map((w, i) => (
+          <tr key={w.id}>
+            <td style={{ ...td, textAlign: "left" }}>{i + 1}</td>
+            <td style={{ ...td, textAlign: "left", fontWeight: 600 }}>{w.name}</td>
+            <td style={{ ...td, textAlign: "left" }}>{String(w.role || "").split("_").map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(" ")}</td>
+            <td style={td}>{inr(w.monthly_salary)}</td><td style={td}>{w.working_days}</td><td style={td}>{w.days_present}</td><td style={td}>{w.days_absent}</td>
+            <td style={td}>{inr(w.deduction)}</td><td style={td}>{w.ot_hours || "—"}</td><td style={td}>{w.ot_amount ? inr(w.ot_amount) : "—"}</td>
+            <td style={td}>{inr(w.advances_deducted)}</td><td style={{ ...td, fontWeight: 800 }}>{inr(w.net)}</td>
+            <td style={{ ...td, textAlign: "right", textTransform: "capitalize" }}>{w.status}</td>
           </tr>))}
         </tbody>
-        {grand && <tfoot><tr style={{ background: "#fff4e5", fontWeight: 800 }}>
-          <td style={{ ...td, textAlign: "left" }}>GRAND TOTAL</td>
-          <td style={td}>{grand.workers}</td><td style={td}>{grand.days}</td><td style={td}>{grand.otH || "—"}</td>
-          {isLabour && <><td style={td}>{inr(grand.basic)}</td><td style={td}>{grand.otAmt ? inr(grand.otAmt) : "—"}</td><td style={td}>{inr(grand.total)}</td></>}
-        </tr></tfoot>}
+        <tfoot><tr style={{ background: "#fff4e5", fontWeight: 800 }}>
+          <td colSpan={3} style={{ ...td, textAlign: "left" }}>TOTAL · {rows.length} staff</td>
+          <td style={td}>{inr(sum(rows, "monthly_salary"))}</td><td style={td}>{sum(rows, "working_days")}</td><td style={td}>{sum(rows, "days_present")}</td><td style={td}>{sum(rows, "days_absent")}</td>
+          <td style={td}>{inr(sum(rows, "deduction"))}</td><td style={td}>{sum(rows, "ot_hours")}</td><td style={td}>{inr(sum(rows, "ot_amount"))}</td>
+          <td style={td}>{inr(sum(rows, "advances_deducted"))}</td><td style={td}>{inr(sum(rows, "net"))}</td><td></td>
+        </tr></tfoot>
+      </table>
+    </>
+  );
+  const SitesTable = ({ sites, grand }) => (
+    <>
+      <Band>SITE SUMMARY DASHBOARD — {p.month}</Band>
+      <Note>Total Site Labour Cost = Basic Wages + OT Amount · figures from the generated payroll for the month · every active site is listed, showing zeros where nothing was recorded</Note>
+      <table style={{ borderCollapse: "collapse", width: "100%" }}>
+        <thead><tr><th style={{ ...th, textAlign: "left" }}>Site</th><th style={th}>Workers Present</th><th style={th}>Total Days</th><th style={th}>Basic Wages (₹)</th><th style={th}>OT Amount (₹)</th><th style={th}>Total Site Labour Cost (₹)</th></tr></thead>
+        <tbody>{sites.map(s => <tr key={s.site_id}><td style={{ ...td, textAlign: "left", fontWeight: 700 }}>{s.site}</td><td style={td}>{s.workers}</td><td style={td}>{s.days}</td><td style={td}>{inr(s.basic)}</td><td style={td}>{s.otAmt ? inr(s.otAmt) : "—"}</td><td style={{ ...td, fontWeight: 800 }}>{inr(s.total)}</td></tr>)}</tbody>
+        {grand && <tfoot><tr style={{ background: "#fff4e5", fontWeight: 800 }}><td style={{ ...td, textAlign: "left" }}>GRAND TOTAL</td><td style={td}>{grand.workers}</td><td style={td}>{grand.days}</td><td style={td}>{inr(grand.basic)}</td><td style={td}>{grand.otAmt ? inr(grand.otAmt) : "—"}</td><td style={td}>{inr(grand.total)}</td></tr></tfoot>}
       </table>
     </>
   );
@@ -121,9 +134,11 @@ export default function WagesPrint() {
       {!d ? <div style={{ padding: 10 }}>Loading…</div> : (
         <>
           {p.kind === "site" && g && <><Grid grid={g.gl} kind="labour" /><Grid grid={g.gs} kind="staff" /></>}
-          {(p.kind === "payroll" || p.kind === "site") && <PayrollTable workers={d.workers} />}
-          {p.kind === "sites" && board && <SitesTable sites={board.sites} grand={board.grand} isLabour={board.isLabour} tab={board.tab} filters={p.filters} />}
-          {p.kind === "site" && <SitesTable sites={d.sites} grand={null} />}
+          {p.kind === "payroll" && board && (board.isLabour
+            ? <PayrollTable workers={board.rows} />
+            : <StaffTable rows={board.rows} tab={board.tab} />)}
+          {p.kind === "site" && <PayrollTable workers={d.workers} />}
+          {(p.kind === "sites" || p.kind === "site") && <SitesTable sites={d.sites} grand={p.kind === "sites" ? d.grand : null} />}
         </>
       )}
       <div style={{ fontSize: 9, color: "#6b7280", textAlign: "center", marginTop: 14 }}>System generated from Pipeskool attendance & payroll · {new Date().toLocaleString("en-IN")}</div>
