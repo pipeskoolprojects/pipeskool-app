@@ -144,13 +144,22 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
     p.daysPaid = +(p.daysPaid + r.daysPaid).toFixed(2);
     p.otTotal = +(p.otTotal + r.otTotal).toFixed(2);
   });
+  // update338: THREE groups, kept completely separate.
+  //   labour      -> always its own section, whatever site it is posted to
+  //   office      -> STAFF whose master assignment includes an office site
+  //   site_staff  -> every other staff member
+  // Only staff are split by office/site: a labour row is labour wherever it works, so the
+  // Workers section is never diluted by a helper who happened to punch at Head Office.
   const people = Object.values(pmap).map(p => {
-    // assignment first; only if the master says nothing do we fall back to where they punched
-    let office;
-    if (p.isStaff && p.uid && assigned[p.uid]) office = [...assigned[p.uid]].some(id => officeSiteIds.has(id));
-    else if (!p.isStaff && p.rows[0].masterSite != null) office = officeSiteIds.has(p.rows[0].masterSite);
-    else office = p.rows.some(r => OFFICE_SITE_RE.test(r.site));
-    return { ...p, group: office ? "office" : "field", siteNames: p.rows.map(r => r.site) };
+    let group;
+    if (!p.isStaff) group = "labour";
+    else {
+      const office = (p.uid && assigned[p.uid])
+        ? [...assigned[p.uid]].some(id => officeSiteIds.has(id))
+        : p.rows.some(r => OFFICE_SITE_RE.test(r.site));   // no assignment on file -> fall back to where they punched
+      group = office ? "office" : "site_staff";
+    }
+    return { ...p, group, siteNames: p.rows.map(r => r.site) };
   }).sort((x, y) => x.worker.localeCompare(y.worker));
 
   return { days, rows, people, wo, hol, settings };
@@ -607,15 +616,16 @@ export default function AttendanceSummary({ month, siteId, sites }) {
   }, [g, f]);
 
   const office = filtered.filter(p => p.group === "office");
-  const field = filtered.filter(p => p.group !== "office");
-  const shown = tab === "office" ? office : field;
+  const siteStaff = filtered.filter(p => p.group === "site_staff");
+  const labourP = filtered.filter(p => p.group === "labour");
+  const shown = tab === "office" ? office : tab === "site_staff" ? siteStaff : labourP;
 
   async function exportExcel() {
     if (!g) return;
     // export the site rows behind whichever employees are on screen — one row per person per site
     const wids = new Set(shown.map(p => p.wid));
     const rows = g.rows.filter(r => wids.has(r.wid));
-    await exportAttendanceXlsx({ month, siteName, kind: tab === "office" ? "staff" : "all", days: g.days, rows, wo: g.wo, hol: g.hol, cellCode, otOf });
+    await exportAttendanceXlsx({ month, siteName, kind: tab === "labour" ? "labour" : "staff", days: g.days, rows, wo: g.wo, hol: g.hol, cellCode, otOf });   // update338
   }
 
   async function saveAll() {
@@ -684,7 +694,8 @@ export default function AttendanceSummary({ month, siteId, sites }) {
         <>
           <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border)", marginTop: 12 }}>
             <button style={tabBtn(tab === "office")} onClick={() => setTab("office")}>🏢 Office Staff · {office.length}</button>
-            <button style={tabBtn(tab === "field")} onClick={() => setTab("field")}>👷 Site Staff &amp; Workers · {field.length}</button>
+            <button style={tabBtn(tab === "site_staff")} onClick={() => setTab("site_staff")}>👷 Site Staff · {siteStaff.length}</button>
+            <button style={tabBtn(tab === "labour")} onClick={() => setTab("labour")}>🧰 Workers / Labour · {labourP.length}</button>
           </div>
           <div className="muted" style={{ fontSize: 12, margin: "8px 0" }}>
             {shown.length} employee{shown.length === 1 ? "" : "s"}, each listed once
