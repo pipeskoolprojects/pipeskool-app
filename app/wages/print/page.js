@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { loadPayrollSummary } from "@/lib/payrollSummary";
 import { getStaffPayouts } from "@/lib/staffpay";
-import { filtersFromQuery, filtersActive, allowedPeople } from "@/lib/payrollBoard";   // update340
+import { filtersFromQuery, filtersActive, allowedPeople, staffRowsFor } from "@/lib/payrollBoard";   // update340
 import { loadAttendanceGrid, cellCode, cellValue, otOf } from "@/components/AttendanceSummary";   // update332: numeric cells
 import { inr } from "@/lib/data";
 import Logo from "@/components/Logo";   // update331c: the real logo, not a text wordmark
@@ -37,11 +37,7 @@ export default function WagesPrint() {
             setBoard({ tab: q.tab, isLabour: true, rows: data.workers.filter(w => ids.has(w.worker_id)) });
           } else {
             const st = await getStaffPayouts(q.month, q.site);
-            const uids = new Set(allowed.map(x => x.uid).filter(Boolean));
-            setBoard({ tab: q.tab, isLabour: false,
-              rows: (st || []).filter(x => uids.has(Number(x.user_id)))
-                .map(x => ({ ...x, name: x.staff?.full_name || ("#" + x.user_id), role: x.staff?.role || "" }))
-                .sort((a, b) => a.name.localeCompare(b.name)) });
+            setBoard({ tab: q.tab, isLabour: false, rows: staffRowsFor(st, allowed) });   // update341
           }
         }
         if (q.kind === "site") { const [gl, gs] = await Promise.all([loadAttendanceGrid(q.month, q.site, "labour"), loadAttendanceGrid(q.month, q.site, "staff")]); setG({ gl, gs }); }
