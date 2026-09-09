@@ -57,17 +57,19 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
   const days = monthDays(monthStr);
   const { from, to } = monthBounds(monthStr);   // update279: the old UTC math made from == to in IST -> empty grid
   if (isDemo) return { days, rows: [], people: [], wo: new Set(), hol: {} };
-  const [settings, hols, { data: staffRows }, { data: siteRows }, { data: userSites }, { data: leaves }] = await Promise.all([
+  const [settings, hols, { data: staffRows }, { data: siteRows }, { data: userSites }, { data: workerSites }, { data: leaves }] = await Promise.all([
     getPayrollSettings(), getHolidaysBetween(from, to),
     supabase.from("app_users").select("id, mobile, role, monthly_salary").eq("is_active", true),
     supabase.from("sites").select("id, name"),
     supabase.from("user_sites").select("user_id, site_id"),                       // update333: master assignment
+    supabase.from("worker_sites").select("worker_id, site_id"),                   // update344: labour allotments
     supabase.from("leave_requests").select("staff_id, from_date, to_date, status, leave_type")
       .eq("status", "approved").lte("from_date", to).gte("to_date", from),        // update333: L in the grid
   ]);
 
   // office sites, by name, from Site Master
   const officeSiteIds = new Set((siteRows || []).filter(s => OFFICE_SITE_RE.test(s.name || "")).map(s => s.id));
+  const siteNameById = {}; (siteRows || []).forEach(s => { siteNameById[s.id] = s.name; });
 
   const staffBy = {}; (staffRows || []).forEach(u => { staffBy[String(u.mobile)] = u; });
   // uid -> assigned site ids
@@ -80,7 +82,7 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
   });
 
   const mk = () => { let q = supabase.from("attendance")
-    .select("worker_id, site_id, att_date, status, review_status, ot_hours, ot_approved, ot_approved_hours, override_by, override_by_name, override_at, override_reason, override_marker, sites!attendance_site_id_fkey(name), workers(full_name, mobile, category, labour_type, daily_wage, site_id)")   // update278: OT row · update335: override markers
+    .select("worker_id, site_id, punch_out_site_id, att_date, status, review_status, ot_hours, ot_approved, ot_approved_hours, override_by, override_by_name, override_at, override_reason, override_marker, sites!attendance_site_id_fkey(name), workers(full_name, mobile, category, labour_type, daily_wage, site_id)")   // update278: OT row · update335: override markers
     .gte("att_date", from).lt("att_date", to).order("id");
   if (siteId && siteId !== "all") q = q.eq("site_id", siteId);
     return q; };   // update320: factory — a fresh query per page
@@ -114,6 +116,13 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
     // update335: a manual day carries who/when/why, and a 'leave' marker prints L.
     const c = a.override_marker === "leave" ? "L" : (CODE[a.status] || "");
     r.cells[a.att_date] = c;
+    // update344: only stored when the worker punched OUT somewhere other than where they
+    // punched IN. Null on every day before 344 — the site was never recorded, so it is
+    // shown as "—" rather than assumed to be the punch-in site.
+    if (a.punch_out_site_id && a.punch_out_site_id !== a.site_id) {
+      r.outSites = r.outSites || {};
+      r.outSites[a.att_date] = siteNameById[a.punch_out_site_id] || ("Site " + a.punch_out_site_id);
+    }
     if (a.override_by) {
       r.ovr = r.ovr || {};
       r.ovr[a.att_date] = { by: a.override_by_name || "someone", at: a.override_at, reason: a.override_reason || "" };
@@ -162,7 +171,41 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
     return { ...p, group, siteNames: p.rows.map(r => r.site) };
   }).sort((x, y) => x.worker.localeCompare(y.worker));
 
-  return { days, rows, people, wo, hol, settings };
+  // update344: EVERY ASSIGNED SITE, not just the ones with activity. A worker allotted to
+  // ten sites who worked three of them was leaving seven sites out of the export entirely,
+  // so the sheet did not match the allotment list on their own profile. These carry zeros
+  // and are marked assignedOnly, and they go in a SEPARATE array so the on-screen grid is
+  // unchanged — only the export merges them in.
+  const assignedBy = {};
+  (workerSites || []).forEach(w => { (assignedBy[w.worker_id] = assignedBy[w.worker_id] || new Set()).add(w.site_id); });
+  const seenBySubject = {};
+  rows.forEach(r => { (seenBySubject[r.wid] = seenBySubject[r.wid] || new Set()).add(r.sid); });
+
+  const assignedRows = [];
+  people.forEach(p => {
+    const worked = seenBySubject[p.wid] || new Set();
+    let allot = new Set();
+    if (p.isStaff && p.uid && assigned[p.uid]) allot = assigned[p.uid];
+    else if (!p.isStaff && assignedBy[p.wid]) allot = assignedBy[p.wid];
+    const primary = p.rows[0]?.masterSite;
+    if (primary != null) allot = new Set([...allot, primary]);
+    [...allot].forEach(sid => {
+      if (worked.has(sid)) return;
+      if (siteId && siteId !== "all" && String(sid) !== String(siteId)) return;
+      assignedRows.push({
+        key: p.wid + ":" + sid, wid: p.wid, sid, worker: p.worker,
+        site: siteNameById[sid] || ("Site " + sid), designation: p.designation,
+        isStaff: p.isStaff, mobile: p.mobile, uid: p.uid, category: p.category,
+        cells: {}, ot: {}, p: 0, h: 0, a: 0, review: 0,
+        daysPaid: 0, otTotal: 0, assignedOnly: true,
+      });
+    });
+  });
+
+  const rowsWithAssigned = [...rows, ...assignedRows]
+    .sort((x, y) => x.worker.localeCompare(y.worker) || x.site.localeCompare(y.site));
+
+  return { days, rows, people, wo, hol, settings, assignedRows, rowsWithAssigned };
 }
 
 // update332: ONE definition of what a cell prints, shared by the screen, the printed
@@ -170,10 +213,15 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
 export function cellValue(code) { return NUM[code] ?? "0"; }
 
 export function otOf(r, d) { return (r.ot && r.ot[d.iso]) || 0; }   // update278
+// update344: the punch-OUT site, only where it differed from the punch-in site
+export function outSiteOf(r, d) { return (r.outSites && r.outSites[d.iso]) || ""; }
 // update335: null unless this day was entered by hand
 export function overrideOf(r, d) { return (r.ovr && r.ovr[d.iso]) || null; }
 
 export function cellCode(r, d, wo, hol) {
+  // update344: an allotted site with no attendance is not an ABSENCE — the worker was
+  // simply somewhere else. It prints 0 with no absence tint and never reaches payroll.
+  if (r.assignedOnly) return hol[d.iso] ? "HOL" : "";
   const c = r.cells[d.iso];
   if (c) return c;
   if (r.leave && r.leave.has(d.iso)) return "L";   // update333: approved leave, only where nothing was punched
@@ -253,6 +301,23 @@ function DateCells({ r, g, editMode, savingAll, pending, setPending, canOverride
   });
 }
 
+// update344: shown only on days the worker finished somewhere other than where they started.
+// No row means same site, or a day from before 344 when it was never recorded.
+function OutSiteRow({ r, g, indent }) {
+  if (!r.outSites || !Object.keys(r.outSites).length) return null;
+  return (
+    <tr style={{ background: "#f5f8ff" }}>
+      <td style={{ position: "sticky", left: 0, background: "#f5f8ff", zIndex: 1 }}></td>
+      <td style={{ position: "sticky", left: 36, background: "#f5f8ff", zIndex: 1, fontSize: 10.5, color: "#1d4ed8", fontStyle: "italic", paddingLeft: indent }}>Punched out at</td>
+      <td colSpan={2}></td>
+      {g.days.map(d => { const v = outSiteOf(r, d); return (
+        <td key={d.iso} title={v ? "Punched IN at " + r.site + " · Punched OUT at " + v : ""}
+            style={{ textAlign: "center", fontSize: 9, color: "#1d4ed8", overflow: "hidden", whiteSpace: "nowrap" }}>{v ? "→" : ""}</td>); })}
+      <td colSpan={2} style={{ fontSize: 10.5, color: "#1d4ed8" }}>{[...new Set(Object.values(r.outSites))].join(", ")}</td>
+    </tr>
+  );
+}
+
 function OtRow({ r, g, indent }) {
   if (!r.otTotal) return null;
   return (
@@ -303,7 +368,7 @@ function PeopleTable({ people, g, editMode, savingAll, pending, setPending, onOp
                     <td className="num" style={{ fontWeight: 700 }}>{r.daysPaid}</td>
                     <td className="num">{r.otTotal || "—"}</td>
                   </tr>
-                  <OtRow r={r} g={g} indent={0} />
+                  <OtRow r={r} g={g} indent={0} /><OutSiteRow r={r} g={g} indent={0} />
                 </Fragment>
               );
             }
@@ -333,7 +398,7 @@ function PeopleTable({ people, g, editMode, savingAll, pending, setPending, onOp
                       <td className="num" style={{ fontWeight: 700 }}>{r.daysPaid}</td>
                       <td className="num">{r.otTotal || "—"}</td>
                     </tr>
-                    <OtRow r={r} g={g} indent={22} />
+                    <OtRow r={r} g={g} indent={22} /><OutSiteRow r={r} g={g} indent={22} />
                   </Fragment>
                 ))}
               </Fragment>
@@ -625,7 +690,10 @@ export default function AttendanceSummary({ month, siteId, sites }) {
     // export the site rows behind whichever employees are on screen — one row per person per site
     const wids = new Set(shown.map(p => p.wid));
     const rows = g.rows.filter(r => wids.has(r.wid));
-    await exportAttendanceXlsx({ month, siteName, kind: tab === "labour" ? "labour" : "staff", days: g.days, rows, wo: g.wo, hol: g.hol, cellCode, otOf });   // update338
+    // update344: the EXPORT includes every allotted site (zeros where nothing happened);
+    // the on-screen grid still shows only sites with activity.
+    const withAssigned = (g.rowsWithAssigned || rows).filter(r => wids.has(r.wid));
+    await exportAttendanceXlsx({ month, siteName, kind: tab === "labour" ? "labour" : "staff", days: g.days, rows: withAssigned, wo: g.wo, hol: g.hol, cellCode, otOf, outSiteOf });   // update338/344
   }
 
   async function saveAll() {
@@ -654,7 +722,7 @@ export default function AttendanceSummary({ month, siteId, sites }) {
         <div>
           <b style={{ fontSize: 13 }}>Full Attendance Summary — {siteName} · {monthLabel(month)}</b>
           <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
-            <b>1</b> = present · <b>0.5</b> = half day · <b>0</b> = absent · <b>L</b> = approved leave · <b>HOL</b> = company holiday · shaded column = Sunday. Each employee appears once, with every site they worked listed underneath their name. An orange corner on a day means it was set by hand — hover it for who, when and why.
+            <b>1</b> = present · <b>0.5</b> = half day · <b>0</b> = absent · <b>L</b> = approved leave · <b>HOL</b> = company holiday · shaded column = Sunday. Each employee appears once, with every site they worked listed underneath their name. An orange corner on a day means it was set by hand — hover it for who, when and why. A blue → marks a day the worker punched out at a different site.
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
