@@ -19,7 +19,7 @@ import { getStaffPayouts } from "@/lib/staffpay";
 import { exportPayrollXlsx, exportStaffPayrollXlsx } from "@/lib/payrollExport";
 import { loadAttendanceGrid, monthLabel } from "@/components/AttendanceSummary";   // update279
 import { inr } from "@/lib/data";
-import { EMPTY_FILTERS, filtersActive, filtersToQuery, boardOptions, allowedPeople } from "@/lib/payrollBoard";
+import { EMPTY_FILTERS, filtersActive, filtersToQuery, boardOptions, allowedPeople, staffRowsFor } from "@/lib/payrollBoard";
 
 const TABS = [["office", "🏢 Office Staff"], ["site_staff", "👷 Site Staff"], ["labour", "🧰 Workers / Labour"]];
 
@@ -89,10 +89,7 @@ export default function PayrollSummary({ month, siteId, sites }) {
       const ids = new Set(allowed.map(p => p.wid));
       return d.workers.filter(w => ids.has(w.worker_id));
     }
-    const uids = new Set(allowed.map(p => p.uid).filter(Boolean));
-    return (staff || []).filter(s => uids.has(Number(s.user_id)))
-      .map(s => ({ ...s, name: s.staff?.full_name || ("#" + s.user_id), role: s.staff?.role || "" }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return staffRowsFor(staff, allowed);   // update341
   }, [loading, people, tab, f, d, staff, isLabour]);
 
   const sum = k => +rows.reduce((n, w) => n + Number(w[k] || 0), 0).toFixed(2);

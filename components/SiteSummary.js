@@ -23,7 +23,7 @@ export default function SiteSummary({ month, siteId, sites }) {
   return (
     <div className="panel">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-        <div className="muted" style={{ fontSize: 12.5 }}>Site-attributable labour cost — days, basic wages and OT split correctly across sites. Download any single site's data separately below.</div>
+        <div className="muted" style={{ fontSize: 12.5, maxWidth: 660 }}>Site-attributable <b>labour</b> cost — days, basic wages and OT split correctly across sites, read from the generated labour payroll. <b>Staff salary is not on this board</b>: it is one monthly figure per person with no site attached. A staff-only site such as HEAD OFFICE therefore shows ₹0 here even when its staff have attendance. Download any single site&apos;s data separately below.</div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => exportSiteSummaryXlsx({ month, sites: d.sites, grand: d.grand })} disabled={!d || !d.sites.length}>⬇ Export All (Excel)</button>
           <a href={`/wages/print?kind=sites&month=${month}&site=${siteId}`} target="_blank" rel="noreferrer"><button className="primary" disabled={!d || !d.sites.length}>⬇ Export All (PDF)</button></a>
@@ -41,7 +41,7 @@ export default function SiteSummary({ month, siteId, sites }) {
               <tbody>
                 {d.sites.map(s => { const quiet = s.days === 0 && s.total === 0; return (
                   <tr key={s.site_id} style={quiet ? { opacity: 0.55 } : undefined}>
-                    <td style={{ fontWeight: 700 }}>{s.site}{quiet && <span className="muted" style={{ fontWeight: 400, fontSize: 11 }}> · nothing recorded</span>}</td><td className="num">{s.workers}</td><td className="num">{s.days}</td>
+                    <td style={{ fontWeight: 700 }}>{s.site}{quiet && <span className="muted" style={{ fontWeight: 400, fontSize: 11 }}> · no labour payroll this month</span>}</td><td className="num">{s.workers}</td><td className="num">{s.days}</td>
                     <td className="num">{inr(s.basic)}</td><td className="num">{s.otAmt ? inr(s.otAmt) : "—"}</td><td className="num" style={{ fontWeight: 800 }}>{inr(s.total)}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       <button className="mw-xl" disabled={busy === s.site_id || quiet} onClick={() => siteExcel(s)}>{busy === s.site_id ? "…" : "⬇ Excel"}</button>{" "}
