@@ -48,7 +48,25 @@ export default function WagesPrint() {
           const m = mergeStaffIntoSites({ sites: data.sites, people: grid.people, staffPayouts: st, staffPrimarySite: primary });
           setBoard({ kind: "sites", ...m });
         }
-        if (q.kind === "site") { const [gl, gs] = await Promise.all([loadAttendanceGrid(q.month, q.site, "labour"), loadAttendanceGrid(q.month, q.site, "staff")]); setG({ gl, gs }); }
+        if (q.kind === "site") {
+          // update343: the single-site report was labour-only — its Payroll Summary and its
+          // Site Summary row both read 0 for a staff-only site while the attendance sheet
+          // printed directly above them showed real people. This affected EVERY site's PDF,
+          // not just Head Office; it just showed as zeros only where the site has no labour.
+          const [gl, gs, grid, st] = await Promise.all([
+            loadAttendanceGrid(q.month, q.site, "labour"),
+            loadAttendanceGrid(q.month, q.site, "staff"),
+            loadAttendanceGrid(q.month, q.site),
+            getStaffPayouts(q.month, q.site),
+          ]);
+          setG({ gl, gs });
+          const primary = {};
+          grid.people.forEach(x => { if (x.isStaff && x.uid && x.rows[0]) primary[x.uid] = x.rows[0].sid; });
+          const uids = new Set(grid.people.filter(x => x.isStaff && x.uid).map(x => Number(x.uid)));
+          const stHere = (st || []).filter(x => uids.has(Number(x.user_id)));
+          const m = mergeStaffIntoSites({ sites: data.sites, people: grid.people, staffPayouts: stHere, staffPrimarySite: primary });
+          setBoard({ kind: "site", ...m, staffRows: staffRowsFor(stHere, grid.people.filter(x => x.isStaff)) });
+        }
       } catch (e) { setErr(e.message); }
     })();
   }, []);
@@ -112,10 +130,43 @@ export default function WagesPrint() {
       </table>
     </>
   );
+  // update343: staff payroll on the single-site report. Without this the report printed a
+  // full staff attendance grid and then a payroll section that said "0 workers".
+  const StaffPayTable = ({ rows }) => {
+    const sum = k => +rows.reduce((n, x) => n + Number(x[k] || 0), 0).toFixed(2);
+    return (
+      <>
+        <Band>STAFF SALARY — {siteName} · {p.month}</Band>
+        <Note>Net = Monthly Salary − Deduction + OT Amount − Advance · from the generated staff salary for the month</Note>
+        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+          <thead><tr>
+            <th style={{ ...th, textAlign: "left" }}>Sr</th><th style={{ ...th, textAlign: "left" }}>Staff</th><th style={{ ...th, textAlign: "left" }}>Designation</th>
+            <th style={th}>Salary</th><th style={th}>Days</th><th style={th}>Deduction</th><th style={th}>OT h</th><th style={th}>OT ₹</th><th style={th}>Advance</th><th style={th}>Net Pay</th>
+          </tr></thead>
+          <tbody>{rows.map((x, i) => (
+            <tr key={x.id}>
+              <td style={{ ...td, textAlign: "left" }}>{i + 1}</td>
+              <td style={{ ...td, textAlign: "left", fontWeight: 700 }}>{x.name}</td>
+              <td style={{ ...td, textAlign: "left" }}>{String(x.role || "").split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}</td>
+              <td style={td}>{inr(x.monthly_salary)}</td><td style={td}>{x.days_present}</td><td style={td}>{inr(x.deduction)}</td>
+              <td style={td}>{x.ot_hours || "—"}</td><td style={td}>{x.ot_amount ? inr(x.ot_amount) : "—"}</td>
+              <td style={td}>{inr(x.advances_deducted)}</td><td style={{ ...td, fontWeight: 800 }}>{inr(x.net)}</td>
+            </tr>))}
+          </tbody>
+          <tfoot><tr style={{ background: "#fff4e5", fontWeight: 800 }}>
+            <td style={{ ...td, textAlign: "left" }} colSpan={3}>TOTAL · {rows.length} staff</td>
+            <td style={td}>{inr(sum("monthly_salary"))}</td><td style={td}>{sum("days_present")}</td><td style={td}>{inr(sum("deduction"))}</td>
+            <td style={td}>{sum("ot_hours") || "—"}</td><td style={td}>{inr(sum("ot_amount"))}</td><td style={td}>{inr(sum("advances_deducted"))}</td><td style={td}>{inr(sum("net"))}</td>
+          </tr></tfoot>
+        </table>
+      </>
+    );
+  };
+
   const SitesTable = ({ sites, grand }) => (
     <>
       <Band>SITE SUMMARY DASHBOARD — {p.month}</Band>
-      <Note>Total Site Labour Cost = Basic Wages + OT Amount · figures from the generated payroll for the month · every active site is listed, showing zeros where nothing was recorded</Note>
+      <Note>Total Site Cost = Basic Wages + OT Amount · labour from the generated labour payroll; staff basic split pro-rata by paid days at each site and staff OT by the actual OT hours there · days and headcount come from attendance, so a person who worked but whose salary is not yet generated still shows their days</Note>
       <table style={{ borderCollapse: "collapse", width: "100%" }}>
         <thead><tr><th style={{ ...th, textAlign: "left" }}>Site</th><th style={th}>Workers</th><th style={th}>Staff</th><th style={th}>Total Days</th><th style={th}>Basic Wages (₹)</th><th style={th}>OT Hours</th><th style={th}>OT Amount (₹)</th><th style={th}>Total Site Cost (₹)</th></tr></thead>
         <tbody>{sites.map(s => <tr key={s.site_id}><td style={{ ...td, textAlign: "left", fontWeight: 700 }}>{s.site}</td><td style={td}>{s.workers}</td><td style={td}>{s.staff ?? 0}</td><td style={td}>{s.days}</td><td style={td}>{inr(s.basic)}</td><td style={td}>{s.otH || "—"}</td><td style={td}>{s.otAmt ? inr(s.otAmt) : "—"}</td><td style={{ ...td, fontWeight: 800 }}>{inr(s.total)}</td></tr>)}</tbody>
@@ -142,8 +193,9 @@ export default function WagesPrint() {
             ? <PayrollTable workers={board.rows} />
             : <StaffTable rows={board.rows} tab={board.tab} />)}
           {p.kind === "site" && <PayrollTable workers={d.workers} />}
+          {p.kind === "site" && board?.staffRows?.length > 0 && <StaffPayTable rows={board.staffRows} />}
           {p.kind === "sites" && board?.kind === "sites" && <SitesTable sites={board.sites} grand={board.grand} />}
-          {p.kind === "site" && <SitesTable sites={d.sites} grand={null} />}
+          {p.kind === "site" && board?.kind === "site" && <SitesTable sites={board.sites} grand={board.grand} />}
         </>
       )}
       <div style={{ fontSize: 9, color: "#6b7280", textAlign: "center", marginTop: 14 }}>System generated from Pipeskool attendance & payroll · {new Date().toLocaleString("en-IN")}</div>
