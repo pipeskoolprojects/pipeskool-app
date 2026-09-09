@@ -9,7 +9,7 @@ import {
   DELIVERY_STATUS, updatePODelivery,
 } from "@/lib/procure";
 import { getVendors } from "@/lib/vendors";
-import { createIndent, editIndent, deleteIndent, quickAddItem } from "@/lib/stock";
+import { createIndent, editIndent, deleteIndent, quickAddItem, getIndentEditAudit } from "@/lib/stock";   // update337
 import { searchIndentCatalog } from "@/lib/boq";
 import { getSites } from "@/lib/data";
 import { billUrl, isPdf } from "@/lib/bills";
@@ -23,6 +23,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   const showPo = only === "all" || only === "po";
   const scope = siteId ? String(siteId) : "all";
   const [session, setSession] = useState(null);
+  const [editLog, setEditLog] = useState(null);   // update337: null = closed
   const isDirector = session?.role === "director";
   // update238: PO approval right, from the shared helper. It resolves to director-only because
   // fn_po_approve is director-only in the database — the UI must not offer a button the RPC
@@ -101,6 +102,8 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   const canAddMaster = session && (session.role === "director" || can(session, "stock", "manage", ni?.site_id));
   // update186: DB policy on purchase_orders = indent create/manage — mirror it in the UI instead of a raw RLS error
   const canIssuePO = ind => session && (session.role === "director" || can(session, "indent", "create", ind?.site_id) || can(session, "indent", "manage", ind?.site_id));
+  // update337: edit ANY indent, not just your own. Server re-checks on every save.
+  const canEditAnyIndent = !!session && (session.role === "director" || can(session, "indent_edit", "manage"));
   async function onItemType(i, val) {
     setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], item_name: val, item_id: null }; return { ...n, lines: ls }; });
     if (val.trim().length >= 2) setSug({ i, q: val, list: await searchIndentCatalog(ni.site_id, val.trim()) });
@@ -142,10 +145,15 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   const [editingNo, setEditingNo] = useState("");
   const CAN_DELETE_ROLES = ["director", "it_executive", "accountant"];
   function startWebEdit(ind) {
+    // update337: only lines with no live PO are editable. They were being loaded into the
+    // form before, so you could retype a PO'd quantity and the server would silently drop it.
+    const editable = (ind.items || []).filter(it => !it.ordered);
+    const locked = (ind.items || []).length - editable.length;
     setNi({ site_id: String(ind.site_id || ""), required_by: ind.required_by || "", urgency: ind.urgency || "normal",
-      note: ind.note || "", lines: (ind.items || []).map(it => ({ item_id: it.item_id || null, item_name: it.item_name,
+      note: ind.note || "", lines: editable.map(it => ({ item_id: it.item_id || null, item_name: it.item_name,
         qty: String(it.qty), unit: it.unit || "", spec: it.spec || "" })) });
-    setEditingId(ind.id); setEditingNo(ind.indent_no); setMsg(""); setErr("");
+    setEditingId(ind.id); setEditingNo(ind.indent_no); setErr("");
+    setMsg(locked ? locked + " item(s) on this indent are already under a PO and cannot be changed — they stay exactly as they are." : "");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   async function delIndent(ind) {
@@ -540,8 +548,13 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                     <div className="muted">{ind.site} · {ind.item_count} items · by {ind.raised_by || "—"} · {ind.date}{ind.required_by ? " · need by " + ind.required_by : ""}</div>
                   </div>
                   <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    {(ind.status === "open" || ind.status === "quoting") && session?.id === ind.raised_by_id && (
-                      <button style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); startWebEdit(ind); }}>✎ Edit</button>)}
+                    {/* update337: raiser, Director, or the granted Indent Edit right */}
+                    {(ind.status === "open" || ind.status === "quoting") && (session?.id === ind.raised_by_id || canEditAnyIndent) && (
+                      <button style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); startWebEdit(ind); }}
+                              title={session?.id === ind.raised_by_id ? "Edit your indent" : "Editing under the Indent Edit right — the change is logged"}>✎ Edit</button>)}
+                    {canEditAnyIndent && ind.edited_at && (
+                      <button style={{ fontSize: 11 }} title="Who changed this indent, and what"
+                              onClick={async e => { e.stopPropagation(); try { setEditLog(await getIndentEditAudit(ind.id)); } catch (x) { setErr(x.message); } }}>🕘</button>)}
                     {CAN_DELETE_ROLES.includes(session?.role) && (() => { const live = (ind.pos || []).filter(p => p.status !== "cancelled"); return (
                       <button style={{ fontSize: 11, color: live.length ? "var(--muted)" : "var(--red)" }} disabled={live.length > 0}
                         title={live.length ? "Cannot delete — live PO(s): " + live.map(p => p.po_no).join(", ") + ". Cancel them first." : "Delete this indent"}
@@ -1038,6 +1051,41 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
           </div>
         )}
 
+      {/* update337: indent edit trail — before/after, who, and what stayed PO-locked */}
+      {editLog && (
+        <div onClick={() => setEditLog(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 120, padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 760, padding: 22, maxHeight: "88vh", overflowY: "auto" }}>
+            <h2 style={{ marginBottom: 2 }}>Indent edit log</h2>
+            <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>Newest first. Entries can never be edited or deleted.</div>
+            {!editLog.length ? <div className="muted">No edits recorded for this indent.</div> : editLog.map(a => (
+              <div key={a.id} style={{ borderTop: "1px solid var(--border)", padding: "10px 0" }}>
+                <div style={{ fontSize: 12, fontWeight: 700 }}>
+                  {new Date(a.changed_at).toLocaleString("en-IN")} · {a.changed_by_name || "—"}
+                  <span className="muted" style={{ fontWeight: 400 }}>
+                    {" "}({a.as_role === "raiser" ? "the raiser" : a.as_role === "director" ? "Director" : "Indent Edit right"})
+                  </span>
+                </div>
+                <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
+                  {a.items_before} item(s) → {a.items_after}
+                  {Array.isArray(a.locked_items) && a.locked_items.length ? ` · ${a.locked_items.length} left untouched (already on a PO)` : ""}
+                </div>
+                <div style={{ display: "flex", gap: 14, marginTop: 6, flexWrap: "wrap", fontSize: 11.5 }}>
+                  <div style={{ flex: "1 1 260px" }}>
+                    <div style={{ fontWeight: 700, color: "#b91c1c", marginBottom: 2 }}>Before</div>
+                    {(a.old_items || []).map((it, k) => <div key={k}>{it.item_name} — {it.qty} {it.unit || ""}</div>)}
+                  </div>
+                  <div style={{ flex: "1 1 260px" }}>
+                    <div style={{ fontWeight: 700, color: "#15803d", marginBottom: 2 }}>After</div>
+                    {(a.new_items || []).map((it, k) => <div key={k}>{it.item_name} — {it.qty} {it.unit || ""}</div>)}
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div style={{ marginTop: 14, textAlign: "right" }}><button onClick={() => setEditLog(null)}>Close</button></div>
+          </div>
+        </div>
+      )}
     </>
+
   );
 }
