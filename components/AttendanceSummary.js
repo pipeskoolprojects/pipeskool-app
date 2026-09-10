@@ -687,14 +687,19 @@ export default function AttendanceSummary({ month, siteId, sites }) {
 
   async function exportExcel() {
     if (!g) return;
-    // export the site rows behind whichever employees are on screen — one row per person per site
-    const wids = new Set(shown.map(p => p.wid));
-    const rows = g.rows.filter(r => wids.has(r.wid));
-    // update344: the EXPORT includes every allotted site (zeros where nothing happened);
-    // the on-screen grid still shows only sites with activity.
-    const withAssigned = (g.rowsWithAssigned || rows).filter(r => wids.has(r.wid));
-    await exportAttendanceXlsx({ month, siteName, kind: tab === "labour" ? "labour" : "staff", days: g.days, rows: withAssigned, wo: g.wo, hol: g.hol, cellCode, otOf, outSiteOf });   // update338/344
+    // update346: hand the exporter the SAME grouping the screen renders — one entry per
+    // person, their sites underneath in the same order. It used to get a flat list sorted
+    // by site, which scattered a multi-site worker's rows across the sheet.
+    const all = g.rowsWithAssigned || g.rows;
+    const groups = shown.map(p => {
+      const rows = all.filter(r => r.wid === p.wid).sort((a, b) => a.site.localeCompare(b.site));
+      return { worker: p.worker, designation: p.designation || "", isStaff: p.isStaff,
+               p: p.p, h: p.h, daysPaid: p.daysPaid, otTotal: p.otTotal, rows };
+    }).filter(x => x.rows.length);
+    await exportAttendanceXlsx({ month, siteName, kind: tab === "labour" ? "labour" : "staff",
+      days: g.days, groups, wo: g.wo, hol: g.hol, cellCode, otOf, outSiteOf });
   }
+
 
   async function saveAll() {
     setSavingAll(true); setCellErr("");
