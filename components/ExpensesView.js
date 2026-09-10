@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import VendorVoucherPanel from "@/components/VendorVoucherPanel";   // update356
 import DataTable from "@/components/DataTable";
 import AdvanceLedger from "@/components/AdvanceLedger";
 import CollapseCard from "@/components/CollapseCard";
@@ -293,6 +294,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
     ["pettyreq", "🪙", "Petty cash requests", () => (pettyReqs || []).filter(r => r.status === "pending").length],
     ["advreq", "📄", "Advance salary requests", () => (adv || []).length],
     ["claims", "💳", "Expenses ledger", () => (claims || []).length],
+    ["vendor", "🛒", "Direct Vendor Payment", () => null],   // update356
     ["pettyled", "📒", "Petty cash ledger", () => petty.length],
     ["advled", "🧾", "Advance salary ledger", () => null],
     ["reports", "📊", "Reports", () => null],
@@ -639,6 +641,12 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
             )}
           </div>
         )}
+
+        {/* update356: Direct Vendor Payment lives here, as an extension of Expenses &
+            Petty Cash — not as a separate procurement module. */}
+        <div className={mtab === "vendor" ? "money-sec" : undefined} style={{ display: mtab === "vendor" ? "flex" : "none", overflowY: "auto", flexDirection: "column" }}>
+          {mtab === "vendor" && <VendorVoucherPanel sites={sitesList} />}
+        </div>
 
         <div className={mtab === "pettyled" ? "money-sec" : undefined} style={{ display: mtab === "pettyled" ? "flex" : "none", overflowY: "auto" }}>
           {petty.length === 0 ? <span className="muted">No petty cash issued yet.</span> :

@@ -30,7 +30,6 @@ const GROUPS = [
       { href: "/dpr", label: "Daily Progress Report (DPR)", module: "dpr" },
       { href: "/rentals", label: "Machines & Rooms (Rent)", module: "rentals" },
       { href: "/expenses", label: "Expenses & Petty Cash", module: "money" },
-      { href: "/vendor-voucher", label: "Direct Vendor Payment", module: "money" },   // update355
     ] },
   ] },
   { label: "Communication", items: [
