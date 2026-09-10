@@ -20,6 +20,8 @@ import { exportPayrollXlsx, exportStaffPayrollXlsx } from "@/lib/payrollExport";
 import { loadAttendanceGrid, monthLabel } from "@/components/AttendanceSummary";   // update279
 import { inr } from "@/lib/data";
 import { EMPTY_FILTERS, filtersActive, filtersToQuery, boardOptions, allowedPeople, staffRowsFor } from "@/lib/payrollBoard";
+import { setStaffStatutory, setStaffAdvance } from "@/lib/staffpay";   // update348
+import { setPayoutStatutory, setPayoutAdvance } from "@/lib/payroll";   // update348
 
 const TABS = [["office", "🏢 Office Staff"], ["site_staff", "👷 Site Staff"], ["labour", "🧰 Workers / Labour"]];
 
@@ -60,12 +62,41 @@ function Filters({ f, setF, opts }) {
 // update347: Basic Wages is worked pay PLUS paid weekly-offs PLUS holiday pay. Showing only
 // the total made every row look wrong (Ajay Gupta 5.5 x 600 = 3,300 against a Basic of 4,500).
 // The parts are now their own columns, so Worked Pay + Off Pay + Holiday Pay = Basic, visibly.
+// update348: an inline money cell. Draft rows only — approved and paid are locked, the same
+// rule the server enforces. It saves on blur, shows the server's error rather than a generic
+// one, and never guesses the new net: the row is reloaded from what the server actually wrote.
+function MoneyCell({ value, disabled, title, onSave }) {
+  const [v, setV] = useState(String(value ?? 0));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => { setV(String(value ?? 0)); }, [value]);
+  if (disabled) return <td className="num" title={title}>{inr(value)}</td>;
+  return (
+    <td className="num" title={err || title}>
+      <input value={v} inputMode="decimal" disabled={busy}
+        onChange={e => { setV(e.target.value.replace(/[^0-9.]/g, "")); setErr(""); }}
+        onBlur={async () => {
+          if (String(value ?? 0) === v) return;
+          setBusy(true);
+          const r = await onSave(v);
+          setBusy(false);
+          if (!r?.ok) { setErr(r?.error || "Could not save."); setV(String(value ?? 0)); }
+        }}
+        style={{ width: 82, textAlign: "right", fontSize: 12, padding: "2px 4px",
+                 border: err ? "1px solid var(--red)" : "1px solid var(--border)", borderRadius: 4 }} />
+      {err && <div style={{ fontSize: 10, color: "var(--red)", maxWidth: 120, whiteSpace: "normal" }}>{err}</div>}
+    </td>
+  );
+}
+
 const LAB_COLS = ["Sr", "Worker Name", "Designation", "Daily Rate", "Days Worked", "Worked Pay", "Paid Off Days", "Off Pay", "Paid Holidays", "Holiday Pay", "Basic Wages", "OT Hours", "OT Amount", "Gross Earnings", "PF Deduction", "Professional Tax", "Other Deduction", "Total Deductions", "Advance Deduction", "Net Pay"];
 // update347: the "+1 day" on Lakshman's net was HOLIDAY PAY — he worked 4 September, a
 // company holiday, so the 2x rule adds one more day's pay. Mukesh did not work it, so he got
 // nothing extra. Identical code for both; it was simply never shown. It now has its own two
 // columns, and the divisor actually used is printed next to Working Days.
-const STF_COLS = ["Sr", "Staff Name", "Designation", "Monthly Salary", "Working Days", "Days Present", "Days Absent", "Paid Holidays", "Holiday Pay", "Deduction", "OT Hours", "OT Amount", "Advance O/S", "Advance", "Net Pay", "Status"];
+// update348: PF / Professional Tax / Other broken out and typed in by hand, exactly like
+// Labour. Nothing here is auto-calculated.
+const STF_COLS = ["Sr", "Staff Name", "Designation", "Monthly Salary", "Working Days", "Days Present", "Days Absent", "Paid Holidays", "Holiday Pay", "Deduction", "OT Hours", "OT Amount", "PF", "Prof. Tax", "Other Ded.", "Advance O/S", "Advance", "Net Pay", "Status"];
 
 export default function PayrollSummary({ month, siteId, sites }) {
   const [d, setD] = useState(null);
@@ -100,6 +131,34 @@ export default function PayrollSummary({ month, siteId, sites }) {
   }, [loading, people, tab, f, d, staff, isLabour]);
 
   const sum = k => +rows.reduce((n, w) => n + Number(w[k] || 0), 0).toFixed(2);
+
+  // update348: inline saves. Each goes through the SAME server function the dedicated
+  // screens use, so the outstanding-advance cap, the draft-only lock and the net formula
+  // are enforced in one place rather than re-implemented here.
+  async function reload() {
+    try {
+      const [d2, st2] = await Promise.all([loadPayrollSummary(month, siteId), getStaffPayouts(month, siteId)]);
+      setD(d2); setStaff(st2);
+    } catch (e) { setErr(e.message); }
+  }
+  async function saveStaffDed(row, patch) {
+    const r = await setStaffStatutory(row.id,
+      patch.pf ?? row.pf, patch.pt ?? row.pt, patch.other ?? row.other);
+    if (r.ok) await reload();
+    return r;
+  }
+  async function saveStaffAdv(row, v) {
+    const r = await setStaffAdvance(row.id, v);
+    if (r.ok) await reload();
+    return r;
+  }
+  async function saveLabourAdv(w, v) {
+    if (!w.payoutId) return { ok: false, error: "This worker has rows at more than one site — set it on the Labour Payroll tab." };
+    const r = await setPayoutAdvance(w.payoutId, v);
+    if (r.ok) await reload();
+    return r;
+  }
+
   const pdfHref = `/wages/print?kind=payroll&month=${month}&site=${siteId}${filtersToQuery(f, tab)}`;
 
   async function excel() {
@@ -170,7 +229,10 @@ export default function PayrollSummary({ month, siteId, sites }) {
                       <td className="num">{w.otH || "—"}</td><td className="num">{w.otAmt ? inr(w.otAmt) : "—"}</td>
                       <td className="num" style={{ fontWeight: 700 }}>{inr(w.gross)}</td>
                       <td className="num">{inr(w.pf)}</td><td className="num">{inr(w.pt)}</td><td className="num">{inr(w.other)}</td>
-                      <td className="num">{inr(w.totalDed)}</td><td className="num">{inr(w.adv)}</td>
+                      <td className="num">{inr(w.totalDed)}</td>
+                      <MoneyCell value={w.adv} disabled={!w.payoutId || w.status !== "draft"}
+                        title={w.payoutId ? "Advance to recover this month" : "Open the Labour Payroll tab — this worker has rows at more than one site"}
+                        onSave={v => saveLabourAdv(w, v)} />
                       <td className="num" style={{ fontWeight: 800 }}>{inr(w.net)}</td>
                     </tr>
                   ))}
@@ -204,8 +266,16 @@ export default function PayrollSummary({ month, siteId, sites }) {
                       <td className="num" title={"Deduction = (Monthly Salary ÷ 30) × Days Absent — the divisor is 30, not the Working Days shown"}>{inr(s.deduction)}</td>
                       <td className="num">{s.ot_hours || "—"}</td>
                       <td className="num">{s.ot_amount ? inr(s.ot_amount) : "—"}</td>
-                      <td className="num" style={{ color: s.outstanding > 0 ? "#b45309" : undefined }}>{s.outstanding ? inr(s.outstanding) : "—"}</td>
-                      <td className="num">{inr(s.advances_deducted)}</td>
+                      <MoneyCell value={s.pf} disabled={s.status !== "draft"} title="PF / SI — typed in, never calculated"
+                        onSave={v => saveStaffDed(s, { pf: v })} />
+                      <MoneyCell value={s.pt} disabled={s.status !== "draft"} title="Professional Tax"
+                        onSave={v => saveStaffDed(s, { pt: v })} />
+                      <MoneyCell value={s.other} disabled={s.status !== "draft"} title="Any other deduction"
+                        onSave={v => saveStaffDed(s, { other: v })} />
+                      <td className="num" style={{ color: s.outstanding > 0 ? "#b45309" : undefined }} title="Advance still outstanding for this person">{s.outstanding ? inr(s.outstanding) : "—"}</td>
+                      <MoneyCell value={s.advances_deducted} disabled={s.status !== "draft"}
+                        title={"Recover this month. Outstanding: " + inr(s.outstanding || 0)}
+                        onSave={v => saveStaffAdv(s, v)} />
                       <td className="num" style={{ fontWeight: 800 }}>{inr(s.net)}</td>
                       <td style={{ textTransform: "capitalize" }}>{s.status}</td>
                     </tr>
@@ -217,6 +287,7 @@ export default function PayrollSummary({ month, siteId, sites }) {
                   <td className="num">{sum("working_days")}</td><td className="num">{sum("days_present")}</td><td className="num">{sum("days_absent")}</td>
                   <td className="num">{sum("holDouble") || "—"}</td><td className="num">{inr(sum("holAmt"))}</td>
                   <td className="num">{inr(sum("deduction"))}</td><td className="num">{sum("ot_hours")}</td><td className="num">{inr(sum("ot_amount"))}</td>
+                  <td className="num">{inr(sum("pf"))}</td><td className="num">{inr(sum("pt"))}</td><td className="num">{inr(sum("other"))}</td>
                   <td className="num">{inr(sum("outstanding"))}</td>
                   <td className="num">{inr(sum("advances_deducted"))}</td><td className="num">{inr(sum("net"))}</td><td></td>
                 </tr></tfoot>
