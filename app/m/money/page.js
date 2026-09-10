@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import VendorVoucherPanel from "@/components/VendorVoucherPanel";   // update356
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
@@ -239,6 +240,16 @@ export default function MoneyScreen() {
               🧾 Claim Site Expense
             </button>
             <div className="sub" style={{ marginTop: -4 }}>Money you spent on site (attach proof). Reimbursed to bank, or deducted from petty cash.</div>
+
+            {/* update356: sits under Claim Site Expense, in the same list, same style — it is
+                another way of spending on site, not a separate system. */}
+            <button className="btn-block" style={{ borderColor: "var(--copper)", position: "relative" }}
+                    onClick={() => { setMode("vendor"); setMsg(""); setErr(""); }}>
+              <span style={{ position: "absolute", left: 8, top: -8, background: "var(--copper)", color: "#fff",
+                             fontSize: 9, fontWeight: 800, borderRadius: 4, padding: "1px 5px" }}>NEW</span>
+              🛒 Direct Vendor Payment / Local Purchase
+            </button>
+            <div className="sub" style={{ marginTop: -4 }}>Material purchased directly from a local vendor (no PO). The company pays the vendor directly.</div>
           </div>
         )}
 
@@ -262,6 +273,17 @@ export default function MoneyScreen() {
               <button className="primary" style={{ flex: 1 }} disabled={busy} onClick={submitAdvance}>{busy ? "Sending…" : "Send request"}</button>
               <button onClick={() => setMode("none")}>Cancel</button>
             </div>
+          </div>
+        )}
+
+        {/* update356: the SAME panel the desktop tab renders, so the two forms cannot drift
+            apart — one component, one set of validation, one save path. */}
+        {mode === "vendor" && (
+          <div style={{ background: "var(--bg)", borderRadius: 12, padding: 12, margin: "12px 0" }}>
+            <h3 style={{ fontSize: 14, marginBottom: 2 }}>Direct Vendor Payment</h3>
+            <div className="sub" style={{ marginBottom: 10 }}>Local Purchase Voucher</div>
+            <VendorVoucherPanel sites={mySites} />
+            <button className="btn-block" style={{ marginTop: 10 }} onClick={() => setMode("")}>← Back</button>
           </div>
         )}
 

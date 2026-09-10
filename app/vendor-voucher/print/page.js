@@ -4,7 +4,8 @@
 // nothing.
 import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
-import { getVendorVoucher } from "@/lib/vendorVoucher";
+import { getVendorVoucher, amountInWords } from "@/lib/vendorVoucher";
+import { supabase } from "@/lib/supabase";
 import { getCompany } from "@/lib/letters";
 import { inr } from "@/lib/data";
 
@@ -15,6 +16,7 @@ const cap = s => s ? String(s).charAt(0).toUpperCase() + String(s).slice(1).repl
 
 export default function VoucherPrint() {
   const [v, setV] = useState(null); const [c, setC] = useState(null); const [err, setErr] = useState("");
+  const [billUrls, setBillUrls] = useState([]);   // update356: the bill pages go on the voucher
 
   useEffect(() => {
     (async () => {
@@ -24,6 +26,15 @@ export default function VoucherPrint() {
         const [row, comp] = await Promise.all([getVendorVoucher(id), getCompany()]);
         if (!row) { setErr("That voucher was not found, or you do not have rights to open it."); return; }
         setV(row); setC(comp);
+        // signed URLs for the attached bills, so they print with the voucher
+        if (row.bills?.length) {
+          const out = [];
+          for (const path of row.bills) {
+            const { data } = await supabase.storage.from("attendance-photos").createSignedUrl(path, 3600);
+            if (data?.signedUrl) out.push({ url: data.signedUrl, pdf: /\.pdf$/i.test(path) });
+          }
+          setBillUrls(out);
+        }
       } catch (e) { setErr(e.message); }
     })();
   }, []);
@@ -38,7 +49,17 @@ export default function VoucherPrint() {
   return (
     <div style={{ maxWidth: 820, margin: "0 auto", padding: 28, background: "#fff", color: "#111", fontFamily: "Inter, Arial, sans-serif", minHeight: "100vh", position: "relative" }}>
       <style>{`
-        @media print { .no-print { display:none !important; } body { background:#fff; } @page { size: A4; margin: 14mm; } }
+        @media print {
+          .no-print { display:none !important; }
+          body { background:#fff; }
+          @page { size: A4; margin: 12mm; }
+          /* keep a bill whole on its own page rather than splitting it across two */
+          .bill-page { break-before: page; page-break-before: always; break-inside: avoid; page-break-inside: avoid; }
+          .sign-row { break-inside: avoid; page-break-inside: avoid; }
+          table { break-inside: auto; }
+          tr { break-inside: avoid; page-break-inside: avoid; }
+        }
+        .bill-page { margin-top: 18px; }
         .v-wm { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
                 font-size: 76px; font-weight: 800; color: rgba(180,83,9,0.10); transform: rotate(-30deg);
                 pointer-events: none; z-index: 5; letter-spacing: 0.05em; }
@@ -68,7 +89,8 @@ export default function VoucherPrint() {
         <tbody>
           <tr>
             <td style={{ ...td, width: "16%", color: "#6b7280", fontSize: 10.5 }}>Vendor</td>
-            <td style={{ ...td, fontWeight: 700 }}>{v.vendor}</td>
+            <td style={{ ...td, fontWeight: 700 }}>{v.vendor}
+              {v.vendor_address && <div style={{ fontWeight: 400, fontSize: 10.5, color: "#6b7280" }}>{v.vendor_address}</div>}</td>
             <td style={{ ...td, width: "16%", color: "#6b7280", fontSize: 10.5 }}>Site</td>
             <td style={{ ...td, fontWeight: 700 }}>{v.site}</td>
           </tr>
@@ -117,23 +139,42 @@ export default function VoucherPrint() {
       )}
 
       {v.items.length > 0 && v.note && (
-        <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Note: {v.note}</div>
+        <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Purchased: {v.note}</div>
       )}
+      {v.remarks && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>Remarks: {v.remarks}</div>}
 
-      <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}>
+      <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 11.5 }}>
+          <span className="muted" style={{ fontSize: 10.5 }}>Amount in words</span>
+          <div style={{ fontWeight: 700, fontStyle: "italic", color: NAVY }}>{amountInWords(v.amount)}</div>
+        </div>
         <div style={{ background: "#fff4e5", border: "1px solid #fdba74", borderRadius: 8, padding: "10px 18px", display: "flex", gap: 24, alignItems: "center" }}>
           <span style={{ fontWeight: 800, fontSize: 13, color: NAVY }}>TOTAL</span>
           <span style={{ fontWeight: 800, fontSize: 19, color: NAVY }}>{inr(v.amount)}</span>
         </div>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 30, marginTop: 46, fontSize: 12 }}>
+      <div className="sign-row" style={{ display: "flex", justifyContent: "space-between", gap: 30, marginTop: 46, fontSize: 12 }}>
         {["Prepared by", "Approved by", "Received by (vendor)"].map(l => (
           <div key={l} style={{ flex: 1 }}>
             <div style={{ borderTop: "1px solid #333", paddingTop: 4, marginTop: 34, fontStyle: "italic", color: "#374151" }}>{l}</div>
           </div>
         ))}
       </div>
+
+      {/* update356: the bill pages print WITH the voucher. Each starts a new page and is
+          fitted inside the A4 area with object-fit: contain, so nothing is cropped, stretched
+          or split across a page break. */}
+      {billUrls.map((b, i) => (
+        <div key={i} className="bill-page">
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: NAVY, marginBottom: 6 }}>
+            ATTACHED BILL / RECEIPT {i + 1} OF {billUrls.length} · {v.voucher_no}
+          </div>
+          {b.pdf
+            ? <iframe title={"bill" + i} src={b.url} style={{ width: "100%", height: "245mm", border: "1px solid #e5e7eb" }} />
+            : <img alt={"bill" + i} src={b.url} style={{ maxWidth: "100%", maxHeight: "245mm", objectFit: "contain", display: "block", margin: "0 auto", border: "1px solid #e5e7eb" }} />}
+        </div>
+      ))}
 
       <div style={{ marginTop: 28, paddingTop: 8, borderTop: "1px solid #e5e7eb", textAlign: "center", fontSize: 9.5, fontWeight: 700, color: "#4b5563", lineHeight: 1.7 }}>
         <div>CIN No: {c.cin} &nbsp; GSTIN: {c.gstin}</div>
