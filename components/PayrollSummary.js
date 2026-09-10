@@ -172,7 +172,7 @@ export default function PayrollSummary({ month, siteId, sites }) {
         <div className="muted" style={{ fontSize: 12.5, maxWidth: 620 }}>
           {isLabour
             ? "Full per-worker breakdown — one row per worker, days summed across sites. Gross = Basic + OT · Net = Gross − PF − PT − Other − Advance."
-            : "One row per staff member for the month, from the generated staff salary. Net = Salary − Deduction + OT − Advance."}
+            : "One row per staff member for the month, from the generated staff salary. Net = Salary + Holiday Pay + OT − Deduction − PF − PT − Other − Advance. Click a name for their salary slip."}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={excel} disabled={loading || !rows.length}>⬇ Excel</button>
@@ -219,7 +219,12 @@ export default function PayrollSummary({ month, siteId, sites }) {
                   {rows.map((w, i) => (
                     <tr key={w.worker_id} title={w.sites.join(" · ")}>
                       <td>{i + 1}</td>
-                      <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{w.worker}{w.manual && <span className="badge gray" style={{ marginLeft: 4, fontSize: 10 }}>✎</span>}<div className="muted" style={{ fontSize: 10.5 }}>{w.sites.join(" · ")}</div></td>
+                      <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                        {/* update349: the name opens that person's salary slip */}
+                        <a onClick={() => window.open(`/wages/slip?kind=labour&id=${w.worker_id}&month=${month}&site=${siteId}`, "_blank")}
+                           title="Open salary slip" style={{ cursor: "pointer", color: "var(--copper)" }}>{w.worker}</a>
+                        {w.manual && <span className="badge gray" style={{ marginLeft: 4, fontSize: 10 }}>✎</span>}
+                        <div className="muted" style={{ fontSize: 10.5 }}>{w.sites.join(" · ")}</div></td>
                       <td className="muted">{w.designation}</td>
                       <td className="num">{inr(w.rate)}</td><td className="num">{w.days}</td>
                       <td className="num">{inr(w.workedPay)}</td>
@@ -255,7 +260,9 @@ export default function PayrollSummary({ month, siteId, sites }) {
                   {rows.map((s, i) => (
                     <tr key={s.id}>
                       <td>{i + 1}</td>
-                      <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{s.name}</td>
+                      <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                        <a onClick={() => window.open(`/wages/slip?kind=staff&id=${s.user_id}&month=${month}&site=${siteId}`, "_blank")}
+                           title="Open salary slip" style={{ cursor: "pointer", color: "var(--copper)" }}>{s.name}</a></td>
                       <td className="muted" style={{ whiteSpace: "nowrap" }}>{String(s.role || "").split("_").map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(" ")}</td>
                       <td className="num">{inr(s.monthly_salary)}</td>
                       <td className="num" title="Calendar days minus Sundays. NOTE: the deduction divisor is 30, not this number.">{s.working_days}</td>
