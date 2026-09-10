@@ -17,6 +17,9 @@ function timeAgo(ts) {
   return Math.floor(s / 86400) + "d ago";
 }
 
+// update353: links baked into older notification rows, remapped at CLICK time.
+const LEGACY = { "/expenses": "/go?to=approvals", "/approvals": "/go?to=approvals" };
+
 export default function NotifyBell({ mobile }) {
   const [open, setOpen] = useState(false);
   const [pstat, setPstat] = useState(null);   // update267: real device push status
@@ -43,7 +46,9 @@ export default function NotifyBell({ mobile }) {
   async function openItem(n) {
     if (!n.is_read) { await markNotifRead(n.id); }
     setOpen(false); refresh();
-    if (n.link) router.push(n.link);
+    // update353: rows sent before today still hold "/expenses" or "/approvals". Route them
+    // through /go so an old notification opens the right shell for THIS device.
+    if (n.link) router.push(LEGACY[n.link] || n.link);
   }
 
   const btnStyle = mobile
