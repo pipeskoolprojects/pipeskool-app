@@ -107,7 +107,12 @@ function InputBox({ keys, values, onChange, title, note, tone }) {
   );
 }
 
-function Paper({ heading, text, company }) {
+// update351: the preview stopped at the closing line while the PRINTED letter carried a
+// signature block, so what you approved on screen was not what came out of the printer.
+// The preview now renders the same block, under the same rule: company-issued letters get
+// the company signature, the Employee Declaration never does.
+function Paper({ heading, text, company, issuedBy, subjectName }) {
+  const byEmployee = issuedBy === "employee";
   return (
     <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 10, padding: "24px 28px" }}>
       <div style={{ borderBottom: "3px solid " + ORANGE, paddingBottom: 8, marginBottom: 16 }}>
@@ -117,6 +122,29 @@ function Paper({ heading, text, company }) {
       </div>
       <div style={{ textAlign: "center", fontWeight: 800, fontSize: 15, color: NAVY, letterSpacing: "0.02em", marginBottom: 16 }}>{heading}</div>
       <div style={{ whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.8 }}>{text}</div>
+
+      {!byEmployee && (
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 40, marginTop: 40, fontSize: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, color: NAVY, marginBottom: 34 }}>For, {(company?.name || "").replace(/PVT LTD\.?$/i, "Private Limited")}</div>
+            <div style={{ borderTop: "1px solid #333", width: 200, paddingTop: 4, fontStyle: "italic", color: "#374151" }}>
+              {company?.signatory_name ? <><b style={{ fontStyle: "normal" }}>{company.signatory_name}</b><br /></> : null}
+              {company?.signatory_title || "Authorized Signatory"}
+            </div>
+            {!company?.signatory_name && (
+              <div className="muted" style={{ fontSize: 10, marginTop: 4 }}>
+                Set the signatory name in Company Rules → Company details.
+              </div>
+            )}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, color: NAVY, marginBottom: 34 }}>Accepted</div>
+            <div style={{ borderTop: "1px solid #333", width: 200, paddingTop: 4, fontStyle: "italic", color: "#374151" }}>
+              {subjectName || ""}<br />Employee Signature
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -450,7 +478,7 @@ export default function LettersPage() {
                   {editing
                     ? <textarea style={{ width: "100%", minHeight: 460, fontFamily: "inherit", fontSize: 12.5, lineHeight: 1.8, padding: 16 }}
                                 value={draft ?? ""} onChange={e => setDraft(e.target.value)} />
-                    : <Paper heading={template?.heading} text={shown} company={company} />}
+                    : <Paper heading={template?.heading} text={shown} company={company} issuedBy={template?.issued_by} subjectName={person?.full_name} />}
 
                   {draft != null && /\{\{/.test(draft) && (
                     <div className="error" style={{ marginTop: 10 }}>
