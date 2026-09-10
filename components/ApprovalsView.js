@@ -184,7 +184,7 @@ export default function ApprovalsView({ mode = "mobile" }) {
                     {rights.money ? (<>
                       <button style={okBtn} disabled={busyId === r.id} onClick={() => confirmSheet("expense", r, "approved")}>✓ Approve</button>
                       <button style={noBtn} disabled={busyId === r.id} onClick={() => confirmSheet("expense", r, "rejected")}>✕ Reject</button>
-                      <button style={btn} disabled={busyId === r.id} onClick={() => confirmSheet("expense", r, "query")}>❓ Query</button>
+                      <button style={btn} disabled={busyId === r.id} onClick={() => confirmSheet("expense", r, "queried")}>❓ Query</button>{/* update352 */}
                     </>) : <ViewOnly inline />}
                   </div>
                 </div>
@@ -201,7 +201,7 @@ export default function ApprovalsView({ mode = "mobile" }) {
                     <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                       <button style={okBtn} disabled={busyId === r.id} onClick={() => confirmSheet("advance", r, "approved")}>✓ Approve</button>
                       <button style={noBtn} disabled={busyId === r.id} onClick={() => confirmSheet("advance", r, "rejected")}>✕ Reject</button>
-                      <button style={btn} disabled={busyId === r.id} onClick={() => confirmSheet("advance", r, "query")}>❓ Query</button>
+                      <button style={btn} disabled={busyId === r.id} onClick={() => confirmSheet("advance", r, "queried")}>❓ Query</button>{/* update352 */}
                     </div>
                   ) : <ViewOnly />}
                 </div>
@@ -288,7 +288,7 @@ export default function ApprovalsView({ mode = "mobile" }) {
             <input value={note} onChange={e => setNote(e.target.value)} placeholder={act.action === "approved" || act.action === "confirmed" ? "Note (optional)" : "Reason / question *"} style={{ width: "100%", marginTop: 6 }} autoFocus={!act.needAmount} />
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
               <button className="primary" style={{ flex: 1, ...(act.action === "rejected" ? { background: "var(--red)", borderColor: "var(--red)" } : {}) }}
-                disabled={busyId != null || ((act.action === "rejected" || act.action === "query" || act.action === "info_requested") && !note.trim()) || (act.needAmount && act.action === "approved" && !(Number(amt) > 0))}
+                disabled={busyId != null || ((act.action === "rejected" || act.action === "queried" || act.action === "info_requested") && !note.trim()) || (act.needAmount && act.action === "approved" && !(Number(amt) > 0))}
                 onClick={doAct}>{busyId != null ? "Saving…" : "Confirm"}</button>
               <button onClick={() => setAct(null)}>Cancel</button>
             </div>
@@ -297,7 +297,10 @@ export default function ApprovalsView({ mode = "mobile" }) {
       )}
 
       {viewer && (
-        <div onClick={() => setViewer(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 80, display: "flex", flexDirection: "column" }}>
+        <div onClick={() => setViewer(null)} // update352: the floating notification bell is fixed at zIndex 140, so at 80 this overlay
+          // sat UNDER it and the bell covered the ✕ — tapping to close opened notifications
+          // instead. 150 clears the bell while staying below the notification panel (200).
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 150, display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", color: "#fff" }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 13, flex: 1 }}>{viewer.title} · {viewer.idx + 1}/{viewer.urls.length}</div>
             <button style={btn} disabled={viewer.idx === 0} onClick={() => setViewer(v => ({ ...v, idx: v.idx - 1 }))}>‹</button>
