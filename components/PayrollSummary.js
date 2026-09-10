@@ -57,8 +57,15 @@ function Filters({ f, setF, opts }) {
   );
 }
 
-const LAB_COLS = ["Sr", "Worker Name", "Designation", "Daily Rate", "Days Worked", "Basic Wages", "OT Hours", "OT Amount", "Gross Earnings", "PF Deduction", "Professional Tax", "Other Deduction", "Total Deductions", "Advance Deduction", "Net Pay"];
-const STF_COLS = ["Sr", "Staff Name", "Designation", "Monthly Salary", "Working Days", "Days Present", "Days Absent", "Deduction", "OT Hours", "OT Amount", "Advance", "Net Pay", "Status"];
+// update347: Basic Wages is worked pay PLUS paid weekly-offs PLUS holiday pay. Showing only
+// the total made every row look wrong (Ajay Gupta 5.5 x 600 = 3,300 against a Basic of 4,500).
+// The parts are now their own columns, so Worked Pay + Off Pay + Holiday Pay = Basic, visibly.
+const LAB_COLS = ["Sr", "Worker Name", "Designation", "Daily Rate", "Days Worked", "Worked Pay", "Paid Off Days", "Off Pay", "Paid Holidays", "Holiday Pay", "Basic Wages", "OT Hours", "OT Amount", "Gross Earnings", "PF Deduction", "Professional Tax", "Other Deduction", "Total Deductions", "Advance Deduction", "Net Pay"];
+// update347: the "+1 day" on Lakshman's net was HOLIDAY PAY — he worked 4 September, a
+// company holiday, so the 2x rule adds one more day's pay. Mukesh did not work it, so he got
+// nothing extra. Identical code for both; it was simply never shown. It now has its own two
+// columns, and the divisor actually used is printed next to Working Days.
+const STF_COLS = ["Sr", "Staff Name", "Designation", "Monthly Salary", "Working Days", "Days Present", "Days Absent", "Paid Holidays", "Holiday Pay", "Deduction", "OT Hours", "OT Amount", "Advance O/S", "Advance", "Net Pay", "Status"];
 
 export default function PayrollSummary({ month, siteId, sites }) {
   const [d, setD] = useState(null);
@@ -155,7 +162,11 @@ export default function PayrollSummary({ month, siteId, sites }) {
                       <td>{i + 1}</td>
                       <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{w.worker}{w.manual && <span className="badge gray" style={{ marginLeft: 4, fontSize: 10 }}>✎</span>}<div className="muted" style={{ fontSize: 10.5 }}>{w.sites.join(" · ")}</div></td>
                       <td className="muted">{w.designation}</td>
-                      <td className="num">{inr(w.rate)}</td><td className="num">{w.days}</td><td className="num">{inr(w.basic)}</td>
+                      <td className="num">{inr(w.rate)}</td><td className="num">{w.days}</td>
+                      <td className="num">{inr(w.workedPay)}</td>
+                      <td className="num">{w.woDays || "—"}</td><td className="num">{w.woAmt ? inr(w.woAmt) : "—"}</td>
+                      <td className="num">{w.holDays || "—"}</td><td className="num">{w.holAmt ? inr(w.holAmt) : "—"}</td>
+                      <td className="num" style={{ fontWeight: 700 }}>{inr(w.basic)}</td>
                       <td className="num">{w.otH || "—"}</td><td className="num">{w.otAmt ? inr(w.otAmt) : "—"}</td>
                       <td className="num" style={{ fontWeight: 700 }}>{inr(w.gross)}</td>
                       <td className="num">{inr(w.pf)}</td><td className="num">{inr(w.pt)}</td><td className="num">{inr(w.other)}</td>
@@ -165,7 +176,11 @@ export default function PayrollSummary({ month, siteId, sites }) {
                   ))}
                 </tbody>
                 <tfoot><tr style={{ background: "#fff4e5", fontWeight: 800 }}>
-                  <td colSpan={4}>TOTAL · {rows.length} workers</td><td className="num">{sum("days")}</td><td className="num">{inr(sum("basic"))}</td>
+                  <td colSpan={4}>TOTAL · {rows.length} workers</td><td className="num">{sum("days")}</td>
+                  <td className="num">{inr(sum("workedPay"))}</td>
+                  <td className="num">{sum("woDays") || "—"}</td><td className="num">{inr(sum("woAmt"))}</td>
+                  <td className="num">{sum("holDays") || "—"}</td><td className="num">{inr(sum("holAmt"))}</td>
+                  <td className="num">{inr(sum("basic"))}</td>
                   <td className="num">{sum("otH")}</td><td className="num">{inr(sum("otAmt"))}</td><td className="num">{inr(sum("gross"))}</td>
                   <td className="num">{inr(sum("pf"))}</td><td className="num">{inr(sum("pt"))}</td><td className="num">{inr(sum("other"))}</td>
                   <td className="num">{inr(sum("totalDed"))}</td><td className="num">{inr(sum("adv"))}</td><td className="num">{inr(sum("net"))}</td>
@@ -181,12 +196,15 @@ export default function PayrollSummary({ month, siteId, sites }) {
                       <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{s.name}</td>
                       <td className="muted" style={{ whiteSpace: "nowrap" }}>{String(s.role || "").split("_").map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(" ")}</td>
                       <td className="num">{inr(s.monthly_salary)}</td>
-                      <td className="num">{s.working_days}</td>
+                      <td className="num" title="Calendar days minus Sundays. NOTE: the deduction divisor is 30, not this number.">{s.working_days}</td>
                       <td className="num">{s.days_present}</td>
                       <td className="num">{s.days_absent}</td>
-                      <td className="num">{inr(s.deduction)}</td>
+                      <td className="num">{s.holDouble || "—"}</td>
+                      <td className="num" title="Worked a company holiday — salary already pays the day once, so the 2x rule adds one more day">{s.holAmt ? inr(s.holAmt) : "—"}</td>
+                      <td className="num" title={"Deduction = (Monthly Salary ÷ 30) × Days Absent — the divisor is 30, not the Working Days shown"}>{inr(s.deduction)}</td>
                       <td className="num">{s.ot_hours || "—"}</td>
                       <td className="num">{s.ot_amount ? inr(s.ot_amount) : "—"}</td>
+                      <td className="num" style={{ color: s.outstanding > 0 ? "#b45309" : undefined }}>{s.outstanding ? inr(s.outstanding) : "—"}</td>
                       <td className="num">{inr(s.advances_deducted)}</td>
                       <td className="num" style={{ fontWeight: 800 }}>{inr(s.net)}</td>
                       <td style={{ textTransform: "capitalize" }}>{s.status}</td>
@@ -197,7 +215,9 @@ export default function PayrollSummary({ month, siteId, sites }) {
                   <td colSpan={3}>TOTAL · {rows.length} staff</td>
                   <td className="num">{inr(sum("monthly_salary"))}</td>
                   <td className="num">{sum("working_days")}</td><td className="num">{sum("days_present")}</td><td className="num">{sum("days_absent")}</td>
+                  <td className="num">{sum("holDouble") || "—"}</td><td className="num">{inr(sum("holAmt"))}</td>
                   <td className="num">{inr(sum("deduction"))}</td><td className="num">{sum("ot_hours")}</td><td className="num">{inr(sum("ot_amount"))}</td>
+                  <td className="num">{inr(sum("outstanding"))}</td>
                   <td className="num">{inr(sum("advances_deducted"))}</td><td className="num">{inr(sum("net"))}</td><td></td>
                 </tr></tfoot>
               </table>
