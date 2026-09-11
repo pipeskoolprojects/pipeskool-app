@@ -38,7 +38,7 @@ const WORKER_FORM_CSS = `
 }
 `;
 
-const EMPTY = { full_name: "", mobile: "", category: "plumber", labour_type: "own", contractor_id: "", site_id: "", daily_wage: "", is_active: true, ot_eligible: true, proxy_authority: false, bank_name: "", emergency_name: "", emergency_relation: "", emergency_mobile: "", emergency_alt_mobile: "", emergency_address: "" };   // update287 · update336
+const EMPTY = { full_name: "", mobile: "", category: "plumber", labour_type: "own", contractor_id: "", site_id: "", daily_wage: "", is_active: true, ot_eligible: true, proxy_authority: false, bank_name: "", payment_type: "direct", emergency_name: "", emergency_relation: "", emergency_mobile: "", emergency_alt_mobile: "", emergency_address: "" };   // update287 · update336
 // roles load dynamically from the Role Master (staff_roles table)
 const S_EMPTY = { full_name: "", mobile: "", role: "supervisor", site_id: "", is_active: true };
 
@@ -194,6 +194,10 @@ export default function WorkersPage() {
       render: r => r.type === "Own" ? <span className="badge gray">Own</span> : <span className="badge info">{r.contractor}</span> },
     { key: "site", label: "Site", filter: "select" },
     { key: "bank", label: "Bank", filter: "select" },   // update359: filter workers by bank
+    { key: "payType", label: "Paid via", filter: "select",   // update361
+      render: r => r.payType === "Contractor" ? <span className="badge info">Contractor</span>
+                 : r.payType === "Union" ? <span className="badge warn">Union</span>
+                 : <span className="badge gray">Direct</span> },
     { key: "wage", label: "Daily wage", type: "num", render: r => inr(r.wage), exportValue: r => r.wage },
     { key: "complete", label: "Profile", filter: "select",
       optionLabel: o => o ? "Complete" : "Incomplete",
@@ -320,6 +324,19 @@ export default function WorkersPage() {
                   <div><label className="muted">Bank account no</label><input inputMode="numeric" value={modal.bank_account_no || ""} onChange={e => set("bank_account_no", e.target.value)} /></div>
                   <div><label className="muted">IFSC</label><input value={modal.bank_ifsc || ""} onChange={e => set("bank_ifsc", e.target.value.toUpperCase())} placeholder="e.g. SBIN0001234" /></div>
                   {/* update359 */}
+                  {/* update361: which sheet of the bank payment file this person lands in.
+                      Contractor labour is set automatically from Labour type — they are paid
+                      through the contractor, not individually. */}
+                  <div className="wf-full"><label className="muted">Paid via</label>
+                    {modal.labour_type === "contractor"
+                      ? <div className="muted" style={{ fontSize: 12, padding: "6px 0" }}>
+                          <b>Contractor</b> — set automatically because Labour type is Contractor. Their wage is paid to the contractor, not to them.
+                        </div>
+                      : <select value={modal.payment_type || "direct"} onChange={e => set("payment_type", e.target.value)}>
+                          <option value="direct">Direct — paid to their own bank account</option>
+                          <option value="union">Union — routed through the union</option>
+                        </select>}
+                  </div>
                   <div className="wf-full"><label className="muted">Bank name</label>
                     <input value={modal.bank_name || ""} placeholder="e.g. Indian Overseas Bank"
                            onChange={e => set("bank_name", e.target.value)} /></div>
