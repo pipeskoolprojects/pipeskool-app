@@ -57,9 +57,28 @@ export default function WorkerProfilePrint() {
   useEffect(() => {
     (async () => {
       try {
-        const id = new URLSearchParams(window.location.search).get("id");
+        const sp = new URLSearchParams(window.location.search);
+        const id = sp.get("id");
+        const isStaff = sp.get("staff") === "1";   // update360: the same sheet serves both masters
         if (!id) { setErr("No employee selected."); return; }
         if (isDemo) { setErr("Not available in demo mode."); return; }
+
+        if (isStaff) {
+          const [{ data: u, error: e2 }, comp2] = await Promise.all([
+            supabase.from("app_users")
+              .select("id, full_name, mobile, role, monthly_salary, ot_eligible, annual_paid_leaves, joining_date, requires_punch, bank_account_no, bank_ifsc, bank_name, pan_no, last_working_day, exit_reason, is_active, emergency_name, emergency_relation, emergency_mobile, emergency_alt_mobile, emergency_address")
+              .eq("id", id).maybeSingle(),
+            getCompany(),
+          ]);
+          if (e2) throw new Error(e2.message);
+          if (!u) { setErr("That staff member was not found, or you do not have rights to open the record."); return; }
+          const { data: us } = await supabase.from("user_sites").select("sites(name)").eq("user_id", id);
+          setW({ ...u, isStaff: true, category: u.role, labour_type: "staff",
+                 daily_wage: null, sites: null, contractors: null });
+          setC(comp2);
+          setSitesAllotted((us || []).map(x => x.sites?.name).filter(Boolean));
+          return;
+        }
         const [{ data: row, error }, comp] = await Promise.all([
           supabase.from("workers")
             .select("id, full_name, mobile, category, labour_type, daily_wage, is_active, ot_eligible, proxy_authority, joining_date, last_working_day, exit_reason, bank_account_no, bank_ifsc, bank_name, aadhaar_doc_url, emergency_name, emergency_relation, emergency_mobile, emergency_alt_mobile, emergency_address, site_id, sites!workers_site_id_fkey(name), contractors(name)")
@@ -108,7 +127,7 @@ export default function WorkerProfilePrint() {
         <div>
           <div style={{ fontSize: 10, letterSpacing: "0.08em", color: "#6b7280", fontWeight: 700 }}>EMPLOYEE DETAILS</div>
           <div style={{ fontSize: 22, fontWeight: 800, color: NAVY, lineHeight: 1.2 }}>{w.full_name}</div>
-          <div style={{ fontSize: 12, color: "#4b5563" }}>{cap(w.category)} · {cap(w.labour_type)} labour</div>
+          <div style={{ fontSize: 12, color: "#4b5563" }}>{cap(w.category)} · {w.isStaff ? "Staff" : cap(w.labour_type) + " labour"}</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <span style={{ display: "inline-block", padding: "4px 12px", borderRadius: 20, fontSize: 11, fontWeight: 800,
@@ -126,21 +145,26 @@ export default function WorkerProfilePrint() {
       </Section>
 
       <Section title="Engagement">
-        <Row a="Joining date" av={fmtDate(w.joining_date)} b="Daily wage" bv={w.daily_wage ? "Rs. " + Number(w.daily_wage).toLocaleString("en-IN") + " per day" : ""} />
+        <Row a="Joining date" av={fmtDate(w.joining_date)}
+             b={w.isStaff ? "Monthly salary" : "Daily wage"}
+             bv={w.isStaff
+                   ? (w.monthly_salary ? "Rs. " + Number(w.monthly_salary).toLocaleString("en-IN") + " per month" : "")
+                   : (w.daily_wage ? "Rs. " + Number(w.daily_wage).toLocaleString("en-IN") + " per day" : "")} />
         <Row a="Last working day" av={fmtDate(w.last_working_day)} b="OT eligible" bv={w.ot_eligible === false ? "No" : "Yes"} />
-        <Row a="Reason for exit" av={w.exit_reason} b="Proxy authority" bv={w.proxy_authority ? "Yes" : "No"} />
+        <Row a="Reason for exit" av={w.exit_reason}
+             b={w.isStaff ? "Paid leaves / yr" : "Proxy authority"}
+             bv={w.isStaff ? (w.annual_paid_leaves ?? "—") : (w.proxy_authority ? "Yes" : "No")} />
       </Section>
 
       <Section title="Site posting">
-        <Wide a="Primary site" av={w.sites?.name} />
-        <Wide a="Also allotted to" av={sitesAllotted.length ? sitesAllotted.join(", ") : "—"} />
+        {!w.isStaff && <Wide a="Primary site" av={w.sites?.name} />}
+        <Wide a={w.isStaff ? "Sites assigned" : "Also allotted to"} av={sitesAllotted.length ? sitesAllotted.join(", ") : "—"} />
         <Wide a="Total sites" av={uniqueSites.length} />
       </Section>
 
       <Section title="KYC & bank">
         <Row a="Bank account no" av={w.bank_account_no} b="IFSC" bv={w.bank_ifsc} />
-        <Row a="Bank name" av={w.bank_name} b="" bv="" />   {/* update359 */}
-        <Row a="Aadhaar on file" av={w.aadhaar_doc_url ? "Yes" : "No"} b="Profile status" bv={kycDone ? "Complete" : "Incomplete"} />
+        <Row a="Bank name" av={w.bank_name} b={w.isStaff ? "PAN" : "Aadhaar on file"} bv={w.isStaff ? w.pan_no : (w.aadhaar_doc_url ? "Yes" : "No")} />
       </Section>
 
       <Section title="Emergency contact">

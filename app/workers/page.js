@@ -147,6 +147,45 @@ export default function WorkersPage() {
     setSmodal(null); load();
   }
 
+  // update360: staff rows + columns, mirroring the Workers tab
+  const staffRows = (staff || []).map(u => ({
+    id: u.id,
+    name: u.full_name,
+    mobile: u.mobile,
+    role: roleLabel(u.role),
+    bank: u.bank_name || "—",
+    kyc: u.bank_account_no && u.bank_ifsc ? "Complete" : (Number(u.monthly_salary) > 0 ? "Pending" : "Not on payroll"),
+    status: u.last_working_day ? "Left" : "Active",
+    raw: u,
+  }));
+
+  const staffColumns = [
+    { key: "name", label: "Name", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    { key: "mobile", label: "Mobile (login)", filter: "search", render: r => <span className="muted">{r.mobile}</span> },
+    { key: "role", label: "Role", filter: "select" },
+    { key: "bank", label: "Bank", filter: "select" },
+    { key: "kyc", label: "Bank details", filter: "select",
+      render: r => r.kyc === "Complete" ? <span className="badge p">✓</span>
+                 : r.kyc === "Pending" ? <span className="badge warn">Pending</span>
+                 : <span className="muted">—</span> },
+    { key: "status", label: "Status", filter: "select",
+      render: r => r.status === "Left" ? <span className="badge warn">Left</span> : <span className="badge p">Active</span> },
+    { key: "_pdf", label: "", exportValue: () => "",
+      render: r => <button style={{ fontSize: 11.5 }} onClick={() => window.open("/workers/profile?staff=1&id=" + r.id, "_blank")}>⬇ PDF</button> },
+    { key: "_edit", label: "", exportValue: () => "",
+      render: r => staffAdmin ? <button style={{ fontSize: 11.5 }} onClick={async () => {
+        setErr(""); const us = await getUserSites(r.id); const ids = us.map(x => Number(x.id));
+        const u = r.raw;
+        setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true,
+          monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible,
+          annual_paid_leaves: u.annual_paid_leaves || "", joining_date: u.joining_date || "",
+          requires_punch: u.requires_punch !== false, bank_account_no: u.bank_account_no || "",
+          bank_ifsc: u.bank_ifsc || "", bank_name: u.bank_name || "", pan_no: u.pan_no || "",
+          last_working_day: u.last_working_day || "", exit_reason: u.exit_reason || "",
+          siteIds: ids, origSiteIds: [...ids] });
+      }}>✎ Edit</button> : null },
+  ];
+
   const columns = [
     { key: "name", label: "Worker", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.name}{r.raw?.proxy_authority && <span title="Proxy Attendance Authority — can mark others present" style={{ marginLeft: 5 }}>🛡</span>}</span> },   // update288
     { key: "mobile", label: "Mobile", filter: "search", render: r => <span className="muted">{r.mobile}</span> },
@@ -196,25 +235,12 @@ export default function WorkersPage() {
         {tab === "staff" && (
           <div className="panel">
             <div className="muted" style={{ marginBottom: 10, fontSize: 12.5 }}>Staff sign in with mobile + password (created on first login). Module permissions per site are managed in <b>Admin → Access Rights</b>.</div>
+            {/* update360: the staff list was a plain table with no filters and no export.
+                It is now a DataTable, exactly like the Workers tab — so search, the Role
+                and Bank filters and Export Excel all behave the same way, and crucially the
+                export writes WHAT IS ON SCREEN rather than everyone. */}
             {!staff ? <div className="muted">Loading…</div> : (
-              <table>
-                <thead><tr><th>Name</th><th>Mobile (login)</th><th>Role</th><th>Bank</th><th></th></tr></thead>
-                <tbody>
-                  {staff.map(u => (
-                    <tr key={u.id}>
-                      <td style={{ fontWeight: 600 }}>{u.full_name}</td>
-                      <td className="muted">{u.mobile}</td>
-                      <td>{roleLabel(u.role)}</td>
-                      <td>{u.bank_account_no && u.bank_ifsc
-                        ? <span className="badge p">✓</span>
-                        : Number(u.monthly_salary) > 0
-                          ? <span className="badge warn">Pending</span>
-                          : <span className="muted">—</span>}</td>
-                      <td style={{ textAlign: "right" }}>{staffAdmin && <button style={{ fontSize: 11.5 }} onClick={async () => { setErr(""); const us = await getUserSites(u.id); const ids = us.map(x => Number(x.id)); setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true, monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible, annual_paid_leaves: u.annual_paid_leaves || "", joining_date: u.joining_date || "", requires_punch: u.requires_punch !== false, bank_account_no: u.bank_account_no || "", bank_ifsc: u.bank_ifsc || "", pan_no: u.pan_no || "", last_working_day: u.last_working_day || "", exit_reason: u.exit_reason || "", siteIds: ids, origSiteIds: [...ids] }); }}>✎ Edit</button>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <DataTable columns={staffColumns} rows={staffRows} exportName="staff" />
             )}
             {!staffAdmin && <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>Only Directors — or staff granted "Manage staff" in Admin capabilities — can add or edit staff.</div>}
           </div>
@@ -418,6 +444,10 @@ export default function WorkersPage() {
                       <input style={{ width: "100%" }} inputMode="numeric" value={smodal.bank_account_no || ""} onChange={e => sset("bank_account_no", e.target.value)} /></div>
                     <div style={{ flex: 1, minWidth: 120 }}><label className="muted">IFSC</label>
                       <input style={{ width: "100%" }} value={smodal.bank_ifsc || ""} onChange={e => sset("bank_ifsc", e.target.value.toUpperCase())} placeholder="e.g. SBIN0001234" /></div>
+                    {/* update360 */}
+                    <div style={{ flex: "1 1 100%" }}><label className="muted">Bank name</label>
+                      <input style={{ width: "100%" }} value={smodal.bank_name || ""} placeholder="e.g. State Bank of India"
+                             onChange={e => sset("bank_name", e.target.value)} /></div>
                     <div style={{ flex: 1, minWidth: 110 }}><label className="muted">PAN</label>
                       <input style={{ width: "100%" }} value={smodal.pan_no || ""} onChange={e => sset("pan_no", e.target.value.toUpperCase())} placeholder="ABCDE1234F" /></div>
                   </div>
