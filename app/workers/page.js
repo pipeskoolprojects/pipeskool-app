@@ -38,7 +38,7 @@ const WORKER_FORM_CSS = `
 }
 `;
 
-const EMPTY = { full_name: "", mobile: "", category: "plumber", labour_type: "own", contractor_id: "", site_id: "", daily_wage: "", is_active: true, ot_eligible: true, proxy_authority: false, emergency_name: "", emergency_relation: "", emergency_mobile: "", emergency_alt_mobile: "", emergency_address: "" };   // update287 · update336
+const EMPTY = { full_name: "", mobile: "", category: "plumber", labour_type: "own", contractor_id: "", site_id: "", daily_wage: "", is_active: true, ot_eligible: true, proxy_authority: false, bank_name: "", emergency_name: "", emergency_relation: "", emergency_mobile: "", emergency_alt_mobile: "", emergency_address: "" };   // update287 · update336
 // roles load dynamically from the Role Master (staff_roles table)
 const S_EMPTY = { full_name: "", mobile: "", role: "supervisor", site_id: "", is_active: true };
 
@@ -154,6 +154,7 @@ export default function WorkersPage() {
     { key: "type", label: "Labour type", filter: "select",
       render: r => r.type === "Own" ? <span className="badge gray">Own</span> : <span className="badge info">{r.contractor}</span> },
     { key: "site", label: "Site", filter: "select" },
+    { key: "bank", label: "Bank", filter: "select" },   // update359: filter workers by bank
     { key: "wage", label: "Daily wage", type: "num", render: r => inr(r.wage), exportValue: r => r.wage },
     { key: "complete", label: "Profile", filter: "select",
       optionLabel: o => o ? "Complete" : "Incomplete",
@@ -292,6 +293,10 @@ export default function WorkersPage() {
                 <div className="wf-grid wf-full">
                   <div><label className="muted">Bank account no</label><input inputMode="numeric" value={modal.bank_account_no || ""} onChange={e => set("bank_account_no", e.target.value)} /></div>
                   <div><label className="muted">IFSC</label><input value={modal.bank_ifsc || ""} onChange={e => set("bank_ifsc", e.target.value.toUpperCase())} placeholder="e.g. SBIN0001234" /></div>
+                  {/* update359 */}
+                  <div className="wf-full"><label className="muted">Bank name</label>
+                    <input value={modal.bank_name || ""} placeholder="e.g. Indian Overseas Bank"
+                           onChange={e => set("bank_name", e.target.value)} /></div>
                   <div className="wf-full">
                     <label className="muted">Aadhaar copy {modal.aadhaar_doc_url && <a href={modal.aadhaar_doc_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
                     <input type="file" accept="image/*,.pdf" onChange={async e => {

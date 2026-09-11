@@ -62,7 +62,7 @@ export default function WorkerProfilePrint() {
         if (isDemo) { setErr("Not available in demo mode."); return; }
         const [{ data: row, error }, comp] = await Promise.all([
           supabase.from("workers")
-            .select("id, full_name, mobile, category, labour_type, daily_wage, is_active, ot_eligible, proxy_authority, joining_date, last_working_day, exit_reason, bank_account_no, bank_ifsc, aadhaar_doc_url, emergency_name, emergency_relation, emergency_mobile, emergency_alt_mobile, emergency_address, site_id, sites!workers_site_id_fkey(name), contractors(name)")
+            .select("id, full_name, mobile, category, labour_type, daily_wage, is_active, ot_eligible, proxy_authority, joining_date, last_working_day, exit_reason, bank_account_no, bank_ifsc, bank_name, aadhaar_doc_url, emergency_name, emergency_relation, emergency_mobile, emergency_alt_mobile, emergency_address, site_id, sites!workers_site_id_fkey(name), contractors(name)")
             .eq("id", id).maybeSingle(),
           getCompany(),
         ]);
@@ -139,6 +139,7 @@ export default function WorkerProfilePrint() {
 
       <Section title="KYC & bank">
         <Row a="Bank account no" av={w.bank_account_no} b="IFSC" bv={w.bank_ifsc} />
+        <Row a="Bank name" av={w.bank_name} b="" bv="" />   {/* update359 */}
         <Row a="Aadhaar on file" av={w.aadhaar_doc_url ? "Yes" : "No"} b="Profile status" bv={kycDone ? "Complete" : "Incomplete"} />
       </Section>
 
