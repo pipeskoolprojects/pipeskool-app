@@ -19,6 +19,10 @@ export const ROUTES = {
   indent:    ["/procure",   "/m/indent"],
   stock:     ["/stock",     "/m/stock"],
   dpr:       ["/dpr",       "/m/dpr"],
+  // update364: these two have NO /m/ shell, so both entries point at the same route rather
+  // than sending a phone to a URL that does not exist.
+  leave:     ["/leave",     "/leave"],
+  tickets:   ["/tickets",   "/tickets"],
 };
 
 export function isMobileShell() {
@@ -33,9 +37,14 @@ export default function Go() {
   const router = useRouter();
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
-    const to = sp.get("to") || "approvals";
-    const pair = ROUTES[to] || ROUTES.approvals;
-    router.replace(pair[isMobileShell() ? 1 : 0]);
+    const to = sp.get("to") || "money";
+    const pair = ROUTES[to] || ROUTES.money;
+    // update364: carry the record id through, so the module can open THAT indent / PO /
+    // claim instead of dropping the person on a list to go hunting.
+    const rest = new URLSearchParams();
+    sp.forEach((v, k) => { if (k !== "to" && k !== "board" && !k.startsWith("f_")) rest.set(k, v); });
+    const q = rest.toString();
+    router.replace(pair[isMobileShell() ? 1 : 0] + (q ? "?" + q : ""));
   }, [router]);
 
   return <div style={{ padding: 24 }} className="muted">Opening…</div>;
