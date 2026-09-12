@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import BankPaymentPanel from "@/components/BankPaymentPanel";   // update367
 import Sidebar from "@/components/Sidebar";
 import { getSites, inr } from "@/lib/data";
 import { generatePayouts, generatePayoutsAll, getPayouts, setPayoutAdvance, setPayoutMode, setPayoutStatutory, fmtHM, approvePayouts, markPayoutsPaid, reopenPayout } from "@/lib/payroll";
@@ -152,7 +153,7 @@ export default function WagesPage() {
         </div>
         {/* update279: mockup tab strip — underline tabs; Labour Payroll (generate/approve) and Staff salary kept as tabs */}
         <div className="mw-tabs">
-          {[["attendance", "📋 Full Attendance Summary"], ["summary", "💰 Payroll Summary"], ["sites", "🏗 Site Summary Dashboard"], ["payroll", "👷 Labour Payroll"], ["staffpay", "🧑‍💼 Staff Salary"]].map(([k, l]) => (
+          {[["attendance", "📋 Full Attendance Summary"], ["summary", "💰 Payroll Summary"], ["sites", "🏗 Site Summary Dashboard"], ["payroll", "👷 Labour Payroll"], ["staffpay", "🧑‍💼 Staff Salary"], ["bank", "🏦 Bank Payment Sheet"]].map(([k, l]) => (
             <button key={k} className={(tab === "staff" ? "staffpay" : sub) === k ? "active" : ""} onClick={() => { if (k === "staffpay") setTab("staff"); else { setTab("labour"); setSub(k); } }}>{l}</button>
           ))}
         </div>
@@ -165,6 +166,8 @@ export default function WagesPage() {
         {tab === "labour" && sub === "attendance" && <AttendanceSummary month={month} siteId={site} sites={sites} />}
         {tab === "labour" && sub === "summary" && <PayrollSummary month={month} siteId={site} sites={sites} />}{/* update278 */}
         {tab === "labour" && sub === "sites" && <SiteSummary month={month} siteId={site} sites={sites} />}
+        {/* update367: the bank upload file — under Payroll/Wages, where the money is */}
+        {tab === "labour" && sub === "bank" && <BankPaymentPanel month={month} />}
         {tab === "labour" && sub === "settings" && <PayrollSettings canEdit={sess?.role === "director"} />}
         {tab === "labour" && sub === "payroll" && <div className="panel">
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
