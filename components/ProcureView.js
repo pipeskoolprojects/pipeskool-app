@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { isDemo } from "@/lib/supabase";
 import { getSession, can } from "@/lib/auth";
 import { canApprove } from "@/lib/perms";
@@ -94,6 +94,10 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   const [itemSplits, setItemSplits] = useState({}); // {itemId: [{vendor, qty}]} when qty-split is on
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+  // update368: `busy` is state, and state does not update synchronously — two clicks in the
+  // same tick both get past it, which is how IND/5/2609/005-014 happened. A ref flips at
+  // once, so the second click is dropped before it reaches the network.
+  const submitting = useRef(false);
   const [sites, setSites] = useState([]);
   const [ni, setNi] = useState(null);                    // new-indent modal state
   useEffect(() => { getSites().then(setSites); }, []);
@@ -123,17 +127,18 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   }
   const openNewIndent = () => setNi({ site_id: "", required_by: "", urgency: "normal", note: "", lines: [blankLine()] });
   async function submitNewIndent() {
+    if (submitting.current) return;   // update368
     setErr("");
     if (!ni.site_id) { setErr("Pick a site."); return; }
     const lines = ni.lines.filter(l => l.item_name.trim() && Number(l.qty) > 0);
     if (!lines.length) { setErr("Add at least one item with a quantity."); return; }
-    setBusy(true);
+    submitting.current = true; setBusy(true);
     const header = { site_id: Number(ni.site_id), raised_by: session?.id || null, required_by: ni.required_by || null,
       urgency: ni.urgency, note: ni.note || null };
     const outLines = lines.map(l => ({ item_id: l.item_id || null, item_name: l.item_name.trim(), qty: Number(l.qty), unit: l.unit, spec: (l.spec || "").trim() || null }));
     let res = editingId ? await editIndent(editingId, header, outLines) : await createIndent(header, outLines);
     if (!res.ok && res.duplicate && window.confirm(res.error + "\n\nRaise it anyway as a separate indent?")) res = await createIndent({ ...header, allow_duplicate: true }, outLines);
-    setBusy(false);
+    submitting.current = false; setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
     clearDraft(ind.id);   // update299
     setNi(null); setMsg(editingId ? "Indent " + editingNo + " updated — quotes were cleared, status back to open." : "Indent " + res.indent_no + " raised.");
@@ -530,7 +535,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
               ))}
               <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                 <button onClick={() => setNi(n => ({ ...n, lines: [...n.lines, blankLine()] }))}>＋ Add item</button>
-                <button className="primary" disabled={busy} onClick={submitNewIndent}>Raise indent</button>
+                <button className="primary" disabled={busy} onClick={submitNewIndent}>{busy ? "⏳ Raising…" : (editingId ? "Save changes" : "Raise indent")}</button>
                 <button onClick={() => setNi(null)}>Cancel</button>
               </div>
             </div>
