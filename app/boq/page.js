@@ -10,6 +10,9 @@ import { isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import { getBoqItems, saveBoqItem, bulkImportBoq, autoShortenBoq, amendBoqItem, getBoqAmendments, BOQ_TEMPLATE_HEADERS, inr } from "@/lib/boq";
 import { searchItems } from "@/lib/stock";
+import { can } from "@/lib/auth";
+import { getBoqKits, copyBoqKits } from "@/lib/boqMaterials";   // update369
+import BoqKitModal from "@/components/BoqKitModal";
 import * as XLSX from "xlsx";
 
 const blank = { item_code: "", description: "", unit: "Rmt", boq_qty: "", rate: "", section: "", basic_rate: "", is_extra: false, extra_status: "pending", item_id: null, item_name: "" };
@@ -116,6 +119,15 @@ export default function BoqPage() {
     if (s?.sites?.length) { setSites(s.sites); setSite(s.sites[0].id); }
   }, []);
   useEffect(() => { if (site) getBoqItems(site).then(setRows); }, [site, msg]);
+  // update369: kits load alongside the lines; the Materials column reads them
+  const [kits, setKits] = useState({});
+  const [kitRow, setKitRow] = useState(null);
+  const [kitErr, setKitErr] = useState("");
+  const loadKits = () => { if (site) getBoqKits(site).then(setKits).catch(e => setKitErr(e.message)); };
+  useEffect(() => { setKitErr(""); loadKits(); }, [site, msg]);   // eslint-disable-line
+  const sessK = typeof window !== "undefined" ? getSession() : null;
+  const canKit = !!sessK && (sessK.role === "director" || can(sessK, "boq_material", "manage"));
+  const unmapped = (rows || []).filter(r => !(kits[r.id] || []).length).length;
 
   // update260: item-master search for the "link item" picker (min 2 chars)
   useEffect(() => {
@@ -178,6 +190,14 @@ export default function BoqPage() {
       render: r => <span title={r.section} style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontSize: 11.5, lineHeight: 1.3 }}>{r.section || "—"}</span> },   // update260b
     { key: "unit", label: "Unit", width: 58 },
     { key: "boq_qty", label: "BOQ qty", type: "num", render: r => r.boq_qty.toLocaleString("en-IN"), exportValue: r => r.boq_qty },
+    // update369: the kit — which Item Master materials this line is built from
+    { key: "_kit", label: "Materials", sortable: false, exportValue: r => (kits[r.id] || []).map(k => `${k.name} ×${k.qty_per_unit}`).join("; "),
+      render: r => { const k = kits[r.id] || []; return (
+        <button onClick={() => setKitRow(r)} title="Materials this BOQ line is built from"
+          style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, border: "1px solid " + (k.length ? "#86efac" : "#fdba74"),
+                   background: k.length ? "#ecfdf5" : "#fff7ed", color: k.length ? "#166534" : "#9a3412", cursor: "pointer", whiteSpace: "nowrap" }}>
+          {k.length ? `✓ ${k.length} material${k.length > 1 ? "s" : ""}` : "⚠ none"}
+        </button>); } },
     { key: "rate", label: "Rate ₹", type: "num", render: r => r.rate != null ? r.rate.toLocaleString("en-IN") : "—", exportValue: r => r.rate ?? "" },   // update260
     { key: "basic_rate", label: "Basic ₹", type: "num", render: r => r.basic_rate != null ? r.basic_rate.toLocaleString("en-IN") : "—", exportValue: r => r.basic_rate ?? "" },   // update260
     { key: "done_qty", label: "Measured (RA)", type: "num", render: r => r.done_qty.toLocaleString("en-IN"), exportValue: r => r.done_qty },
@@ -298,6 +318,23 @@ export default function BoqPage() {
         </div>
 
         <div className="panel">
+          {/* update369 */}
+        {kitErr && <div className="error" style={{ marginBottom: 8 }}>{kitErr}</div>}
+        {rows && rows.length > 0 && (
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 8, fontSize: 12.5 }}>
+            <span className={unmapped ? "badge warn" : "badge p"}>{unmapped ? `⚠ ${unmapped} of ${rows.length} BOQ lines have no materials mapped` : `✓ every BOQ line has materials mapped`}</span>
+            <span className="muted" style={{ fontSize: 11.5 }}>Indents at this site in strict categories can only pick mapped materials.</span>
+            {canKit && sites.length > 1 && (
+              <button style={{ fontSize: 11.5 }} onClick={async () => {
+                const from = prompt("Copy kits FROM which site? Enter the site id:\n" + sites.map(x => `${x.id} — ${x.name}`).join("\n"));
+                if (!from) return;
+                const r = await copyBoqKits(from, site);
+                if (!r.ok) { setKitErr(r.error); return; }
+                setKitErr(""); loadKits(); alert(`${r.copied} kit line(s) copied (matched by item code).`);
+              }}>⧉ Copy kits from another site</button>
+            )}
+          </div>
+        )}
           {!rows ? <div className="muted">Loading…</div> :
             shown.length === 0 && tab === "extra" ? <div className="muted">No extra items yet. When a non-tender item comes up on site, add it here with its rate — it bills in its own "Extra / Non-tender items" section on the RA bill.</div> :
             <DataTable fixed columns={columns} rows={shown} exportName={tab === "extra" ? "boq_extra_items" : "boq"} />}
@@ -306,7 +343,9 @@ export default function BoqPage() {
         {amend && <AmendModal row={amend} onClose={() => setAmend(null)}
           onDone={changed => { setAmend(null); setMsg("Amended (" + changed.join(", ") + ") — logged with reason. Applies from the next RA bill."); }} />}
         {hist && <HistoryModal siteId={site} row={hist.row} onClose={() => setHist(null)} />}
+        {kitRow && <BoqKitModal row={kitRow} kit={kits[kitRow.id] || []} canEdit={canKit} onClose={() => setKitRow(null)} onChanged={loadKits} />}
       </main>
     </div>
+
   );
 }
