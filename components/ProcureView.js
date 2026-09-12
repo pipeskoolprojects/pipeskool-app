@@ -10,6 +10,7 @@ import {
 } from "@/lib/procure";
 import { getVendors } from "@/lib/vendors";
 import { createIndent, editIndent, deleteIndent, quickAddItem, getIndentEditAudit } from "@/lib/stock";   // update337
+import { getSiteAllowance, checkLine } from "@/lib/boqMaterials";   // update372
 import { searchIndentCatalog } from "@/lib/boq";
 import { getSites } from "@/lib/data";
 import { billUrl, isPdf } from "@/lib/bills";
@@ -103,6 +104,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   useEffect(() => { getSites().then(setSites); }, []);
   const blankLine = () => ({ item_name: "", qty: "", unit: "", item_id: null, spec: "" });
   const [sug, setSug] = useState(null);            // { i, q, list }
+  const [devs, setDevs] = useState({});             // update372: item_name -> deviation for the current form
   const canAddMaster = session && (session.role === "director" || can(session, "stock", "manage", ni?.site_id));
   // update186: DB policy on purchase_orders = indent create/manage — mirror it in the UI instead of a raw RLS error
   const canIssuePO = ind => session && (session.role === "director" || can(session, "indent", "create", ind?.site_id) || can(session, "indent", "manage", ind?.site_id));
@@ -114,7 +116,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     else setSug(null);
   }
   function pickSug(i, opt) {
-    setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], item_name: opt.label, unit: opt.unit || ls[i].unit, item_id: opt.item_id || null }; return { ...n, lines: ls }; });
+    setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], item_name: opt.label, unit: opt.unit || ls[i].unit, item_id: opt.item_id || null, item_type: opt.item_type || null, deviation_reason: "" }; return { ...n, lines: ls }; });   // update372
     getRateSuggestions([opt.label]).then(m => setRateSug(s => ({ ...s, ...m }))).catch(() => {});   // update299
     setSug(null);
   }
@@ -125,17 +127,29 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     pickSug(i, { label: r.item.display_name, unit: r.item.unit, item_id: r.item.id });
     setMsg(`"${r.item.display_name}" added to Item Master.`);
   }
-  const openNewIndent = () => setNi({ site_id: "", required_by: "", urgency: "normal", note: "", lines: [blankLine()] });
+  const openNewIndent = () => { setDevs({}); setNi({ site_id: "", required_by: "", urgency: "normal", note: "", lines: [blankLine()] }); };   // update372
   async function submitNewIndent() {
     if (submitting.current) return;   // update368
     setErr("");
     if (!ni.site_id) { setErr("Pick a site."); return; }
     const lines = ni.lines.filter(l => l.item_name.trim() && Number(l.qty) > 0);
     if (!lines.length) { setErr("Add at least one item with a quantity."); return; }
+    // update372: the BOQ check. A line that is off-BOQ (strict category) or over the BOQ
+    // quantity may still be raised — WITH a reason, and it goes to the Director as a
+    // deviation. Without a reason it does not leave this form.
+    let allowance = null;
+    try { allowance = await getSiteAllowance(Number(ni.site_id)); } catch { allowance = null; }
+    const flagged = lines.map(l => ({ l, dev: allowance ? checkLine(allowance, { item_id: l.item_id, item_type: l.item_type, qty: l.qty }) : null })).filter(x => x.dev);
+    const needReason = flagged.filter(x => !String(x.l.deviation_reason || "").trim());
+    if (needReason.length) {
+      setDevs(Object.fromEntries(flagged.map(x => [x.l.item_name, x.dev])));
+      setErr(`${needReason.length} line(s) are outside this site's BOQ. Give a reason for each — it goes to the Director for approval before a PO can be issued.`);
+      return;
+    }
     submitting.current = true; setBusy(true);
     const header = { site_id: Number(ni.site_id), raised_by: session?.id || null, required_by: ni.required_by || null,
       urgency: ni.urgency, note: ni.note || null };
-    const outLines = lines.map(l => ({ item_id: l.item_id || null, item_name: l.item_name.trim(), qty: Number(l.qty), unit: l.unit, spec: (l.spec || "").trim() || null }));
+    const outLines = lines.map(l => ({ item_id: l.item_id || null, item_name: l.item_name.trim(), qty: Number(l.qty), unit: l.unit, spec: (l.spec || "").trim() || null, item_type: l.item_type || null, deviation_reason: (l.deviation_reason || "").trim() || null }));   // update372
     let res = editingId ? await editIndent(editingId, header, outLines) : await createIndent(header, outLines);
     if (!res.ok && res.duplicate && window.confirm(res.error + "\n\nRaise it anyway as a separate indent?")) res = await createIndent({ ...header, allow_duplicate: true }, outLines);
     submitting.current = false; setBusy(false);
@@ -499,7 +513,8 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                 }
               `}</style>
               {ni.lines.map((l, i) => (
-                <div key={i} className="ind-line" style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                <div key={i}>{/* update372: row + its reason box */}
+                <div className="ind-line" style={{ display: "flex", gap: 8, marginBottom: 6 }}>
                   <div className="ind-name" style={{ flex: 2, position: "relative" }}>
                     <input style={{ width: "100%" }} placeholder="Item / material name * (type 2+ letters to search)" value={l.item_name}
                            onChange={e => onItemType(i, e.target.value)} />
@@ -510,8 +525,11 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                         {sug.list.map((o, j) => (
                           <div key={j} onClick={() => pickSug(i, o)}
                                style={{ padding: "7px 10px", cursor: "pointer", fontSize: 13, display: "flex", justifyContent: "space-between", gap: 8 }}>
-                            <span>{o.label}</span>
-                            <span className="muted" style={{ fontSize: 11 }}>{o.kind === "boq" ? "BOQ" : "Item"}{o.unit ? " · " + o.unit : ""}</span>
+                            <span>{o.label}{o.boq && <span title={"In this site's BOQ — " + o.boqRefs} style={{ marginLeft: 6, fontSize: 10, fontWeight: 800, color: "#166534", background: "#ecfdf5", border: "1px solid #86efac", borderRadius: 999, padding: "1px 6px" }}>✓ BOQ {o.boqRefs}</span>}</span>
+                            <span className="muted" style={{ fontSize: 11 }}>
+                              {o.kind === "boq" ? "BOQ" : "Item"}{o.unit ? " · " + o.unit : ""}
+                              {o.boq && o.remaining != null && <span style={{ marginLeft: 6, color: o.remaining > 0 ? "#166534" : "var(--red)" }}>{o.remaining} left</span>}
+                            </span>
                           </div>
                         ))}
                         {sug.list.length === 0 && <div className="muted" style={{ padding: "7px 10px", fontSize: 12.5 }}>No match in Item or BOQ master.</div>}
@@ -531,6 +549,17 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                   <input className="ind-spec" style={{ width: 220 }} placeholder="Specification (e.g. ASTM A106 Gr B, Sch 40, ISI)" value={l.spec || ""}
                          onChange={e => setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], spec: e.target.value }; return { ...n, lines: ls }; })} />
                   {ni.lines.length > 1 && <button onClick={() => setNi(n => ({ ...n, lines: n.lines.filter((_, j) => j !== i) }))}>✕</button>}
+                </div>
+                {/* update372: a line outside the site's BOQ gets a reason box right under it.
+                    The indent will not submit until every flagged line has one. */}
+                {devs[l.item_name] && (
+                  <div style={{ margin: "-4px 0 8px 0", padding: "8px 10px", background: "#fff7ed", border: "1px solid #fdba74", borderRadius: 6 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#9a3412" }}>⚠ {devs[l.item_name].kind === "off_boq" ? "Not in this site's BOQ" : "Over the BOQ quantity"} — {devs[l.item_name].message}</div>
+                    <input style={{ width: "100%", marginTop: 6 }} placeholder="Why is this needed? (goes to the Director for approval)"
+                           value={l.deviation_reason || ""}
+                           onChange={e => setNi(n => { const ls = [...n.lines]; ls[i] = { ...ls[i], deviation_reason: e.target.value }; return { ...n, lines: ls }; })} />
+                  </div>
+                )}
                 </div>
               ))}
               <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
