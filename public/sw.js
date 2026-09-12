@@ -5,9 +5,13 @@
 // which resolves the right shell on the device. These two entries rescue the notifications
 // already stored with a hard-coded desktop path — an Android tap on any of them used to land
 // on the wide Money & Expenses table with no Approve buttons in reach.
+// update364: rows already in the notifications table point at old destinations. Money kinds
+// go to Expenses & Petty Cash, which is the module that owns them — not to the combined
+// Approvals screen, which was the wrong answer and has been withdrawn.
 const LEGACY = {
-  "/expenses": "/go?to=approvals",
-  "/approvals": "/go?to=approvals",
+  "/expenses": "/go?to=money",
+  "/approvals": "/go?to=money",
+  "/go?to=approvals": "/go?to=money",
 };
 function resolve(link) {
   const clean = String(link || "/").split("#")[0];

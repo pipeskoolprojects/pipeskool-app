@@ -18,7 +18,7 @@ function timeAgo(ts) {
 }
 
 // update353: links baked into older notification rows, remapped at CLICK time.
-const LEGACY = { "/expenses": "/go?to=approvals", "/approvals": "/go?to=approvals" };
+const LEGACY = { "/expenses": "/go?to=money", "/approvals": "/go?to=money", "/go?to=approvals": "/go?to=money" };   // update364
 
 export default function NotifyBell({ mobile }) {
   const [open, setOpen] = useState(false);

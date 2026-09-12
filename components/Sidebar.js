@@ -27,13 +27,6 @@ const GROUPS = [
       { href: "/assets", label: "Tools & Assets", module: "assets" },
     ] },
     { label: "Site Execution", items: [
-      // update362: Approvals is a real nav entry now. A Group auto-opens when it contains the
-      // current path, so arriving from a notification lands INSIDE Site Execution with the
-      // group expanded and the row highlighted — instead of on a page whose only link was
-      // "← Home", which is why it felt like the notification threw you back to the dashboard.
-      // module: null so it never disappears: everyone who can reach a notification can reach
-      // the approvals screen, and the screen enforces its own rights per request anyway.
-      { href: "/approvals", label: "Approvals", module: null },
       { href: "/dpr", label: "Daily Progress Report (DPR)", module: "dpr" },
       { href: "/rentals", label: "Machines & Rooms (Rent)", module: "rentals" },
       { href: "/expenses", label: "Expenses & Petty Cash", module: "money" },
