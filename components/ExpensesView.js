@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import VendorVoucherPanel from "@/components/VendorVoucherPanel";   // update356
+import ContractorAdvancePanel from "@/components/ContractorAdvancePanel";   // update365
 import DataTable from "@/components/DataTable";
 import AdvanceLedger from "@/components/AdvanceLedger";
 import CollapseCard from "@/components/CollapseCard";
@@ -295,6 +296,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
     ["advreq", "📄", "Advance salary requests", () => (adv || []).length],
     ["claims", "💳", "Expenses ledger", () => (claims || []).length],
     ["vendor", "🛒", "Direct Vendor Payment", () => null],   // update356
+    ["contradv", "🧱", "Contractor advances", () => null],   // update365
     ["pettyled", "📒", "Petty cash ledger", () => petty.length],
     ["advled", "🧾", "Advance salary ledger", () => null],
     ["reports", "📊", "Reports", () => null],
@@ -646,6 +648,12 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
             Petty Cash — not as a separate procurement module. */}
         <div className={mtab === "vendor" ? "money-sec" : undefined} style={{ display: mtab === "vendor" ? "flex" : "none", overflowY: "auto", flexDirection: "column" }}>
           {mtab === "vendor" && <VendorVoucherPanel sites={sitesList} />}
+        </div>
+
+        {/* update365: contractor advances sit beside the other ledgers — same section, because
+            it is the same kind of money, just owed to a different party. */}
+        <div className={mtab === "contradv" ? "money-sec" : undefined} style={{ display: mtab === "contradv" ? "flex" : "none", overflowY: "auto", flexDirection: "column" }}>
+          {mtab === "contradv" && <ContractorAdvancePanel />}
         </div>
 
         <div className={mtab === "pettyled" ? "money-sec" : undefined} style={{ display: mtab === "pettyled" ? "flex" : "none", overflowY: "auto" }}>
