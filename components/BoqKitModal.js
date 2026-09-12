@@ -92,7 +92,20 @@ export default function BoqKitModal({ row, kit, canEdit, onClose, onChanged }) {
         {canEdit && (<>
           <div style={{ fontWeight: 700, fontSize: 12.5, color: NAVY, marginBottom: 4 }}>Add a material</div>
           <input placeholder="Search the Item Master…" value={q} onChange={e => setQ(e.target.value)} style={{ width: "100%", marginBottom: 6 }} />
-          {found.length > 0 && <div style={{ marginBottom: 12 }}>{found.map(it => <Pick key={it.id} it={it} />)}</div>}
+          {found.length > 0 && (
+            <div style={{ marginBottom: 12, maxHeight: 360, overflowY: "auto" }}>
+              {/* update370: grouped by type, so Pipe / Fitting / Valve are each visible at a glance */}
+              {[...new Set(found.map(x => x.item_type || "Other"))].map(type => (
+                <div key={type}>
+                  <div style={{ fontSize: 10.5, fontWeight: 800, color: NAVY, letterSpacing: "0.05em", padding: "8px 0 2px", borderBottom: "1.5px solid #FF7A1A" }}>
+                    {String(type).toUpperCase()} · {found.filter(x => (x.item_type || "Other") === type).length}
+                  </div>
+                  {found.filter(x => (x.item_type || "Other") === type).map(it => <Pick key={it.id} it={it} />)}
+                </div>
+              ))}
+              <div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>{found.length} match{found.length === 1 ? "" : "es"}{found.length >= 150 ? " — showing the first 150, narrow the search" : ""}</div>
+            </div>
+          )}
           {!q && sug.length > 0 && (<>
             <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>Suggested from the description — one click to accept</div>
             {sug.map(it => <Pick key={it.id} it={it} />)}
