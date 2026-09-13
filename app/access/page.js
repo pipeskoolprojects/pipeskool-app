@@ -184,8 +184,16 @@ export default function AccessPage() {
           </div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: 16 }}>
-          <div className="panel" style={{ marginBottom: 0 }}>
+        {/* update376: same phone treatment as /rights — one column, dropdown picker */}
+        <div className="rights-grid" style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: 16 }}>
+          <div className="panel rights-staff-picker" style={{ marginBottom: 0, display: "none" }}>
+            <label className="muted" style={{ fontSize: 12 }}>Staff member</label>
+            <select style={{ width: "100%", fontSize: 14 }} value={sel?.id || ""} onChange={e => { const u = staff.find(x => String(x.id) === e.target.value); if (u) openUser(u); }}>
+              <option value="">— select —</option>
+              {staff.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+            </select>
+          </div>
+          <div className="panel rights-staff-list" style={{ marginBottom: 0 }}>
             <h2>Staff</h2>
             {staff.map(u => (
               <div key={u.id} onClick={() => openUser(u)} style={{ padding: "10px 8px", borderBottom: "1px solid var(--border)", cursor: "pointer", background: sel?.id === u.id ? "var(--copper-soft)" : "transparent", borderRadius: 6 }}>

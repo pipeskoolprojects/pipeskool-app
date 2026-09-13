@@ -378,3 +378,10 @@ tr.po-void:hover td { opacity: 0.85; }
 body.has-global-mnav .main,
 body.has-global-mnav .layout > main { padding-bottom: calc(76px + env(safe-area-inset-bottom)) !important; }
 body.has-global-mnav { padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
+
+/* update376: Access Rights on a phone — one column, dropdown picker, full-width checkboxes */
+@media (max-width: 720px) {
+  .rights-grid { grid-template-columns: 1fr !important; }
+  .rights-staff-list { display: none !important; }
+  .rights-staff-picker { display: block !important; }
+}

@@ -19,7 +19,7 @@ export default function RightsPage() {
   useEffect(() => {
     const s = getSession();
     setSession(s);
-    getCatalog().then(setCatalog);
+    getCatalog().then(setCatalog).catch(e => setMsg("Could not load the permission catalog: " + e.message));   // update376
     getStaffList().then(list => { setStaff(list); if (list[0]) pick(list[0]); });
   }, []);
 
@@ -53,8 +53,17 @@ export default function RightsPage() {
         {isDemo && <div className="demo-banner">Demo mode — changes are not stored. Connect database to save real permissions.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
 
-        <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16 }}>
-          <div className="panel" style={{ marginBottom: 0 }}>
+        {/* update376: two columns on a desktop; on a phone the staff list becomes a dropdown
+            above the rights panel, so the checkboxes get the full width instead of a
+            ~170px strip. */}
+        <div className="rights-grid" style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16 }}>
+          <div className="panel rights-staff-picker" style={{ marginBottom: 0, display: "none" }}>
+            <label className="muted" style={{ fontSize: 12 }}>Staff member</label>
+            <select style={{ width: "100%", fontSize: 14 }} value={selected?.id || ""} onChange={e => { const u = staff.find(x => String(x.id) === e.target.value); if (u) pick(u); }}>
+              {staff.map(u => <option key={u.id} value={u.id}>{u.full_name} — {ROLE_LABELS[u.role] || u.role}</option>)}
+            </select>
+          </div>
+          <div className="panel rights-staff-list" style={{ marginBottom: 0 }}>
             <h2>Staff</h2>
             {staff.map(u => (
               <div key={u.id} onClick={() => pick(u)}
@@ -67,7 +76,7 @@ export default function RightsPage() {
           </div>
 
           <div className="panel" style={{ marginBottom: 0 }}>
-            {!selected ? <div className="muted">Select a staff member.</div> : (
+            {!selected ? <div className="muted">Select a staff member.</div> : !catalog.length ? <div className="muted">Loading the permission catalog…</div> : (
               <>
                 <h2>{selected.full_name} — {ROLE_LABELS[selected.role] || selected.role}</h2>
                 <p className="muted" style={{ marginBottom: 14 }}>
