@@ -370,3 +370,11 @@ tr.po-void:hover td { opacity: 0.85; }
   background: var(--deep); color: #fff; border-radius: 10px; padding: 8px 12px; margin: 12px 0 8px;
   font-weight: 800; font-size: 13px; }
 .grp-head .muted { color: rgba(255,255,255,0.75); }
+
+
+/* update374: when the global bottom bar is showing on a desktop-layout page, keep the page
+   content clear of it. 58px bar + safe area. The sidebar layout's own scroll container gets
+   the padding too, since that is what actually scrolls on those pages. */
+body.has-global-mnav .main,
+body.has-global-mnav .layout > main { padding-bottom: calc(76px + env(safe-area-inset-bottom)) !important; }
+body.has-global-mnav { padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
