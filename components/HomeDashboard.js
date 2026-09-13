@@ -306,7 +306,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   const apprTile = rights.open ? [["✅", "Approvals", R("/m/approvals", "/approvals"), apprTotal]] : [];
   const dirTiles = [...apprTile, ["💰", "Finance", "/expenses", 0], ["📊", "Analytics", R("/m/report", "/reports"), 0], ["🏗", "All Sites", null, 0],
     ["📄", "PO", "/procure?tab=po", 0], ["🛒", "Indents", "/procure?tab=indents", 0],   // update284: direct tabs (mock item 1/4)
-    ["🏢", "Vendors", "/vendors", 0], ["👥", "Team & HR", "/workers", 0], ["🗒", "Assign Task", "/tasks", 0], ["🚚", "Pending Del.", "/procure/pending", pendCount], ["⚙", "Admin", "/rights", 0]];   // update265: /admin never existed (404) — Access Rights is the admin landing
+    ["🏢", "Vendors", "/vendors", 0], ["👥", "Team & HR", "/workers", 0], ["🗒", "Assign Task", "/tasks", 0], ["🚚", "Pending Del.", "/procure/pending", pendCount], ["⚙", "Admin", "/access", 0]];   // update265: /admin never existed · update377: /rights read a table that does not exist; /access is the real Access Rights
   const staffTiles = [["📁", "Projects", null, 0], ["👷", "Muster", R("/m/muster", "/attendance"), 0], ...apprTile, ["📦", "Stock", R("/m/stock", "/stock"), 0],
     ["💳", "Expenses", R("/m/money", "/expenses"), appr.claims], ["🗒", "Tasks", null, 0], ["📋", "Reports", R("/m/report", "/reports"), 0], ["🛒", "Indents", "/procure?tab=indents", appr.ind], ["🚚", "Pending Del.", "/procure/pending", pendCount]];   // update284: Indents tile lands on its tab
   const tiles = companyView ? dirTiles : staffTiles;
