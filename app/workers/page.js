@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { getWorkerCategories, addWorkerCategory } from "@/lib/data";
-import { getWorkers, saveWorker, uploadAadhaarDoc, inr, deleteWorker, deleteStaff, getWorkerAllotments, setWorkerAllotments } from "@/lib/data";
+import { getWorkers, saveWorker, uploadAadhaarDoc, uploadBankDoc, inr, deleteWorker, deleteStaff, getWorkerAllotments, setWorkerAllotments } from "@/lib/data";   // update374
 import { getContractors, getSitesList } from "@/lib/mobile";
 import { getStaff, addStaff, updateStaff, getRoles, addRole, renameRole, deleteRole, resetStaffPassword, getUserSites, assignSite, removeSite } from "@/lib/access";
 import { getSession } from "@/lib/auth";
@@ -180,7 +180,7 @@ export default function WorkersPage() {
           monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible,
           annual_paid_leaves: u.annual_paid_leaves || "", joining_date: u.joining_date || "",
           requires_punch: u.requires_punch !== false, bank_account_no: u.bank_account_no || "",
-          bank_ifsc: u.bank_ifsc || "", bank_name: u.bank_name || "", pan_no: u.pan_no || "",
+          bank_ifsc: u.bank_ifsc || "", bank_name: u.bank_name || "", pan_no: u.pan_no || "", aadhaar_doc_url: u.aadhaar_doc_url || null, bank_doc_url: u.bank_doc_url || null,   // update374
           last_working_day: u.last_working_day || "", exit_reason: u.exit_reason || "",
           siteIds: ids, origSiteIds: [...ids] });
       }}>✎ Edit</button> : null },
@@ -351,6 +351,18 @@ export default function WorkersPage() {
                       set("aadhaar_doc_url", r.url);
                     }} />
                   </div>
+                  {/* update374 — same shape as the Aadhaar upload directly above */}
+                  <div className="wf-full">
+                    <label className="muted">Bank passbook / cancelled cheque {modal.bank_doc_url && <a href={modal.bank_doc_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
+                    <input type="file" accept="image/*,.pdf" onChange={async e => {
+                      const f = e.target.files?.[0]; if (!f) return;
+                      setBusy(true); setErr("");
+                      const r = await uploadBankDoc(modal.mobile || modal.id || "w", f);
+                      setBusy(false);
+                      if (!r.ok) { setErr(r.error); return; }
+                      set("bank_doc_url", r.url);
+                    }} />
+                  </div>
                 </div>
                 {modal.labour_type === "contractor" && (
                   <div className="wf-full"><label className="muted">Contractor</label>
@@ -467,6 +479,29 @@ export default function WorkersPage() {
                              onChange={e => sset("bank_name", e.target.value)} /></div>
                     <div style={{ flex: 1, minWidth: 110 }}><label className="muted">PAN</label>
                       <input style={{ width: "100%" }} value={smodal.pan_no || ""} onChange={e => sset("pan_no", e.target.value.toUpperCase())} placeholder="ABCDE1234F" /></div>
+                    {/* update374 */}
+                    <div style={{ flex: "1 1 100%" }}>
+                      <label className="muted">Aadhaar copy {smodal.aadhaar_doc_url && <a href={smodal.aadhaar_doc_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
+                      <input type="file" accept="image/*,.pdf" onChange={async e => {
+                        const f = e.target.files?.[0]; if (!f) return;
+                        setBusy(true); setErr("");
+                        const r = await uploadAadhaarDoc(smodal.mobile || smodal.id || "s", f);
+                        setBusy(false);
+                        if (!r.ok) { setErr(r.error); return; }
+                        sset("aadhaar_doc_url", r.url);
+                      }} />
+                    </div>
+                    <div style={{ flex: "1 1 100%" }}>
+                      <label className="muted">Bank passbook / cancelled cheque {smodal.bank_doc_url && <a href={smodal.bank_doc_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
+                      <input type="file" accept="image/*,.pdf" onChange={async e => {
+                        const f = e.target.files?.[0]; if (!f) return;
+                        setBusy(true); setErr("");
+                        const r = await uploadBankDoc(smodal.mobile || smodal.id || "s", f);
+                        setBusy(false);
+                        if (!r.ok) { setErr(r.error); return; }
+                        sset("bank_doc_url", r.url);
+                      }} />
+                    </div>
                   </div>
                 </div>
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
