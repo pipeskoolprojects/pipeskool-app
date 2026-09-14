@@ -48,6 +48,14 @@ export default function AttendancePage() {
   const load = () => getAttendance(date, site).then(res => { setRows(res.rows || []); setLoadErr(res.error || ""); });
   // update378: three category tabs, same split as Muster Roll & Wages
   const [tab, setTab] = useState("labour");
+  // update378b: if the current tab is empty and another has rows, land on the one that does
+  useEffect(() => {
+    if (!rows) return;
+    const c = { office: rows.filter(r => r.isStaff && r.isOffice).length,
+                site_staff: rows.filter(r => r.isStaff && !r.isOffice).length,
+                labour: rows.filter(r => !r.isStaff).length };
+    if (c[tab] === 0) setTab(c.labour ? "labour" : c.site_staff ? "site_staff" : "office");
+  }, [rows]);   // eslint-disable-line
   const tabRows = (rows || []).filter(r =>
     tab === "office" ? (r.isStaff && r.isOffice) :
     tab === "site_staff" ? (r.isStaff && !r.isOffice) :
