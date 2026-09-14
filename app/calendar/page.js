@@ -118,6 +118,8 @@ function HolidayModal({ init, sites, onClose, onSaved }) {
   );
 }
 
+import DayPaymentsPanel from "@/components/DayPaymentsPanel";   // update382
+
 export default function CalendarPage() {
   const [session, setSession] = useState(null);
   const [view, setView] = useState("month");
@@ -290,6 +292,12 @@ export default function CalendarPage() {
                 ? <div className="muted" style={{ fontSize: 12.5 }}>Loading…</div>
                 : <Agenda list={byDate[sel] || []} onClick={open} empty="Nothing on this day." />}
             </div>
+
+            {/* update382: day-level payment control — always visible, shows the workers who
+                have attendance on the selected date and lets a manager set a per-worker
+                holiday multiplier. Nothing changes for a normal day unless a multiplier is
+                set. Payroll picks it up on next Generate. */}
+            <DayPaymentsPanel date={sel} isHoliday={(byDate[sel] || []).some(e => e.type === "holiday")} />
 
             <div className="panel" style={{ margin: 0 }}>
               <h2 style={{ fontSize: 14 }}>Next 7 days</h2>
