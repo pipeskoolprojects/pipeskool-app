@@ -212,11 +212,11 @@ export default function WorkerProfilePrint() {
         </div>
       </div>
     
-      {(((w.aadhaar_docs || []).length) || w.aadhaar_doc_url || w.bank_doc_url) && (   // update377
+      {/* update379: fixed a JSX inline-comment bug (// on the same line as the gate condition
+           made the whole KYC block silently render nothing) — moved the comment above,
+           and added a bank passbook page here that never existed on the printed sheet. */}
+      {(((w.aadhaar_docs || []).length) || w.aadhaar_doc_url || w.bank_doc_url) && (
         <>
-          {/* update374: each doc gets its own page — like the vendor voucher pattern,
-              object-fit contain so nothing is cropped or stretched, page-break before it. */}
-          {/* update377: one page per uploaded Aadhaar file, then the legacy fallback if any */}
           {(w.aadhaar_docs || []).map((u, i) => {
             const isPdf = /\.pdf(\?|$)/i.test(u);
             return (
@@ -234,6 +234,14 @@ export default function WorkerProfilePrint() {
               {/\.pdf(\?|$)/i.test(w.aadhaar_doc_url)
                 ? <iframe title="aadhaar-legacy" src={w.aadhaar_doc_url} style={{ width: "100%", height: "245mm", border: "1px solid #e5e7eb" }} />
                 : <img alt="aadhaar-legacy" src={w.aadhaar_doc_url} style={{ maxWidth: "100%", maxHeight: "245mm", objectFit: "contain", display: "block", margin: "0 auto", border: "1px solid #e5e7eb" }} />}
+            </div>
+          )}
+          {w.bank_doc_url && (
+            <div className="kyc-page">
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: "#1f2a4b", marginBottom: 6 }}>ATTACHED — BANK PASSBOOK / CANCELLED CHEQUE · {w.full_name}</div>
+              {/\.pdf(\?|$)/i.test(w.bank_doc_url)
+                ? <iframe title="bank-doc" src={w.bank_doc_url} style={{ width: "100%", height: "245mm", border: "1px solid #e5e7eb" }} />
+                : <img alt="bank-doc" src={w.bank_doc_url} style={{ maxWidth: "100%", maxHeight: "245mm", objectFit: "contain", display: "block", margin: "0 auto", border: "1px solid #e5e7eb" }} />}
             </div>
           )}
         </>
