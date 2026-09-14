@@ -66,7 +66,7 @@ export default function WorkerProfilePrint() {
         if (isStaff) {
           const [{ data: u, error: e2 }, comp2] = await Promise.all([
             supabase.from("app_users")
-              .select("id, full_name, mobile, role, monthly_salary, ot_eligible, annual_paid_leaves, joining_date, requires_punch, bank_account_no, bank_ifsc, bank_name, pan_no, aadhaar_doc_url, aadhaar_front_url, aadhaar_back_url, aadhaar_pdf_url, bank_doc_url, last_working_day, exit_reason, is_active, emergency_name, emergency_relation, emergency_mobile, emergency_alt_mobile, emergency_address")
+              .select("id, full_name, mobile, role, monthly_salary, ot_eligible, annual_paid_leaves, joining_date, requires_punch, bank_account_no, bank_ifsc, bank_name, pan_no, aadhaar_doc_url, aadhaar_docs, bank_doc_url, last_working_day, exit_reason, is_active, emergency_name, emergency_relation, emergency_mobile, emergency_alt_mobile, emergency_address")
               .eq("id", id).maybeSingle(),
             getCompany(),
           ]);
@@ -81,7 +81,7 @@ export default function WorkerProfilePrint() {
         }
         const [{ data: row, error }, comp] = await Promise.all([
           supabase.from("workers")
-            .select("id, full_name, mobile, category, labour_type, daily_wage, is_active, ot_eligible, proxy_authority, joining_date, last_working_day, exit_reason, bank_account_no, bank_ifsc, bank_name, aadhaar_doc_url, aadhaar_front_url, aadhaar_back_url, aadhaar_pdf_url, bank_doc_url, emergency_name, emergency_relation, emergency_mobile, emergency_alt_mobile, emergency_address, site_id, sites!workers_site_id_fkey(name), contractors(name)")
+            .select("id, full_name, mobile, category, labour_type, daily_wage, is_active, ot_eligible, proxy_authority, joining_date, last_working_day, exit_reason, bank_account_no, bank_ifsc, bank_name, aadhaar_doc_url, aadhaar_docs, bank_doc_url, emergency_name, emergency_relation, emergency_mobile, emergency_alt_mobile, emergency_address, site_id, sites!workers_site_id_fkey(name), contractors(name)")
             .eq("id", id).maybeSingle(),
           getCompany(),
         ]);
@@ -164,16 +164,14 @@ export default function WorkerProfilePrint() {
 
       <Section title="KYC & bank">
         <Row a="Bank account no" av={w.bank_account_no} b="IFSC" bv={w.bank_ifsc} />
-        <Row a="Bank name" av={w.bank_name} b={w.isStaff ? "PAN" : "Aadhaar on file"} bv={w.isStaff ? w.pan_no : ((w.aadhaar_front_url || w.aadhaar_back_url || w.aadhaar_pdf_url || w.aadhaar_doc_url) ? "Yes" : "No")} />
+        <Row a="Bank name" av={w.bank_name} b={w.isStaff ? "PAN" : "Aadhaar on file"} bv={w.isStaff ? w.pan_no : (((w.aadhaar_docs || []).length || w.aadhaar_doc_url) ? "Yes" : "No")} />
         {/* update374: the two KYC documents. Printed as a row on the sheet, and as tappable
             links in the on-screen version — a printed PDF cannot open a URL, so the row
             simply says "attached" against each one and the sheet is the record. */}
-        {/* update376: three Aadhaar links (front/back/PDF) or the legacy fallback if none exist */}
+        {/* update377: one link per uploaded Aadhaar file, or the legacy fallback if any */}
         <Row a="Aadhaar on file"
-             av={(w.aadhaar_front_url || w.aadhaar_back_url || w.aadhaar_pdf_url)
-               ? <>{w.aadhaar_front_url && <a href={w.aadhaar_front_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)", marginRight: 8 }}>front</a>}
-                  {w.aadhaar_back_url  && <a href={w.aadhaar_back_url}  target="_blank" rel="noreferrer" style={{ color: "var(--copper)", marginRight: 8 }}>back</a>}
-                  {w.aadhaar_pdf_url   && <a href={w.aadhaar_pdf_url}   target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>PDF</a>}</>
+             av={(w.aadhaar_docs || []).length
+               ? <>{(w.aadhaar_docs || []).map((u, i) => <a key={u + i} href={u} target="_blank" rel="noreferrer" style={{ color: "var(--copper)", marginRight: 8 }}>file {i + 1}</a>)}</>
                : (w.aadhaar_doc_url ? <a href={w.aadhaar_doc_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>view (legacy)</a> : "—")}
              b="Bank doc on file"
              bv={w.bank_doc_url ? <a href={w.bank_doc_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>view</a> : "—"} />
@@ -214,44 +212,28 @@ export default function WorkerProfilePrint() {
         </div>
       </div>
     
-      {(w.aadhaar_front_url || w.aadhaar_back_url || w.aadhaar_pdf_url || w.aadhaar_doc_url || w.bank_doc_url) && (   // update376
+      {(((w.aadhaar_docs || []).length) || w.aadhaar_doc_url || w.bank_doc_url) && (   // update377
         <>
           {/* update374: each doc gets its own page — like the vendor voucher pattern,
               object-fit contain so nothing is cropped or stretched, page-break before it. */}
-          {/* update376: one page per Aadhaar slot, then the legacy fallback if the three
-              are empty but the old single upload still exists */}
-          {w.aadhaar_front_url && (
-            <div className="kyc-page">
-              <div style={{ fontSize: 10.5, fontWeight: 800, color: "#1f2a4b", marginBottom: 6 }}>ATTACHED — AADHAAR FRONT · {w.full_name}</div>
-              <img alt="aadhaar-front" src={w.aadhaar_front_url} style={{ maxWidth: "100%", maxHeight: "245mm", objectFit: "contain", display: "block", margin: "0 auto", border: "1px solid #e5e7eb" }} />
-            </div>
-          )}
-          {w.aadhaar_back_url && (
-            <div className="kyc-page">
-              <div style={{ fontSize: 10.5, fontWeight: 800, color: "#1f2a4b", marginBottom: 6 }}>ATTACHED — AADHAAR BACK · {w.full_name}</div>
-              <img alt="aadhaar-back" src={w.aadhaar_back_url} style={{ maxWidth: "100%", maxHeight: "245mm", objectFit: "contain", display: "block", margin: "0 auto", border: "1px solid #e5e7eb" }} />
-            </div>
-          )}
-          {w.aadhaar_pdf_url && (
-            <div className="kyc-page">
-              <div style={{ fontSize: 10.5, fontWeight: 800, color: "#1f2a4b", marginBottom: 6 }}>ATTACHED — AADHAAR PDF · {w.full_name}</div>
-              <iframe title="aadhaar-pdf" src={w.aadhaar_pdf_url} style={{ width: "100%", height: "245mm", border: "1px solid #e5e7eb" }} />
-            </div>
-          )}
-          {w.aadhaar_doc_url && !w.aadhaar_front_url && !w.aadhaar_back_url && !w.aadhaar_pdf_url && (
+          {/* update377: one page per uploaded Aadhaar file, then the legacy fallback if any */}
+          {(w.aadhaar_docs || []).map((u, i) => {
+            const isPdf = /\.pdf(\?|$)/i.test(u);
+            return (
+              <div key={u + i} className="kyc-page">
+                <div style={{ fontSize: 10.5, fontWeight: 800, color: "#1f2a4b", marginBottom: 6 }}>ATTACHED — AADHAAR {i + 1} OF {(w.aadhaar_docs || []).length} · {w.full_name}</div>
+                {isPdf
+                  ? <iframe title={"aadhaar-" + i} src={u} style={{ width: "100%", height: "245mm", border: "1px solid #e5e7eb" }} />
+                  : <img alt={"aadhaar-" + i} src={u} style={{ maxWidth: "100%", maxHeight: "245mm", objectFit: "contain", display: "block", margin: "0 auto", border: "1px solid #e5e7eb" }} />}
+              </div>
+            );
+          })}
+          {!(w.aadhaar_docs || []).length && w.aadhaar_doc_url && (
             <div className="kyc-page">
               <div style={{ fontSize: 10.5, fontWeight: 800, color: "#1f2a4b", marginBottom: 6 }}>ATTACHED — AADHAAR (legacy upload) · {w.full_name}</div>
-              {/\.pdf$/i.test(w.aadhaar_doc_url)
+              {/\.pdf(\?|$)/i.test(w.aadhaar_doc_url)
                 ? <iframe title="aadhaar-legacy" src={w.aadhaar_doc_url} style={{ width: "100%", height: "245mm", border: "1px solid #e5e7eb" }} />
                 : <img alt="aadhaar-legacy" src={w.aadhaar_doc_url} style={{ maxWidth: "100%", maxHeight: "245mm", objectFit: "contain", display: "block", margin: "0 auto", border: "1px solid #e5e7eb" }} />}
-            </div>
-          )}
-          {w.bank_doc_url && (
-            <div className="kyc-page">
-              <div style={{ fontSize: 10.5, fontWeight: 800, color: "#1f2a4b", marginBottom: 6 }}>ATTACHED — BANK PASSBOOK / CANCELLED CHEQUE · {w.full_name}</div>
-              {/\.pdf$/i.test(w.bank_doc_url)
-                ? <iframe title="bank" src={w.bank_doc_url} style={{ width: "100%", height: "245mm", border: "1px solid #e5e7eb" }} />
-                : <img alt="bank" src={w.bank_doc_url} style={{ maxWidth: "100%", maxHeight: "245mm", objectFit: "contain", display: "block", margin: "0 auto", border: "1px solid #e5e7eb" }} />}
             </div>
           )}
         </>
