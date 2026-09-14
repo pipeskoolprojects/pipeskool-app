@@ -119,6 +119,7 @@ function HolidayModal({ init, sites, onClose, onSaved }) {
 }
 
 import DayPaymentsPanel from "@/components/DayPaymentsPanel";   // update382
+import YearMaster from "@/components/YearMaster";   // update383
 
 export default function CalendarPage() {
   const [session, setSession] = useState(null);
@@ -152,6 +153,10 @@ export default function CalendarPage() {
       const s = new Date(cursor); s.setDate(cursor.getDate() - cursor.getDay());
       const e = new Date(s); e.setDate(s.getDate() + 6);
       return { from: iso(s), to: iso(e) };
+    }
+    if (view === "year") {   // update383: whole year window feeds the master table
+      const y = cursor.getFullYear();
+      return { from: `${y}-01-01`, to: `${y}-12-31` };
     }
     return { from: iso(cursor), to: iso(cursor) };
   }, [view, cursor]);
@@ -205,7 +210,7 @@ export default function CalendarPage() {
             </div>
           </div>
           <div className="cal-switch">
-            {["month", "week", "day"].map(v => (
+            {["month", "week", "day", "year"].map(v => (   // update383: Year Master view
               <button key={v} type="button" onClick={() => setView(v)} className={view === v ? "active" : ""}>
                 {v[0].toUpperCase() + v.slice(1)}
               </button>
@@ -260,6 +265,7 @@ export default function CalendarPage() {
             {view !== "day" && (
               <div className="cal-dow">{DOW.map(d => <div key={d}>{d}</div>)}</div>
             )}
+            {view === "year" ? <YearMaster events={filtered} onEdit={open} /> :
             <div className={view === "day" ? "cal-daygrid" : "cal-grid"}>
               {cells.map(c => {
                 const list = byDate[c.key] || [];
@@ -281,6 +287,7 @@ export default function CalendarPage() {
                 );
               })}
             </div>
+            }
           </div>
 
           <div className="cal-side">
