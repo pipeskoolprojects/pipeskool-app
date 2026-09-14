@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { getWorkerCategories, addWorkerCategory } from "@/lib/data";
-import { getWorkers, saveWorker, uploadAadhaarDoc, uploadBankDoc, inr, deleteWorker, deleteStaff, getWorkerAllotments, setWorkerAllotments } from "@/lib/data";   // update374
+import { getWorkers, saveWorker, uploadAadhaarDoc, uploadBankDoc, uploadAadhaarFront, uploadAadhaarBack, uploadAadhaarPdf, inr, deleteWorker, deleteStaff, getWorkerAllotments, setWorkerAllotments } from "@/lib/data";   // update374/376
 import { getContractors, getSitesList } from "@/lib/mobile";
 import { getStaff, addStaff, updateStaff, getRoles, addRole, renameRole, deleteRole, resetStaffPassword, getUserSites, assignSite, removeSite } from "@/lib/access";
 import { getSession } from "@/lib/auth";
@@ -180,7 +180,7 @@ export default function WorkersPage() {
           monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible,
           annual_paid_leaves: u.annual_paid_leaves || "", joining_date: u.joining_date || "",
           requires_punch: u.requires_punch !== false, bank_account_no: u.bank_account_no || "",
-          bank_ifsc: u.bank_ifsc || "", bank_name: u.bank_name || "", pan_no: u.pan_no || "", aadhaar_doc_url: u.aadhaar_doc_url || null, bank_doc_url: u.bank_doc_url || null,   // update374
+          bank_ifsc: u.bank_ifsc || "", bank_name: u.bank_name || "", pan_no: u.pan_no || "", aadhaar_doc_url: u.aadhaar_doc_url || null, aadhaar_front_url: u.aadhaar_front_url || null, aadhaar_back_url: u.aadhaar_back_url || null, aadhaar_pdf_url: u.aadhaar_pdf_url || null, bank_doc_url: u.bank_doc_url || null,   // update374/376
           last_working_day: u.last_working_day || "", exit_reason: u.exit_reason || "",
           siteIds: ids, origSiteIds: [...ids] });
       }}>✎ Edit</button> : null },
@@ -340,17 +340,46 @@ export default function WorkersPage() {
                   <div className="wf-full"><label className="muted">Bank name</label>
                     <input value={modal.bank_name || ""} placeholder="e.g. Indian Overseas Bank"
                            onChange={e => set("bank_name", e.target.value)} /></div>
+                  {/* update376: three separate Aadhaar slots — front, back, PDF. Any one is enough.
+                      The legacy single upload is view-only fallback below. */}
                   <div className="wf-full">
-                    <label className="muted">Aadhaar copy {modal.aadhaar_doc_url && <a href={modal.aadhaar_doc_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
-                    <input type="file" accept="image/*,.pdf" onChange={async e => {
+                    <label className="muted">Aadhaar — front {modal.aadhaar_front_url && <a href={modal.aadhaar_front_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
+                    <input type="file" accept="image/*" onChange={async e => {
                       const f = e.target.files?.[0]; if (!f) return;
                       setBusy(true); setErr("");
-                      const r = await uploadAadhaarDoc(modal.mobile || modal.id || "w", f);
+                      const r = await uploadAadhaarFront(modal.mobile || modal.id || "w", f);
                       setBusy(false);
                       if (!r.ok) { setErr(r.error); return; }
-                      set("aadhaar_doc_url", r.url);
+                      set("aadhaar_front_url", r.url);
                     }} />
                   </div>
+                  <div className="wf-full">
+                    <label className="muted">Aadhaar — back {modal.aadhaar_back_url && <a href={modal.aadhaar_back_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
+                    <input type="file" accept="image/*" onChange={async e => {
+                      const f = e.target.files?.[0]; if (!f) return;
+                      setBusy(true); setErr("");
+                      const r = await uploadAadhaarBack(modal.mobile || modal.id || "w", f);
+                      setBusy(false);
+                      if (!r.ok) { setErr(r.error); return; }
+                      set("aadhaar_back_url", r.url);
+                    }} />
+                  </div>
+                  <div className="wf-full">
+                    <label className="muted">Aadhaar — PDF {modal.aadhaar_pdf_url && <a href={modal.aadhaar_pdf_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
+                    <input type="file" accept="application/pdf,.pdf" onChange={async e => {
+                      const f = e.target.files?.[0]; if (!f) return;
+                      setBusy(true); setErr("");
+                      const r = await uploadAadhaarPdf(modal.mobile || modal.id || "w", f);
+                      setBusy(false);
+                      if (!r.ok) { setErr(r.error); return; }
+                      set("aadhaar_pdf_url", r.url);
+                    }} />
+                  </div>
+                  {modal.aadhaar_doc_url && !modal.aadhaar_front_url && !modal.aadhaar_back_url && !modal.aadhaar_pdf_url && (
+                    <div className="wf-full muted" style={{ fontSize: 11.5 }}>
+                      Existing Aadhaar on file: <a href={modal.aadhaar_doc_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>view</a> — please re-upload it into the correct slot above the next time this worker is edited.
+                    </div>
+                  )}
                   {/* update374 — same shape as the Aadhaar upload directly above */}
                   <div className="wf-full">
                     <label className="muted">Bank passbook / cancelled cheque {modal.bank_doc_url && <a href={modal.bank_doc_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
@@ -480,17 +509,45 @@ export default function WorkersPage() {
                     <div style={{ flex: 1, minWidth: 110 }}><label className="muted">PAN</label>
                       <input style={{ width: "100%" }} value={smodal.pan_no || ""} onChange={e => sset("pan_no", e.target.value.toUpperCase())} placeholder="ABCDE1234F" /></div>
                     {/* update374 */}
+                    {/* update376: three separate Aadhaar slots — same shape as the worker form */}
                     <div style={{ flex: "1 1 100%" }}>
-                      <label className="muted">Aadhaar copy {smodal.aadhaar_doc_url && <a href={smodal.aadhaar_doc_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
-                      <input type="file" accept="image/*,.pdf" onChange={async e => {
+                      <label className="muted">Aadhaar — front {smodal.aadhaar_front_url && <a href={smodal.aadhaar_front_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
+                      <input type="file" accept="image/*" onChange={async e => {
                         const f = e.target.files?.[0]; if (!f) return;
                         setBusy(true); setErr("");
-                        const r = await uploadAadhaarDoc(smodal.mobile || smodal.id || "s", f);
+                        const r = await uploadAadhaarFront(smodal.mobile || smodal.id || "s", f);
                         setBusy(false);
                         if (!r.ok) { setErr(r.error); return; }
-                        sset("aadhaar_doc_url", r.url);
+                        sset("aadhaar_front_url", r.url);
                       }} />
                     </div>
+                    <div style={{ flex: "1 1 100%" }}>
+                      <label className="muted">Aadhaar — back {smodal.aadhaar_back_url && <a href={smodal.aadhaar_back_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
+                      <input type="file" accept="image/*" onChange={async e => {
+                        const f = e.target.files?.[0]; if (!f) return;
+                        setBusy(true); setErr("");
+                        const r = await uploadAadhaarBack(smodal.mobile || smodal.id || "s", f);
+                        setBusy(false);
+                        if (!r.ok) { setErr(r.error); return; }
+                        sset("aadhaar_back_url", r.url);
+                      }} />
+                    </div>
+                    <div style={{ flex: "1 1 100%" }}>
+                      <label className="muted">Aadhaar — PDF {smodal.aadhaar_pdf_url && <a href={smodal.aadhaar_pdf_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
+                      <input type="file" accept="application/pdf,.pdf" onChange={async e => {
+                        const f = e.target.files?.[0]; if (!f) return;
+                        setBusy(true); setErr("");
+                        const r = await uploadAadhaarPdf(smodal.mobile || smodal.id || "s", f);
+                        setBusy(false);
+                        if (!r.ok) { setErr(r.error); return; }
+                        sset("aadhaar_pdf_url", r.url);
+                      }} />
+                    </div>
+                    {smodal.aadhaar_doc_url && !smodal.aadhaar_front_url && !smodal.aadhaar_back_url && !smodal.aadhaar_pdf_url && (
+                      <div style={{ flex: "1 1 100%", fontSize: 11.5 }} className="muted">
+                        Existing Aadhaar on file: <a href={smodal.aadhaar_doc_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>view</a> — please re-upload it into the correct slot above the next time this staff member is edited.
+                      </div>
+                    )}
                     <div style={{ flex: "1 1 100%" }}>
                       <label className="muted">Bank passbook / cancelled cheque {smodal.bank_doc_url && <a href={smodal.bank_doc_url} target="_blank" rel="noreferrer" style={{ color: "var(--copper)" }}>· view current ✓</a>}</label>
                       <input type="file" accept="image/*,.pdf" onChange={async e => {
