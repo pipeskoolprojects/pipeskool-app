@@ -46,6 +46,15 @@ export default function AttendancePage() {
 
   useEffect(() => { getSites().then(setSites); }, []);
   const load = () => getAttendance(date, site).then(res => { setRows(res.rows || []); setLoadErr(res.error || ""); });
+  // update378: three category tabs, same split as Muster Roll & Wages
+  const [tab, setTab] = useState("labour");
+  const tabRows = (rows || []).filter(r =>
+    tab === "office" ? (r.isStaff && r.isOffice) :
+    tab === "site_staff" ? (r.isStaff && !r.isOffice) :
+    !r.isStaff);
+  const counts = { office: (rows || []).filter(r => r.isStaff && r.isOffice).length,
+                   site_staff: (rows || []).filter(r => r.isStaff && !r.isOffice).length,
+                   labour: (rows || []).filter(r => !r.isStaff).length };
   useEffect(() => { load(); }, [date, site]);
 
   async function saveOt() {
@@ -147,8 +156,26 @@ export default function AttendancePage() {
         </div>
         {isDemo && <div className="demo-banner">Demo mode — sample register shown.</div>}
         <div className="panel">
+          {/* update378: category tabs, same order as Muster Roll & Wages */}
+          {rows && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+              {[
+                ["office",     "🏢 Office Staff",     counts.office],
+                ["site_staff", "👷 Site Staff",       counts.site_staff],
+                ["labour",     "🧰 Workers / Labour", counts.labour],
+              ].map(([k, label, n]) => (
+                <button key={k} onClick={() => setTab(k)}
+                  style={{ fontSize: 12.5, padding: "6px 12px", borderRadius: 999,
+                    border: "1px solid " + (tab === k ? "var(--copper)" : "var(--border)"),
+                    background: tab === k ? "var(--copper)" : "#fff",
+                    color: tab === k ? "#fff" : "inherit", fontWeight: tab === k ? 700 : 500, cursor: "pointer" }}>
+                  {label} · {n}
+                </button>
+              ))}
+            </div>
+          )}
           {!rows ? <div className="muted">Loading…</div> :
-            <DataTable columns={columns} rows={rows} exportName={"attendance_" + date} />}
+            <DataTable columns={columns} rows={tabRows} exportName={"attendance_" + date + "_" + tab} />}
         </div>
         <div className="muted">OT is the time worked after the site's shift end. Tap a photo to enlarge. ⚠ means approved OT differs from what the punch-out time shows.</div>
 
