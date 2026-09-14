@@ -202,19 +202,36 @@ export default function CalendarPage() {
     <div className="layout">
       <Sidebar />
       <main className="main">
+        <div className="cal-shell">
         <div className="cal-top">
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>📅 Pipeskool Calendar</h1>
-            <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
-              All company events in one place — read live from your existing data.
+            <h1>📅 Pipeskool Calendar</h1>
+            <div className="cal-sub">
+              {view === "day"
+                ? cursor.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+                : view === "year"
+                  ? cursor.getFullYear() + " · full year"
+                  : MONTHS[cursor.getMonth()] + " " + cursor.getFullYear()}
             </div>
           </div>
-          <div className="cal-switch">
-            {["month", "week", "day", "year"].map(v => (   // update383: Year Master view
-              <button key={v} type="button" onClick={() => setView(v)} className={view === v ? "active" : ""}>
-                {v[0].toUpperCase() + v.slice(1)}
-              </button>
-            ))}
+          <div className="cal-topright">
+            <div className="cal-nav-group" role="group" aria-label="Date navigation">
+              <button type="button" onClick={() => step(-1)} className="cal-nav" aria-label="Previous">‹</button>
+              <button type="button" onClick={() => { setCursor(new Date()); setSel(t); }} className="cal-today">Today</button>
+              <button type="button" onClick={() => step(1)} className="cal-nav" aria-label="Next">›</button>
+            </div>
+            <div className="cal-switch" role="tablist" aria-label="Calendar view">
+              {["month", "week", "day", "year"].map(v => (   // update383: Year Master view
+                <button key={v} type="button" role="tab" aria-selected={view === v}
+                        onClick={() => setView(v)} className={view === v ? "active" : ""}>
+                  {v[0].toUpperCase() + v.slice(1)}
+                </button>
+              ))}
+            </div>
+            {canManageHol && <button type="button" className="primary"
+              onClick={() => { setMsg(""); setHol({ on_date: sel, name: "", site_ids: [] }); }}
+              title="Add a paid company holiday on the selected date"
+              style={{ padding: "8px 14px", borderRadius: 10, fontSize: 12.5 }}>🪔 ＋ Add holiday</button>}
           </div>
         </div>
 
@@ -224,22 +241,12 @@ export default function CalendarPage() {
           onSaved={m => { setHol(null); setMsg(m); setBump(b => b + 1); }} />}{/* update264 */}
 
         <div className="cal-filters">
-          <button type="button" onClick={() => step(-1)} className="cal-nav">‹</button>
-          <b style={{ minWidth: 160, textAlign: "center", fontSize: 15 }}>
-            {view === "day"
-              ? cursor.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
-              : MONTHS[cursor.getMonth()] + " " + cursor.getFullYear()}
-          </b>
-          <button type="button" onClick={() => step(1)} className="cal-nav">›</button>
-          <button type="button" onClick={() => { setCursor(new Date()); setSel(t); }} className="cal-today">Today</button>
-          {canManageHol && <button type="button" onClick={() => { setMsg(""); setHol({ on_date: sel, name: "", site_ids: [] }); }}
-            style={{ marginLeft: 6 }} title="Add a paid company holiday on the selected date">🪔 ＋ Add holiday</button>}{/* update264 */}
-
+          <span className="cal-filters-label">Filter</span>
           <select value={site} onChange={e => setSite(e.target.value)}>
             <option value="all">Site / Project: all</option>
             {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-
+          <div className="cal-sep" />
           <div className="cal-types">
             {Object.entries(EVENT_TYPES).map(([k, m]) => {
               const on = !!types[k];
@@ -252,7 +259,7 @@ export default function CalendarPage() {
               );
             })}
             {activeTypes.length > 0 && <button type="button" className="cal-type" onClick={() => setTypes({})}>✕ clear</button>}
-            <span style={{ width: 1, alignSelf: "stretch", background: "var(--border)", margin: "0 4px" }} />{/* update293: holiday audience filter */}
+            <div className="cal-sep" />{/* update293: holiday audience filter */}
             {[["all", "🪔 All holidays"], ["both", "🏢+👷 Both"], ["staff", "🏢 Office"], ["labour", "👷 Workers"], ["none", "📿 Observances"]].map(([k, l]) => (
               <button key={"hw" + k} type="button" onClick={() => setHolWho(k)} className={"cal-type" + (holWho === k ? " on" : "")}
                 style={holWho === k ? { background: "#FF6A1F", color: "#fff", borderColor: "#FF6A1F" } : undefined}>{l}</button>
@@ -273,7 +280,7 @@ export default function CalendarPage() {
                 const show = view === "month" ? list.slice(0, 3) : list;
                 return (
                   <div key={c.key} onClick={() => setSel(c.key)}
-                    className={"cal-cell" + (c.inMonth ? "" : " out") + (c.key === t ? " today" : "") +
+                    className={"cal-cell" + (c.inMonth ? "" : " out") + (c.key === t ? " today" : "") + (c.date.getDay() === 0 ? " sun" : "") +
                       (isHol ? " holiday" : "") + (c.key === sel ? " sel" : "")}>
                     <div className="cal-daynum">
                       {c.date.getDate()}
@@ -323,6 +330,7 @@ export default function CalendarPage() {
               ))}
             </div>
           </div>
+        </div>
         </div>
       </main>
     </div>

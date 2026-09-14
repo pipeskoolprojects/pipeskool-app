@@ -263,55 +263,189 @@ tr.po-void td { opacity: 0.62; }
 tr.po-void td:first-child, tr.po-void td:nth-child(6) { opacity: 0.8; }
 tr.po-void:hover td { opacity: 0.85; }
 
-/* ---------- update259: PIPESKOOL CALENDAR ---------- */
-.cal-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
-.cal-switch { display: flex; background: #fff; border: 1px solid var(--border); border-radius: 11px; padding: 4px; }
-.cal-switch button { border: none; background: none; padding: 8px 15px; font-size: 12.5px; font-weight: 700; color: var(--muted); border-radius: 8px; cursor: pointer; }
-.cal-switch button.active { background: linear-gradient(135deg, #FF9D5C, #FF5F1F); color: #fff; }
+/* ---------- update259/385: PIPESKOOL CALENDAR — enterprise polish ---------- */
+/* update385: scoped design tokens for the calendar. Nothing here leaks; all rules are
+   `.cal-*` prefixed. Base tokens (--deep, --copper, --border, --muted) come from the rest
+   of the app so the calendar stays consistent with every other page. */
+.cal-shell {
+  --cal-bg:        #ffffff;
+  --cal-line:      #ebeef2;
+  --cal-line-str:  #d9dde3;
+  --cal-tint:      #f7f9fc;
+  --cal-hover:     #f3f6fa;
+  --cal-num:       #0f1729;
+  --cal-num-mut:   #8b93a3;
+  --cal-hol-tint:  #fff8ef;
+  --cal-hol-mark:  #e07c17;
+  --cal-hol-num:   #7a3d00;
+  --cal-sun-tint:  #fafbfc;
+  --cal-today-ring: rgba(255, 122, 26, 0.9);
+  --cal-shadow:    0 1px 2px rgba(15, 23, 41, 0.04), 0 1px 3px rgba(15, 23, 41, 0.06);
+}
 
-.cal-filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
-.cal-nav { width: 34px; height: 34px; border-radius: 9px; font-size: 15px; padding: 0; }
-.cal-today { background: var(--deep); color: #fff; border: none; font-weight: 700; border-radius: 9px; padding: 8px 14px; cursor: pointer; }
-.cal-types { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
-.cal-type { border: 1px solid var(--border); background: #fff; border-radius: 999px; padding: 5px 10px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+/* -------- top bar: title | nav | switcher on one row; filters on a separate row -------- */
+.cal-top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.cal-top h1 { margin: 0; font-size: 20px; line-height: 1.15; }
+.cal-top .cal-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.cal-topright { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
-.cal-body { display: flex; gap: 14px; align-items: flex-start; }
-.cal-card { flex: 2.4; min-width: 0; background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 14px; }
-.cal-side { flex: 1; min-width: 250px; display: flex; flex-direction: column; gap: 12px; }
+.cal-nav-group {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--cal-bg); border: 1px solid var(--cal-line);
+  border-radius: 10px; padding: 3px;
+}
+.cal-nav {
+  width: 30px; height: 30px; padding: 0; border-radius: 7px;
+  background: transparent; border: none; color: var(--muted);
+  font-size: 15px; line-height: 1; cursor: pointer;
+}
+.cal-nav:hover { background: var(--cal-hover); color: var(--cal-num); }
+.cal-today {
+  background: transparent; color: var(--deep); border: none;
+  font-weight: 700; font-size: 12.5px; padding: 6px 12px; border-radius: 7px;
+  cursor: pointer;
+}
+.cal-today:hover { background: var(--cal-hover); }
 
-.cal-dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 6px; }
-.cal-dow div { text-align: center; font-size: 11px; font-weight: 800; color: var(--muted); }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal-switch {
+  display: inline-flex; align-items: center;
+  background: var(--cal-bg); border: 1px solid var(--cal-line);
+  border-radius: 10px; padding: 3px; gap: 2px;
+}
+.cal-switch button {
+  border: none; background: transparent; color: var(--muted);
+  padding: 6px 14px; font-size: 12.5px; font-weight: 700;
+  border-radius: 7px; cursor: pointer; white-space: nowrap;
+}
+.cal-switch button:hover { background: var(--cal-hover); color: var(--cal-num); }
+.cal-switch button.active { background: var(--deep); color: #fff; }
+
+/* -------- filters strip -------- */
+.cal-filters {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  padding: 10px 12px; margin-bottom: 12px;
+  background: var(--cal-tint); border: 1px solid var(--cal-line); border-radius: 10px;
+}
+.cal-filters-label {
+  font-size: 11px; font-weight: 800; color: var(--muted);
+  letter-spacing: 0.06em; text-transform: uppercase; margin-right: 2px;
+}
+.cal-types { display: flex; gap: 6px; flex-wrap: wrap; }
+.cal-type {
+  border: 1px solid var(--cal-line-str); background: #fff;
+  border-radius: 999px; padding: 5px 11px; font-size: 11.5px;
+  font-weight: 700; cursor: pointer; white-space: nowrap;
+  color: var(--muted); transition: all 0.12s ease;
+}
+.cal-type:hover { border-color: var(--muted); color: var(--cal-num); }
+.cal-type.on { background: var(--deep); color: #fff; border-color: var(--deep); }
+.cal-filters .cal-sep {
+  width: 1px; height: 20px; background: var(--cal-line-str); margin: 0 2px;
+}
+
+/* -------- body: grid card + sidebar column -------- */
+.cal-body { display: flex; gap: 16px; align-items: flex-start; }
+.cal-card {
+  flex: 2.4; min-width: 0;
+  background: var(--cal-bg); border: 1px solid var(--cal-line);
+  border-radius: 14px; padding: 14px 14px 10px;
+  box-shadow: var(--cal-shadow);
+}
+.cal-side { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 12px; }
+.cal-side .panel {
+  margin: 0; border-radius: 12px; box-shadow: var(--cal-shadow);
+  border-color: var(--cal-line);
+}
+
+/* -------- month grid: one enclosing frame, hairline dividers -------- */
+.cal-dow {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  border-bottom: 1px solid var(--cal-line);
+  padding-bottom: 8px; margin-bottom: 8px;
+}
+.cal-dow div {
+  text-align: center; font-size: 10.5px; font-weight: 800;
+  color: var(--cal-num-mut); letter-spacing: 0.08em; text-transform: uppercase;
+}
+.cal-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  border-left: 1px solid var(--cal-line); border-top: 1px solid var(--cal-line);
+  border-radius: 8px; overflow: hidden;
+}
 .cal-daygrid { display: block; }
+.cal-cell {
+  border-right: 1px solid var(--cal-line);
+  border-bottom: 1px solid var(--cal-line);
+  background: #fff; padding: 6px 8px; min-height: 108px;
+  cursor: pointer; position: relative; transition: background 0.1s ease;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.cal-cell:hover { background: var(--cal-hover); }
+.cal-daygrid .cal-cell { min-height: 240px; border-radius: 12px; border: 1px solid var(--cal-line); }
+.cal-cell.out { background: var(--cal-tint); }
+.cal-cell.out .cal-daynum { color: var(--cal-num-mut); font-weight: 600; }
+.cal-cell.sun { background: var(--cal-sun-tint); }
+.cal-cell.holiday {
+  background: var(--cal-hol-tint);
+  box-shadow: inset 3px 0 0 var(--cal-hol-mark);
+}
+.cal-cell.holiday .cal-daynum { color: var(--cal-hol-num); }
+.cal-cell.today .cal-daynum { color: #fff; background: var(--copper); }
+.cal-cell.today { background: #fff; }
+.cal-cell.today.holiday { background: var(--cal-hol-tint); }
+.cal-cell.sel { box-shadow: inset 0 0 0 2px var(--cal-today-ring); }
 
-.cal-cell { border: 1px solid var(--border); border-radius: 10px; padding: 6px 7px; min-height: 96px; cursor: pointer; overflow: hidden; }
-.cal-daygrid .cal-cell { min-height: 220px; }
-.cal-cell.out { background: #fafbfd; opacity: 0.55; }
-.cal-cell.today { border: 2px solid var(--copper); }
-.cal-cell.sel { box-shadow: 0 0 0 2px rgba(255,122,26,0.35); }
-.cal-cell.holiday { background: linear-gradient(135deg, #FFF3E9, #FFE4CF); border-color: #FFC38A; }
-.cal-daynum { font-size: 11.5px; font-weight: 700; margin-bottom: 4px; }
-.cal-cell.holiday .cal-daynum { color: #A15C00; }
-.cal-chip { display: block; width: 100%; text-align: left; border: none; border-radius: 5px; padding: 2px 5px;
-  margin-bottom: 2px; font-size: 9.5px; font-weight: 700; white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; cursor: pointer; }
-.cal-more { font-size: 9.5px; color: var(--muted); font-weight: 700; margin-top: 2px; }
+.cal-daynum {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 22px; padding: 0 6px; align-self: flex-start;
+  font-size: 12px; font-weight: 700; color: var(--cal-num);
+  border-radius: 999px;
+}
 
-.cal-agrow { display: flex; gap: 9px; padding: 8px 0; border-bottom: 1px solid var(--border); align-items: center; cursor: pointer; }
+/* -------- event chips -------- */
+.cal-chip {
+  display: flex; align-items: center; gap: 5px;
+  width: 100%; text-align: left; border: none; border-radius: 5px;
+  padding: 2px 6px; font-size: 10.5px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: pointer; line-height: 1.35;
+}
+.cal-chip:hover { filter: brightness(0.96); }
+.cal-more {
+  font-size: 10.5px; color: var(--muted); font-weight: 700;
+  margin-top: 2px; cursor: pointer; padding: 1px 4px;
+}
+.cal-more:hover { color: var(--cal-num); }
+
+/* -------- agenda rows in the sidebar -------- */
+.cal-agrow {
+  display: flex; gap: 10px; padding: 9px 0;
+  border-bottom: 1px solid var(--cal-line); align-items: center; cursor: pointer;
+}
+.cal-agrow:hover { background: var(--cal-hover); margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 8px; }
 .cal-agrow:last-child { border-bottom: none; }
-.cal-agic { width: 28px; height: 28px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+.cal-agic {
+  width: 30px; height: 30px; border-radius: 9px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; flex-shrink: 0;
+}
 
-/* phone and tablet: the side column drops under the grid, cells shrink but stay tappable */
+/* -------- responsive -------- */
 @media (max-width: 1000px) {
   .cal-body { flex-direction: column; }
   .cal-card, .cal-side { width: 100%; flex: none; }
-  .cal-types { margin-left: 0; }
+  .cal-side { min-width: 0; }
 }
 @media (max-width: 640px) {
-  .cal-cell { min-height: 66px; padding: 4px; }
-  .cal-chip { font-size: 8.5px; }
-  .cal-grid, .cal-dow { gap: 3px; }
-  .cal-switch button { padding: 7px 11px; }
+  .cal-top h1 { font-size: 17px; }
+  .cal-cell { min-height: 78px; padding: 4px 5px; }
+  .cal-chip { font-size: 9.5px; padding: 1px 4px; }
+  .cal-switch button { padding: 6px 10px; font-size: 11.5px; }
+  .cal-filters { padding: 8px 10px; }
+  .cal-daynum { min-width: 18px; height: 18px; font-size: 10.5px; }
 }
 
 
