@@ -7,7 +7,7 @@ import Sidebar from "@/components/Sidebar";
 import { getSession } from "@/lib/auth";
 import { getSites } from "@/lib/data";
 import { getCalendarEvents, groupByDate, monthGrid, iso, EVENT_TYPES, STATUS_META } from "@/lib/calendar";
-import { saveHoliday, deleteHoliday } from "@/lib/holidays";   // update264
+import { saveHoliday, deleteHoliday, getHolidayTypes, copyHolidaysYear } from "@/lib/holidays";   // update264/386
 import { canAnySite } from "@/lib/auth";
 
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -49,7 +49,11 @@ function Agenda({ list, onClick, empty }) {
 // update264: MODULE scope — add / edit / delete a company holiday straight from the calendar.
 // Writes the same company_holidays rows payroll and the muster read; DB policy is the real gate.
 function HolidayModal({ init, sites, onClose, onSaved }) {
-  const [f, setF] = useState({ id: init.id || null, on_date: init.on_date, name: init.name || "", site_ids: init.site_ids || [], applies_to: init.applies_to || "both", note: init.note || "" });   // update293
+  const [f, setF] = useState({ id: init.id || null, on_date: init.on_date, name: init.name || "", site_ids: init.site_ids || [], applies_to: init.applies_to || "both", note: init.note || "",
+    type_code: init.type_code || "paid_off",            // update386
+    category_rules: init.category_rules || null });    // update386: null = use type defaults
+  const [types, setTypes] = useState({});
+  useEffect(() => { getHolidayTypes().then(setTypes); }, []);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
   const allSites = f.site_ids.length === 0;
   const toggleSite = id => setF(x => ({ ...x, site_ids: x.site_ids.includes(id) ? x.site_ids.filter(s => s !== id) : [...x.site_ids, id] }));
@@ -87,8 +91,45 @@ function HolidayModal({ init, sites, onClose, onSaved }) {
         </select>
         <label className="muted">Note (optional)</label>
         <input value={f.note} onChange={e => setF(x => ({ ...x, note: e.target.value }))} placeholder="e.g. Only for Odisha workers" style={{ width: "100%", marginBottom: 8 }} />
-        <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
-          Marked holidays are <b>paid</b> (27-Aug rule): absent = 1× pay, worked full day = 2×. Payroll, muster and the attendance register all read this same entry.
+        {/* update386: holiday type + per-category multiplier overrides */}
+        <div style={{ marginBottom: 10, padding: "10px 12px", background: "#f7f9fc", border: "1px solid #e5e7eb", borderRadius: 8 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", letterSpacing: 0.05, textTransform: "uppercase", marginBottom: 6 }}>Rule</div>
+          <label className="muted">Holiday type</label>
+          <select value={f.type_code || ""} onChange={e => setF(x => ({ ...x, type_code: e.target.value || null }))} style={{ width: "100%", marginBottom: 6 }}>
+            <option value="">— use classic rule (2× worked, 1× absent) —</option>
+            {Object.values(types).sort((a, b) => a.sort_order - b.sort_order).map(t => (
+              <option key={t.code} value={t.code}>{t.label}</option>
+            ))}
+          </select>
+          <details style={{ marginTop: 6 }}>
+            <summary style={{ fontSize: 12, cursor: "pointer", color: "#334155" }}>Per-category override for THIS date only (advanced)</summary>
+            <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 11.5 }}>
+              {["labour", "site_staff", "office_staff"].map(cat => {
+                const c = f.category_rules?.[cat] || {};
+                const setCat = (part) => setF(x => {
+                  const cr = { ...(x.category_rules || {}) };
+                  cr[cat] = { ...(cr[cat] || {}), ...part };
+                  Object.keys(cr[cat]).forEach(k => { if (cr[cat][k] === "" || cr[cat][k] == null) delete cr[cat][k]; });
+                  if (Object.keys(cr[cat]).length === 0) delete cr[cat];
+                  return { ...x, category_rules: Object.keys(cr).length ? cr : null };
+                });
+                return (
+                  <div key={cat}>
+                    <div style={{ fontWeight: 700, marginBottom: 3, color: "#0f172a" }}>{cat.replace("_", " ")}</div>
+                    <label className="muted" style={{ fontSize: 10.5 }}>Present ×</label>
+                    <input inputMode="decimal" value={c.present ?? ""} placeholder="type default"
+                      onChange={e => setCat({ present: e.target.value === "" ? null : Number(e.target.value) })}
+                      style={{ width: "100%", padding: "3px 5px", fontSize: 11.5 }} />
+                    <label className="muted" style={{ fontSize: 10.5, display: "block", marginTop: 3 }}>Absent ×</label>
+                    <input inputMode="decimal" value={c.absent ?? ""} placeholder="type default"
+                      onChange={e => setCat({ absent: e.target.value === "" ? null : Number(e.target.value) })}
+                      style={{ width: "100%", padding: "3px 5px", fontSize: 11.5 }} />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>Leave a box blank to use the type default. Overrides apply only to this date.</div>
+          </details>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
           <div><label className="muted">Date</label><input type="date" style={{ width: "100%" }} value={f.on_date} onChange={e => setF(x => ({ ...x, on_date: e.target.value }))} /></div>
