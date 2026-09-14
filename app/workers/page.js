@@ -40,7 +40,7 @@ const WORKER_FORM_CSS = `
 
 const EMPTY = { full_name: "", mobile: "", category: "plumber", labour_type: "own", contractor_id: "", site_id: "", daily_wage: "", is_active: true, ot_eligible: true, proxy_authority: false, bank_name: "", payment_type: "direct", emergency_name: "", emergency_relation: "", emergency_mobile: "", emergency_alt_mobile: "", emergency_address: "" };   // update287 · update336
 // roles load dynamically from the Role Master (staff_roles table)
-const S_EMPTY = { full_name: "", mobile: "", role: "supervisor", site_id: "", is_active: true };
+const S_EMPTY = { full_name: "", mobile: "", role: "supervisor", site_id: "", is_active: true, emergency_name: "", emergency_relation: "", emergency_mobile: "", emergency_alt_mobile: "", emergency_address: "" };   // update384
 
 export default function WorkersPage() {
   const [rows, setRows] = useState(null);
@@ -182,6 +182,9 @@ export default function WorkersPage() {
           requires_punch: u.requires_punch !== false, bank_account_no: u.bank_account_no || "",
           bank_ifsc: u.bank_ifsc || "", bank_name: u.bank_name || "", pan_no: u.pan_no || "", aadhaar_doc_url: u.aadhaar_doc_url || null, aadhaar_docs: Array.isArray(u.aadhaar_docs) ? u.aadhaar_docs : [], bank_doc_url: u.bank_doc_url || null,   // update374/377
           last_working_day: u.last_working_day || "", exit_reason: u.exit_reason || "",
+          emergency_name: u.emergency_name || "", emergency_relation: u.emergency_relation || "",   // update384
+          emergency_mobile: u.emergency_mobile || "", emergency_alt_mobile: u.emergency_alt_mobile || "",
+          emergency_address: u.emergency_address || "",
           siteIds: ids, origSiteIds: [...ids] });
       }}>✎ Edit</button> : null },
   ];
@@ -533,6 +536,33 @@ export default function WorkersPage() {
                         if (!r.ok) { setErr(r.error); return; }
                         sset("bank_doc_url", r.url);
                       }} />
+                    </div>
+                  </div>
+                </div>
+                {/* update384: Emergency contact — same fields as workers.emergency_*; not
+                    mandatory on staff since HR usually captures this via letters. */}
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 6 }}>Emergency contact <span className="muted" style={{ fontWeight: 400 }}>(optional — used on Employee PDF and by HR)</span></div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ flex: "1 1 200px" }}>
+                      <label className="muted">Contact person name</label>
+                      <input style={{ width: "100%" }} value={smodal.emergency_name || ""} onChange={e => sset("emergency_name", e.target.value)} />
+                    </div>
+                    <div style={{ flex: "1 1 160px" }}>
+                      <label className="muted">Relationship</label>
+                      <input style={{ width: "100%" }} placeholder="e.g. Father, Wife, Brother" value={smodal.emergency_relation || ""} onChange={e => sset("emergency_relation", e.target.value)} />
+                    </div>
+                    <div style={{ flex: "1 1 160px" }}>
+                      <label className="muted">Mobile number</label>
+                      <input style={{ width: "100%" }} inputMode="numeric" value={smodal.emergency_mobile || ""} onChange={e => sset("emergency_mobile", e.target.value.replace(/[^0-9+ ]/g, ""))} />
+                    </div>
+                    <div style={{ flex: "1 1 160px" }}>
+                      <label className="muted">Alternate number</label>
+                      <input style={{ width: "100%" }} inputMode="numeric" value={smodal.emergency_alt_mobile || ""} onChange={e => sset("emergency_alt_mobile", e.target.value.replace(/[^0-9+ ]/g, ""))} />
+                    </div>
+                    <div style={{ flex: "1 1 100%" }}>
+                      <label className="muted">Address</label>
+                      <textarea rows={2} style={{ width: "100%" }} value={smodal.emergency_address || ""} onChange={e => sset("emergency_address", e.target.value)} />
                     </div>
                   </div>
                 </div>
