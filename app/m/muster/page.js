@@ -377,11 +377,19 @@ export default function MusterScreen() {
                   </table>
                 </div>
                 <div style={{ fontWeight: 600, fontSize: 13, margin: "10px 0 4px" }}>Salary history (wage payouts)</div>
-                {sheetData.history.length === 0 ? <div className="muted" style={{ fontSize: 12 }}>No payouts generated yet.</div> : (
+                {sheetData.worker.staffPay ? (
+                  // update375: this profile is really staff — labour history is a phantom.
+                  // Their salary is computed on the Staff Salary sheet from monthly_salary ÷ days-in-month.
+                  <div className="muted" style={{ fontSize: 12, padding: "6px 8px", background: "#f3f4f6", borderRadius: 6 }}>
+                    Salary is computed on the <b>Staff Salary sheet</b> — ₹{sheetData.worker.staffPay.perDay.toLocaleString("en-IN")}/day ({inr(sheetData.worker.staffPay.salary)} / month).
+                  </div>
+                ) : sheetData.history.length === 0 ? <div className="muted" style={{ fontSize: 12 }}>No payouts generated yet.</div> : (
+                  <div style={{ overflowX: "auto" }}>{/* update375: horizontal scroll on narrow phones */}
                   <table className="dt-compact" style={{ width: "100%", fontSize: 11.5 }}>
                     <thead><tr><th>Month</th><th className="num">Days</th><th className="num">OT h</th><th className="num">Gross</th><th className="num">Adv</th><th className="num">Net</th><th>Status</th></tr></thead>
                     <tbody>{sheetData.history.map(h => <tr key={h.month}><td>{h.month}</td><td className="num">{Number(h.days_full) + Number(h.days_half) * 0.5}</td><td className="num">{h.ot_hours}</td><td className="num">{inr(h.gross)}</td><td className="num">{inr(h.advances_deducted)}</td><td className="num"><b>{inr(h.net)}</b></td><td><span className="badge gray">{h.status}</span></td></tr>)}</tbody>
                   </table>
+                  </div>
                 )}
               </>
             )}
