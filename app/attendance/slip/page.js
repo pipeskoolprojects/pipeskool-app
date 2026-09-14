@@ -128,10 +128,25 @@ function Slip() {
       <button style={{ marginRight: 6 }} className="no-print" onClick={() => shiftMonth(-1)}>‹ Prev month</button><button style={{ marginRight: 12 }} className="no-print" onClick={() => shiftMonth(1)}>Next month ›</button>          <button style={{ marginTop: 6, fontSize: 12 }} onClick={() => window.print()}>🖨 Print / Save PDF</button>
         </div>
       </div>
+      {/* update381: if the definer RPC fn_staff_pay_for_worker errored, say so loudly
+          instead of silently falling back to labour ₹/day. If it succeeded, print how the
+          staff record was matched (auth_id / mobile) so a wrong slip is diagnosable at a
+          glance instead of us guessing at the code path from a screenshot. */}
+      {w.staffPayError && (
+        <div className="no-print" style={{ margin: "8px 0", padding: "8px 12px", background: "#fef2f2", border: "1px solid var(--red)", borderRadius: 6, fontSize: 12.5, color: "#991b1b" }}>
+          <b>⚠ Could not read staff record.</b> Salary shown may be the labour placeholder.<br/>
+          Details: {w.staffPayError}<br/>
+          If this is a monthly-salaried staff member, first run <code>pipeskool_staff_pay_lookup.sql</code> in Supabase; if it's already run, screenshot this and send it — the message names the exact failure.
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 13, margin: "12px 0" }}>
         <div><b>Worker:</b> {w.name} (ID {w.id})</div><div><b>Category:</b> {w.category} · {w.labour}</div>
         <div><b>Home site:</b> {w.site}</div><div><b>Mobile:</b> {w.mobile}</div>
-        <div><b>Daily wage:</b> {w.staffPay ? <>Staff — salary {inr(w.staffPay.salary)}/month (≈ {inr(w.staffPay.perDay)}/day)</> : inr(w.wage)}</div>{/* update309 */}{w.otEligible ? <div><b>OT rate:</b> {inr(w.otRate)}/h (wage ÷ {w.stdHrs} h)</div> : <div><b>OT:</b> Not eligible</div>}
+        <div><b>{w.staffPay ? "Monthly salary:" : "Daily wage:"}</b> {w.staffPay
+          ? <>{inr(w.staffPay.salary)}/month <span className="muted" style={{ fontSize: 11.5 }}>· ≈ {inr(w.staffPay.perDay)}/day · matched by {w.staffPay.matchedBy || "?"}</span></>
+          : <>{inr(w.wage)} <span className="muted" style={{ fontSize: 11.5 }}>· no staff record found for this profile</span></>}
+        </div>
+        {w.otEligible ? <div><b>OT rate:</b> {inr(w.otRate)}/h ({w.staffPay ? "salary÷" : "wage ÷"} {w.stdHrs} h)</div> : <div><b>OT:</b> Not eligible</div>}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6, margin: "10px 0" }}>
         {/* update345: Present / Half / Absent / Holidays are each their own line item, and
