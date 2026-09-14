@@ -132,7 +132,7 @@ function Slip() {
           instead of silently falling back to labour ₹/day. If it succeeded, print how the
           staff record was matched (auth_id / mobile) so a wrong slip is diagnosable at a
           glance instead of us guessing at the code path from a screenshot. */}
-      {w.staffPayError && (
+      {w.staffPayError && !w.staffPay && (   // update381c: only warn if we could not resolve anywhere
         <div className="no-print" style={{ margin: "8px 0", padding: "8px 12px", background: "#fef2f2", border: "1px solid var(--red)", borderRadius: 6, fontSize: 12.5, color: "#991b1b" }}>
           <b>⚠ Could not read staff record.</b> Salary shown may be the labour placeholder.<br/>
           Details: {w.staffPayError}<br/>
