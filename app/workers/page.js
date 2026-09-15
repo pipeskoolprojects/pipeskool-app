@@ -87,6 +87,42 @@ export default function WorkersPage() {
     if (modal?.id) getWorkerAllotments(modal.id).then(setAllot); else setAllot([]);
   }, [modal?.id]);
 
+  // update388b: Contractor Master read straight from the table (id, name + bank columns added by
+  // pipeskool_contractor_bank.sql). Fallback ladder: bank columns missing → id,name only →
+  // table unreadable → whatever getContractors() returned. Every step leaves a visible note.
+  const [cmaster, setCmaster] = useState(null);      // null = not loaded yet
+  const [cnote, setCnote] = useState("");
+  const [cbank, setCbank] = useState({ bank_account_no: "", bank_ifsc: "", bank_name: "" });
+  const [cdirty, setCdirty] = useState(false);
+  async function loadContractors() {
+    if (isDemo) { setCmaster([]); return; }
+    let r = await supabase.from("contractors").select("id, name, bank_account_no, bank_ifsc, bank_name").order("name");
+    if (r.error) {
+      const r2 = await supabase.from("contractors").select("id, name").order("name");
+      if (r2.error) { setCmaster(null); setCnote("Contractor Master could not be read (" + (r2.error.message || r2.error) + ") — using the app's contractor list."); return; }
+      setCnote("Contractor bank columns missing — run pipeskool_contractor_bank.sql. Names load, bank details cannot be saved yet.");
+      r = r2;
+    } else setCnote("");
+    setCmaster(r.data || []);
+  }
+  useEffect(() => { loadContractors(); }, []);
+  const clist = cmaster ?? contractors;                // rows always carry id + name
+  const csel = clist.find(c => String(c.id) === String(modal?.contractor_id || "")) || null;
+  useEffect(() => {                                    // selecting a contractor pre-fills his bank details
+    setCbank({ bank_account_no: csel?.bank_account_no || "", bank_ifsc: csel?.bank_ifsc || "", bank_name: csel?.bank_name || "" });
+    setCdirty(false);
+  }, [modal?.contractor_id, cmaster]);
+  const cset = (k, v) => { setCbank(b => ({ ...b, [k]: v })); setCdirty(true); };
+  async function addContractor() {
+    const name = window.prompt("New contractor name:");
+    if (!name || !name.trim()) return;
+    setErr("");
+    const { data, error } = await supabase.from("contractors").insert({ name: name.trim() }).select("id, name").single();
+    if (error) { setErr("Could not add contractor: " + (error.message || error)); return; }
+    await loadContractors();
+    set("contractor_id", data.id);
+  }
+
   async function save() {
     // update336: emergency contact is REQUIRED for a new worker — that is the moment the
     // details are actually to hand. For the 81 workers already on file it is a warning, not
@@ -101,6 +137,15 @@ export default function WorkersPage() {
       if (miss.length) { setErr("Emergency contact needs a " + miss.join(", ") + "."); return; }
     }
     setBusy(true); setErr("");
+    // update388b: contractor bank details live on the CONTRACTOR row (one place for every worker under him)
+    if (modal.labour_type === "contractor" && modal.contractor_id && cdirty) {
+      const { error: ce } = await supabase.from("contractors")
+        .update({ bank_account_no: String(cbank.bank_account_no || "").trim() || null,
+                  bank_ifsc: String(cbank.bank_ifsc || "").trim().toUpperCase() || null,
+                  bank_name: String(cbank.bank_name || "").trim() || null })
+        .eq("id", modal.contractor_id);
+      if (ce) { setBusy(false); setErr("Contractor bank details did NOT save: " + (ce.message || ce) + " — has pipeskool_contractor_bank.sql been run?"); return; }
+    }
     const res = await saveWorker(modal.id || null, modal);
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
@@ -309,6 +354,33 @@ export default function WorkersPage() {
                       {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                     </div>
+                    {modal.labour_type === "contractor" && (<div className="wf-full" style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 12px", marginTop: 4 }}>
+                      {/* update388b: contractor block — only for Contractor labour. Name from the Contractor
+                          Master; bank details are the contractor's (the company pays him, not the worker). */}
+                      <div className="wf-grid">
+                        <div className="wf-full"><label className="muted">Contractor name</label>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <select style={{ flex: 1 }} value={modal.contractor_id || ""} onChange={e => set("contractor_id", e.target.value)}>
+                              <option value="">Select contractor…</option>
+                              {clist.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                            <button type="button" onClick={addContractor} disabled={busy} title="Add a contractor to the master">＋ Add</button>
+                          </div>
+                          {clist.length === 0 && <div style={{ fontSize: 11.5, color: "#9a3412", marginTop: 3 }}>No contractors in the master (or none visible to your login) — use ＋ Add.</div>}
+                          {cnote && <div style={{ fontSize: 11.5, color: "#9a3412", marginTop: 3 }}>{cnote}</div>}
+                        </div>
+                        <div className="wf-full muted" style={{ fontSize: 11.5 }}>Contractor bank details — used for this worker's payment in the Bank Payment Sheet. Saved on the contractor, so every worker under him shares them.</div>
+                        <div><label className="muted">Bank account no</label>
+                          <input value={cbank.bank_account_no} inputMode="numeric" autoComplete="off" disabled={!modal.contractor_id}
+                                 placeholder={modal.contractor_id ? "" : "select a contractor first"} onChange={e => cset("bank_account_no", e.target.value)} /></div>
+                        <div><label className="muted">IFSC</label>
+                          <input value={cbank.bank_ifsc} placeholder="e.g. SBIN0001234" disabled={!modal.contractor_id}
+                                 onChange={e => cset("bank_ifsc", e.target.value)} /></div>
+                        <div className="wf-full"><label className="muted">Bank name</label>
+                          <input value={cbank.bank_name} placeholder="e.g. Indian Overseas Bank" disabled={!modal.contractor_id}
+                                 onChange={e => cset("bank_name", e.target.value)} /></div>
+                      </div>
+                    </div>)}
                     {modal.id ? (<div className="wf-full">
                       <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>Also allotted to (multi-site worker — can self-punch there):</div>
                       <div className="wf-allot">
@@ -383,13 +455,7 @@ export default function WorkersPage() {
                     }} />
                   </div>
                 </div>
-                {modal.labour_type === "contractor" && (
-                  <div className="wf-full"><label className="muted">Contractor</label>
-                    <select value={modal.contractor_id || ""} onChange={e => set("contractor_id", e.target.value)}>
-                      <option value="">Select contractor…</option>
-                      {contractors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select></div>
-                )}
+                {/* update388b: Contractor dropdown moved up under Labour type */}
 
                 {/* update336: emergency contact — who to call if something happens on site */}
                 <div className="wf-full wf-sub">Emergency contact
