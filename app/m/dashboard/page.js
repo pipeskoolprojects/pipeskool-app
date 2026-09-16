@@ -24,6 +24,9 @@ export default function MobileHomePage() {
     // Desktop/web never stays on the mobile home (231). /home bounces back below 760px.
     if (typeof window !== "undefined" && window.innerWidth > 760) { router.replace("/home"); return; }
     setSess(s);
+    const onSess = e => { if (e?.detail) setSess(e.detail); };   // update391: rights refresh → header follows
+    window.addEventListener("psk-session", onSess);
+    return () => window.removeEventListener("psk-session", onSess);
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const isDirector = sess?.role === "director";
