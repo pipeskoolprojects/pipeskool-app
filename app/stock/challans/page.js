@@ -3,7 +3,8 @@
 // listed + filtered, then Convert -> GRN. Print / PDF / Tally per row and in bulk.
 import { useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
-import { createDeliveryChallan, getDeliveryChallans, convertDcToGrn, cancelDeliveryChallan, uploadDcProof, dcProofUrl, priceDcLines, dcTallyXml, getChallanPOs } from "@/lib/challan";
+import { createDeliveryChallan, getDeliveryChallans, convertDcToGrn, cancelDeliveryChallan, uploadDcProof, dcProofUrl, priceDcLines, dcTallyXml, getChallanPOs, editDeliveryChallan } from "@/lib/challan";
+import { getClients, shipBlock, addrLines } from "@/lib/clients";   // update393
 import { getTallySettings } from "@/lib/tally";
 import { getSession, canSeeModuleAnySite } from "@/lib/auth";
 
@@ -24,7 +25,11 @@ export default function DeliveryChallans() {
   // ---- create state (shared preview for both paths)
   const [file, setFile] = useState(null);
   const [reading, setReading] = useState(false);
-  const [head, setHead] = useState({ vendor_name: "", vendor_dc_no: "", dc_date: new Date().toISOString().slice(0, 10), po_id: null, source: "manual", confidence: null });
+  const [head, setHead] = useState({ vendor_name: "", vendor_dc_no: "", dc_date: new Date().toISOString().slice(0, 10), po_id: null, source: "manual", confidence: null, dc_ref: "", client_id: "" });
+  // update393: Client Master + site→client default; DC number typed by hand (blank = series); ✎ edit
+  const [clients, setClients] = useState([]); const [siteClient, setSiteClient] = useState({});
+  const [edit, setEdit] = useState(null); const [editBusy, setEditBusy] = useState(false);
+  const clientOf = id => clients.find(c => String(c.id) === String(id)) || null;
   const [lines, setLines] = useState([]);                // { po_item_id,item_id,item_name,unit,ordered_qty,received_qty }
   const [poQ, setPoQ] = useState("");
   const [poSite, setPoSite] = useState("all");     // update271: PO picker filters
@@ -38,6 +43,7 @@ export default function DeliveryChallans() {
     const s = getSession(); if (!s) { window.location.replace("/login"); return; }
     setSession(s);
     load(); getChallanPOs().then(setPos); getTallySettings().then(setTally);
+    getClients({ activeOnly: true }).then(list => { setClients(list); const m = {}; list.forEach(c => (c.sites || []).forEach(s => { m[String(s.id)] = c.id; })); setSiteClient(m); }).catch(e => setErr(e.message));
   }, []);
 
   function pickPO(p) {
@@ -98,10 +104,19 @@ export default function DeliveryChallans() {
     setSaving(false);
     if (!res.ok) { setErr(res.error); return; }
     setMsg("Saved " + res.dc_ref + (res.status === "mismatch" ? " — quantity mismatch flagged for review." : "."));
-    setFile(null); setLines([]); setHead({ vendor_name: "", vendor_dc_no: "", dc_date: new Date().toISOString().slice(0, 10), po_id: null, source: "manual", confidence: null });
+    setFile(null); setLines([]); setHead({ vendor_name: "", vendor_dc_no: "", dc_date: new Date().toISOString().slice(0, 10), po_id: null, source: "manual", confidence: null, dc_ref: "", client_id: "" });
     load();
   }
   const siteOfPo = () => pos.find(p => p.id === head.po_id)?.site_id;
+  // update393: picking a PO pre-selects that site's client (still changeable)
+  useEffect(() => { const sid = siteOfPo(); if (sid && !head.client_id && siteClient[String(sid)]) setHead(h => ({ ...h, client_id: String(siteClient[String(sid)]) })); }, [head.po_id, siteClient]);   // eslint-disable-line react-hooks/exhaustive-deps
+  async function saveEdit() {
+    setEditBusy(true); setErr("");
+    const r = await editDeliveryChallan(edit.id, edit);
+    setEditBusy(false);
+    if (!r.ok) { setErr(r.error); return; }
+    setEdit(null); setMsg("Challan " + edit.dc_ref + " updated."); load();
+  }
 
   // ---- listing filters
   const [fVendor, setFVendor] = useState("all"); const [fSite, setFSite] = useState("all");
@@ -233,9 +248,19 @@ export default function DeliveryChallans() {
                     <div><div className="muted" style={{ fontSize: 10.5 }}>Vendor</div><input value={head.vendor_name} onChange={e => setHead(h => ({ ...h, vendor_name: e.target.value }))} style={{ fontWeight: 700 }} /></div>
                     <div><div className="muted" style={{ fontSize: 10.5 }}>Vendor DC No.</div><input style={{ width: 120 }} value={head.vendor_dc_no} onChange={e => setHead(h => ({ ...h, vendor_dc_no: e.target.value }))} /></div>
                     <div><div className="muted" style={{ fontSize: 10.5 }}>DC date</div><input type="date" value={head.dc_date} onChange={e => setHead(h => ({ ...h, dc_date: e.target.value }))} /></div>
+                    <div><div className="muted" style={{ fontSize: 10.5 }}>DC No. <span title="Leave blank for the next PSP series number">(blank = auto)</span></div><input style={{ width: 150 }} placeholder="auto" value={head.dc_ref} onChange={e => setHead(h => ({ ...h, dc_ref: e.target.value }))} /></div>
+                    <div><div className="muted" style={{ fontSize: 10.5 }}>Client</div>
+                      <select value={head.client_id || ""} onChange={e => setHead(h => ({ ...h, client_id: e.target.value }))} style={{ minWidth: 180 }}>
+                        <option value="">— none —</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select></div>
                     <div><div className="muted" style={{ fontSize: 10.5 }}>Matched PO</div><b>{pos.find(p => p.id === head.po_id)?.po_no || "—"}</b></div>
                     {head.confidence !== null && <span className="badge p">✓ {head.confidence}% match confidence</span>}
                   </div>
+                  {clientOf(head.client_id) && (() => { const c = clientOf(head.client_id); const sb = shipBlock(c); return (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10, background: "#f6f7fb", borderRadius: 8, padding: "8px 10px", marginBottom: 8, fontSize: 12 }}>
+                      <div><div className="muted" style={{ fontSize: 10.5 }}>Bill to</div><b>{c.company_name || c.name}</b>{addrLines({ line1: c.bill_line1, line2: c.bill_line2, city: c.bill_city, pincode: c.bill_pincode }).map((l, i) => <div key={i}>{l}</div>)}{c.gstin && <div>GSTIN: {c.gstin}</div>}</div>
+                      <div><div className="muted" style={{ fontSize: 10.5 }}>Ship to</div><b>{c.name}</b>{addrLines(sb).map((l, i) => <div key={i}>{l}</div>)}{(c.contact_name || c.mobile) && <div>{[c.contact_name, c.mobile].filter(Boolean).join(" · ")}</div>}</div>
+                    </div>); })()}
                   <table className="dt-compact" style={{ width: "100%" }}>
                     <thead><tr><th>Item</th><th className="num">Ordered</th><th className="num">Received (editable)</th><th>Unit</th><th>Match</th></tr></thead>
                     <tbody>
@@ -282,7 +307,7 @@ export default function DeliveryChallans() {
                     <tr key={r.id} style={r.status === "cancelled" ? { opacity: 0.55, textDecoration: "line-through" } : undefined} title={r.status === "cancelled" ? ("Cancelled" + (r.cancelled_by ? " by " + r.cancelled_by : "") + (r.cancel_reason ? " — " + r.cancel_reason : "")) : undefined}>{/* update272 */}
                       <td style={{ fontWeight: 700 }}>{r.dc_ref}{r.vendor_dc_no && <div className="muted" style={{ fontSize: 10.5 }}>vendor: {r.vendor_dc_no}</div>}</td>
                       <td className="muted">{r.date}</td>
-                      <td>{r.site}</td>
+                      <td>{r.site}{r.client && <div className="muted" style={{ fontSize: 10.5 }}>{r.client}</div>}</td>
                       <td>{r.vendor}</td>
                       <td>{r.po_no || <span className="badge warn">No PO</span>}</td>
                       <td className="num"><b>{r.recv}</b> / {r.ord || "—"}</td>
@@ -293,6 +318,7 @@ export default function DeliveryChallans() {
                       <td style={{ whiteSpace: "nowrap" }}>
                         <a href={"/stock/dc-print?ids=" + r.id} target="_blank" rel="noreferrer" title="Print / save as PDF"><button type="button" style={{ fontSize: 11.5, marginRight: 4 }}>🖨</button></a>
                         <button type="button" style={{ fontSize: 11.5, marginRight: 4 }} title="Tally XML" disabled={!tally} onClick={() => dlTally([r], r.dc_ref.replace(/\//g, "-") + ".xml")}>📊</button>
+                        {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5, marginRight: 4 }} title="Edit DC No. / date / client" onClick={() => setEdit({ id: r.id, dc_ref: r.dc_ref, dc_date: r.date, client_id: r.client_id || "", vendor_dc_no: r.vendor_dc_no || "" })}>✎</button>}{/* update393 */}
                         {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5, fontWeight: 700 }} disabled={conv === r.id} onClick={() => convert(r)}>{conv === r.id ? "…" : "Convert → GRN"}</button>}
                         {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5, color: "var(--red)", borderColor: "var(--red)" }} onClick={() => cancelDc(r)}>✕ Cancel</button>}{/* update272 */}
                       </td>
@@ -304,7 +330,26 @@ export default function DeliveryChallans() {
           )}
           <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Value uses each item's PO rate. 🖨 opens the letterhead document — use Print → Save as PDF for a file (works the same on Android, via the share sheet). Converting creates a real GRN through the same engine as the GRN Register.</div>
         </div>
-      </main>
+              {edit && (   /* update393: edit header of an unconverted challan */
+          <div onClick={() => !editBusy && setEdit(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 12 }}>
+            <div onClick={e => e.stopPropagation()} className="panel" style={{ width: "min(460px,100%)", margin: 0 }}>
+              <h2 style={{ marginTop: 0 }}>Edit challan</h2>
+              <div style={{ display: "grid", gap: 10 }}>
+                <div><label className="muted">DC No.</label><input style={{ width: "100%", boxSizing: "border-box", fontWeight: 700 }} value={edit.dc_ref} onChange={e => setEdit(x => ({ ...x, dc_ref: e.target.value }))} /></div>
+                <div><label className="muted">DC date</label><input type="date" style={{ width: "100%", boxSizing: "border-box" }} value={edit.dc_date || ""} onChange={e => setEdit(x => ({ ...x, dc_date: e.target.value }))} /></div>
+                <div><label className="muted">Client</label><select style={{ width: "100%" }} value={edit.client_id || ""} onChange={e => setEdit(x => ({ ...x, client_id: e.target.value }))}><option value="">— none —</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                <div><label className="muted">Vendor DC No.</label><input style={{ width: "100%", boxSizing: "border-box" }} value={edit.vendor_dc_no} onChange={e => setEdit(x => ({ ...x, vendor_dc_no: e.target.value }))} /></div>
+              </div>
+              <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Line items are locked (they drive GRN pending). Converted challans cannot be edited — cancel and re-issue instead.</div>
+              {err && <div className="error" style={{ marginTop: 8 }}>{err}</div>}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+                <button onClick={() => setEdit(null)} disabled={editBusy}>Cancel</button>
+                <button className="primary" onClick={saveEdit} disabled={editBusy || !String(edit.dc_ref).trim()}>{editBusy ? "Saving…" : "Save changes"}</button>
+              </div>
+            </div>
+          </div>
+        )}
+</main>
     </div>
   );
 }

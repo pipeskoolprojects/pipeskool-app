@@ -6,6 +6,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getDeliveryChallans } from "@/lib/challan";
+import { shipBlock, addrLines } from "@/lib/clients";   // update393
 
 function DcDoc({ d, hsn }) {
   // update223: exact replica of the company's Tally Delivery Note (PSP/2026-27 series).
@@ -41,14 +42,24 @@ function DcDoc({ d, hsn }) {
           <tr>
             <td style={cell}>
               <div style={lbl}>Consignee (Ship to)</div>
-              <b>{d.client || d.site}</b><br />{d.client ? <>Site: {d.site}<br /></> : null}State Name : Gujarat, Code : 24
+              {d.clientRow ? (<>{/* update393: from the Client Master */}
+                <b>{d.clientRow.name}</b><br />Site: {d.site}<br />
+                {addrLines(shipBlock(d.clientRow)).map((l, i) => <span key={i}>{l}<br /></span>)}
+                {(d.clientRow.contact_name || d.clientRow.mobile) && <>Contact: {[d.clientRow.contact_name, d.clientRow.mobile].filter(Boolean).join(" · ")}<br /></>}
+                State Name : {shipBlock(d.clientRow)?.state || "Gujarat"}, Code : {shipBlock(d.clientRow)?.state_code || "24"}
+              </>) : (<><b>{d.client || d.site}</b><br />{d.client ? <>Site: {d.site}<br /></> : null}State Name : Gujarat, Code : 24</>)}
             </td>
             <td style={cell} colSpan={2}><div style={lbl}>Terms of Delivery</div>&nbsp;</td>
           </tr>
           <tr>
             <td style={cell}>
               <div style={lbl}>Buyer (Bill to)</div>
-              <b>{d.client || d.site}</b><br />State Name : Gujarat, Code : 24
+              {d.clientRow ? (<>
+                <b>{d.clientRow.company_name || d.clientRow.name}</b><br />
+                {addrLines({ line1: d.clientRow.bill_line1, line2: d.clientRow.bill_line2, city: d.clientRow.bill_city, pincode: d.clientRow.bill_pincode }).map((l, i) => <span key={i}>{l}<br /></span>)}
+                {d.clientRow.gstin && <>GSTIN/UIN : {d.clientRow.gstin}<br /></>}
+                State Name : {d.clientRow.bill_state || "Gujarat"}, Code : {d.clientRow.bill_state_code || "24"}
+              </>) : (<><b>{d.client || d.site}</b><br />State Name : Gujarat, Code : 24</>)}
             </td>
             <td style={cell} colSpan={2}>&nbsp;</td>
           </tr>
