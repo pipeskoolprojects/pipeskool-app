@@ -282,7 +282,7 @@ export default function MoneyScreen() {
           <div style={{ background: "var(--bg)", borderRadius: 12, padding: 12, margin: "12px 0" }}>
             <h3 style={{ fontSize: 14, marginBottom: 2 }}>Direct Vendor Payment</h3>
             <div className="sub" style={{ marginBottom: 10 }}>Local Purchase Voucher</div>
-            <VendorVoucherPanel sites={mySites} />
+            <VendorVoucherPanel sites={mySites} autoOpen compact />   {/* update389: five-field form opens at once */}
             <button className="btn-block" style={{ marginTop: 10 }} onClick={() => setMode("")}>← Back</button>
           </div>
         )}
