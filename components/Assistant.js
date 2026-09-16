@@ -72,7 +72,7 @@ export default function Assistant() {
 
   return (
     <>
-      <button onClick={() => setOpen(o => !o)} title="Pipeskool Assistant"
+      <button onClick={() => setOpen(o => !o)} title="Pipeskool Assistant" className="no-print"
         style={{ position: "fixed", right: 14, bottom: (path || "").startsWith("/m") ? 76 : 18, zIndex: 150, width: 52, height: 52, borderRadius: "50%",
           background: "var(--copper, #FF7A1A)", color: "#fff", fontSize: 22, border: "none", boxShadow: "0 4px 14px rgba(0,0,0,.25)", cursor: "pointer" }}>
         {open ? "✕" : "💬"}

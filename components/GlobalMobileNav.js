@@ -16,7 +16,8 @@ import { usePathname } from "next/navigation";
 import MobileNav from "@/components/MobileNav";
 import { getSession } from "@/lib/auth";
 
-const NO_BAR = [/^\/login/, /^\/go(\b|\/)/, /\/print(\b|\/)/, /\/slip(\b|\/)/, /^\/workers\/profile/, /^\/letters\/print/];
+const NO_BAR = [/^\/login/, /^\/go(\b|\/)/, /\/print(\b|\/)/, /\/slip(\b|\/)/, /^\/workers\/profile/, /^\/letters\/print/,
+  /^\/purchase\/po(\b|\/)/, /^\/expenses\/voucher/, /^\/expenses\/advance-voucher/];   // update390: documents — no app chrome
 
 export default function GlobalMobileNav() {
   const path = usePathname() || "/";

@@ -60,7 +60,7 @@ export default function NotifyBell({ mobile }) {
   return (
     <>
       {(!mobile || !open) && (
-      <button onClick={() => { setOpen(o => !o); }} style={btnStyle} title="Notifications">
+      <button onClick={() => { setOpen(o => !o); }} className="no-print" style={btnStyle} title="Notifications">
         🔔 {!mobile && "Notifications"}
         {unread > 0 && (
           <span style={{ position: "absolute", top: -6, right: -6, background: "var(--copper, #FF7A1A)", color: "#fff",
