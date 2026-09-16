@@ -519,3 +519,9 @@ body.has-global-mnav { padding-bottom: calc(58px + env(safe-area-inset-bottom));
   .rights-staff-list { display: none !important; }
   .rights-staff-picker { display: block !important; }
 }
+
+/* update390: printed documents carry only the document — never the phone bar, bell or assistant */
+@media print {
+  .m-nav, .no-print, .print-hide { display: none !important; }
+  body.has-global-mnav, body.has-global-mnav .main, body.has-global-mnav .layout > main { padding-bottom: 0 !important; }
+}

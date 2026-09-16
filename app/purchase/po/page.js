@@ -15,6 +15,54 @@ function POView() {
   const [loading, setLoading] = useState(true);
   const [proofs, setProofs] = useState({ indentId: null, proofs: [] });   // update254: rate-comparison reference
   const [recv, setRecv] = useState([]);   // update256: per-line ordered / received / pending
+  const [sending, setSending] = useState(false); const [sendMsg, setSendMsg] = useState("");   // update390
+
+  // update390: the browser's PDF header/filename comes from document.title — make it the PO,
+  // not the app name. Restored on leave so the rest of the app is untouched.
+  useEffect(() => {
+    if (!po?.po_no) return;
+    const prev = document.title;
+    document.title = `PO ${po.po_no} · ${po.date}`;
+    return () => { document.title = prev; };
+  }, [po?.po_no, po?.date]);
+
+  // update390: SEND PO — the same document rendered to an A4 PDF in the browser and handed to
+  // the phone / OS share sheet (WhatsApp, mail, Drive…). No download step. Where the browser
+  // cannot share files (most desktops), the PDF is saved instead and the user is told so.
+  async function sendPo() {
+    setSending(true); setSendMsg("");
+    try {
+      const el = document.querySelector(".po-doc");
+      const html2pdf = (await import("html2pdf.js")).default;
+      const fname = "PO_" + String(po.po_no).replace(/[^A-Za-z0-9]+/g, "-") + ".pdf";
+      document.body.classList.add("po-rendering");
+      let blob;
+      try {
+        blob = await html2pdf().set({
+          margin: [12, 12, 14, 12], filename: fname,
+          image: { type: "jpeg", quality: 0.95 },
+          html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff",
+                         ignoreElements: n => n.classList && (n.classList.contains("no-print") || n.classList.contains("po-back")) },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          pagebreak: { mode: ["css", "legacy"], avoid: ["tr", ".po-keep"] },
+        }).from(el).outputPdf("blob");
+      } finally { document.body.classList.remove("po-rendering"); }
+      const file = new File([blob], fname, { type: "application/pdf" });
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: `PO ${po.po_no}`, text: `Purchase Order ${po.po_no} dated ${po.date} — Pipeskool Projects Pvt. Ltd.` });
+        setSendMsg("Shared.");
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a"); a.href = url; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        setSendMsg("This browser cannot share files directly — the PDF was saved as " + fname + ". Attach it from your Downloads.");
+      }
+    } catch (e) {
+      if (e && e.name === "AbortError") setSendMsg("");           // user closed the share sheet
+      else setSendMsg("Could not create the PDF: " + (e?.message || e));
+    }
+    setSending(false);
+  }
 
   useEffect(() => {
     if (!poId) { setLoading(false); return; }
@@ -68,6 +116,15 @@ function POView() {
           .po-doc .po-back { display: inline-flex !important; }
         }
         @media print { .po-doc .po-back { display: none !important; } }
+        /* update390: A4, print-ready — no browser header/footer (they live in the page margin,
+           which is 0), the document carries its own margin instead */
+        @media print {
+          @page { size: A4 portrait; margin: 0; }
+          html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+          .po-doc { max-width: none !important; margin: 0 !important; padding: 14mm 14mm 16mm !important; }
+          .po-doc table tr { page-break-inside: avoid; }
+        }
+        body.po-rendering .po-doc .po-wm { display: none; }
       `}</style>
       <button type="button" className="po-back" onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign("/m/approvals"); }}
         style={{ display: "none", alignItems: "center", gap: 6, marginBottom: 10, padding: "8px 12px", border: "1px solid #ddd", borderRadius: 8, background: "#fff", fontSize: 13 }}>← Back to approvals</button>
@@ -223,9 +280,14 @@ function POView() {
         </div>
       )}
 
-      <div style={{ textAlign: "center", marginTop: 26 }} className="no-print">
-        <button onClick={() => window.print()} style={{ padding: "10px 22px", fontSize: 14, background: "#FF7A1A", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>🖨 Print / Save as PDF</button>
+      <div style={{ textAlign: "center", marginTop: 26, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }} className="no-print">
+        <button onClick={() => window.print()} style={{ padding: "10px 22px", fontSize: 14, background: "#fff", color: "#0F1419", border: "1.5px solid #0F1419", borderRadius: 8, cursor: "pointer" }}>🖨 Print / Save as PDF</button>
+        {!draftReview && (
+          <button onClick={sendPo} disabled={sending} style={{ padding: "10px 22px", fontSize: 14, background: "#FF7A1A", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", opacity: sending ? .6 : 1 }}>
+            {sending ? "Preparing PDF…" : "📤 Send PO"}</button>
+        )}
       </div>
+      {sendMsg && <div className="no-print" style={{ textAlign: "center", marginTop: 8, fontSize: 12.5, color: "#555" }}>{sendMsg}</div>}
       <style>{`@media print { .no-print { display: none; } }`}</style>
     </div>
   );
