@@ -37,6 +37,7 @@ const GROUPS = [
     { href: "/calendar", label: "Calendar", module: "notices" },   // update259: aggregates every module, no new data
   ] },
   { label: "Commercial / Billing", items: [
+    { href: "/clients", label: "Clients", module: "billing" },   // update393
     { href: "/boq", label: "BOQ Master", module: "billing" },
     { href: "/billing", label: "RA Billing", module: "billing" },
     { href: "/tally", label: "Tally Export", module: "billing" },
