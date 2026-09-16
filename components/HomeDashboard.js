@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
+import { supabase, isDemo, authReady } from "@/lib/supabase";   // update391
 import { approvalRights } from "@/lib/perms";
 import { getPendingCount } from "@/lib/pending";
 import { getSites, getAttendance, getWorkers } from "@/lib/data";
@@ -184,10 +185,17 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }, [panel]);
 
-  useEffect(() => {
+  // update391: ONE loader for everything on this page. It runs only after the auth token has
+  // been restored (fresh load / new deploy / resumed app), and again whenever the session or
+  // rights refresh, the token is (re)issued, or the app comes back to the foreground — so a
+  // deploy never leaves the page showing empty/zero data until a logout-login.
+  const lastLoad = useRef(0);
+  async function loadAll(reason) {
     const s = getSession();
     if (!s) return;
     setSess(s);
+    if (!isDemo) await authReady();
+    lastLoad.current = Date.now();
     getSites().then(r => { const rows = arr(r); setSites(rows); if (onSites) onSites(rows); });
     getProjects().then(r => setProjects(arr(r)));
     getAttendance(todayLocal(), "all").then(r => setAtt(arr(r))).catch(() => setAtt([]));
@@ -205,6 +213,25 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
     const key = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
     Promise.all(days.map(d => getAttendance(key(d), "all").then(r => arr(r)).catch(() => [])))
       .then(lists => setWeek(days.map((d, i) => ({ day: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()], date: key(d), rows: lists[i] }))));
+  }
+  useEffect(() => {
+    if (!getSession()) return;
+    loadAll("mount");
+    const onSess = e => { if (e?.detail) setSess(e.detail); loadAll("session"); };
+    const onVis = () => { if (document.visibilityState === "visible" && Date.now() - lastLoad.current > 60000) loadAll("resume"); };
+    window.addEventListener("psk-session", onSess);
+    document.addEventListener("visibilitychange", onVis);
+    let sub = null;
+    if (!isDemo && supabase?.auth) {
+      const r = supabase.auth.onAuthStateChange((ev) => {
+        if ((ev === "SIGNED_IN" || ev === "TOKEN_REFRESHED") && Date.now() - lastLoad.current > 3000) loadAll(ev);
+      });
+      sub = r?.data?.subscription || null;
+    }
+    return () => { window.removeEventListener("psk-session", onSess); document.removeEventListener("visibilitychange", onVis); if (sub) sub.unsubscribe(); };
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!getSession()) return;
     if (desk) return;
     const openFromHash = () => { if (window.location.hash === "#projects") setPanel("all"); };
     const openFromNav = () => setPanel("all");   // update262: direct signal from the Projects tab

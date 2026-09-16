@@ -72,13 +72,13 @@ export default function Assistant() {
 
   return (
     <>
-      <button onClick={() => setOpen(o => !o)} title="Pipeskool Assistant" className="no-print"
-        style={{ position: "fixed", right: 14, bottom: (path || "").startsWith("/m") ? 76 : 18, zIndex: 150, width: 52, height: 52, borderRadius: "50%",
+      <button onClick={() => setOpen(o => !o)} title="Pipeskool Assistant" className="no-print asst-fab"
+        style={{ position: "fixed", right: 14, bottom: (path || "").startsWith("/m") ? "calc(74px + env(safe-area-inset-bottom, 0px))" : 18, zIndex: 150, width: 52, height: 52, borderRadius: "50%",
           background: "var(--copper, #FF7A1A)", color: "#fff", fontSize: 22, border: "none", boxShadow: "0 4px 14px rgba(0,0,0,.25)", cursor: "pointer" }}>
         {open ? "✕" : "💬"}
       </button>
       {open && (
-        <div style={{ position: "fixed", right: 14, bottom: (path || "").startsWith("/m") ? 138 : 80, zIndex: 150, width: "min(94vw, 380px)", height: "min(70vh, 560px)",
+        <div className="asst-panel" style={{ position: "fixed", right: 14, bottom: (path || "").startsWith("/m") ? "calc(136px + env(safe-area-inset-bottom, 0px))" : 80, zIndex: 150, width: "min(94vw, 380px)", height: "min(70vh, 560px)",
           background: "#fff", borderRadius: 16, boxShadow: "0 10px 34px rgba(0,0,0,.28)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ background: "var(--deep, #0F1419)", color: "#fff", padding: "12px 14px", display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 18 }}>🛟</span>
