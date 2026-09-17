@@ -1,268 +1,364 @@
 "use client";
-// update394/396: ATTENDANCE RULES — four stacked sections over the 386 rule tables, embedded as
-// the "Rules" tab of /calendar. The calendar and both payroll engines read the same rows.
+// update397: RULES tab of /calendar, laid out to the Director's reference (17 Sep): eight sub-tabs,
+// blue info strip, orange ＋ button, left form card + right table card. Every tab is wired to REAL
+// tables/settings that payroll already reads — nothing here is decorative:
+//   Holiday → company_holidays · Attendance → sites shift/hours/geofence · Overtime → payroll.ot_divisor + sites.ot_divisor
+//   Sunday → sunday_site_rules + one-day rules · Festival → holiday_types category defaults
+//   Worker/Staff → attendance.holiday_multiplier / staff_pay_days overrides · General → payroll.* + copy-year
 import { useEffect, useMemo, useState } from "react";
 import { getSession, canAnySite } from "@/lib/auth";
-import { getSites } from "@/lib/data";
+import { getSitesFull, updateSiteTimings, updateSiteGeofence } from "@/lib/data";
+import { supabase, isDemo } from "@/lib/supabase";
 import { iso } from "@/lib/calendar";
-import { saveHoliday, deleteHoliday, getHolidaysBetween, _resetHolidayCache } from "@/lib/holidays";
+import { saveHoliday, deleteHoliday, getHolidaysBetween, _resetHolidayCache, copyHolidaysYear } from "@/lib/holidays";
+import { getPayrollSettings, savePayrollSettings } from "@/lib/payrollSettings";
 import { notifyUsers } from "@/lib/notify";
 import { CATS, SUN_CODES, ruleCode, setWorkerOverride, setStaffOverride, setTypeDefaults, setSundayRule, getOverrides, getSundayRules, getTypesList, getPeople, staffForSites } from "@/lib/attendanceRules";
 
-const fmtX = n => n == null || n === "" ? "" : Number(n).toFixed(2).replace(/\.?0+$/, "") + "×";
+const fmtX = n => n == null || n === "" || Number.isNaN(Number(n)) ? "—" : Number(n).toFixed(2).replace(/\.?0+$/, "") + "x";
 const dmy = k => k ? String(k).split("-").reverse().join("/") : "";
-const DESC = {
-  holiday: "Every holiday and its pay multiplier per category. Saving notifies the site staff and shows a banner on the worker punch screen for 3 days before.",
-  sunday: "Sunday policy per site. Company default is Working Day (Sunday is a normal day). Mark single Sundays differently with a one-day rule.",
-  category: "Default multipliers per rule type × category. These pre-fill every new holiday rule and apply to holidays without their own override.",
-  override: "One-time pay overrides for an individual worker or staff member on a date. An override beats every rule above for that person and day.",
-};
 const typeLabel = t => t.label || t.name || t.code;
+const MULTS = ["0", "0.5", "1", "1.5", "2", "2.5", "3"];
+const TABS = [["holiday", "🎉", "Holiday Rules"], ["attendance", "📅", "Attendance Rules"], ["overtime", "🕘", "Overtime Rules"], ["sunday", "📆", "Sunday Rules"], ["festival", "✨", "Festival Rules"], ["worker", "👷", "Worker Rules"], ["staff", "👥", "Staff Rules"], ["general", "⚙️", "General"]];
+const INFO = {
+  holiday: "Add and manage all company holidays. Set pay rules, site-wise applicability and category-wise multipliers.",
+  attendance: "Site working hours, shift timings and geofence. Hours are ACTUAL time at site — no lunch or break deduction, ever. A missing punch-out stays open until midnight, then closes at the site's shift end and is held out of wages until a supervisor confirms.",
+  overtime: "Labour OT starts only after the site's shift end. OT rate = daily rate ÷ divisor (company default, site may override). Rounding: ≤1 h → 0; round up only when extra minutes exceed 30. Approval is always manual.",
+  sunday: "Sunday policy per site. Company default is Working Day (Sunday is a normal day; a half day worked on Sunday counts as a full paid day). Mark single Sundays differently below.",
+  festival: "Default pay multipliers per rule type and category. These pre-fill every new holiday rule and apply to holidays without their own override.",
+  worker: "One-time pay overrides for an individual worker on a date — beats every rule for that worker and day. Worker policy: daily wage; advances recovered manually; contractor workers are paid via the contractor.",
+  staff: "One-time pay overrides for a staff member on a date. Staff policy: salary ÷ 30 per day, Sundays paid, OT per staff toggle; leave year Apr–Mar, one paid pool, ≤50% usable Apr–Sep, max 10 days per stretch.",
+  general: "Pay period, Professional Tax slab and year-to-year holiday copy. Changes apply from the next payroll generation.",
+};
+const card = { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 };
+const inp = { width: "100%", boxSizing: "border-box" };
+const lab = { fontSize: 12.5, fontWeight: 600, display: "block", marginBottom: 4 };
+const req = <span style={{ color: "#dc2626" }}> *</span>;
+const btnO = { background: "#FF7A1A", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 700, cursor: "pointer" };
+const btnB = { background: "#1d4ed8", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 700, cursor: "pointer" };
+const btnG = { background: "#fff", color: "#111827", border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 16px", fontWeight: 600, cursor: "pointer" };
+const pillOk = { background: "#dcfce7", color: "#15803d", borderRadius: 6, padding: "3px 10px", fontSize: 12, fontWeight: 600 };
+const pillOff = { background: "#f3f4f6", color: "#6b7280", borderRadius: 6, padding: "3px 10px", fontSize: 12, fontWeight: 600 };
+const Toggle = ({ on, set, label, hint }) => (
+  <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+    <span onClick={() => set(!on)} style={{ width: 44, height: 24, borderRadius: 12, background: on ? "#1d4ed8" : "#d1d5db", position: "relative", flex: "none" }}><span style={{ position: "absolute", top: 3, left: on ? 23 : 3, width: 18, height: 18, borderRadius: 9, background: "#fff", transition: "left .15s" }} /></span>
+    <span><div style={{ fontWeight: 700, fontSize: 13.5 }}>{label}</div>{hint && <div className="muted" style={{ fontSize: 11.5 }}>{hint}</div>}</span>
+  </label>
+);
+
+const InfoStrip = ({ text, action }) => (
+  <div style={{ display: "flex", gap: 14, alignItems: "stretch", marginBottom: 16, flexWrap: "wrap" }}>
+    <div style={{ flex: 1, minWidth: 260, background: "#eff4ff", border: "1px solid #c7d7fe", color: "#1e40af", borderRadius: 10, padding: "12px 16px", fontSize: 13.5, display: "flex", alignItems: "center", gap: 10 }}><span style={{ fontSize: 18 }}>ⓘ</span><span>{text}</span></div>
+    {action}
+  </div>
+);
+const TableCard = ({ children, search, onSearch }) => (
+  <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+    {search !== undefined && <div style={{ display: "flex", justifyContent: "flex-end", padding: 12 }}><input placeholder="🔍  Search…" value={search} onChange={e => onSearch(e.target.value)} style={{ width: 260 }} /></div>}
+    <div className="dt-scroll" style={{ padding: "0 12px 12px" }}>{children}</div>
+  </div>
+);
 
 export default function AttendanceRules() {
   const [session, setSession] = useState(null);
-  const [sites, setSites] = useState([]); const [types, setTypes] = useState([]);
+  const [tab, setTab] = useState("holiday");
   const [year, setYear] = useState(new Date().getFullYear());
+  const [sites, setSites] = useState([]); const [types, setTypes] = useState([]);
   const [hols, setHols] = useState(null); const [sun, setSun] = useState({});
+  const [people, setPeople] = useState({ workers: [], staff: [] });
+  const [pay, setPay] = useState(null); const [siteDraft, setSiteDraft] = useState({});
   const [ovFrom, setOvFrom] = useState(iso(new Date(new Date().getFullYear(), new Date().getMonth() - 2, 1)));
-  const [ovTo, setOvTo] = useState(iso(new Date()));
-  const [ovs, setOvs] = useState(null); const [people, setPeople] = useState({ workers: [], staff: [] });
+  const [ovTo, setOvTo] = useState(iso(new Date())); const [ovs, setOvs] = useState(null);
   const [err, setErr] = useState(""); const [msg, setMsg] = useState(""); const [busy, setBusy] = useState(false);
-  const [hForm, setHForm] = useState(null); const [oForm, setOForm] = useState(null); const [sForm, setSForm] = useState(null);
-  const [cats, setCats] = useState({});   // draft for Tab 3: code -> { present:{cat:n}, absent:{cat:n} }
+  const [q, setQ] = useState(""); const [pg, setPg] = useState(1); const [pageSize, setPageSize] = useState(10);
+  const [cats, setCats] = useState({});
+  const [copy, setCopy] = useState({ from: new Date().getFullYear(), to: new Date().getFullYear() + 1, preview: null });
   const canManage = !!session && (session.role === "director" || canAnySite(session, "attendance", "manage"));
+
+  const blankH = () => ({ id: null, name: "", on_date: "", type_code: "", mult: { labour: "2", site_staff: "1", office_staff: "1" }, site: "all", note: "", is_active: true, notify: true });
+  const [hForm, setHForm] = useState(blankH);
+  const blankO = kind => ({ kind, person_id: "", on_date: iso(new Date()), mult: "2", reason: "" });
+  const [oForm, setOForm] = useState(blankO("worker"));
+  const [sForm, setSForm] = useState({ site: "all", on_date: "", type_code: "", name: "" });
 
   async function loadAll() {
     try {
-      const [s, t, h, r, p] = await Promise.all([getSites(), getTypesList(), getHolidaysBetween(`${year}-01-01`, `${year}-12-31`), getSundayRules(), getPeople()]);
-      setSites(Array.isArray(s) ? s : (s?.data || [])); setTypes(t); setHols(h); setSun(r); setPeople(p);
-      const d = {}; t.forEach(x => { d[x.code] = { present: { ...(x.default_multipliers_present || {}) }, absent: { ...(x.default_multipliers_absent || {}) } }; }); setCats(d);
+      const [s, t, h, r, p, ps] = await Promise.all([getSitesFull(), getTypesList(), getHolidaysBetween(`${year}-01-01`, `${year}-12-31`), getSundayRules(), getPeople(), getPayrollSettings()]);
+      const { data: otRows } = isDemo ? { data: [] } : await supabase.from("sites").select("id, ot_divisor").eq("is_active", true);
+      const otBy = {}; (otRows || []).forEach(x => { otBy[x.id] = x.ot_divisor; });
+      const full = (s || []).map(x => ({ ...x, ot_divisor: otBy[x.id] ?? null }));
+      setSites(full); setTypes(t); setHols(h); setSun(r); setPeople(p); setPay(ps);
+      const d = {}; full.forEach(x => { d[x.id] = { shift_start: (x.shift_start || "09:00").slice(0, 5), shift_end: (x.shift_end || "18:00").slice(0, 5), std: x.std_working_hours ?? 8, radius: x.geofence_radius_m ?? 200, lat: x.geofence_lat ?? "", lng: x.geofence_lng ?? "", ot: x.ot_divisor ?? "" }; }); setSiteDraft(d);
+      const c = {}; t.forEach(x => { c[x.code] = { present: { ...(x.default_multipliers_present || {}) }, absent: { ...(x.default_multipliers_absent || {}) } }; }); setCats(c);
     } catch (e) { setErr(e.message); setHols([]); }
   }
   useEffect(() => { const s = getSession(); if (!s) { window.location.replace("/login"); return; } setSession(s); }, []);
   useEffect(() => { loadAll(); }, [year]);   // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { getOverrides(ovFrom, ovTo).then(setOvs).catch(e => { setErr(e.message); setOvs([]); }); }, [ovFrom, ovTo]);
+  useEffect(() => { if (tab === "worker" || tab === "staff") getOverrides(ovFrom, ovTo).then(setOvs).catch(e => { setErr(e.message); setOvs([]); }); }, [tab, ovFrom, ovTo]);
 
   const typeByCode = useMemo(() => { const m = {}; types.forEach(t => { m[t.code] = t; }); return m; }, [types]);
   const siteName = id => sites.find(s => Number(s.id) === Number(id))?.name || ("Site " + id);
-  // effective multiplier for a holiday row × category: row override, else type default (present)
-  const effMult = (h, cat) => {
-    const cr = h.category_rules || {};
-    const v = cr[cat] ?? cr["*"];
-    if (v != null) return { v: typeof v === "number" ? v : v.present, own: true };
-    const t = typeByCode[h.type_code]; const m = t?.default_multipliers_present || {};
-    return { v: m[cat] ?? m["*"] ?? null, own: false };
-  };
+  const effMult = (h, cat) => { const cr = h.category_rules || {}; const v = cr[cat] ?? cr["*"]; if (v != null) return { v: typeof v === "number" ? v : v.present, own: true }; const t = typeByCode[h.type_code]; const m = t?.default_multipliers_present || {}; const dv = m[cat] ?? m["*"]; return { v: dv ?? (h.type_code ? null : 2 * (cat === "labour" ? 1 : 0.5)), own: false }; };
+  const defaultsFor = code => { const m = {}; CATS.forEach(([c]) => { const d = typeByCode[code]?.default_multipliers_present; m[c] = d ? String(d[c] ?? d["*"] ?? "") : (c === "labour" ? "2" : "1"); }); return m; };
 
-  // ---- Tab 1
-  function openHoliday(h, presetDate, presetSite) {
-    const type = h?.type_code || types[0]?.code || "paid_off";
-    const m = {}; CATS.forEach(([c]) => { m[c] = h ? (effMult(h, c).v ?? "") : (typeByCode[type]?.default_multipliers_present?.[c] ?? typeByCode[type]?.default_multipliers_present?.["*"] ?? "") ; });
-    setErr(""); setHForm({ id: h?.id || null, name: h?.name || "", on_date: h?.on_date || presetDate || iso(new Date()), type_code: type,
-      site: h ? ((h.site_ids || []).length ? String(h.site_ids[0]) : "all") : (presetSite || "all"), mult: m, notify: !h });
-  }
-  const onTypeChange = code => setHForm(f => { const m = {}; CATS.forEach(([c]) => { m[c] = typeByCode[code]?.default_multipliers_present?.[c] ?? typeByCode[code]?.default_multipliers_present?.["*"] ?? ""; }); return { ...f, type_code: code, mult: m }; });
+  // ---- holiday form
+  function editHol(h) { const m = {}; CATS.forEach(([c]) => { m[c] = String(effMult(h, c).v ?? ""); }); setErr(""); setHForm({ id: h.id, name: h.name, on_date: h.on_date, type_code: h.type_code || "", mult: m, site: (h.site_ids || []).length ? String(h.site_ids[0]) : "all", note: h.note || "", is_active: h.is_active !== false, notify: false }); window.scrollTo({ top: 0, behavior: "smooth" }); }
   async function saveHol() {
+    if (!hForm.name.trim() || !hForm.on_date) { setErr("Holiday name and date are required."); return; }
     setBusy(true); setErr("");
     const cr = {}; CATS.forEach(([c]) => { if (hForm.mult[c] !== "" && hForm.mult[c] != null) cr[c] = Number(hForm.mult[c]); });
     const site_ids = hForm.site === "all" ? [] : [Number(hForm.site)];
-    const r = await saveHoliday({ id: hForm.id, name: hForm.name, on_date: hForm.on_date, type_code: hForm.type_code, site_ids, applies_to: "both", category_rules: cr });
+    const r = await saveHoliday({ id: hForm.id, name: hForm.name, on_date: hForm.on_date, type_code: hForm.type_code || null, site_ids, applies_to: "both", note: hForm.note, category_rules: cr, is_active: hForm.is_active });
     if (!r.ok) { setBusy(false); setErr(r.error); return; }
     _resetHolidayCache();
-    if (hForm.notify) {   // bell + push to the staff of the affected sites (workers see the punch-screen banner)
-      const ids = await staffForSites(site_ids);
-      await notifyUsers({ userIds: ids, kind: "holiday", siteId: site_ids[0] || null, title: `Holiday: ${hForm.name} · ${dmy(hForm.on_date)}`,
-        body: `${typeLabel(typeByCode[hForm.type_code] || { code: hForm.type_code })} · ${hForm.site === "all" ? "All sites" : siteName(hForm.site)}`, link: "/calendar" });
-    }
-    setBusy(false); setHForm(null); setMsg("Holiday rule saved" + (hForm.notify ? " · site staff notified." : ".")); loadAll();
+    if (hForm.notify && hForm.is_active) { const ids = await staffForSites(site_ids); await notifyUsers({ userIds: ids, kind: "holiday", siteId: site_ids[0] || null, title: `Holiday: ${hForm.name} · ${dmy(hForm.on_date)}`, body: (hForm.type_code ? typeLabel(typeByCode[hForm.type_code] || { code: hForm.type_code }) : "Holiday") + " · " + (hForm.site === "all" ? "All sites" : siteName(hForm.site)), link: "/calendar" }); }
+    setBusy(false); setMsg(hForm.id ? "Holiday rule updated." : "Holiday rule saved" + (hForm.notify ? " · site staff notified." : ".")); setHForm(blankH()); loadAll();
   }
   async function delHol(h) { if (!window.confirm(`Delete "${h.name}" (${dmy(h.on_date)})?`)) return; const r = await deleteHoliday(h.id); if (!r.ok) { setErr(r.error); return; } _resetHolidayCache(); setMsg("Deleted."); loadAll(); }
+  const holRows = useMemo(() => (hols || []).filter(h => !q.trim() || (h.name + " " + h.on_date).toLowerCase().includes(q.trim().toLowerCase())), [hols, q]);
+  const pages = Math.max(1, Math.ceil(holRows.length / pageSize)); const pageRows = holRows.slice((pg - 1) * pageSize, pg * pageSize);
+  useEffect(() => { setPg(1); }, [q, pageSize, hols]);
 
-  // ---- Tab 2
+  // ---- sites (attendance / overtime)
+  const setSD = (id, k, v) => setSiteDraft(d => ({ ...d, [id]: { ...d[id], [k]: v } }));
+  async function saveSiteTimes(s) { setBusy(true); setErr(""); const d = siteDraft[s.id]; const r1 = await updateSiteTimings(s.id, d.shift_start, d.shift_end); if (!r1.ok) { setBusy(false); setErr(r1.error); return; } const r2 = await updateSiteGeofence(s.id, d.lat, d.lng, d.radius); if (!r2.ok) { setBusy(false); setErr(r2.error); return; } if (Number(d.std) !== Number(s.std_working_hours)) { const { error } = await supabase.from("sites").update({ std_working_hours: Number(d.std) || 8 }).eq("id", s.id); if (error) { setBusy(false); setErr(error.message); return; } } setBusy(false); setMsg(s.name + " saved."); loadAll(); }
+  async function saveSiteOt(s) { setBusy(true); setErr(""); const v = siteDraft[s.id].ot; const { error } = await supabase.from("sites").update({ ot_divisor: v === "" ? null : Number(v) }).eq("id", s.id); setBusy(false); if (error) { setErr(error.message); return; } setMsg(s.name + " OT divisor saved."); loadAll(); }
+  async function savePay(part) { setBusy(true); setErr(""); const r = await savePayrollSettings(part); setBusy(false); if (!r?.ok && r?.error) { setErr(r.error); return; } setMsg("Settings saved."); }
+
+  // ---- sunday
   async function saveSun(siteId, code) { setBusy(true); setErr(""); const r = await setSundayRule(siteId, code); setBusy(false); if (!r.ok) { setErr(r.error); return; } setMsg("Sunday rule saved."); setSun(await getSundayRules()); }
   const sundaysOf = y => { const out = []; for (let d = new Date(y, 0, 1); d.getFullYear() === y; d.setDate(d.getDate() + 1)) if (d.getDay() === 0) out.push(iso(d)); return out; };
   const specialSundays = (hols || []).filter(h => new Date(h.on_date + "T00:00:00").getDay() === 0);
+  async function saveSpecialSunday() { if (!sForm.on_date) { setErr("Pick a Sunday."); return; } setBusy(true); setErr(""); const r = await saveHoliday({ name: sForm.name || ((sForm.type_code ? typeLabel(typeByCode[sForm.type_code] || { code: sForm.type_code }) : "Special") + " Sunday"), on_date: sForm.on_date, type_code: sForm.type_code || null, site_ids: sForm.site === "all" ? [] : [Number(sForm.site)], applies_to: "both", category_rules: null, is_active: true }); setBusy(false); if (!r.ok) { setErr(r.error); return; } _resetHolidayCache(); setMsg("Sunday marked."); setSForm({ site: "all", on_date: "", type_code: "", name: "" }); loadAll(); }
 
-  // ---- Tab 3
-  async function saveCats() {
-    setBusy(true); setErr("");
-    for (const t of types) {
-      const d = cats[t.code]; if (!d) continue;
-      const pr = {}; CATS.forEach(([c]) => { if (d.present[c] !== "" && d.present[c] != null) pr[c] = Number(d.present[c]); });
-      const ab = {}; CATS.forEach(([c]) => { if (d.absent[c] !== "" && d.absent[c] != null) ab[c] = Number(d.absent[c]); });
-      const r = await setTypeDefaults(t.code, pr, ab); if (!r.ok) { setBusy(false); setErr(r.error); return; }
-    }
-    _resetHolidayCache(); setBusy(false); setMsg("Category defaults saved."); loadAll();
-  }
+  // ---- festival (category defaults)
   const setCat = (code, key, cat, v) => setCats(c => ({ ...c, [code]: { ...c[code], [key]: { ...c[code][key], [cat]: v.replace(/[^0-9.]/g, "") } } }));
+  async function saveCats() { setBusy(true); setErr(""); for (const t of types) { const d = cats[t.code]; if (!d) continue; const pr = {}; CATS.forEach(([c]) => { if (d.present[c] !== "" && d.present[c] != null) pr[c] = Number(d.present[c]); }); const ab = {}; CATS.forEach(([c]) => { if (d.absent[c] !== "" && d.absent[c] != null) ab[c] = Number(d.absent[c]); }); const r = await setTypeDefaults(t.code, pr, ab); if (!r.ok) { setBusy(false); setErr(r.error); return; } } _resetHolidayCache(); setBusy(false); setMsg("Category defaults saved."); loadAll(); }
 
-  // ---- Tab 4
-  async function saveOv() {
-    setBusy(true); setErr("");
-    const r = oForm.kind === "worker" ? await setWorkerOverride(oForm.person_id, oForm.on_date, oForm.mult, oForm.reason) : await setStaffOverride(oForm.person_id, oForm.on_date, oForm.mult, oForm.reason);
-    setBusy(false); if (!r.ok) { setErr(r.error); return; }
-    setOForm(null); setMsg("Override saved."); getOverrides(ovFrom, ovTo).then(setOvs);
-  }
-  async function delOv(o) {
-    if (!window.confirm(`Remove the ${fmtX(o.multiplier)} override for ${o.person_name} on ${dmy(o.on_date)}? The normal rule applies again.`)) return;
-    const r = o.kind === "worker" ? await setWorkerOverride(o.person_id, o.on_date, null, null) : await setStaffOverride(o.person_id, o.on_date, null, null);
-    if (!r.ok) { setErr(r.error); return; } setMsg("Override removed."); getOverrides(ovFrom, ovTo).then(setOvs);
-  }
-  const originalRule = o => { const h = (hols || []).find(x => x.on_date === o.on_date && (!(x.site_ids || []).length || (x.site_ids || []).map(Number).includes(Number(o.site_id)))); if (h) return h.name + " · " + typeLabel(typeByCode[h.type_code] || { code: h.type_code || "classic" }); const r = sun[String(o.site_id)]; return new Date(o.on_date + "T00:00:00").getDay() === 0 ? "Sunday · " + SUN_CODES.find(s => s[0] === ruleCode(r))[1] : "Working day"; };
+  // ---- overrides
+  async function saveOv() { if (!oForm.person_id || !oForm.on_date || !oForm.mult) { setErr("Pick a person, date and multiplier."); return; } setBusy(true); setErr(""); const r = oForm.kind === "worker" ? await setWorkerOverride(oForm.person_id, oForm.on_date, oForm.mult, oForm.reason) : await setStaffOverride(oForm.person_id, oForm.on_date, oForm.mult, oForm.reason); setBusy(false); if (!r.ok) { setErr(r.error); return; } setMsg("Override saved."); setOForm(blankO(oForm.kind)); getOverrides(ovFrom, ovTo).then(setOvs); }
+  async function delOv(o) { if (!window.confirm(`Remove the ${fmtX(o.multiplier)} override for ${o.person_name} on ${dmy(o.on_date)}?`)) return; const r = o.kind === "worker" ? await setWorkerOverride(o.person_id, o.on_date, null, null) : await setStaffOverride(o.person_id, o.on_date, null, null); if (!r.ok) { setErr(r.error); return; } setMsg("Override removed."); getOverrides(ovFrom, ovTo).then(setOvs); }
+  const originalRule = o => { const h = (hols || []).find(x => x.on_date === o.on_date && (!(x.site_ids || []).length || (x.site_ids || []).map(Number).includes(Number(o.site_id)))); if (h) return h.name; const r = sun[String(o.site_id)]; return new Date(o.on_date + "T00:00:00").getDay() === 0 ? "Sunday · " + SUN_CODES.find(s => s[0] === ruleCode(r))[1] : "Working day"; };
 
-  const inp = { width: "100%", boxSizing: "border-box" };
-  // plain render helper (NOT a component — a component defined here would remount on every keystroke)
-  const renderModal = ({ title, children, onSave, saveLabel = "Save", onClose }) => (
-    <div onClick={() => !busy && onClose()} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 12 }}>
-      <div onClick={e => e.stopPropagation()} className="panel" style={{ width: "min(620px,100%)", margin: 0, maxHeight: "92vh", overflowY: "auto" }}>
-        <h2 style={{ marginTop: 0 }}>{title}</h2>{children}
-        {err && <div className="error" style={{ marginTop: 8 }}>{err}</div>}
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}><button onClick={onClose} disabled={busy}>Cancel</button><button className="primary" onClick={onSave} disabled={busy}>{busy ? "Saving…" : saveLabel}</button></div>
+  // ---- shared pieces
+  const th = { background: "#f8fafc", fontWeight: 600, fontSize: 12.5, color: "#374151", padding: "10px 10px", textAlign: "left", borderBottom: "1px solid #e5e7eb" };
+  const td = { padding: "12px 10px", borderBottom: "1px solid #eef0f4", fontSize: 13, verticalAlign: "top" };
+  const renderOvTable = kind => (
+    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <thead><tr>{["Name", "Date", "Site", "Original rule", "Override", "Reason", "Set by", "Actions"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+      <tbody>{ovs === null ? <tr><td style={td} colSpan={8} className="muted">Loading…</td></tr> : ovs.filter(o => o.kind === kind).length === 0 ? <tr><td style={td} colSpan={8} className="muted">No overrides in this range.</td></tr>
+        : ovs.filter(o => o.kind === kind).map((o, i) => <tr key={i}><td style={{ ...td, fontWeight: 700 }}>{o.person_name}</td><td style={td}>{dmy(o.on_date)}</td><td style={td}>{o.site_name || "—"}</td><td style={td}>{originalRule(o)}</td><td style={{ ...td, fontWeight: 700 }}>{fmtX(o.multiplier)}</td><td style={td}>{o.reason || "—"}</td><td style={td}>{o.set_by_name || "—"}</td>
+          <td style={{ ...td, whiteSpace: "nowrap" }}>{canManage && <><button style={{ ...btnG, padding: "6px 10px", fontSize: 12, marginRight: 6 }} onClick={() => { setErr(""); setOForm({ kind: o.kind, person_id: String(o.person_id), on_date: o.on_date, mult: String(o.multiplier), reason: o.reason || "", lock: true }); }}>✎ Edit</button><button style={{ ...btnG, padding: "6px 10px", fontSize: 12, color: "#dc2626", borderColor: "#fecaca" }} onClick={() => delOv(o)}>🗑 Delete</button></>}</td></tr>)}</tbody>
+    </table>
+  );
+  const renderOvForm = kind => (
+    <div style={card}>
+      <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>{oForm.lock ? "Edit Override" : "Add Override"}</div>
+      <label style={lab}>{kind === "worker" ? "Worker" : "Staff member"}{req}</label>
+      <select style={{ ...inp, marginBottom: 12 }} disabled={oForm.lock} value={oForm.person_id} onChange={e => setOForm(f => ({ ...f, kind, person_id: e.target.value }))}><option value="">— select —</option>{(kind === "worker" ? people.workers : people.staff).map(p => <option key={p.id} value={p.id}>{p.full_name}{p.sites?.name ? " · " + p.sites.name : p.site_id ? " · " + siteName(p.site_id) : ""}</option>)}</select>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div><label style={lab}>Date{req}</label><input type="date" style={inp} disabled={oForm.lock} value={oForm.on_date} onChange={e => setOForm(f => ({ ...f, on_date: e.target.value }))} /></div>
+        <div><label style={lab}>Multiplier{req}</label><select style={inp} value={MULTS.includes(oForm.mult) ? oForm.mult : "custom"} onChange={e => setOForm(f => ({ ...f, mult: e.target.value === "custom" ? "" : e.target.value }))}>{MULTS.map(m => <option key={m} value={m}>{m}x</option>)}<option value="custom">Custom…</option></select>{!MULTS.includes(oForm.mult) && <input style={{ ...inp, marginTop: 6 }} inputMode="decimal" placeholder="e.g. 1.25" value={oForm.mult} onChange={e => setOForm(f => ({ ...f, mult: e.target.value.replace(/[^0-9.]/g, "") }))} />}</div>
       </div>
+      <label style={{ ...lab, marginTop: 12 }}>Reason</label><input style={inp} value={oForm.reason} placeholder="e.g. came in on Diwali" onChange={e => setOForm(f => ({ ...f, reason: e.target.value }))} />
+      {kind === "worker" && <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>Needs an attendance row on that date — mark attendance first.</div>}
+      <div style={{ display: "flex", gap: 10, marginTop: 16 }}><button style={{ ...btnG, flex: 1 }} onClick={() => setOForm(blankO(kind))}>↺ Reset</button><button style={{ ...btnB, flex: 2 }} disabled={busy || !canManage} onClick={saveOv}>💾 {oForm.lock ? "Update Override" : "Save Override"}</button></div>
     </div>
   );
 
+  const title = TABS.find(t => t[0] === tab)[2];
   return (
-      <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
-          <div className="muted" style={{ fontSize: 12.5 }}>Single source of truth for holiday, Sunday, category and override pay rules — payroll and the calendar read these rows.</div>
-          <select value={year} onChange={e => setYear(Number(e.target.value))}>{[year - 1, year, year + 1].map(y => <option key={y} value={y}>{y}</option>)}</select>
-        </div>
-        {!canManage && session && <div className="note amber" style={{ marginBottom: 10 }}>View only — editing needs Director or the Attendance manage right.</div>}
-        {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
-        {err && !hForm && !oForm && !sForm && <div className="error" style={{ marginBottom: 10 }}>{err}</div>}
-
-
-        <h2 style={{ margin: "18px 0 2px" }}>Holiday Rules</h2>
-        <div className="muted" style={{ fontSize: 12.5, marginBottom: 8 }}>{DESC.holiday}</div>
-        {(
-          <div className="panel">
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>{canManage && <button className="primary" onClick={() => openHoliday(null)}>＋ Add Holiday Rule</button>}</div>
-            {hols === null ? <div className="muted">Loading…</div> : hols.length === 0 ? <div className="muted">No holiday rules in {year}.</div> : (
-              <div className="dt-scroll"><table className="dt-compact" style={{ width: "100%" }}>
-                <thead><tr><th>Holiday Name</th><th>Date</th><th>Rule Type</th><th>Site</th><th className="num">Workers</th><th className="num">Site Staff</th><th className="num">Office Staff</th><th>Actions</th></tr></thead>
-                <tbody>{hols.map(h => (
-                  <tr key={h.id}>
-                    <td style={{ fontWeight: 700 }}>{h.name}</td><td>{dmy(h.on_date)}</td>
-                    <td>{typeLabel(typeByCode[h.type_code] || { code: h.type_code || "Classic (2×/1×)" })}</td>
-                    <td>{(h.site_ids || []).length ? h.site_ids.map(siteName).join(", ") : "All Sites"}</td>
-                    {CATS.map(([c]) => { const e = effMult(h, c); return <td key={c} className="num" style={{ color: e.own ? "inherit" : "var(--muted)" }} title={e.own ? "Set on this holiday" : "Default from Category Pay Rules"}>{e.v == null ? "—" : fmtX(e.v)}</td>; })}
-                    <td style={{ whiteSpace: "nowrap" }}>{canManage && <><button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => openHoliday(h)}>✎ Edit</button><button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => delHol(h)}>Delete</button></>}</td>
-                  </tr>))}</tbody>
-              </table></div>
-            )}
-            <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>Grey multipliers are inherited from Category Pay Rules; black ones are set on that holiday.</div>
-          </div>
-        )}
-
-        <h2 style={{ margin: "18px 0 2px" }}>Sunday Rules</h2>
-        <div className="muted" style={{ fontSize: 12.5, marginBottom: 8 }}>{DESC.sunday}</div>
-        {(
-          <div className="panel">
-            <table className="dt-compact" style={{ width: "100%", marginBottom: 14 }}>
-              <thead><tr><th>Site</th><th>Sunday policy</th><th></th></tr></thead>
-              <tbody>{sites.map(s => { const code = ruleCode(sun[String(s.id)]); return (
-                <tr key={s.id}><td style={{ fontWeight: 700 }}>{s.name}</td>
-                  <td><span className={"badge " + (code === "weekly_off" ? "warn" : code === "special_pay" ? "p" : "gray")}>{SUN_CODES.find(x => x[0] === code)[1]}</span></td>
-                  <td>{canManage && <select value={code} disabled={busy} onChange={e => saveSun(s.id, e.target.value)}>{SUN_CODES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>}</td>
-                </tr>); })}</tbody>
-            </table>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <div><b>Special Sundays {year}</b> <span className="muted" style={{ fontSize: 12 }}>— single Sundays that differ from the site's default</span></div>
-              {canManage && <button className="primary" onClick={() => { setErr(""); setSForm({ site: "all", on_date: sundaysOf(year).find(d => d >= iso(new Date())) || sundaysOf(year)[0], type_code: types[0]?.code || "paid_off", name: "" }); }}>＋ Mark a Sunday</button>}
-            </div>
-            {specialSundays.length === 0 ? <div className="muted">None marked.</div> : (
-              <table className="dt-compact" style={{ width: "100%" }}><thead><tr><th>Sunday</th><th>Name</th><th>Rule Type</th><th>Site</th><th></th></tr></thead>
-                <tbody>{specialSundays.map(h => <tr key={h.id}><td>{dmy(h.on_date)}</td><td>{h.name}</td><td>{typeLabel(typeByCode[h.type_code] || { code: h.type_code || "Classic" })}</td><td>{(h.site_ids || []).length ? h.site_ids.map(siteName).join(", ") : "All Sites"}</td><td>{canManage && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => delHol(h)}>Delete</button>}</td></tr>)}</tbody></table>
-            )}
-          </div>
-        )}
-
-        <h2 style={{ margin: "18px 0 2px" }}>Category Pay Rules</h2>
-        <div className="muted" style={{ fontSize: 12.5, marginBottom: 8 }}>{DESC.category}</div>
-        {(
-          <div className="panel">
-            {types.length === 0 ? <div className="muted">No rule types found — run pipeskool_holiday_rules_v2.sql (update 386).</div> : (
-              <table className="dt-compact" style={{ width: "100%" }}>
-                <thead><tr><th>Rule type</th>{CATS.map(([c, l]) => <th key={c} className="num">{l}<div className="muted" style={{ fontSize: 10, fontWeight: 400 }}>worked · absent</div></th>)}</tr></thead>
-                <tbody>{types.map(t => (
-                  <tr key={t.code}><td style={{ fontWeight: 700 }}>{typeLabel(t)}<div className="muted" style={{ fontSize: 10.5 }}>{t.code}{t.counts_as_paid_day === false ? " · not a paid day" : ""}</div></td>
-                    {CATS.map(([c]) => <td key={c} className="num" style={{ whiteSpace: "nowrap" }}>
-                      <input disabled={!canManage} style={{ width: 54, textAlign: "right" }} value={cats[t.code]?.present?.[c] ?? ""} placeholder={cats[t.code]?.present?.["*"] ?? "—"} onChange={e => setCat(t.code, "present", c, e.target.value)} /> ×
-                      <span className="muted"> · </span>
-                      <input disabled={!canManage} style={{ width: 54, textAlign: "right" }} value={cats[t.code]?.absent?.[c] ?? ""} placeholder={cats[t.code]?.absent?.["*"] ?? "—"} onChange={e => setCat(t.code, "absent", c, e.target.value)} /> ×
-                    </td>)}
-                  </tr>))}</tbody>
-              </table>
-            )}
-            <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>"worked" = multiplier when the person attends that day; "absent" = what a no-show on the holiday is paid (1 = paid holiday, 0 = unpaid). Blank falls back to the type's * default.</div>
-            {canManage && types.length > 0 && <div style={{ textAlign: "right", marginTop: 10 }}><button className="primary" onClick={saveCats} disabled={busy}>{busy ? "Saving…" : "Save defaults"}</button></div>}
-          </div>
-        )}
-
-        <h2 style={{ margin: "18px 0 2px" }}>Worker Overrides</h2>
-        <div className="muted" style={{ fontSize: 12.5, marginBottom: 8 }}>{DESC.override}</div>
-        {(
-          <div className="panel">
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
-              <span className="muted" style={{ fontSize: 12 }}>From</span><input type="date" value={ovFrom} onChange={e => setOvFrom(e.target.value)} />
-              <span className="muted" style={{ fontSize: 12 }}>to</span><input type="date" value={ovTo} onChange={e => setOvTo(e.target.value)} />
-              <div style={{ marginLeft: "auto" }}>{canManage && <button className="primary" onClick={() => { setErr(""); setOForm({ kind: "worker", person_id: "", on_date: iso(new Date()), mult: "2", reason: "" }); }}>＋ Add Override</button>}</div>
-            </div>
-            {ovs === null ? <div className="muted">Loading…</div> : ovs.length === 0 ? <div className="muted">No overrides in this range.</div> : (
-              <div className="dt-scroll"><table className="dt-compact" style={{ width: "100%" }}>
-                <thead><tr><th>Person</th><th>Date</th><th>Site</th><th>Original rule</th><th className="num">Override</th><th>Reason</th><th>Set by</th><th>Actions</th></tr></thead>
-                <tbody>{ovs.map((o, i) => (
-                  <tr key={i}><td style={{ fontWeight: 700 }}>{o.person_name}<div className="muted" style={{ fontSize: 10.5 }}>{o.kind === "worker" ? "Worker" : "Staff"}</div></td><td>{dmy(o.on_date)}</td><td>{o.site_name || "—"}</td><td style={{ fontSize: 12 }}>{originalRule(o)}</td>
-                    <td className="num" style={{ fontWeight: 700 }}>{fmtX(o.multiplier)}</td><td style={{ fontSize: 12 }}>{o.reason || "—"}</td><td style={{ fontSize: 12 }}>{o.set_by_name || <span className="muted">—</span>}{o.set_at && <div className="muted" style={{ fontSize: 10.5 }}>{dmy(String(o.set_at).slice(0, 10))}</div>}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>{canManage && <><button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => { setErr(""); setOForm({ kind: o.kind, person_id: String(o.person_id), on_date: o.on_date, mult: String(o.multiplier), reason: o.reason || "", lock: true }); }}>✎ Edit</button><button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => delOv(o)}>Delete</button></>}</td>
-                  </tr>))}</tbody>
-              </table></div>
-            )}
-          </div>
-        )}
-
-        {hForm && (
-          renderModal({ title: hForm.id ? "Edit holiday rule" : "Add holiday rule", onSave: saveHol, onClose: () => setHForm(null), children: (<>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 10 }}>
-              <div style={{ gridColumn: "1/-1" }}><label className="muted">Holiday name *</label><input style={inp} value={hForm.name} onChange={e => setHForm(f => ({ ...f, name: e.target.value }))} autoFocus /></div>
-              <div><label className="muted">Date *</label><input type="date" style={inp} value={hForm.on_date} onChange={e => setHForm(f => ({ ...f, on_date: e.target.value }))} /></div>
-              <div><label className="muted">Rule type</label><select style={inp} value={hForm.type_code} onChange={e => onTypeChange(e.target.value)}>{types.map(t => <option key={t.code} value={t.code}>{typeLabel(t)}</option>)}</select></div>
-              <div><label className="muted">Site</label><select style={inp} value={hForm.site} onChange={e => setHForm(f => ({ ...f, site: e.target.value }))}><option value="all">All Sites</option>{sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-            </div>
-            <div className="muted" style={{ fontSize: 11.5, margin: "12px 0 4px" }}>Multiplier when worked, per category (pre-filled from Category Pay Rules — change to override for this holiday)</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
-              {CATS.map(([c, l]) => <div key={c}><label className="muted">{l}</label><input style={inp} inputMode="decimal" value={hForm.mult[c] ?? ""} onChange={e => setHForm(f => ({ ...f, mult: { ...f.mult, [c]: e.target.value.replace(/[^0-9.]/g, "") } }))} /></div>)}
-            </div>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}><input type="checkbox" checked={hForm.notify} onChange={e => setHForm(f => ({ ...f, notify: e.target.checked }))} /> Notify site staff (bell + push). Workers see the punch-screen banner automatically.</label>
-          </>) })
-        )}
-        {sForm && (
-          renderModal({ title: "Mark a Sunday", saveLabel: "Save", onClose: () => setSForm(null), onSave: async () => {
-            setBusy(true); setErr("");
-            const r = await saveHoliday({ name: sForm.name || (typeLabel(typeByCode[sForm.type_code] || { code: sForm.type_code }) + " Sunday"), on_date: sForm.on_date, type_code: sForm.type_code, site_ids: sForm.site === "all" ? [] : [Number(sForm.site)], applies_to: "both", category_rules: null });
-            setBusy(false); if (!r.ok) { setErr(r.error); return; } _resetHolidayCache(); setSForm(null); setMsg("Sunday marked."); loadAll(); }, children: (<>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 10 }}>
-              <div><label className="muted">Sunday</label><select style={inp} value={sForm.on_date} onChange={e => setSForm(f => ({ ...f, on_date: e.target.value }))}>{sundaysOf(year).map(d => <option key={d} value={d}>{dmy(d)}</option>)}</select></div>
-              <div><label className="muted">Treat as</label><select style={inp} value={sForm.type_code} onChange={e => setSForm(f => ({ ...f, type_code: e.target.value }))}>{types.map(t => <option key={t.code} value={t.code}>{typeLabel(t)}</option>)}</select></div>
-              <div><label className="muted">Site</label><select style={inp} value={sForm.site} onChange={e => setSForm(f => ({ ...f, site: e.target.value }))}><option value="all">All Sites</option>{sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-              <div><label className="muted">Label (optional)</label><input style={inp} value={sForm.name} onChange={e => setSForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Paid Sunday — Navratri" /></div>
-            </div>
-          </>) })
-        )}
-        {oForm && (
-          renderModal({ title: oForm.lock ? "Edit override" : "Add override", onSave: saveOv, onClose: () => setOForm(null), children: (<>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 10 }}>
-              <div><label className="muted">Who</label><select style={inp} disabled={oForm.lock} value={oForm.kind} onChange={e => setOForm(f => ({ ...f, kind: e.target.value, person_id: "" }))}><option value="worker">Worker / labour</option><option value="staff">Staff</option></select></div>
-              <div><label className="muted">Person</label><select style={inp} disabled={oForm.lock} value={oForm.person_id} onChange={e => setOForm(f => ({ ...f, person_id: e.target.value }))}><option value="">— select —</option>
-                {(oForm.kind === "worker" ? people.workers : people.staff).map(p => <option key={p.id} value={p.id}>{p.full_name}{p.sites?.name ? " · " + p.sites.name : p.site_id ? " · " + siteName(p.site_id) : ""}</option>)}</select></div>
-              <div><label className="muted">Date</label><input type="date" style={inp} disabled={oForm.lock} value={oForm.on_date} onChange={e => setOForm(f => ({ ...f, on_date: e.target.value }))} /></div>
-              <div><label className="muted">Multiplier</label><div style={{ display: "flex", gap: 6 }}>{["1", "1.5", "2"].map(v => <button key={v} type="button" className={oForm.mult === v ? "primary" : ""} onClick={() => setOForm(f => ({ ...f, mult: v }))}>{v}×</button>)}<input style={{ width: 70 }} inputMode="decimal" value={oForm.mult} onChange={e => setOForm(f => ({ ...f, mult: e.target.value.replace(/[^0-9.]/g, "") }))} /></div></div>
-              <div style={{ gridColumn: "1/-1" }}><label className="muted">Reason</label><input style={inp} value={oForm.reason} onChange={e => setOForm(f => ({ ...f, reason: e.target.value }))} placeholder="e.g. came in on Diwali" /></div>
-            </div>
-            <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Worker overrides need an attendance row on that date (mark attendance first). Staff overrides apply through the salary sheet.</div>
-          </>) })
-        )}
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
+        <div className="muted" style={{ fontSize: 13 }}>Single source of truth for holiday, Sunday, category and override pay rules — payroll and the calendar read these rows.</div>
+        <select value={year} onChange={e => setYear(Number(e.target.value))}>{[year - 1, year, year + 1].map(y => <option key={y} value={y}>{y}</option>)}</select>
       </div>
+      <h1 style={{ margin: "10px 0 2px" }}>{title}</h1>
+      <div className="muted" style={{ fontSize: 13, marginBottom: 12 }}>{INFO[tab].split(". ")[0]}.</div>
+
+      <div style={{ display: "flex", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden", background: "#fff", marginBottom: 14 }}>
+        {TABS.map(([k, ic, l]) => <button key={k} onClick={() => { setTab(k); setErr(""); setMsg(""); }} style={{ flex: 1, minWidth: 120, border: "none", borderRight: "1px solid #e5e7eb", padding: "14px 8px", background: tab === k ? "#1d4ed8" : "#fff", color: tab === k ? "#fff" : "#111827", fontWeight: 600, fontSize: 13.5, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><span>{ic}</span>{l}</button>)}
+      </div>
+      {!canManage && session && <div className="note amber" style={{ marginBottom: 10 }}>View only — editing needs Director or the Attendance manage right.</div>}
+      {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
+      {err && <div className="error" style={{ marginBottom: 10 }}>{err}</div>}
+
+      {tab === "holiday" && (<>
+        <InfoStrip text={INFO.holiday} action={canManage && <button style={btnO} onClick={() => { setHForm(blankH()); setErr(""); }}>＋ Add Holiday Rule</button>} />
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(300px, 380px) 1fr", gap: 16, alignItems: "start" }}>
+          <div style={card}>
+            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>{hForm.id ? "Edit Holiday Rule" : "Add / Edit Holiday Rule"}</div>
+            <label style={lab}>Holiday Name{req}</label><input style={{ ...inp, marginBottom: 12 }} placeholder="e.g. Diwali" value={hForm.name} onChange={e => setHForm(f => ({ ...f, name: e.target.value }))} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div><label style={lab}>Date{req}</label><input type="date" style={inp} value={hForm.on_date} onChange={e => setHForm(f => ({ ...f, on_date: e.target.value }))} /></div>
+              <div><label style={lab}>Holiday Type{req}</label><select style={inp} value={hForm.type_code} onChange={e => setHForm(f => ({ ...f, type_code: e.target.value, mult: e.target.value ? defaultsFor(e.target.value) : f.mult }))}><option value="">Classic (2×/1×)</option>{types.map(t => <option key={t.code} value={t.code}>{typeLabel(t)}</option>)}</select></div>
+              <div><label style={lab}>Pay Multiplier (Workers){req}</label><select style={inp} value={hForm.mult.labour} onChange={e => setHForm(f => ({ ...f, mult: { ...f.mult, labour: e.target.value } }))}>{MULTS.map(m => <option key={m} value={m}>{m}x</option>)}</select></div>
+              <div><label style={lab}>Pay Multiplier (Site Staff)</label><select style={inp} value={hForm.mult.site_staff} onChange={e => setHForm(f => ({ ...f, mult: { ...f.mult, site_staff: e.target.value } }))}>{MULTS.map(m => <option key={m} value={m}>{m}x</option>)}</select></div>
+            </div>
+            <label style={lab}>Pay Multiplier (Office Staff)</label><select style={{ ...inp, marginBottom: 12 }} value={hForm.mult.office_staff} onChange={e => setHForm(f => ({ ...f, mult: { ...f.mult, office_staff: e.target.value } }))}>{MULTS.map(m => <option key={m} value={m}>{m}x</option>)}</select>
+            <label style={lab}>Applicable Sites{req}</label><select style={{ ...inp, marginBottom: 12 }} value={hForm.site} onChange={e => setHForm(f => ({ ...f, site: e.target.value }))}><option value="all">All Sites</option>{sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+            <label style={lab}>Description</label><textarea style={{ ...inp, minHeight: 56, marginBottom: 12 }} placeholder="Add description (optional)" value={hForm.note} onChange={e => setHForm(f => ({ ...f, note: e.target.value }))} />
+            <div style={{ marginBottom: 8 }}><Toggle on={hForm.is_active} set={v => setHForm(f => ({ ...f, is_active: v }))} label="Active" hint="Show this holiday in calendar" /></div>
+            <div style={{ marginBottom: 14 }}><Toggle on={hForm.notify} set={v => setHForm(f => ({ ...f, notify: v }))} label="Notify site staff" hint="Bell + push on save; workers see the punch-screen banner" /></div>
+            <div style={{ display: "flex", gap: 10 }}><button style={{ ...btnG, flex: 1 }} onClick={() => { setHForm(blankH()); setErr(""); }}>↺ Reset</button><button style={{ ...btnB, flex: 2 }} disabled={busy || !canManage} onClick={saveHol}>💾 {hForm.id ? "Update Holiday Rule" : "Save Holiday Rule"}</button></div>
+          </div>
+          <TableCard search={q} onSearch={setQ}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr>{["Holiday Name", "Date", "Rule Type", "Workers", "Site Staff", "Office Staff", "Sites", "Status", "Actions"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+              <tbody>{hols === null ? <tr><td style={td} colSpan={9} className="muted">Loading…</td></tr> : pageRows.length === 0 ? <tr><td style={td} colSpan={9} className="muted">No holiday rules{q ? " match" : " in " + year}.</td></tr>
+                : pageRows.map(h => (<tr key={h.id}>
+                  <td style={{ ...td, fontWeight: 700 }}>{h.name}</td><td style={td}>{dmy(h.on_date)}</td><td style={td}>{h.type_code ? typeLabel(typeByCode[h.type_code] || { code: h.type_code }) : "Classic (2×/1×)"}</td>
+                  {CATS.map(([c]) => { const e = effMult(h, c); return <td key={c} style={{ ...td, color: e.own ? "#111827" : "#6b7280" }}>{fmtX(e.v)}</td>; })}
+                  <td style={td}>{(h.site_ids || []).length ? h.site_ids.map(siteName).join(", ") : "All Sites"}</td>
+                  <td style={td}><span style={h.is_active === false ? pillOff : pillOk}>{h.is_active === false ? "Inactive" : "Active"}</span></td>
+                  <td style={{ ...td, whiteSpace: "nowrap" }}>{canManage && <><button style={{ ...btnG, padding: "6px 10px", fontSize: 12, marginRight: 6 }} onClick={() => editHol(h)}>✎ Edit</button><button style={{ ...btnG, padding: "6px 10px", fontSize: 12, color: "#dc2626", borderColor: "#fecaca" }} onClick={() => delHol(h)}>🗑 Delete</button></>}</td>
+                </tr>))}</tbody>
+            </table>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+              <div className="muted" style={{ fontSize: 12 }}>Grey multipliers are inherited from Category Pay Rules; black ones are set on that holiday.</div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <button style={{ ...btnG, padding: "6px 10px" }} disabled={pg <= 1} onClick={() => setPg(p => p - 1)}>‹</button>
+                {Array.from({ length: pages }, (_, i) => i + 1).slice(Math.max(0, pg - 3), Math.max(0, pg - 3) + 5).map(n => <button key={n} onClick={() => setPg(n)} style={{ ...btnG, padding: "6px 10px", borderColor: n === pg ? "#1d4ed8" : "#d1d5db", color: n === pg ? "#1d4ed8" : "#111827" }}>{n}</button>)}
+                <button style={{ ...btnG, padding: "6px 10px" }} disabled={pg >= pages} onClick={() => setPg(p => p + 1)}>›</button>
+                <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))}>{[10, 25, 50].map(n => <option key={n} value={n}>{n} / page</option>)}</select>
+              </div>
+            </div>
+          </TableCard>
+        </div>
+      </>)}
+
+      {tab === "attendance" && (<>
+        <InfoStrip text={INFO.attendance} />
+        <TableCard>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr>{["Site", "Shift start", "Shift end", "Std hours", "Geofence radius (m)", "Latitude", "Longitude", "Actions"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <tbody>{sites.map(s => { const d = siteDraft[s.id] || {}; return (<tr key={s.id}>
+              <td style={{ ...td, fontWeight: 700 }}>{s.name}</td>
+              <td style={td}><input type="time" disabled={!canManage} value={d.shift_start || ""} onChange={e => setSD(s.id, "shift_start", e.target.value)} /></td>
+              <td style={td}><input type="time" disabled={!canManage} value={d.shift_end || ""} onChange={e => setSD(s.id, "shift_end", e.target.value)} /></td>
+              <td style={td}><input style={{ width: 60 }} disabled={!canManage} value={d.std ?? ""} onChange={e => setSD(s.id, "std", e.target.value)} /></td>
+              <td style={td}><input style={{ width: 80 }} disabled={!canManage} value={d.radius ?? ""} onChange={e => setSD(s.id, "radius", e.target.value)} /></td>
+              <td style={td}><input style={{ width: 110 }} disabled={!canManage} value={d.lat ?? ""} onChange={e => setSD(s.id, "lat", e.target.value)} /></td>
+              <td style={td}><input style={{ width: 110 }} disabled={!canManage} value={d.lng ?? ""} onChange={e => setSD(s.id, "lng", e.target.value)} /></td>
+              <td style={td}>{canManage && <button style={{ ...btnB, padding: "6px 12px", fontSize: 12 }} disabled={busy} onClick={() => saveSiteTimes(s)}>💾 Save</button>}</td>
+            </tr>); })}</tbody>
+          </table>
+          <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>Same fields as Site Master. Shift end also decides where a missing punch-out is closed at midnight.</div>
+        </TableCard>
+      </>)}
+
+      {tab === "overtime" && (<>
+        <InfoStrip text={INFO.overtime} />
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(300px, 380px) 1fr", gap: 16, alignItems: "start" }}>
+          <div style={card}>
+            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>Company OT rule</div>
+            <label style={lab}>OT divisor (company default){req}</label>
+            <input style={{ ...inp, marginBottom: 6 }} disabled={!canManage} value={pay?.ot_divisor ?? ""} onChange={e => setPay(p => ({ ...p, ot_divisor: e.target.value.replace(/[^0-9.]/g, "") }))} />
+            <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>OT rate per hour = daily rate ÷ divisor. Example: ₹800 ÷ 8 = ₹100/h.</div>
+            <div style={{ background: "#f8fafc", borderRadius: 8, padding: 12, fontSize: 12.5, lineHeight: 1.6 }}>
+              <b>Fixed rules (not editable here)</b><br />• Labour OT starts only after the site's shift end<br />• ≤1 h extra → no OT; round up only when extra minutes exceed 30<br />• Holiday OT stays at the normal OT rate<br />• OT approval is always manual (Verify &amp; +OT on the muster)
+            </div>
+            {canManage && <button style={{ ...btnB, width: "100%", marginTop: 14 }} disabled={busy} onClick={() => savePay({ ot_divisor: Number(pay.ot_divisor) || 8 })}>💾 Save company rule</button>}
+          </div>
+          <TableCard>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr>{["Site", "Shift end (OT starts after)", "Site OT divisor (blank = company)", "Effective", "Actions"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+              <tbody>{sites.map(s => { const d = siteDraft[s.id] || {}; return (<tr key={s.id}>
+                <td style={{ ...td, fontWeight: 700 }}>{s.name}</td><td style={td}>{(s.shift_end || "18:00").slice(0, 5)}</td>
+                <td style={td}><input style={{ width: 80 }} disabled={!canManage} placeholder={String(pay?.ot_divisor ?? 8)} value={d.ot ?? ""} onChange={e => setSD(s.id, "ot", e.target.value.replace(/[^0-9.]/g, ""))} /></td>
+                <td style={td}>÷ {d.ot || pay?.ot_divisor || 8}</td>
+                <td style={td}>{canManage && <button style={{ ...btnB, padding: "6px 12px", fontSize: 12 }} disabled={busy} onClick={() => saveSiteOt(s)}>💾 Save</button>}</td>
+              </tr>); })}</tbody>
+            </table>
+          </TableCard>
+        </div>
+      </>)}
+
+      {tab === "sunday" && (<>
+        <InfoStrip text={INFO.sunday} />
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(300px, 380px) 1fr", gap: 16, alignItems: "start" }}>
+          <div style={card}>
+            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>Mark a single Sunday</div>
+            <label style={lab}>Sunday{req}</label><select style={{ ...inp, marginBottom: 12 }} value={sForm.on_date} onChange={e => setSForm(f => ({ ...f, on_date: e.target.value }))}><option value="">— pick —</option>{sundaysOf(year).map(d => <option key={d} value={d}>{dmy(d)}</option>)}</select>
+            <label style={lab}>Treat as{req}</label><select style={{ ...inp, marginBottom: 12 }} value={sForm.type_code} onChange={e => setSForm(f => ({ ...f, type_code: e.target.value }))}><option value="">Classic (2×/1×)</option>{types.map(t => <option key={t.code} value={t.code}>{typeLabel(t)}</option>)}</select>
+            <label style={lab}>Site{req}</label><select style={{ ...inp, marginBottom: 12 }} value={sForm.site} onChange={e => setSForm(f => ({ ...f, site: e.target.value }))}><option value="all">All Sites</option>{sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+            <label style={lab}>Label</label><input style={{ ...inp, marginBottom: 14 }} placeholder="e.g. Paid Sunday — Navratri" value={sForm.name} onChange={e => setSForm(f => ({ ...f, name: e.target.value }))} />
+            <div style={{ display: "flex", gap: 10 }}><button style={{ ...btnG, flex: 1 }} onClick={() => setSForm({ site: "all", on_date: "", type_code: "", name: "" })}>↺ Reset</button><button style={{ ...btnB, flex: 2 }} disabled={busy || !canManage} onClick={saveSpecialSunday}>💾 Save</button></div>
+          </div>
+          <div style={{ display: "grid", gap: 16 }}>
+            <TableCard>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead><tr>{["Site", "Sunday policy", "Change"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                <tbody>{sites.map(s => { const code = ruleCode(sun[String(s.id)]); return (<tr key={s.id}><td style={{ ...td, fontWeight: 700 }}>{s.name}</td>
+                  <td style={td}><span style={code === "working" ? pillOff : { ...pillOk, background: "#fff3e8", color: "#9a3412" }}>{SUN_CODES.find(x => x[0] === code)[1]}</span></td>
+                  <td style={td}>{canManage && <select value={code} disabled={busy} onChange={e => saveSun(s.id, e.target.value)}>{SUN_CODES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>}</td></tr>); })}</tbody>
+              </table>
+            </TableCard>
+            <TableCard>
+              <div style={{ fontWeight: 700, padding: "12px 0 6px" }}>Special Sundays {year}</div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead><tr>{["Sunday", "Name", "Rule Type", "Site", "Actions"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                <tbody>{specialSundays.length === 0 ? <tr><td style={td} colSpan={5} className="muted">None marked.</td></tr> : specialSundays.map(h => <tr key={h.id}><td style={td}>{dmy(h.on_date)}</td><td style={{ ...td, fontWeight: 700 }}>{h.name}</td><td style={td}>{h.type_code ? typeLabel(typeByCode[h.type_code] || { code: h.type_code }) : "Classic"}</td><td style={td}>{(h.site_ids || []).length ? h.site_ids.map(siteName).join(", ") : "All Sites"}</td><td style={td}>{canManage && <button style={{ ...btnG, padding: "6px 10px", fontSize: 12, color: "#dc2626", borderColor: "#fecaca" }} onClick={() => delHol(h)}>🗑 Delete</button>}</td></tr>)}</tbody>
+              </table>
+            </TableCard>
+          </div>
+        </div>
+      </>)}
+
+      {tab === "festival" && (<>
+        <InfoStrip text={INFO.festival} action={canManage && types.length > 0 && <button style={btnO} disabled={busy} onClick={saveCats}>💾 Save Defaults</button>} />
+        <TableCard>
+          {types.length === 0 ? <div className="muted" style={{ padding: 12 }}>No rule types found — run the update 386 SQL.</div> : (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr><th style={th}>Rule type</th>{CATS.map(([c, l]) => <th key={c} style={th}>{l}<div className="muted" style={{ fontSize: 10.5, fontWeight: 400 }}>worked · absent</div></th>)}</tr></thead>
+              <tbody>{types.map(t => (<tr key={t.code}><td style={{ ...td, fontWeight: 700 }}>{typeLabel(t)}<div className="muted" style={{ fontSize: 10.5 }}>{t.code}{t.counts_as_paid_day === false ? " · not a paid day" : ""}</div></td>
+                {CATS.map(([c]) => <td key={c} style={{ ...td, whiteSpace: "nowrap" }}><input disabled={!canManage} style={{ width: 54, textAlign: "right" }} value={cats[t.code]?.present?.[c] ?? ""} placeholder={cats[t.code]?.present?.["*"] ?? "—"} onChange={e => setCat(t.code, "present", c, e.target.value)} /> x <span className="muted">·</span> <input disabled={!canManage} style={{ width: 54, textAlign: "right" }} value={cats[t.code]?.absent?.[c] ?? ""} placeholder={cats[t.code]?.absent?.["*"] ?? "—"} onChange={e => setCat(t.code, "absent", c, e.target.value)} /> x</td>)}
+              </tr>))}</tbody>
+            </table>)}
+          <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>"worked" = multiplier when the person attends; "absent" = pay for a no-show on that holiday (1 = paid holiday, 0 = unpaid). Blank falls back to the type's * default.</div>
+        </TableCard>
+      </>)}
+
+      {(tab === "worker" || tab === "staff") && (<>
+        <InfoStrip text={INFO[tab]} action={canManage && <button style={btnO} onClick={() => { setOForm(blankO(tab)); setErr(""); }}>＋ Add Override</button>} />
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(300px, 380px) 1fr", gap: 16, alignItems: "start" }}>
+          {renderOvForm(tab)}
+          <TableCard>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "12px 0 4px" }}><span className="muted" style={{ fontSize: 12 }}>From</span><input type="date" value={ovFrom} onChange={e => setOvFrom(e.target.value)} /><span className="muted" style={{ fontSize: 12 }}>to</span><input type="date" value={ovTo} onChange={e => setOvTo(e.target.value)} /></div>
+            {renderOvTable(tab)}
+          </TableCard>
+        </div>
+      </>)}
+
+      {tab === "general" && (<>
+        <InfoStrip text={INFO.general} />
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(300px, 380px) 1fr", gap: 16, alignItems: "start" }}>
+          <div style={card}>
+            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>Payroll settings</div>
+            {pay === null ? <div className="muted">Loading…</div> : (<>
+              <label style={lab}>Pay period starts on day</label><input style={{ ...inp, marginBottom: 12 }} disabled={!canManage} value={pay.period_start_day ?? ""} onChange={e => setPay(p => ({ ...p, period_start_day: e.target.value.replace(/\D/g, "") }))} />
+              <label style={lab}>Period label</label><input style={{ ...inp, marginBottom: 12 }} disabled={!canManage} value={pay.period_label ?? ""} onChange={e => setPay(p => ({ ...p, period_label: e.target.value }))} />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div><label style={lab}>PT threshold (₹ gross)</label><input style={inp} disabled={!canManage} value={pay.pt_threshold ?? ""} onChange={e => setPay(p => ({ ...p, pt_threshold: e.target.value.replace(/\D/g, "") }))} /></div>
+                <div><label style={lab}>PT amount (₹)</label><input style={inp} disabled={!canManage} value={pay.pt_amount ?? ""} onChange={e => setPay(p => ({ ...p, pt_amount: e.target.value.replace(/\D/g, "") }))} /></div>
+              </div>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>PT applies once per worker per month on total gross across all sites, on the largest-gross site.</div>
+              {canManage && <button style={{ ...btnB, width: "100%" }} disabled={busy} onClick={() => savePay({ period_start_day: Number(pay.period_start_day) || 1, period_label: pay.period_label || "Monthly wages", pt_threshold: Number(pay.pt_threshold) || 0, pt_amount: Number(pay.pt_amount) || 0 })}>💾 Save settings</button>}
+            </>)}
+          </div>
+          <div style={card}>
+            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6 }}>Copy holidays to another year</div>
+            <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>Preview first — nothing is written until you confirm. Same names, dates shifted to the target year; duplicates are skipped.</div>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+              <div><label style={lab}>From year</label><input style={{ width: 90 }} value={copy.from} onChange={e => setCopy(c => ({ ...c, from: e.target.value.replace(/\D/g, ""), preview: null }))} /></div>
+              <div><label style={lab}>To year</label><input style={{ width: 90 }} value={copy.to} onChange={e => setCopy(c => ({ ...c, to: e.target.value.replace(/\D/g, ""), preview: null }))} /></div>
+              <button style={btnG} disabled={busy || !canManage} onClick={async () => { setBusy(true); setErr(""); const r = await copyHolidaysYear(copy.from, copy.to, true); setBusy(false); if (!r.ok) { setErr(r.error); return; } setCopy(c => ({ ...c, preview: r.data })); }}>👁 Preview</button>
+              <button style={btnB} disabled={busy || !canManage || copy.preview == null} onClick={async () => { if (!window.confirm(`Copy ${copy.from} holidays into ${copy.to}?`)) return; setBusy(true); setErr(""); const r = await copyHolidaysYear(copy.from, copy.to, false); setBusy(false); if (!r.ok) { setErr(r.error); return; } _resetHolidayCache(); setMsg(`Holidays copied to ${copy.to}.`); setCopy(c => ({ ...c, preview: null })); if (Number(copy.to) === year) loadAll(); }}>💾 Copy</button>
+            </div>
+            {copy.preview != null && <pre style={{ background: "#f8fafc", borderRadius: 8, padding: 10, fontSize: 12, marginTop: 12, maxHeight: 260, overflow: "auto" }}>{Array.isArray(copy.preview) ? copy.preview.map(x => typeof x === "object" ? Object.values(x).join(" · ") : String(x)).join("\n") : JSON.stringify(copy.preview, null, 1)}</pre>}
+          </div>
+        </div>
+      </>)}
+    </div>
   );
 }
