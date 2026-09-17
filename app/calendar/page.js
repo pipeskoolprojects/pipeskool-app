@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import Logo from "@/components/Logo";
+import AttendanceRules from "@/components/AttendanceRules";   // update396: Rules tab
 import { getSession, canAnySite } from "@/lib/auth";
 import { getSites } from "@/lib/data";
 import { supabase, isDemo } from "@/lib/supabase";
@@ -57,6 +58,7 @@ export default function CalendarPage() {
   const canManage = !!session && (session.role === "director" || canAnySite(session, "attendance", "manage"));
   const today = iso(new Date());
   const [view, setView] = useState("month");
+  const [page, setPage] = useState(() => { try { return new URLSearchParams(window.location.search).get("tab") === "rules" ? "rules" : "calendar"; } catch { return "calendar"; } });   // update396
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth());
   const [selDate, setSelDate] = useState(today);
@@ -211,6 +213,13 @@ export default function CalendarPage() {
             @media (max-width: 1100px) { .cal392 .cols { grid-template-columns: 1fr !important; } }
             @media (max-width: 760px) { .cal392 .cell { min-height: 74px; padding: 6px; } .cal392 .stat { min-width: 44%; } .cal392 .hdr { flex-wrap: wrap; } .cal392 .hdr input { width: 100% !important; } }
           `}</style>
+          {/* update396: the only level of tabs — Calendar | Rules */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+            {[["calendar", "Calendar"], ["rules", "Rules"]].map(([k, l]) =>
+              <button key={k} onClick={() => { setPage(k); try { window.history.replaceState(null, "", k === "rules" ? "/calendar?tab=rules" : "/calendar"); } catch {} }}
+                      style={{ padding: "9px 18px", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", border: "1px solid " + (page === k ? "#FF7A1A" : C.line), background: page === k ? "#FF7A1A" : "#fff", color: page === k ? "#fff" : C.text }}>{l}</button>)}
+          </div>
+          {page === "rules" ? <AttendanceRules /> : (
           <div className="cal392">
             {/* header */}
             <div className="hdr" style={{ ...card, display: "flex", alignItems: "center", gap: 14, padding: "14px 22px", marginBottom: 14 }}>
@@ -223,7 +232,6 @@ export default function CalendarPage() {
               <select value={site} onChange={e => setSite(e.target.value)} style={{ ...sel, minWidth: 150 }}>
                 <option value="all">All Sites</option>{sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
-              {canManage && <a href="/calendar/rules" title="Attendance Rules"><button style={{ ...btnGhost, fontWeight: 600 }}>⚙ Attendance Rules</button></a>}{/* update394 */}
               {canManage && <button style={btnBlue} onClick={() => openAdd()}>＋ Add Holiday</button>}
             </div>
 
@@ -371,6 +379,7 @@ export default function CalendarPage() {
             </div>
             <div style={{ textAlign: "center", ...label, color: C.muted, marginTop: 22, fontSize: 11.5 }}>Changes auto-sync to attendance · muster roll · wages · payroll · salary slips</div>
           </div>
+          )}
         </div>
 
         {/* add / edit modal */}
