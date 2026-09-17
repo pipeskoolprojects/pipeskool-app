@@ -13,17 +13,18 @@ import { iso } from "@/lib/calendar";
 import { saveHoliday, deleteHoliday, getHolidaysBetween, _resetHolidayCache, copyHolidaysYear } from "@/lib/holidays";
 import { getPayrollSettings, savePayrollSettings } from "@/lib/payrollSettings";
 import { notifyUsers } from "@/lib/notify";
+import { getOtRules, saveOtRule, deleteOtRule, getOtSlabs, saveOtSlab, deleteOtSlab, fmtRange } from "@/lib/otRules";   // update398
 import { CATS, SUN_CODES, ruleCode, setWorkerOverride, setStaffOverride, setTypeDefaults, setSundayRule, getOverrides, getSundayRules, getTypesList, getPeople, staffForSites } from "@/lib/attendanceRules";
 
 const fmtX = n => n == null || n === "" || Number.isNaN(Number(n)) ? "—" : Number(n).toFixed(2).replace(/\.?0+$/, "") + "x";
 const dmy = k => k ? String(k).split("-").reverse().join("/") : "";
 const typeLabel = t => t.label || t.name || t.code;
 const MULTS = ["0", "0.5", "1", "1.5", "2", "2.5", "3"];
-const TABS = [["holiday", "🎉", "Holiday Rules"], ["attendance", "📅", "Attendance Rules"], ["overtime", "🕘", "Overtime Rules"], ["sunday", "📆", "Sunday Rules"], ["festival", "✨", "Festival Rules"], ["worker", "👷", "Worker Rules"], ["staff", "👥", "Staff Rules"], ["general", "⚙️", "General"]];
+const TABS = [["holiday", "🎉", "Holiday Rules"], ["overtime", "🕘", "Overtime Rules"], ["sunday", "📆", "Sunday Rules"], ["festival", "✨", "Festival Rules"], ["worker", "👷", "Worker Rules"], ["staff", "👥", "Staff Rules"], ["general", "⚙️", "General"]];
 const INFO = {
   holiday: "Add and manage all company holidays. Set pay rules, site-wise applicability and category-wise multipliers.",
   attendance: "Site working hours, shift timings and geofence. Hours are ACTUAL time at site — no lunch or break deduction, ever. A missing punch-out stays open until midnight, then closes at the site's shift end and is held out of wages until a supervisor confirms.",
-  overtime: "Labour OT starts only after the site's shift end. OT rate = daily rate ÷ divisor (company default, site may override). Rounding: ≤1 h → 0; round up only when extra minutes exceed 30. Approval is always manual.",
+  overtime: "Set overtime eligibility, start time, round-off rules and OT multipliers. These rules will be used in payroll and salary slip calculations.",
   sunday: "Sunday policy per site. Company default is Working Day (Sunday is a normal day; a half day worked on Sunday counts as a full paid day). Mark single Sundays differently below.",
   festival: "Default pay multipliers per rule type and category. These pre-fill every new holiday rule and apply to holidays without their own override.",
   worker: "One-time pay overrides for an individual worker on a date — beats every rule for that worker and day. Worker policy: daily wage; advances recovered manually; contractor workers are paid via the contractor.",
@@ -72,6 +73,10 @@ export default function AttendanceRules() {
   const [err, setErr] = useState(""); const [msg, setMsg] = useState(""); const [busy, setBusy] = useState(false);
   const [q, setQ] = useState(""); const [pg, setPg] = useState(1); const [pageSize, setPageSize] = useState(10);
   const [cats, setCats] = useState({});
+  const [otRules, setOtRules] = useState(null); const [slabs, setSlabs] = useState(null);   // update398
+  const blankR = () => ({ id: null, name: "", is_eligible: true, start_after: "", round_type: "custom", multiplier: "1", apply_labour: true, apply_site_staff: false, apply_office_staff: false, description: "", is_active: true });
+  const [rForm, setRForm] = useState(blankR); const [rq, setRq] = useState("");
+  const [slabForm, setSlabForm] = useState(null);   // { from_h, from_m, to_h, to_m, hours }
   const [copy, setCopy] = useState({ from: new Date().getFullYear(), to: new Date().getFullYear() + 1, preview: null });
   const canManage = !!session && (session.role === "director" || canAnySite(session, "attendance", "manage"));
 
@@ -95,6 +100,15 @@ export default function AttendanceRules() {
   useEffect(() => { const s = getSession(); if (!s) { window.location.replace("/login"); return; } setSession(s); }, []);
   useEffect(() => { loadAll(); }, [year]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (tab === "worker" || tab === "staff") getOverrides(ovFrom, ovTo).then(setOvs).catch(e => { setErr(e.message); setOvs([]); }); }, [tab, ovFrom, ovTo]);
+  const loadOt = () => Promise.all([getOtRules(), getOtSlabs()]).then(([r, sl]) => { setOtRules(r); setSlabs(sl); }).catch(e => { setErr(e.message); setOtRules([]); setSlabs([]); });
+  useEffect(() => { if (tab === "overtime") loadOt(); }, [tab]);
+  async function saveRule() { if (!rForm.name.trim()) { setErr("Rule name is required."); return; } setBusy(true); setErr(""); const r = await saveOtRule(rForm.id, { ...rForm, multiplier: Number(rForm.multiplier) || 1 }); setBusy(false); if (!r.ok) { setErr(r.error); return; } setMsg(rForm.id ? "Overtime rule updated." : "Overtime rule saved."); setRForm(blankR()); loadOt(); }
+  async function delRule(r) { if (!window.confirm(`Delete "${r.name}"?`)) return; const x = await deleteOtRule(r.id); if (!x.ok) { setErr(x.error); return; } setMsg("Rule deleted."); loadOt(); }
+  async function saveSlab() { const f = Number(slabForm.from_h) * 60 + Number(slabForm.from_m || 0), t = Number(slabForm.to_h) * 60 + Number(slabForm.to_m || 0); if (Number.isNaN(f) || Number.isNaN(t) || slabForm.hours === "") { setErr("Fill from, to and counted hours."); return; } setBusy(true); setErr(""); const r = await saveOtSlab(slabForm.id, f, t, slabForm.hours); setBusy(false); if (!r.ok) { setErr(r.error); return; } setMsg("Round-off rule saved."); setSlabForm(null); loadOt(); }
+  async function delSlab(x) { if (!window.confirm(`Remove slab ${fmtRange(x.from_min, x.to_min)}?`)) return; const r = await deleteOtSlab(x.id); if (!r.ok) { setErr(r.error); return; } loadOt(); }
+  const slabFor = min => (slabs || []).find(x => min >= x.from_min && min <= x.to_min);
+  const exampleMin = 135;   // 11 h 15 m worked on a 9 h shift → 2 h 15 m extra
+  const exSlab = slabFor(exampleMin);
 
   const typeByCode = useMemo(() => { const m = {}; types.forEach(t => { m[t.code] = t; }); return m; }, [types]);
   const siteName = id => sites.find(s => Number(s.id) === Number(id))?.name || ("Site " + id);
@@ -227,50 +241,84 @@ export default function AttendanceRules() {
         </div>
       </>)}
 
-      {tab === "attendance" && (<>
-        <InfoStrip text={INFO.attendance} />
-        <TableCard>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr>{["Site", "Shift start", "Shift end", "Std hours", "Geofence radius (m)", "Latitude", "Longitude", "Actions"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
-            <tbody>{sites.map(s => { const d = siteDraft[s.id] || {}; return (<tr key={s.id}>
-              <td style={{ ...td, fontWeight: 700 }}>{s.name}</td>
-              <td style={td}><input type="time" disabled={!canManage} value={d.shift_start || ""} onChange={e => setSD(s.id, "shift_start", e.target.value)} /></td>
-              <td style={td}><input type="time" disabled={!canManage} value={d.shift_end || ""} onChange={e => setSD(s.id, "shift_end", e.target.value)} /></td>
-              <td style={td}><input style={{ width: 60 }} disabled={!canManage} value={d.std ?? ""} onChange={e => setSD(s.id, "std", e.target.value)} /></td>
-              <td style={td}><input style={{ width: 80 }} disabled={!canManage} value={d.radius ?? ""} onChange={e => setSD(s.id, "radius", e.target.value)} /></td>
-              <td style={td}><input style={{ width: 110 }} disabled={!canManage} value={d.lat ?? ""} onChange={e => setSD(s.id, "lat", e.target.value)} /></td>
-              <td style={td}><input style={{ width: 110 }} disabled={!canManage} value={d.lng ?? ""} onChange={e => setSD(s.id, "lng", e.target.value)} /></td>
-              <td style={td}>{canManage && <button style={{ ...btnB, padding: "6px 12px", fontSize: 12 }} disabled={busy} onClick={() => saveSiteTimes(s)}>💾 Save</button>}</td>
-            </tr>); })}</tbody>
-          </table>
-          <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>Same fields as Site Master. Shift end also decides where a missing punch-out is closed at midnight.</div>
-        </TableCard>
-      </>)}
-
       {tab === "overtime" && (<>
         <InfoStrip text={INFO.overtime} />
         <div style={{ display: "grid", gridTemplateColumns: "minmax(300px, 380px) 1fr", gap: 16, alignItems: "start" }}>
           <div style={card}>
-            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>Company OT rule</div>
-            <label style={lab}>OT divisor (company default){req}</label>
-            <input style={{ ...inp, marginBottom: 6 }} disabled={!canManage} value={pay?.ot_divisor ?? ""} onChange={e => setPay(p => ({ ...p, ot_divisor: e.target.value.replace(/[^0-9.]/g, "") }))} />
-            <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>OT rate per hour = daily rate ÷ divisor. Example: ₹800 ÷ 8 = ₹100/h.</div>
-            <div style={{ background: "#f8fafc", borderRadius: 8, padding: 12, fontSize: 12.5, lineHeight: 1.6 }}>
-              <b>Fixed rules (not editable here)</b><br />• Labour OT starts only after the site's shift end<br />• ≤1 h extra → no OT; round up only when extra minutes exceed 30<br />• Holiday OT stays at the normal OT rate<br />• OT approval is always manual (Verify &amp; +OT on the muster)
+            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>{rForm.id ? "Edit Overtime Rule" : "Add / Edit Overtime Rule"}</div>
+            <label style={lab}>Rule Name{req}</label><input style={{ ...inp, marginBottom: 12 }} placeholder="e.g. Standard OT Rule" value={rForm.name} onChange={e => setRForm(f => ({ ...f, name: e.target.value }))} />
+            <div style={{ marginBottom: 12 }}><Toggle on={rForm.is_eligible} set={v => setRForm(f => ({ ...f, is_eligible: v }))} label="OT Eligible" hint="Enable overtime for workers/staff" /></div>
+            <label style={lab}>OT Start After</label><input type="time" style={inp} value={rForm.start_after || ""} onChange={e => setRForm(f => ({ ...f, start_after: e.target.value }))} />
+            <div className="muted" style={{ fontSize: 11.5, margin: "4px 0 12px" }}>Working hours after which OT will be counted. Blank = the site's own shift end (current rule).</div>
+            <label style={lab}>OT Round Off Type</label><select style={inp} value={rForm.round_type} onChange={e => setRForm(f => ({ ...f, round_type: e.target.value }))}><option value="custom">Custom (As per rules)</option><option value="nearest_hour">Nearest Hour</option><option value="none">No rounding</option></select>
+            <div className="muted" style={{ fontSize: 11.5, margin: "4px 0 12px" }}>Choose how OT hours will be rounded</div>
+            <label style={lab}>OT Rate / Multiplier</label><select style={inp} value={rForm.multiplier} onChange={e => setRForm(f => ({ ...f, multiplier: e.target.value }))}>{[["1", "1x (Standard)"], ["1.5", "1.5x"], ["2", "2x"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+            <div className="muted" style={{ fontSize: 11.5, margin: "4px 0 12px" }}>Set overtime calculation rate</div>
+            <label style={lab}>Apply For</label>
+            <div style={{ display: "flex", gap: 16, marginBottom: 12, fontSize: 13 }}>
+              {[["apply_labour", "Workers"], ["apply_site_staff", "Site Staff"], ["apply_office_staff", "Office Staff"]].map(([k, l]) => <label key={k} style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="checkbox" checked={!!rForm[k]} onChange={e => setRForm(f => ({ ...f, [k]: e.target.checked }))} />{l}</label>)}
             </div>
-            {canManage && <button style={{ ...btnB, width: "100%", marginTop: 14 }} disabled={busy} onClick={() => savePay({ ot_divisor: Number(pay.ot_divisor) || 8 })}>💾 Save company rule</button>}
+            <label style={lab}>Description</label><textarea style={{ ...inp, minHeight: 56, marginBottom: 14 }} placeholder="Add description (optional)" value={rForm.description || ""} onChange={e => setRForm(f => ({ ...f, description: e.target.value }))} />
+            <div style={{ display: "flex", gap: 10 }}><button style={{ ...btnG, flex: 1 }} onClick={() => { setRForm(blankR()); setErr(""); }}>↺ Reset</button><button style={{ ...btnB, flex: 2 }} disabled={busy || !canManage} onClick={saveRule}>💾 {rForm.id ? "Update Overtime Rule" : "Save Overtime Rule"}</button></div>
           </div>
-          <TableCard>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr>{["Site", "Shift end (OT starts after)", "Site OT divisor (blank = company)", "Effective", "Actions"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
-              <tbody>{sites.map(s => { const d = siteDraft[s.id] || {}; return (<tr key={s.id}>
-                <td style={{ ...td, fontWeight: 700 }}>{s.name}</td><td style={td}>{(s.shift_end || "18:00").slice(0, 5)}</td>
-                <td style={td}><input style={{ width: 80 }} disabled={!canManage} placeholder={String(pay?.ot_divisor ?? 8)} value={d.ot ?? ""} onChange={e => setSD(s.id, "ot", e.target.value.replace(/[^0-9.]/g, ""))} /></td>
-                <td style={td}>÷ {d.ot || pay?.ot_divisor || 8}</td>
-                <td style={td}>{canManage && <button style={{ ...btnB, padding: "6px 12px", fontSize: 12 }} disabled={busy} onClick={() => saveSiteOt(s)}>💾 Save</button>}</td>
-              </tr>); })}</tbody>
-            </table>
-          </TableCard>
+          <div style={{ display: "grid", gap: 16 }}>
+            <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 12, flexWrap: "wrap", gap: 8 }}><div style={{ fontWeight: 800, fontSize: 16 }}>Overtime Rules List</div><input placeholder="🔍  Search rules…" value={rq} onChange={e => setRq(e.target.value)} style={{ width: 260 }} /></div>
+              <div className="dt-scroll" style={{ padding: "0 12px 12px" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead><tr>{["Rule Name", "OT Start After", "Round Off Type", "Rate / Multiplier", "Applicable To", "Status", "Actions"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                  <tbody>{otRules === null ? <tr><td style={td} colSpan={7} className="muted">Loading…</td></tr> : otRules.filter(r => !rq.trim() || r.name.toLowerCase().includes(rq.trim().toLowerCase())).map(r => (<tr key={r.id}>
+                    <td style={{ ...td, fontWeight: 700 }}>{r.name}</td><td style={td}>{r.start_after ? String(r.start_after).slice(0, 5) : "Site shift end"}</td>
+                    <td style={td}>{r.round_type === "custom" ? "Custom" : r.round_type === "nearest_hour" ? "Nearest Hour" : "None"}</td><td style={td}>{fmtX(r.multiplier)}</td>
+                    <td style={td}>{[r.apply_labour && "Workers", r.apply_site_staff && "Site Staff", r.apply_office_staff && "Office Staff"].filter(Boolean).join(", ") || "—"}</td>
+                    <td style={td}><span style={r.is_active && r.is_eligible ? pillOk : pillOff}>{!r.is_active ? "Inactive" : r.is_eligible ? "Active" : "OT off"}</span></td>
+                    <td style={{ ...td, whiteSpace: "nowrap" }}>{canManage && <><button style={{ ...btnG, padding: "6px 10px", fontSize: 12, marginRight: 6 }} onClick={() => { setErr(""); setRForm({ ...r, multiplier: String(r.multiplier), start_after: r.start_after ? String(r.start_after).slice(0, 5) : "" }); }}>✎ Edit</button><button style={{ ...btnG, padding: "6px 10px", fontSize: 12, color: "#dc2626", borderColor: "#fecaca" }} onClick={() => delRule(r)}>🗑 Delete</button></>}</td>
+                  </tr>))}</tbody>
+                </table>
+              </div>
+              <div style={{ padding: "0 12px 12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 8, margin: "6px 0 10px" }}>
+                  <div><div style={{ fontWeight: 800, fontSize: 16 }}>OT Round Off Rules</div><div className="muted" style={{ fontSize: 12.5 }}>Define how OT hours will be rounded and calculated.</div></div>
+                  {canManage && <button style={{ ...btnG, color: "#1d4ed8", borderColor: "#1d4ed8" }} onClick={() => { setErr(""); setSlabForm({ id: null, from_h: "", from_m: "0", to_h: "", to_m: "0", hours: "" }); }}>＋ Add Round Off Rule</button>}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 1fr) minmax(280px, 1fr)", gap: 14, alignItems: "start" }}>
+                  <div>
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <thead><tr>{["Actual OT Hours", "Count as OT Hours", "Action"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                      <tbody>{slabs === null ? <tr><td style={td} colSpan={3} className="muted">Loading…</td></tr> : slabs.map(x => (<tr key={x.id}>
+                        <td style={td}>{fmtRange(x.from_min, x.to_min)}</td><td style={td}>{Number(x.count_hours)} hour{Number(x.count_hours) === 1 ? "" : "s"}</td>
+                        <td style={{ ...td, whiteSpace: "nowrap" }}>{canManage && <><button style={{ ...btnG, padding: "4px 8px", fontSize: 12, marginRight: 4 }} onClick={() => setSlabForm({ id: x.id, from_h: String(Math.floor(x.from_min / 60)), from_m: String(x.from_min % 60), to_h: String(Math.floor(x.to_min / 60)), to_m: String(x.to_min % 60), hours: String(x.count_hours) })}>✎</button><button style={{ ...btnG, padding: "4px 8px", fontSize: 12, color: "#dc2626", borderColor: "#fecaca" }} onClick={() => delSlab(x)}>🗑</button></>}</td>
+                      </tr>))}</tbody>
+                    </table>
+                    {slabForm && (
+                      <div style={{ border: "1px solid #c7d7fe", background: "#f8faff", borderRadius: 8, padding: 10, marginTop: 10, fontSize: 13 }}>
+                        <b>{slabForm.id ? "Edit slab" : "New slab"}</b>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+                          From <input style={{ width: 44 }} placeholder="h" value={slabForm.from_h} onChange={e => setSlabForm(f => ({ ...f, from_h: e.target.value.replace(/\D/g, "") }))} />:<input style={{ width: 44 }} placeholder="m" value={slabForm.from_m} onChange={e => setSlabForm(f => ({ ...f, from_m: e.target.value.replace(/\D/g, "") }))} />
+                          to <input style={{ width: 44 }} placeholder="h" value={slabForm.to_h} onChange={e => setSlabForm(f => ({ ...f, to_h: e.target.value.replace(/\D/g, "") }))} />:<input style={{ width: 44 }} placeholder="m" value={slabForm.to_m} onChange={e => setSlabForm(f => ({ ...f, to_m: e.target.value.replace(/\D/g, "") }))} />
+                          → count <input style={{ width: 54 }} placeholder="hrs" value={slabForm.hours} onChange={e => setSlabForm(f => ({ ...f, hours: e.target.value.replace(/[^0-9.]/g, "") }))} /> h
+                        </div>
+                        <div style={{ display: "flex", gap: 8, marginTop: 8 }}><button style={{ ...btnG, padding: "6px 10px" }} onClick={() => setSlabForm(null)}>Cancel</button><button style={{ ...btnB, padding: "6px 12px" }} disabled={busy} onClick={saveSlab}>Save</button></div>
+                      </div>)}
+                  </div>
+                  <div style={{ display: "grid", gap: 12 }}>
+                    <div style={{ background: "#eff4ff", border: "1px solid #c7d7fe", borderRadius: 10, padding: 14, fontSize: 13.5, lineHeight: 1.6 }}>
+                      <div style={{ fontWeight: 800, color: "#1e40af", marginBottom: 4 }}>🧮 Example Calculation</div>
+                      If an employee works 11 hours and 15 minutes on a 9-hour shift (OT = 2 hours 15 minutes)<br />
+                      {exSlab ? <>As per rule → <b>{fmtRange(exSlab.from_min, exSlab.to_min)} = {Number(exSlab.count_hours)} OT hours</b><br /><b>So, OT counted = {Number(exSlab.count_hours)} hours</b></> : <>No slab covers 2:15 — the fallback formula counts <b>2 hours</b>.</>}
+                    </div>
+                    <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 10, padding: 14, fontSize: 13, lineHeight: 1.7 }}>
+                      <div style={{ fontWeight: 800, color: "#15803d", marginBottom: 4 }}>✅ Important Notes</div>
+                      • The round-off slabs above set the OT hours suggested at approval; approval stays manual.<br />
+                      • OT is calculated only if OT Eligible is ON (staff: the per-staff toggle on the Staff master).<br />
+                      • Today's payroll applies: OT after the site's shift end, rate = daily ÷ divisor (General tab). A rule's fixed start time and rate multiplier are stored here and will be applied to payroll only after Director sign-off — they are not yet used in calculations.<br />
+                      • Holiday OT stays at the normal OT rate.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </>)}
 
@@ -343,7 +391,9 @@ export default function AttendanceRules() {
                 <div><label style={lab}>PT amount (₹)</label><input style={inp} disabled={!canManage} value={pay.pt_amount ?? ""} onChange={e => setPay(p => ({ ...p, pt_amount: e.target.value.replace(/\D/g, "") }))} /></div>
               </div>
               <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>PT applies once per worker per month on total gross across all sites, on the largest-gross site.</div>
-              {canManage && <button style={{ ...btnB, width: "100%" }} disabled={busy} onClick={() => savePay({ period_start_day: Number(pay.period_start_day) || 1, period_label: pay.period_label || "Monthly wages", pt_threshold: Number(pay.pt_threshold) || 0, pt_amount: Number(pay.pt_amount) || 0 })}>💾 Save settings</button>}
+              <label style={lab}>OT divisor (company default)</label><input style={{ ...inp, marginBottom: 4 }} disabled={!canManage} value={pay.ot_divisor ?? ""} onChange={e => setPay(p => ({ ...p, ot_divisor: e.target.value.replace(/[^0-9.]/g, "") }))} />
+              <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>OT rate per hour = daily rate ÷ divisor (₹800 ÷ 8 = ₹100/h). A site may override below.</div>
+              {canManage && <button style={{ ...btnB, width: "100%" }} disabled={busy} onClick={() => savePay({ period_start_day: Number(pay.period_start_day) || 1, period_label: pay.period_label || "Monthly wages", pt_threshold: Number(pay.pt_threshold) || 0, pt_amount: Number(pay.pt_amount) || 0, ot_divisor: Number(pay.ot_divisor) || 8 })}>💾 Save settings</button>}
             </>)}
           </div>
           <div style={card}>
@@ -356,6 +406,21 @@ export default function AttendanceRules() {
               <button style={btnB} disabled={busy || !canManage || copy.preview == null} onClick={async () => { if (!window.confirm(`Copy ${copy.from} holidays into ${copy.to}?`)) return; setBusy(true); setErr(""); const r = await copyHolidaysYear(copy.from, copy.to, false); setBusy(false); if (!r.ok) { setErr(r.error); return; } _resetHolidayCache(); setMsg(`Holidays copied to ${copy.to}.`); setCopy(c => ({ ...c, preview: null })); if (Number(copy.to) === year) loadAll(); }}>💾 Copy</button>
             </div>
             {copy.preview != null && <pre style={{ background: "#f8fafc", borderRadius: 8, padding: 10, fontSize: 12, marginTop: 12, maxHeight: 260, overflow: "auto" }}>{Array.isArray(copy.preview) ? copy.preview.map(x => typeof x === "object" ? Object.values(x).join(" · ") : String(x)).join("\n") : JSON.stringify(copy.preview, null, 1)}</pre>}
+          </div>
+          <div style={{ ...card, gridColumn: "1/-1" }}>
+            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6 }}>Site working hours &amp; OT divisor</div>
+            <div className="dt-scroll"><table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr>{["Site", "Shift start", "Shift end", "Std hrs", "Geofence m", "OT divisor", ""].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+              <tbody>{sites.map(s => { const d = siteDraft[s.id] || {}; return (<tr key={s.id}>
+                <td style={{ ...td, fontWeight: 700 }}>{s.name}</td>
+                <td style={td}><input type="time" disabled={!canManage} value={d.shift_start || ""} onChange={e => setSD(s.id, "shift_start", e.target.value)} /></td>
+                <td style={td}><input type="time" disabled={!canManage} value={d.shift_end || ""} onChange={e => setSD(s.id, "shift_end", e.target.value)} /></td>
+                <td style={td}><input style={{ width: 50 }} disabled={!canManage} value={d.std ?? ""} onChange={e => setSD(s.id, "std", e.target.value)} /></td>
+                <td style={td}><input style={{ width: 60 }} disabled={!canManage} value={d.radius ?? ""} onChange={e => setSD(s.id, "radius", e.target.value)} /></td>
+                <td style={td}><input style={{ width: 50 }} disabled={!canManage} placeholder={String(pay?.ot_divisor ?? 8)} value={d.ot ?? ""} onChange={e => setSD(s.id, "ot", e.target.value.replace(/[^0-9.]/g, ""))} /></td>
+                <td style={td}>{canManage && <button style={{ ...btnB, padding: "6px 10px", fontSize: 12 }} disabled={busy} onClick={async () => { await saveSiteTimes(s); await saveSiteOt(s); }}>💾</button>}</td>
+              </tr>); })}</tbody>
+            </table></div>
           </div>
         </div>
       </>)}
