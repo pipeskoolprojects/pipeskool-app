@@ -1,7 +1,4 @@
 "use client";
-// update396: Attendance Rules now lives as the "Rules" tab of /calendar — keep old links working.
+// update399: the Rules UI is withdrawn pending redesign — old links land on the calendar.
 import { useEffect } from "react";
-export default function RulesRedirect() {
-  useEffect(() => { window.location.replace("/calendar?tab=rules"); }, []);
-  return null;
-}
+export default function RulesRedirect() { useEffect(() => { window.location.replace("/calendar"); }, []); return null; }
