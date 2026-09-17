@@ -13,6 +13,8 @@ const GROUPS = [
     { label: "Labour & Attendance", items: [
       { href: "/attendance", label: "Attendance & Labour", module: "attendance" },
       { href: "/wages", label: "Muster Roll & Wages", module: "wages" },
+      { href: "/calendar", label: "Calendar", module: "attendance" },   // update395: moved from Communication
+      { href: "/calendar/rules", label: "Attendance Rules", module: "attendance" },   // update394/395
       { href: "/workers", label: "Workers & Staff Master", module: "workers" },
       { href: "/leave", label: "Leave Requests", module: null },
       { href: "/letters", label: "Letters & Documents", module: "letters" },   // update329
@@ -34,7 +36,6 @@ const GROUPS = [
   ] },
   { label: "Communication", items: [
     { href: "/notices", label: "Notice Board", module: "notices" },   // update230: Tasks removed from nav — tasks live on the Home dashboard
-    { href: "/calendar", label: "Calendar", module: "notices" },   // update259: aggregates every module, no new data
   ] },
   { label: "Commercial / Billing", items: [
     { href: "/clients", label: "Clients", module: "billing" },   // update393
