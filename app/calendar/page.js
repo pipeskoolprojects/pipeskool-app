@@ -22,6 +22,8 @@ const AUD_LABEL = { both: "Office + Workers", staff: "Office", labour: "Workers"
 const STATUS = [["all","All"],["holiday","Holidays"],["working","Working days"]];
 const SUN_OPTS = [["weekly_off","Weekly Off"],["working","Working Day"],["special_pay","Special Pay"]];
 const TYPE_LABEL = { paid_off: "Holiday", festival_2x: "Festival · 2×", optional: "Optional / unpaid", working: "Special working day", special: "Special / custom" };
+const TYPE_DOT = { paid_off: "#e11d48", festival_2x: "#f97316", optional: "#9ca3af", working: "#3b5bdb", special: "#e11d48" };
+const LEGEND = [["#e11d48", "Holiday / Paid Off"], ["#f97316", "Festival 2×"], ["#9ca3af", "Unpaid Off"], ["#3b5bdb", "Working Sunday"]];
 const TYPE_PAY = { paid_off: "1X", festival_2x: "2X", optional: "0X", working: "1X", special: "Custom" };
 
 // ---- palette lifted from the recording ----
@@ -105,12 +107,21 @@ export default function CalendarPage() {
   const dayKind = k => byDate[k]?.length ? (byDate[k][0].type_code === "working" ? "special" : "holiday") : (isSunday(k) && sunCode !== "working" ? "off" : "work");
 
   // ---- selected-date details ----
+  const appliesToCat = (h, cat) => {   // update395: same test the payroll resolver uses
+    if (h.category_rules && typeof h.category_rules === "object") return h.category_rules[cat] != null || h.category_rules["*"] != null;
+    const a = h.applies_to || "both"; return a === "both" || (a === "labour" ? cat === "labour" : cat !== "labour");
+  };
   const selRows = byDate[selDate] || [];
   const primary = selRows[0] || null;
   const selKind = dayKind(selDate);
+  const sitesCovered = (() => {   // update395: plain list of site names a rule applies to on the selected date
+    if (selRows.length) { const ids = new Set(); let all = false; selRows.forEach(h => { if (!(h.site_ids || []).length) all = true; else h.site_ids.forEach(x => ids.add(Number(x))); }); return sites.filter(x => all || ids.has(Number(x.id))).map(x => x.name); }
+    if (isSunday(selDate)) return sites.filter(x => ruleCode(sunRules[String(x.id)]) !== "working").map(x => x.name);
+    return [];
+  })();
   const [dayWorkers, setDayWorkers] = useState(null);
   const [selWorker, setSelWorker] = useState(null);
-  const [chip, setChip] = useState("1.5");
+  const [chip, setChip] = useState("2");
   useEffect(() => {
     setDayWorkers(null); setSelWorker(null); setMsg("");
     if (isDemo) { setDayWorkers([]); return; }
@@ -179,20 +190,19 @@ export default function CalendarPage() {
         <div style={{ padding: "22px 26px 40px", maxWidth: 1400, margin: "0 auto", fontFamily: "var(--sans, Inter, system-ui, sans-serif)", color: C.text }}>
           <style>{`
             .cal392 select { appearance: auto; }
-            .cal392 .cell { border: 1px solid ${C.line}; border-radius: 10px; background: #f6f7fb; min-height: 108px; padding: 8px 9px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; position: relative; }
-            .cal392 .cell.off { background: ${C.beige}; border-color: ${C.beigeLine}; }
+            .cal392 .cell { border: 1px solid ${C.line}; border-radius: 10px; background: #fff; min-height: 126px; padding: 8px 9px; cursor: pointer; display: flex; flex-direction: column; justify-content: flex-start; gap: 6px; position: relative; }
+            .cal392 .cell.off { background: #eceef3; border-color: #dfe2ea; }
             .cal392 .cell.out { opacity: .55; }
             .cal392 .cell.sel { outline: 2px solid ${C.blue}; outline-offset: -1px; background: #eef1ff; }
-            .cal392 .cell.hol { background: #fff1f2; border-color: #fecdd3; }
-            .cal392 .cell.special { background: #ecfdf5; border-color: #a7f3d0; }
+            .cal392 .cell.hol { background: #fff7f8; }
             .cal392 .cell .n { font-size: 13px; font-weight: 600; }
-            .cal392 .cell.off .n { color: #b45309; }
-            .cal392 .cell .t { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: ${C.muted}; }
-            .cal392 .cell.off .t { color: #b45309; } .cal392 .cell.hol .t { color: ${C.red}; } .cal392 .cell.special .t { color: ${C.greenInk}; }
+            .cal392 .cell .hn { font-size: 12px; font-weight: 600; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: ${C.text}; }
             .cal392 .chip { border: 1px solid ${C.line}; background: #fff; border-radius: 10px; padding: 9px 0; text-align: center; font-size: 13.5px; font-weight: 600; cursor: pointer; }
             .cal392 .chip.on { background: ${C.blue}; color: #fff; border-color: ${C.blue}; }
-            .cal392 .sopt { border: 1px solid ${C.line}; border-radius: 10px; padding: 12px 14px; font-size: 15px; display: flex; justify-content: space-between; align-items: center; background: #fff; cursor: pointer; margin-top: 8px; }
-            .cal392 .sopt.on { background: ${C.amber}; color: #fff; border-color: ${C.amber}; font-weight: 700; }
+            .cal392 .sopt { border: 1px solid ${C.line}; border-radius: 10px; padding: 11px 14px; font-size: 14.5px; display: flex; gap: 10px; align-items: center; background: #fff; cursor: pointer; margin-top: 8px; }
+            .cal392 .sopt .rb { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #c4c8d4; background: #fff; flex: none; }
+            .cal392 .sopt.on { background: #FF7A1A; color: #fff; border-color: #FF7A1A; font-weight: 700; }
+            .cal392 .sopt.on .rb { border-color: #fff; background: radial-gradient(#fff 45%, transparent 50%); }
             .cal392 .mcard { border-bottom: 1px solid ${C.line}; padding: 14px 4px; }
             .cal392 .stat { flex: 1; min-width: 200px; padding: 16px 18px; display: flex; gap: 12px; align-items: flex-start; }
             .cal392 .seg { display: inline-flex; background: #fff; border-radius: 12px; padding: 4px; box-shadow: 0 1px 2px rgba(20,30,60,.06); }
@@ -231,7 +241,7 @@ export default function CalendarPage() {
               <select value={status} onChange={e => setStatus(e.target.value)} style={sel}>{STATUS.map(([v, l]) => <option key={v} value={v}>Status: {l}</option>)}</select>
               <select value={aud} onChange={e => setAud(e.target.value)} style={sel}>{AUD.map(([v, l]) => <option key={v} value={v}>Audience: {l}</option>)}</select>
               <div style={{ marginLeft: "auto", fontSize: 12.5, color: C.muted, display: "flex", gap: 14 }}>
-                <span><Dot c={C.red} />Holiday</span><span><Dot c={C.amber} />Sunday Off</span><span><Dot c={C.green} />Special Pay</span>
+                {LEGEND.map(([c, l]) => <span key={l}><Dot c={c} />{l}</span>)}
               </div>
             </div>
             {err && <div className="error" style={{ marginBottom: 10 }}>{err}</div>}
@@ -258,80 +268,72 @@ export default function CalendarPage() {
                       const kd = dayKind(d.key); const dim = !filteredDay(d.key);
                       const h = byDate[d.key]?.[0];
                       return (
-                        <div key={d.key} className={"cell " + (kd === "off" ? "off " : kd === "holiday" ? "hol " : kd === "special" ? "special " : "") + (d.inMonth ? "" : "out ") + (d.key === selDate ? "sel" : "")}
+                        <div key={d.key} className={"cell " + (kd === "off" ? "off " : h ? "hol " : "") + (d.inMonth ? "" : "out ") + (d.key === selDate ? "sel" : "")}
                              style={{ opacity: dim ? .35 : undefined }} onClick={() => setSelDate(d.key)}>
                           <div className="n">{d.date.getDate()}</div>
-                          <div className="t" title={h?.name}>{kd === "off" ? "OFF" : kd === "holiday" ? (h.name.length > 14 ? h.name.slice(0, 13) + "…" : h.name) : kd === "special" ? "SPECIAL" : (d.inMonth ? "WORK" : "")}</div>
+                          {h && <div className="hn" title={h.name}><Dot c={TYPE_DOT[h.type_code || "paid_off"] || "#e11d48"} />{h.name}</div>}
                         </div>
                       );
                     })}
                   </div>
                   <div style={{ marginTop: 16, fontSize: 12.5, color: C.muted, display: "flex", gap: 16 }}>
-                    <span><Dot c={C.red} />Holiday</span><span><Dot c={C.amber} />Sunday Off</span><span><Dot c={C.green} />Special Pay</span><span><Dot c={C.blue} />Selected</span>
+                    {LEGEND.map(([c, l]) => <span key={l}><Dot c={c} />{l}</span>)}
                   </div>
                 </div>
 
-                {/* right column */}
+                {/* right column — update395 order: date · applies-to chips · multipliers · workers · Sunday policy · sites covered · buttons */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  {/* date details */}
                   <div style={{ ...card, padding: 22 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div style={{ ...label, color: C.blue }}>Date details</div>
-                      <span style={{ background: C.greenSoft, color: C.greenInk, borderRadius: 999, padding: "4px 12px", fontSize: 12, fontWeight: 700 }}>Synced</span>
-                    </div>
-                    <div style={{ fontSize: 22, fontWeight: 800, marginTop: 10 }}>{fmtLong(selDate)}</div>
-                    <div style={{ fontSize: 13.5, color: C.muted, marginTop: 2 }}>
-                      {primary ? primary.name + " · " + (TYPE_LABEL[primary.type_code || "paid_off"]) : selKind === "off" ? "Sunday — " + sunLabel : "Regular working day"}
-                    </div>
-                    <div style={{ fontSize: 13.5, marginTop: 10 }}>Applies to <b>{primary ? AUD_LABEL[primary.applies_to || "both"] : "Office + Workers"}</b> · <b>{primary && (primary.site_ids || []).length ? primary.site_ids.map(id => sites.find(s => Number(s.id) === Number(id))?.name || "Site " + id).join(", ") : "All Sites"}</b></div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 14 }}>
-                      <div style={{ background: C.lav, borderRadius: 10, padding: "10px 12px" }}><div style={{ ...label, fontSize: 10, color: C.muted }}>Event type</div><div style={{ fontWeight: 600, marginTop: 4 }}>{primary ? TYPE_LABEL[primary.type_code || "paid_off"] : selKind === "off" ? "Weekly off" : "Working day"}</div></div>
-                      <div style={{ background: C.lav, borderRadius: 10, padding: "10px 12px" }}><div style={{ ...label, fontSize: 10, color: C.muted }}>Payment</div><div style={{ fontWeight: 600, marginTop: 4 }}>{primary ? (typeof primary.category_rules?.["*"] === "number" ? fmtX(primary.category_rules["*"]) : TYPE_PAY[primary.type_code || "paid_off"]) : selKind === "off" && sunCode === "special_pay" ? "2X" : "1X"}</div></div>
-                    </div>
-                    <div style={{ background: C.lav, borderRadius: 12, padding: 14, marginTop: 14 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 8 }}>Worker payment override</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
-                        {[["1", "1X"], ["1.5", "1.5X"], ["2", "2X"], ["custom", "Custom"]].map(([v, l]) =>
-                          <div key={v} className={"chip " + (chip === v ? "on" : "")} onClick={() => setChip(v)}>{l}</div>)}
+                    <div style={{ ...label, color: C.blue }}>Date details</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, marginTop: 8 }}>{fmtLong(selDate)}</div>
+                    {primary ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 15, fontWeight: 700 }}>{primary.name}</span>
+                        <span style={{ background: TYPE_DOT[primary.type_code || "paid_off"] || C.red, color: "#fff", borderRadius: 999, padding: "3px 10px", fontSize: 11.5, fontWeight: 700 }}>{TYPE_LABEL[primary.type_code || "paid_off"]}</span>
                       </div>
-                      <div style={{ marginTop: 10, maxHeight: 220, overflowY: "auto" }}>
-                        {dayWorkers === null ? <div style={{ fontSize: 12.5, color: C.muted }}>Loading…</div>
-                          : dayWorkers.length === 0 ? <div style={{ fontSize: 12.5, color: C.muted }}>No attendance on this date yet.</div>
-                          : dayWorkers.map(w => (
-                            <div key={w.attendance_id} onClick={() => setSelWorker(w)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 6px", borderRadius: 10, cursor: "pointer", background: selWorker?.attendance_id === w.attendance_id ? "#e0e7ff" : "transparent" }}>
-                              <div style={{ width: 32, height: 32, borderRadius: 16, background: C.blue, color: "#fff", fontSize: 11.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{initials(w.worker_name)}</div>
-                              <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{w.worker_name}</div><div style={{ fontSize: 11.5, color: C.muted }}>{w.site_name || "—"}</div></div>
-                              <span style={{ background: C.greenSoft, color: C.greenInk, borderRadius: 999, padding: "4px 10px", fontSize: 12, fontWeight: 700 }}>{w.holiday_multiplier != null ? fmtX(w.holiday_multiplier) : "rule"}</span>
-                            </div>))}
-                      </div>
+                    ) : <div style={{ fontSize: 13.5, color: C.muted, marginTop: 4 }}>{selKind === "off" ? "Sunday — " + sunLabel : "Regular working day"}</div>}
+
+                    <div style={{ ...label, fontSize: 10, color: C.muted, marginTop: 14 }}>Applies to</div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                      {[["labour", "Workers"], ["site_staff", "Site Staff"], ["office_staff", "Office Staff"]].map(([c, l]) => {
+                        const on = !primary || appliesToCat(primary, c);
+                        return <span key={c} style={{ border: "1px solid " + (on ? "#FF7A1A" : C.line), background: on ? "#fff3e8" : "#fff", color: on ? "#9a3412" : C.muted, borderRadius: 999, padding: "4px 11px", fontSize: 12.5, fontWeight: 600 }}>{l}</span>;
+                      })}
                     </div>
+
+                    <div style={{ ...label, fontSize: 10, color: C.muted, marginTop: 14 }}>Pay multiplier for the selected worker</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginTop: 6 }}>
+                      {[["1", "1×"], ["2", "2×"], ["custom", "Custom"]].map(([v, l]) =>
+                        <div key={v} className={"chip " + (chip === v ? "on" : "")} onClick={() => setChip(v)}>{l}</div>)}
+                    </div>
+
+                    <div style={{ ...label, fontSize: 10, color: C.muted, marginTop: 14 }}>Workers on this date</div>
+                    <div style={{ marginTop: 6, maxHeight: 220, overflowY: "auto" }}>
+                      {dayWorkers === null ? <div style={{ fontSize: 12.5, color: C.muted }}>Loading…</div>
+                        : dayWorkers.length === 0 ? <div style={{ fontSize: 12.5, color: C.muted }}>No attendance on this date yet.</div>
+                        : dayWorkers.map(w => (
+                          <div key={w.attendance_id} onClick={() => setSelWorker(w)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 6px", borderRadius: 10, cursor: "pointer", background: selWorker?.attendance_id === w.attendance_id ? "#fff3e8" : "transparent" }}>
+                            <div style={{ width: 32, height: 32, borderRadius: 16, background: C.blue, color: "#fff", fontSize: 11.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{initials(w.worker_name)}</div>
+                            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{w.worker_name}</div><div style={{ fontSize: 11.5, color: C.muted }}>{w.site_name || "—"}</div></div>
+                            <span style={{ background: w.holiday_multiplier != null ? "#fff3e8" : C.lav, color: w.holiday_multiplier != null ? "#9a3412" : C.muted, borderRadius: 999, padding: "4px 10px", fontSize: 12, fontWeight: 700 }}>{w.holiday_multiplier != null ? fmtX(w.holiday_multiplier) : "rule"}</span>
+                          </div>))}
+                    </div>
+
+                    <div style={{ ...label, fontSize: 10, color: "#92400e", marginTop: 16 }}>Sunday policy <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: C.muted }}>· {site === "all" ? "all sites" : (sites.find(x => String(x.id) === String(site))?.name || "site")}</span></div>
+                    {SUN_OPTS.map(([v, l]) => <div key={v} className={"sopt " + (sunCode === v ? "on" : "")} onClick={() => setSunday(v)}><span className="rb" /><span>{l}</span></div>)}
+
+                    <div style={{ ...label, fontSize: 10, color: C.muted, marginTop: 16 }}>Sites covered</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                      {sitesCovered.length === 0 ? <span style={{ fontSize: 12.5, color: C.muted }}>No rule on this date.</span>
+                        : sitesCovered.map(n => <span key={n} style={{ background: C.lav, borderRadius: 8, padding: "4px 10px", fontSize: 12.5 }}>{n}</span>)}
+                    </div>
+
                     {msg && <div style={{ color: C.greenInk, fontSize: 12.5, marginTop: 10 }}>✓ {msg}</div>}
-                    <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                      <button disabled={!canManage || !primary} onClick={() => primary && openEdit(primary)} style={{ ...btnBlue, flex: 1, background: C.blueSoft, opacity: !primary ? .7 : 1 }}>✎ Edit</button>
-                      <button disabled={!canManage || busy} onClick={() => applyOverride(chip === "custom" ? Number(window.prompt("Multiplier (e.g. 1.25):") || NaN) : Number(chip))} style={btnGhost}>Enable</button>
-                      <button disabled={!canManage || busy} title={primary ? "Delete holiday" : "Remove worker override"} onClick={() => primary ? delHoliday(primary) : applyOverride(null)} style={{ ...btnGhost, color: C.red }}>🗑</button>
+                    <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                      <button disabled={!canManage || !primary} onClick={() => primary && openEdit(primary)} style={{ ...btnBlue, flex: 1, background: primary ? C.blue : C.blueSoft }}>✎ Edit</button>
+                      <button disabled={!canManage || busy || !selWorker} title="Apply the multiplier to the selected worker" onClick={() => applyOverride(chip === "custom" ? Number(window.prompt("Multiplier (e.g. 1.25):") || NaN) : Number(chip))} style={{ ...btnGhost, borderColor: "#FF7A1A", color: "#9a3412", fontWeight: 700 }}>Enable</button>
+                      <button disabled={!canManage || busy || !selWorker} title="Remove the selected worker's override" onClick={() => applyOverride(null)} style={btnGhost}>Disable</button>
                     </div>
-                  </div>
-
-                  {/* sunday policy */}
-                  <div style={{ ...card, padding: 22 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}><div style={{ ...label, color: "#92400e" }}>Sunday policy</div><span style={{ fontSize: 12, color: C.muted }}>Applies weekly</span></div>
-                    {SUN_OPTS.map(([v, l]) => <div key={v} className={"sopt " + (sunCode === v ? "on" : "")} onClick={() => setSunday(v)}><span>{l}</span>{sunCode === v && <span style={{ fontSize: 12.5 }}>Active</span>}</div>)}
-                  </div>
-
-                  {/* site-wise view */}
-                  <div style={{ ...card, padding: 22 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}><div style={{ ...label, color: C.violet }}>Site-wise view</div><span style={{ color: C.muted }}>⚙</span></div>
-                    <div style={{ fontSize: 18, fontWeight: 800, margin: "6px 0 10px" }}>Sync health</div>
-                    {sites.map(s => {
-                      const n = scoped.filter(h => (!(h.site_ids || []).length || h.site_ids.map(Number).includes(Number(s.id))) && h.on_date.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`)).length;
-                      return (
-                        <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, background: C.lav, borderRadius: 12, padding: "10px 12px", marginTop: 8 }}>
-                          <div style={{ width: 34, height: 34, borderRadius: 10, background: "#e0e7ff", color: C.blue, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{initials(s.name)[0]}</div>
-                          <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 700, fontSize: 14 }}>{s.name}</div><div style={{ fontSize: 12, color: C.muted }}>{siteStats[String(s.id)] || 0} workers · {n} month entries</div></div>
-                          <span style={{ background: C.greenSoft, color: C.greenInk, borderRadius: 999, padding: "4px 10px", fontSize: 12, fontWeight: 700 }}>In sync</span>
-                        </div>);
-                    })}
                   </div>
                 </div>
               </div>
@@ -392,6 +394,7 @@ export default function CalendarPage() {
               </div>
               {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+                {modal.id && <button style={{ ...btnGhost, color: C.red, marginRight: "auto" }} disabled={busy} onClick={() => { const h = hols.find(x => x.id === modal.id); if (h) { setModal(null); delHoliday(h); } }}>Delete holiday</button>}
                 <button style={btnGhost} onClick={() => setModal(null)} disabled={busy}>Cancel</button>
                 <button style={{ ...btnBlue, background: modal.name.trim() ? C.blue : C.blueSoft }} disabled={busy || !modal.name.trim()} onClick={saveModal}>Save &amp; Sync</button>
               </div>
