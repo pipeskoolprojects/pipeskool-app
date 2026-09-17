@@ -9,6 +9,7 @@ import { Fragment } from "react";   // update286
 import { getMuster, proxyPunch, proxyPunchOut, getSiteGeo, getPosition, distanceMeters, verifyDay, verifyOne, markAbsent, unmarkAbsent, getWorkerMonth, getMyProxyAuthority } from "@/lib/mobile";   // update287
 import { approveOt } from "@/lib/data";
 import { otRound, fmtHM } from "@/lib/payroll";
+import { loadOtSlabs } from "@/lib/otRules";   // update398
 import { getSession, setCurrentSite, can } from "@/lib/auth";
 import { getHolidayMap } from "@/lib/holidays";
 import { todayLocal } from "@/lib/today";
@@ -39,6 +40,7 @@ export default function MusterScreen() {
   const [busy, setBusy] = useState(false);
 
   const sess = typeof window !== "undefined" ? getSession() : null;
+  useEffect(() => { loadOtSlabs(); }, []);   // update398: OT suggestion follows the round-off slabs
   useEffect(() => { if (typeof window !== "undefined" && !getSession()) window.location.replace("/m"); }, []);
   const siteId = sess?.currentSite || sess?.sites?.[0]?.id || 1;
   // update286: combined multi-site muster. Supervisors on 2+ sites open on ALL their sites,
