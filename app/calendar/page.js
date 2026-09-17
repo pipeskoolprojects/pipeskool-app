@@ -213,6 +213,7 @@ export default function CalendarPage() {
               <select value={site} onChange={e => setSite(e.target.value)} style={{ ...sel, minWidth: 150 }}>
                 <option value="all">All Sites</option>{sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
+              {canManage && <a href="/calendar/rules" title="Attendance Rules"><button style={{ ...btnGhost, fontWeight: 600 }}>⚙ Attendance Rules</button></a>}{/* update394 */}
               {canManage && <button style={btnBlue} onClick={() => openAdd()}>＋ Add Holiday</button>}
             </div>
 

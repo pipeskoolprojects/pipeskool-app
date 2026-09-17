@@ -12,6 +12,7 @@ import { getLang, t } from "@/lib/i18n";
 import Logo from "@/components/Logo";
 import CameraCapture from "@/components/CameraCapture";
 import { getTodayQuote } from "@/lib/notices";
+import { getWorkerUpcomingHolidays } from "@/lib/attendanceRules";   // update394
 
 export default function PunchScreen() {
   const router = useRouter();
@@ -19,6 +20,9 @@ export default function PunchScreen() {
   const [proxyAuth, setProxyAuth] = useState(false);   // update288
   const [proxyErr, setProxyErr] = useState("");        // update289: the check is never silent
   useEffect(() => { if (worker?.id) getWorkerProxyFlag(worker.id).then(f => { setProxyAuth(f); setProxyErr(""); }).catch(e => { setProxyAuth(false); setProxyErr(e.message); }); }, [worker?.id]);
+  // update394: holiday banner — today + next 3 days at this worker's sites (definer RPC; worker app is anon)
+  const [upHols, setUpHols] = useState([]);
+  useEffect(() => { if (worker?.id) getWorkerUpcomingHolidays(worker.id).then(setUpHols); }, [worker?.id]);
   const [wSites, setWSites] = useState([]);   // update168: labour multi-site allotments
   useEffect(() => { if (worker?.id) getWorkerSiteOptions(worker).then(setWSites); else setWSites([]); }, [worker?.id]);
   const [mQuote, setMQuote] = useState(null);
@@ -154,6 +158,12 @@ export default function PunchScreen() {
         📊 Director Dashboard</a>
     )}
     <div className="m-wrap">
+      {upHols.length > 0 && (   /* update394 */
+        <div style={{ background: "#fff7ed", border: "1px solid #fdba74", color: "#9a3412", borderRadius: 10, padding: "8px 12px", margin: "8px 10px 0", fontSize: 13 }}>
+          {upHols.map(h => { const d = new Date(h.on_date + "T00:00:00"); const today = new Date(); today.setHours(0,0,0,0); const diff = Math.round((d - today) / 86400000);
+            return <div key={h.on_date}>🪔 <b>{diff === 0 ? "Today" : diff === 1 ? "Tomorrow" : d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}:</b> {h.name}{h.type_code === "working" ? " — working day" : h.type_code === "optional" ? " — optional (unpaid)" : " — holiday"}</div>; })}
+        </div>
+      )}
       <div className="m-head">
         <div>
           <div className="title">{worker.full_name}</div>
@@ -226,7 +236,7 @@ export default function PunchScreen() {
           <div className="stat-box"><div className="k">Hours</div><div className="v">{today.hours_worked != null ? Math.floor(today.hours_worked) + "h " + String(Math.round((today.hours_worked % 1) * 60)).padStart(2, "0") + "m" : "\u2014"}</div></div>
         </div>
 
-        <div className="muted" style={{ textAlign: "center", fontSize: 10, marginTop: 10 }}>Pipeskool v328</div>{/* update289: visible build tag — if this line is missing on the phone, the deploy is not live */}
+        <div className="muted" style={{ textAlign: "center", fontSize: 10, marginTop: 10 }}>Pipeskool v394</div>{/* update289: visible build tag — if this line is missing on the phone, the deploy is not live */}
         {worker.profile_complete === false && (
           <div className="note amber" style={{ textAlign: "left" }}>
             ⚠ Profile incomplete — bank details pending. Show this to your supervisor.
