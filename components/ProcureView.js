@@ -154,10 +154,14 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     if (!res.ok && res.duplicate && window.confirm(res.error + "\n\nRaise it anyway as a separate indent?")) res = await createIndent({ ...header, allow_duplicate: true }, outLines);
     submitting.current = false; setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    clearDraft(ind.id);   // update299
-    setNi(null); setMsg(editingId ? "Indent " + editingNo + " updated — quotes were cleared, status back to open." : "Indent " + res.indent_no + " raised.");
+    // update400: `ind` was never defined here — clearDraft(ind.id) threw AFTER the save succeeded,
+    // so the form never closed, no message showed and the list did not refresh (Edit → Save too).
+    if (editingId) clearDraft(editingId);   // update299 mirror only exists for an indent being edited
+    setNi(null); setDevs({}); setErr("");
+    setMsg(editingId ? "Indent " + editingNo + " updated — quotes were cleared, status back to open." : "Indent " + res.indent_no + " raised.");
     setEditingId(null); setEditingNo("");
     getOpenIndents(scope).then(setIndents);
+    try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch {}
   }
   const [masterVendors, setMasterVendors] = useState([]);
   const [editingId, setEditingId] = useState(null);
