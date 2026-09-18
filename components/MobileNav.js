@@ -28,6 +28,7 @@ const more = [
   { href: "/m/rentals", ico: "🚜", key: "m_rentals", show: s => canSeeModuleAnySite(s, "rentals") },
   { href: "/m/money", ico: "₹", key: "m_money", show: s => canSeeModuleAnySite(s, "money") },
   { href: "/m/tasks", ico: "📋", key: "m_tasks", show: s => !!s?.id },   // update327: My Tasks — every signed-in user
+  { href: "/help", ico: "❓", key: "m_help", show: s => !!s?.id },   // update401: Help Center (contextual ? added at open time)
   // update186: verification moved INTO Daily Muster (per-row ✓ + Verify all) — menu entry removed
   { href: "/m/add", ico: "＋", key: "m_add", show: s => canAnySite(s, "workers", "create") || canAnySite(s, "workers", "manage") },
 ];
