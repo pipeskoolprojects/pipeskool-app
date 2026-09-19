@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { createDeliveryChallan, getDeliveryChallans, convertDcToGrn, cancelDeliveryChallan, uploadDcProof, dcProofUrl, priceDcLines, dcTallyXml, getChallanPOs, editDeliveryChallan } from "@/lib/challan";
 import { getClients, shipBlock, addrLines } from "@/lib/clients";   // update393
+import InternalDispatchTab from "@/components/InternalDispatchTab";   // update403
 import { getTallySettings } from "@/lib/tally";
 import { getSession, canSeeModuleAnySite } from "@/lib/auth";
 
@@ -20,6 +21,8 @@ export default function DeliveryChallans() {
   const [tally, setTally] = useState(null);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
   const [ctab, setCtab] = useState("manual");            // update272c: Upload/AI tab removed on Director instruction — manual only
+  const [mainTab, setMainTab] = useState(() => { try { return new URLSearchParams(window.location.search).get("tab") === "internal" ? "internal" : "vendor"; } catch { return "vendor"; } });   // update403
+  const [idcCount, setIdcCount] = useState(null);
   const [showNew, setShowNew] = useState(true);
 
   // ---- create state (shared preview for both paths)
@@ -176,6 +179,16 @@ export default function DeliveryChallans() {
     <div className="layout">
       <Sidebar />
       <main className="main">
+        {/* update403: two challan flows on one page — vendor inward (unchanged) and internal dispatch */}
+        <div style={{ display: "flex", borderBottom: "1px solid var(--border)", marginBottom: 12, gap: 4 }}>
+          {[["vendor", "🚚 Vendor → Company", rows === null ? null : rows.length], ["internal", "➡️ Office → Site (Internal)", idcCount]].map(([k, l, n]) => (
+            <button key={k} type="button" onClick={() => { setMainTab(k); try { const u = new URL(window.location.href); k === "internal" ? u.searchParams.set("tab", "internal") : u.searchParams.delete("tab"); window.history.replaceState(null, "", u.toString()); } catch {} }}
+              style={{ background: "transparent", border: "none", borderBottom: mainTab === k ? "2px solid #FF7A1A" : "2px solid transparent", color: mainTab === k ? "#FF7A1A" : "var(--muted)", fontWeight: mainTab === k ? 700 : 500, padding: "10px 14px", fontSize: 13.5, cursor: "pointer", borderRadius: 0 }}>
+              {l}{n != null && <span style={{ marginLeft: 6, fontSize: 11, padding: "1px 7px", borderRadius: 10, background: mainTab === k ? "#FFF3E8" : "var(--gray-bg)", border: "1px solid " + (mainTab === k ? "#FF7A1A" : "var(--border)") }}>{n}</span>}
+            </button>))}
+        </div>
+        {mainTab === "internal" && <InternalDispatchTab session={session} onCount={setIdcCount} />}
+        <div style={{ display: mainTab === "vendor" ? "block" : "none" }}>
         <div className="page-head">
           <div><h1>Delivery challans</h1>
             <div className="muted" style={{ fontSize: 12.5 }}>Match vendor delivery challans against your POs — upload to auto-fill, or enter manually — then convert to GRN. Chain: PO → DC → GRN.</div></div>
@@ -349,7 +362,8 @@ export default function DeliveryChallans() {
             </div>
           </div>
         )}
-</main>
+        </div>{/* update403: end vendor tab */}
+      </main>
     </div>
   );
 }
