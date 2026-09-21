@@ -1,7 +1,7 @@
 "use client";
 // update215: DELIVERY CHALLAN module — vendor challan in (photo/AI or manual vs PO),
 // listed + filtered, then Convert -> GRN. Print / PDF / Tally per row and in bulk.
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { createDeliveryChallan, getDeliveryChallans, convertDcToGrn, cancelDeliveryChallan, uploadDcProof, dcProofUrl, priceDcLines, dcTallyXml, getChallanPOs, editDeliveryChallan } from "@/lib/challan";
 import { getClients, shipBlock, addrLines } from "@/lib/clients";   // update393
@@ -125,6 +125,8 @@ export default function DeliveryChallans() {
   const [fVendor, setFVendor] = useState("all"); const [fSite, setFSite] = useState("all");
   const [fFrom, setFFrom] = useState(""); const [fTo, setFTo] = useState("");
   const [fStatus, setFStatus] = useState("all"); const [fSource, setFSource] = useState("all"); const [q, setQ] = useState("");
+  const [pg, setPg] = useState(1); const PAGE = 20; const [xp, setXp] = useState({}); const [moreF, setMoreF] = useState(false);   // update406
+  useEffect(() => { setPg(1); }, [fVendor, fSite, fFrom, fTo, fStatus, fSource, q]);
   useEffect(() => { try { const sp = new URLSearchParams(window.location.search).get("site"); if (sp) setFSite(String(sp)); } catch {} }, []);
   const vendors = useMemo(() => [...new Set((rows || []).map(r => r.vendor).filter(Boolean))].sort(), [rows]);
   const siteOpts = useMemo(() => { const m = {}; (rows || []).forEach(r => { m[r.site_id] = r.site; }); return Object.entries(m); }, [rows]);
@@ -179,39 +181,36 @@ export default function DeliveryChallans() {
     <div className="layout">
       <Sidebar />
       <main className="main">
-        {/* update403: two challan flows on one page — vendor inward (unchanged) and internal dispatch */}
-        <div style={{ display: "flex", borderBottom: "1px solid var(--border)", marginBottom: 12, gap: 4 }}>
-          {[["vendor", "🚚 Vendor → Company", rows === null ? null : rows.length], ["internal", "➡️ Office → Site (Internal)", idcCount]].map(([k, l, n]) => (
-            <button key={k} type="button" onClick={() => { setMainTab(k); try { const u = new URL(window.location.href); k === "internal" ? u.searchParams.set("tab", "internal") : u.searchParams.delete("tab"); window.history.replaceState(null, "", u.toString()); } catch {} }}
-              style={{ background: "transparent", border: "none", borderBottom: mainTab === k ? "2px solid #FF7A1A" : "2px solid transparent", color: mainTab === k ? "#FF7A1A" : "var(--muted)", fontWeight: mainTab === k ? 700 : 500, padding: "10px 14px", fontSize: 13.5, cursor: "pointer", borderRadius: 0 }}>
-              {l}{n != null && <span style={{ marginLeft: 6, fontSize: 11, padding: "1px 7px", borderRadius: 10, background: mainTab === k ? "#FFF3E8" : "var(--gray-bg)", border: "1px solid " + (mainTab === k ? "#FF7A1A" : "var(--border)") }}>{n}</span>}
-            </button>))}
+        {/* update403/406: two challan flows on one page — pill tabs with icon + count */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+          <div style={{ display: "inline-flex", background: "var(--gray-bg)", borderRadius: 8, padding: 3, gap: 2 }}>
+            {[["vendor", "🚚", "Vendor challans", rows === null ? null : rows.length], ["internal", "🏭", "Internal transfers", idcCount]].map(([k, ic, l, n]) => (
+              <button key={k} type="button" onClick={() => { setMainTab(k); try { const u = new URL(window.location.href); k === "internal" ? u.searchParams.set("tab", "internal") : u.searchParams.delete("tab"); window.history.replaceState(null, "", u.toString()); } catch {} }}
+                style={{ border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 13, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", background: mainTab === k ? "#fff" : "transparent", color: mainTab === k ? "var(--text)" : "var(--muted)", fontWeight: mainTab === k ? 600 : 400, boxShadow: mainTab === k ? "0 0 0 1px var(--border)" : "none" }}>
+                <span>{ic}</span>{l}{n != null && <span style={{ color: "var(--muted)", fontSize: 12 }}>{n}</span>}
+              </button>))}
+          </div>
+          {mainTab === "vendor" && canCreate && <button type="button" onClick={() => setShowNew(v => !v)}>{showNew ? "🙈 Hide form" : "＋ New Delivery Challan"}</button>}
         </div>
         {mainTab === "internal" && <InternalDispatchTab session={session} onCount={setIdcCount} />}
         <div style={{ display: mainTab === "vendor" ? "block" : "none" }}>
-        <div className="page-head">
-          <div><h1>Delivery challans</h1>
-            <div className="muted" style={{ fontSize: 12.5 }}>Match vendor delivery challans against your POs — upload to auto-fill, or enter manually — then convert to GRN. Chain: PO → DC → GRN.</div></div>
-          {canCreate && <button className="primary" onClick={() => setShowNew(v => !v)}>{showNew ? "Hide form" : "+ New Delivery Challan"}</button>}
-        </div>
+        <h1 style={{ margin: "0 0 2px" }}>Delivery challans</h1>
+        <div className="muted" style={{ fontSize: 13, marginBottom: 16 }}>Match vendor challans against POs, then convert to GRN. Chain: PO → DC → GRN.</div>
         {msg && <div className="note green">{msg}</div>}
         {err && <div className="note red">{err}</div>}
 
-        <div className="cards" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))" }}>
-          {[["🧾 Total challans", stat.total, "this filter"], ["⚡ Auto-matched", stat.auto, "from uploaded DCs"], ["✍ Manual entries", stat.manual, "entered by hand"], ["⚠ Qty mismatch", stat.mism, "needs review"], ["⏳ Pending → GRN", stat.pend, "not yet converted"], ["₹ Received value", inr(recvValue), "PO rates, this filter"]].map(([l, v, sub]) => (
-            <div className="card" key={l}><div className="muted" style={{ fontSize: 11 }}>{l}</div><b style={{ fontSize: 18 }}>{v}</b><div className="muted" style={{ fontSize: 10.5 }}>{sub}</div></div>
-          ))}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 18 }}>
+          {[["🧾", "Total challans", stat.total, null], ["⚡", "Auto-matched", stat.auto, null], ["✍", "Manual entries", stat.manual, null], ["⚠", "Qty mismatch", stat.mism, "amber"], ["⏳", "Pending → GRN", stat.pend, "blue"], ["₹", "Received value", inr(recvValue), null]].map(([ic, l, v, tone]) => (
+            <div key={l} style={{ background: tone === "amber" ? "#FEF3C7" : tone === "blue" ? "#E8F0FE" : "#fff", border: "1px solid " + (tone === "amber" ? "#FDE68A" : tone === "blue" ? "#C7D7FE" : "var(--border)"), borderRadius: 12, padding: "12px 14px", color: tone === "amber" ? "#92400E" : tone === "blue" ? "#1D4ED8" : "inherit" }}>
+              <div style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6, opacity: tone ? 1 : .7 }}><span>{ic}</span>{l}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={String(v)}>{v}</div>
+            </div>))}
         </div>
 
         {canCreate && showNew && (
-          <div className="panel" style={{ padding: 0 }}>
-            <div style={{ display: "flex", borderBottom: "1px solid var(--border)" }}>
-              {[["manual", "✍ Manual Entry — Select PO"]].map(([k, l]) => (   /* update272c: upload tab removed */
-                <button key={k} type="button" onClick={() => setCtab(k)}
-                  style={{ flex: 1, border: "none", background: "none", padding: "12px", fontSize: 13, cursor: "pointer", fontWeight: ctab === k ? 800 : 600, color: ctab === k ? "var(--copper)" : "var(--muted)", borderBottom: ctab === k ? "3px solid var(--copper)" : "3px solid transparent" }}>{l}</button>
-              ))}
-            </div>
-            <div style={{ padding: 16 }}>
+          <div style={{ background: "#F5F8FF", border: "1px solid #C7D7FE", borderRadius: 12, padding: 16, marginBottom: 18 }}>{/* update406: workflow card, accent tint */}
+            <div style={{ fontSize: 13.5, color: "#1D4ED8", display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>👆 Manual entry — pick a PO to match against</div>
+            <div>
               {ctab === "upload" && (
                 <div style={{ border: "2px dashed var(--copper)", background: "#fff8f2", borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
                   <div style={{ fontSize: 26 }}>🖨️</div>
@@ -240,7 +239,7 @@ export default function DeliveryChallans() {
                     </select>
                     <input placeholder="🔎 Search PO number…" value={poQ} onChange={e => setPoQ(e.target.value)} style={{ flex: "2 1 200px" }} />
                   </div>
-                  <div style={{ maxHeight: 170, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 10 }}>
+                  <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8, background: "#fff" }}>
                     {pos.filter(p => (poSite === "all" || p.site === poSite) && (poVendor === "all" || p.vendor === poVendor)
                         && (!poQ || (p.po_no + " " + p.vendor + " " + (p.site || "")).toLowerCase().includes(poQ.toLowerCase()))).slice(0, 40).map(p => (
                       <div key={p.id} onClick={() => pickPO(p)}
@@ -297,48 +296,69 @@ export default function DeliveryChallans() {
           </div>
         )}
 
-        <div className="panel">
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-            <select value={fVendor} onChange={e => setFVendor(e.target.value)}><option value="all">Vendor: all</option>{vendors.map(v => <option key={v} value={v}>{v}</option>)}</select>
-            <select value={fSite} onChange={e => setFSite(e.target.value)}><option value="all">Site: all</option>{siteOpts.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select>
-            <input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)} /><span className="muted" style={{ fontSize: 11 }}>to</span>
-            <input type="date" value={fTo} onChange={e => setFTo(e.target.value)} />
-            <select value={fStatus} onChange={e => setFStatus(e.target.value)}><option value="all">Status: all</option><option value="matched">Matched</option><option value="mismatch">Mismatch</option><option value="pending">No PO</option><option value="pending_grn">Pending → GRN</option><option value="cancelled">Cancelled</option></select>
-            <select value={fSource} onChange={e => setFSource(e.target.value)}><option value="all">Source: all</option><option value="auto">Auto</option><option value="manual">Manual</option></select>
-            <input placeholder="PO / DC / GRN no… 🔎" value={q} onChange={e => setQ(e.target.value)} style={{ width: 150 }} />
+        <div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ flex: "1 1 200px", display: "flex", alignItems: "center", gap: 6, background: "#fff", border: "1px solid var(--border)", borderRadius: 8, padding: "0 10px", height: 36 }}><span className="muted">🔍</span><input placeholder="Search PO / DC / GRN no…" value={q} onChange={e => setQ(e.target.value)} style={{ border: "none", background: "transparent", outline: "none", width: "100%", fontSize: 13 }} /></div>
+            <select value={fStatus} onChange={e => setFStatus(e.target.value)} style={{ height: 36 }}><option value="all">Status: all</option><option value="matched">Matched</option><option value="mismatch">Mismatch</option><option value="pending">No PO</option><option value="pending_grn">Pending → GRN</option><option value="cancelled">Cancelled</option></select>
+            <button type="button" className={moreF ? "primary" : ""} style={{ height: 36 }} onClick={() => setMoreF(m => !m)}>⚙ More filters{(fVendor !== "all" || fSite !== "all" || fFrom || fTo || fSource !== "all") ? " •" : ""}</button>
             <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-              <a href={"/stock/dc-print?ids=" + shown.map(r => r.id).join(",")} target="_blank" rel="noreferrer"><button type="button" style={{ fontSize: 12 }} disabled={!shown.length}>🖨 Print / ⬇ PDF (filtered {shown.length})</button></a>
-              <button type="button" style={{ fontSize: 12 }} disabled={!shown.length || !tally} onClick={() => dlTally(shown, "delivery_challans_batch.xml")}>📊 Tally batch</button>
+              <a href={"/stock/dc-print?ids=" + shown.map(r => r.id).join(",")} target="_blank" rel="noreferrer"><button type="button" style={{ height: 36 }} disabled={!shown.length}>🖨 Print</button></a>
+              <button type="button" style={{ height: 36 }} disabled={!shown.length || !tally} onClick={() => dlTally(shown, "delivery_challans_batch.xml")}>🔄 Tally batch</button>
             </span>
           </div>
+          {moreF && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
+              <select value={fVendor} onChange={e => setFVendor(e.target.value)}><option value="all">Vendor: all</option>{vendors.map(v => <option key={v} value={v}>{v}</option>)}</select>
+              <select value={fSite} onChange={e => setFSite(e.target.value)}><option value="all">Site: all</option>{siteOpts.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select>
+              <input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)} /><span className="muted" style={{ fontSize: 11 }}>to</span><input type="date" value={fTo} onChange={e => setFTo(e.target.value)} />
+              <select value={fSource} onChange={e => setFSource(e.target.value)}><option value="all">Source: all</option><option value="auto">Auto</option><option value="manual">Manual</option></select>
+              <button type="button" style={{ fontSize: 11.5, marginLeft: "auto" }} onClick={() => { setFVendor("all"); setFSite("all"); setFFrom(""); setFTo(""); setFSource("all"); }}>Clear</button>
+            </div>
+          )}
           {!rows ? <div className="muted">Loading…</div> : shown.length === 0 ? <div className="muted">No delivery challans match.</div> : (
-            <div className="dt-scroll" style={{ maxHeight: "60vh" }}>
-              <table className="dt-compact" style={{ width: "100%" }}>
-                <thead><tr><th>DC Ref</th><th>Date</th><th>Site</th><th>Vendor</th><th>Against PO</th><th className="num">Qty (Recv/Ord)</th><th>Match</th><th>Source</th><th>Proof</th><th>GRN</th><th>Actions</th></tr></thead>
+            <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+              <style>{`.dc406 tbody tr.dc-row:hover td { background: #FAFAFC; } .dc406 th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 10px 12px; background: var(--gray-bg); } .dc406 td { padding: 11px 12px; font-size: 13px; border-top: 1px solid var(--border); vertical-align: middle; } .dc406 .ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } @media (max-width: 720px) { .dc406 .hide-m { display: none; } }`}</style>
+              <table className="dc406" style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                <colgroup><col style={{ width: "24%" }} /><col style={{ width: "26%" }} /><col className="hide-m" style={{ width: "20%" }} /><col style={{ width: "14%" }} /><col style={{ width: "16%" }} /></colgroup>
+                <thead><tr><th>DC ref</th><th>Vendor</th><th className="hide-m">Against PO</th><th style={{ textAlign: "right" }}>Qty</th><th>Match</th></tr></thead>
                 <tbody>
-                  {shown.map(r => { const [sl, sc] = stBadge[r.status] || ["?", "gray"]; return (
-                    <tr key={r.id} style={r.status === "cancelled" ? { opacity: 0.55, textDecoration: "line-through" } : undefined} title={r.status === "cancelled" ? ("Cancelled" + (r.cancelled_by ? " by " + r.cancelled_by : "") + (r.cancel_reason ? " — " + r.cancel_reason : "")) : undefined}>{/* update272 */}
-                      <td style={{ fontWeight: 700 }}>{r.dc_ref}{r.vendor_dc_no && <div className="muted" style={{ fontSize: 10.5 }}>vendor: {r.vendor_dc_no}</div>}</td>
-                      <td className="muted">{r.date}</td>
-                      <td>{r.site}{r.client && <div className="muted" style={{ fontSize: 10.5 }}>{r.client}</div>}</td>
-                      <td>{r.vendor}</td>
-                      <td>{r.po_no || <span className="badge warn">No PO</span>}</td>
-                      <td className="num"><b>{r.recv}</b> / {r.ord || "—"}</td>
-                      <td><span className={"badge " + sc}>{sl}</span></td>
-                      <td><span className={"badge " + (r.source === "auto" ? "info" : "gray")}>{r.source === "auto" ? "Auto" : "Manual"}</span></td>
-                      <td>{r.proof ? <a href={dcProofUrl(r.proof)} target="_blank" rel="noreferrer">🖼</a> : <span className="muted">—</span>}</td>
-                      <td>{r.grn_no ? <span className="badge p" title="Open GRN Register to view">{r.grn_no}</span> : <span className="muted">—</span>}</td>
-                      <td style={{ whiteSpace: "nowrap" }}>
-                        <a href={"/stock/dc-print?ids=" + r.id} target="_blank" rel="noreferrer" title="Print / save as PDF"><button type="button" style={{ fontSize: 11.5, marginRight: 4 }}>🖨</button></a>
-                        <button type="button" style={{ fontSize: 11.5, marginRight: 4 }} title="Tally XML" disabled={!tally} onClick={() => dlTally([r], r.dc_ref.replace(/\//g, "-") + ".xml")}>📊</button>
-                        {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5, marginRight: 4 }} title="Edit DC No. / date / client" onClick={() => setEdit({ id: r.id, dc_ref: r.dc_ref, dc_date: r.date, client_id: r.client_id || "", vendor_dc_no: r.vendor_dc_no || "" })}>✎</button>}{/* update393 */}
-                        {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5, fontWeight: 700 }} disabled={conv === r.id} onClick={() => convert(r)}>{conv === r.id ? "…" : "Convert → GRN"}</button>}
-                        {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5, color: "var(--red)", borderColor: "var(--red)" }} onClick={() => cancelDc(r)}>✕ Cancel</button>}{/* update272 */}
-                      </td>
+                  {shown.slice((pg - 1) * PAGE, pg * PAGE).map(r => { const [sl] = stBadge[r.status] || ["?"]; const tone = r.status === "matched" ? ["#DCFCE7", "#15803D"] : r.status === "mismatch" ? ["#FEE2E2", "#B91C1C"] : r.status === "pending" ? ["#FEF3C7", "#92400E"] : ["#F3F4F6", "#6B7280"]; const o = !!xp[r.id]; return (
+                    <Fragment key={r.id}>
+                    <tr className="dc-row" onClick={() => setXp(x => ({ ...x, [r.id]: !x[r.id] }))} style={{ cursor: "pointer", opacity: r.status === "cancelled" ? 0.6 : 1, background: o ? "#FAFAFC" : undefined }} title={r.status === "cancelled" ? ("Cancelled" + (r.cancelled_by ? " by " + r.cancelled_by : "") + (r.cancel_reason ? " — " + r.cancel_reason : "")) : undefined}>
+                      <td className="ell"><span style={{ fontWeight: 600, textDecoration: r.status === "cancelled" ? "line-through" : "none" }}>{o ? "▾ " : "▸ "}{r.dc_ref}</span><br /><span className="muted" style={{ fontSize: 11 }}>{r.date} · {r.site}</span></td>
+                      <td className="ell">{r.vendor}{r.vendor_dc_no && <div className="muted" style={{ fontSize: 10.5 }}>vendor DC {r.vendor_dc_no}</div>}</td>
+                      <td className="ell hide-m muted">{r.po_no || "No PO"}</td>
+                      <td style={{ textAlign: "right" }}><b>{r.recv}</b>/{r.ord || "—"}</td>
+                      <td><span style={{ background: tone[0], color: tone[1], fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>{sl}</span>{!r.grn_no && r.status !== "cancelled" && <span style={{ background: "#E8F0FE", color: "#1D4ED8", fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>→ GRN</span>}</td>
                     </tr>
+                    {o && (
+                      <tr><td colSpan={5} style={{ background: "#FAFAFC", padding: "10px 14px 14px" }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, fontSize: 12.5, marginBottom: 10 }}>
+                          <div><div className="muted" style={{ fontSize: 11 }}>Against PO</div>{r.po_no || <span className="muted">No PO</span>}</div>
+                          <div><div className="muted" style={{ fontSize: 11 }}>Client</div>{r.client || "—"}</div>
+                          <div><div className="muted" style={{ fontSize: 11 }}>Source</div><span className={"badge " + (r.source === "auto" ? "info" : "gray")}>{r.source === "auto" ? "Auto" : "Manual"}</span></div>
+                          <div><div className="muted" style={{ fontSize: 11 }}>Proof</div>{r.proof ? <a href={dcProofUrl(r.proof)} target="_blank" rel="noreferrer">🖼 open</a> : <span className="muted">none</span>}</div>
+                          <div><div className="muted" style={{ fontSize: 11 }}>GRN</div>{r.grn_no ? <a href="/stock/grn" title="Open GRN Register"><span className="badge p">{r.grn_no}</span></a> : <span className="muted">not yet converted</span>}</div>
+                          <div><div className="muted" style={{ fontSize: 11 }}>Lines</div>{r.lines.length} item(s) · {r.recv} recd / {r.ord || "—"} ordered</div>
+                        </div>
+                        {r.status === "cancelled" && <div className="note red" style={{ marginBottom: 8 }}>Cancelled{r.cancelled_by ? " by " + r.cancelled_by : ""}{r.cancel_reason ? " — " + r.cancel_reason : ""}</div>}
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <a href={"/stock/dc-print?ids=" + r.id} target="_blank" rel="noreferrer"><button type="button" style={{ fontSize: 11.5 }}>🖨 Print / PDF</button></a>
+                          <button type="button" style={{ fontSize: 11.5 }} disabled={!tally} onClick={() => dlTally([r], r.dc_ref.replace(/\//g, "-") + ".xml")}>📊 Tally XML</button>
+                          {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5 }} onClick={() => setEdit({ id: r.id, dc_ref: r.dc_ref, dc_date: r.date, client_id: r.client_id || "", vendor_dc_no: r.vendor_dc_no || "" })}>✎ Edit</button>}
+                          {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" className="primary" style={{ fontSize: 11.5 }} disabled={conv === r.id} onClick={() => convert(r)}>{conv === r.id ? "…" : "Convert → GRN"}</button>}
+                          {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5, color: "var(--red)", borderColor: "var(--red)" }} onClick={() => cancelDc(r)}>✕ Cancel</button>}
+                        </div>
+                      </td></tr>
+                    )}
+                    </Fragment>
                   ); })}
                 </tbody>
               </table>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderTop: "1px solid var(--border)", flexWrap: "wrap", gap: 8 }}>
+                <span className="muted" style={{ fontSize: 12 }}>Showing {Math.min((pg - 1) * PAGE + 1, shown.length)}–{Math.min(pg * PAGE, shown.length)} of {shown.length} · tap a row for GRN, proof and source</span>
+                <div style={{ display: "flex", gap: 4 }}><button type="button" style={{ padding: "5px 9px" }} disabled={pg <= 1} onClick={() => setPg(p => p - 1)}>‹</button><button type="button" style={{ padding: "5px 9px" }} disabled={pg * PAGE >= shown.length} onClick={() => setPg(p => p + 1)}>›</button></div>
+              </div>
             </div>
           )}
           <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Value uses each item's PO rate. 🖨 opens the letterhead document — use Print → Save as PDF for a file (works the same on Android, via the share sheet). Converting creates a real GRN through the same engine as the GRN Register.</div>
