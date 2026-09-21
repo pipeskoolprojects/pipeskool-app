@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { useEffect, useState, Suspense } from "react";
 import { getCompanyGstin } from "@/lib/data";   // update300
 import { useSearchParams } from "next/navigation";
-import { getPODetail, getPOProofs } from "@/lib/procure";
+import { getPODetail, getPOProofs, canEditPoRates, editPoRates, lastRateForVendor, getPoRateLog, getPoLineIds, duplicatePO } from "@/lib/procure";   // update408
 import { getPOItemStatus, LINE_STATUS } from "@/lib/pending";
 
 function POView() {
@@ -16,6 +16,31 @@ function POView() {
   const [proofs, setProofs] = useState({ indentId: null, proofs: [] });   // update254: rate-comparison reference
   const [recv, setRecv] = useState([]);   // update256: per-line ordered / received / pending
   const [sending, setSending] = useState(false); const [sendMsg, setSendMsg] = useState("");   // update390
+  // update408: Edit PO (rates) with audit + vendor-history hints; duplicate
+  const [canEdit, setCanEdit] = useState(false); const [edit, setEdit] = useState(null);
+  const [rateLog, setRateLog] = useState([]); const [busyE, setBusyE] = useState(false); const [emsg, setEmsg] = useState("");
+  const reload = () => getPODetail(poId).then(d => setPo(d));
+  useEffect(() => { if (!poId) return; canEditPoRates().then(setCanEdit); getPoRateLog(poId).then(setRateLog); }, [poId]);
+  async function startEdit() {
+    setEmsg(""); const lines = await getPoLineIds(poId);
+    const hints = {};
+    await Promise.all(lines.map(async l => { const h = await lastRateForVendor(po.vendor, l.item_id, l.item_name); if (h && Number(h.po_id) !== Number(poId)) hints[l.id] = h; }));
+    setEdit({ lines: lines.map(l => ({ ...l, rate: String(l.rate ?? ""), list_rate: l.list_rate == null ? "" : String(l.list_rate), discount_pct: l.discount_pct == null ? "" : String(l.discount_pct) })), hints, reason: "" });
+  }
+  const netFrom = (list, disc) => { const L = Number(list), D = Number(disc); return L > 0 ? +(L * (1 - (D || 0) / 100)).toFixed(2) : null; };
+  const setLine = (id, k, v) => setEdit(e => ({ ...e, lines: e.lines.map(l => { if (l.id !== id) return l; const n = { ...l, [k]: v }; if ((k === "list_rate" || k === "discount_pct") && Number(n.list_rate) > 0) { const net = netFrom(n.list_rate, n.discount_pct); if (net != null) n.rate = String(net); } return n; }) }));
+  const applyHint = id => { const h = edit.hints[id]; if (!h) return; setEdit(e => ({ ...e, lines: e.lines.map(l => l.id === id ? { ...l, rate: String(h.rate), list_rate: h.list_rate == null ? l.list_rate : String(h.list_rate), discount_pct: h.discount_pct == null ? l.discount_pct : String(h.discount_pct) } : l) })); };
+  async function saveEdit() {
+    setBusyE(true); setEmsg("");
+    const r = await editPoRates(Number(poId), edit.lines.map(l => ({ po_item_id: l.id, rate: Number(l.rate) || 0, discount_pct: l.discount_pct === "" ? null : Number(l.discount_pct), list_rate: l.list_rate === "" ? null : Number(l.list_rate) })), edit.reason);
+    setBusyE(false); if (!r.ok) { setEmsg(r.error); return; }
+    setEdit(null); setEmsg(r.changed ? `${r.changed} rate(s) corrected — logged with your name and today's date.` : "No rate changed."); reload(); getPoRateLog(poId).then(setRateLog);
+  }
+  async function dup() {
+    if (!window.confirm(`Duplicate ${po.po_no} as a new PO for ${po.vendor} with the same lines? It will go to Director approval like any new PO.`)) return;
+    const s2 = getSession(); const r = await duplicatePO(Number(poId), s2?.id); if (!r.ok) { setEmsg(r.error); return; }
+    setEmsg(`Created ${r.po_no}. Opening the PO list…`); setTimeout(() => window.location.assign("/procure"), 900);
+  }
 
   // update390: the browser's PDF header/filename comes from document.title — make it the PO,
   // not the app name. Restored on leave so the rest of the app is untouched.
@@ -136,6 +161,15 @@ function POView() {
         <div style={{ background: "#fff7ed", border: "1.5px solid #f59e0b", color: "#92400e", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
           ⚠ DRAFT — NOT YET APPROVED. Review copy for the approving Director; not valid for issue to vendor.</div>
       </>)}
+      {/* update408: action bar — screen only, never printed */}
+      <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, alignItems: "center" }}>
+        {canEdit && !edit && po.status !== "cancelled" && <button type="button" onClick={startEdit} style={{ background: "#FF7A1A", color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", fontSize: 13, cursor: "pointer" }}>✎ Edit PO</button>}
+        <button type="button" onClick={() => window.print()} style={{ borderRadius: 8, padding: "7px 14px", fontSize: 13 }}>⬇ Download PDF</button>
+        {!draftReview && <button type="button" onClick={sendPo} disabled={sending} style={{ borderRadius: 8, padding: "7px 14px", fontSize: 13 }}>{sending ? "Preparing…" : "📤 Send to vendor"}</button>}
+        {canEdit && <button type="button" onClick={dup} style={{ borderRadius: 8, padding: "7px 14px", fontSize: 13 }}>⧉ Duplicate</button>}
+        {sendMsg && <span style={{ fontSize: 12, color: "#555" }}>{sendMsg}</span>}
+        {emsg && <span style={{ fontSize: 12, color: /corrected|Created|No rate/.test(emsg) ? "#15803D" : "#B91C1C" }}>{emsg}</span>}
+      </div>
       <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "3px solid #FF7A1A", paddingBottom: 14 }}>
         <div>
           <svg width="46" height="5" viewBox="0 0 46 5" style={{ display: "block", marginBottom: 7 }}>
@@ -170,6 +204,32 @@ function POView() {
       </div>
 
       <div className="po-scroll">{/* update265 */}
+      {edit && (
+        <div className="no-print" style={{ border: "1px solid #C7D7FE", background: "#F5F8FF", borderRadius: 12, padding: 14, marginTop: 16 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>✎ Edit rates — {po.po_no}</div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead><tr style={{ color: "#6b7280", fontSize: 12 }}><th style={{ textAlign: "left", padding: 6 }}>Description</th><th style={{ textAlign: "right", padding: 6 }}>Qty</th><th style={{ textAlign: "right", padding: 6 }}>List rate</th><th style={{ textAlign: "right", padding: 6 }}>Disc %</th><th style={{ textAlign: "right", padding: 6 }}>Net rate</th><th style={{ textAlign: "right", padding: 6 }}>Amount</th></tr></thead>
+            <tbody>{edit.lines.map(l => { const h = edit.hints[l.id]; const amt = (Number(l.qty) - Number(l.returned_qty || 0)) * (Number(l.rate) || 0); return (
+              <tr key={l.id} style={{ borderTop: "1px solid #e5e7eb", opacity: l.line_kind === "exchanged" ? .6 : 1 }}>
+                <td style={{ padding: 6, verticalAlign: "top" }}>{l.item_name}{l.spec ? " — " + l.spec : ""}{l.line_kind === "exchanged" && <span style={{ fontSize: 10.5, color: "#A32D2D" }}> · exchanged</span>}</td>
+                <td style={{ padding: 6, textAlign: "right", verticalAlign: "top" }}>{Number(l.qty) - Number(l.returned_qty || 0)} {l.unit}</td>
+                <td style={{ padding: 6, textAlign: "right", verticalAlign: "top" }}><input style={{ width: 82, textAlign: "right" }} inputMode="decimal" value={l.list_rate} placeholder="—" onChange={e => setLine(l.id, "list_rate", e.target.value.replace(/[^0-9.]/g, ""))} /></td>
+                <td style={{ padding: 6, textAlign: "right", verticalAlign: "top" }}><input style={{ width: 60, textAlign: "right" }} inputMode="decimal" value={l.discount_pct} placeholder="0" onChange={e => setLine(l.id, "discount_pct", e.target.value.replace(/[^0-9.]/g, ""))} /></td>
+                <td style={{ padding: 6, textAlign: "right", verticalAlign: "top" }}>
+                  <input style={{ width: 82, textAlign: "right", border: "1px solid #93A5FD", borderRadius: 6 }} inputMode="decimal" value={l.rate} onChange={e => setLine(l.id, "rate", e.target.value.replace(/[^0-9.]/g, ""))} />
+                  {h && <div style={{ fontSize: 10.5, color: "#1D4ED8", marginTop: 4, lineHeight: 1.4, cursor: "pointer" }} title="Click to use this rate" onClick={() => applyHint(l.id)}>Last bought: {inr(h.rate)}{h.discount_pct ? `, ${h.discount_pct}% disc` : ""}<br />{h.po_no} · {String(h.po_date).split("-").reverse().join("/")}</div>}
+                </td>
+                <td style={{ padding: 6, textAlign: "right", verticalAlign: "top" }}>{inr(amt)}</td>
+              </tr>); })}</tbody>
+          </table>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+            <input style={{ flex: "1 1 240px" }} placeholder="Reason for correction (optional, goes in the audit log)" value={edit.reason} onChange={e => setEdit(x => ({ ...x, reason: e.target.value }))} />
+            <button type="button" onClick={() => setEdit(null)} disabled={busyE}>Cancel</button>
+            <button type="button" onClick={saveEdit} disabled={busyE} style={{ background: "#FF7A1A", color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px" }}>{busyE ? "Saving…" : "Save rates"}</button>
+          </div>
+          <div style={{ fontSize: 11.5, color: "#1D4ED8", marginTop: 8 }}>ⓘ Hints come from this vendor's earlier POs for the same item — click a hint to use it. Net rate = list × (1 − disc%); typing a net rate directly is also fine. Every change is logged with date and user.</div>
+        </div>
+      )}
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
         <thead>
           <tr style={{ background: "#FEF2EC" }}>
@@ -232,6 +292,7 @@ function POView() {
           looked identical and an uploaded proof seemed to vanish. */}
       {proofs.indentId && (
         <div className="no-print" style={{ textAlign: "center", marginTop: 18, fontSize: 12.5 }}>
+          <div style={{ fontWeight: 800, fontSize: 12, color: "#6b7280", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>Rate comparison proof</div>{/* update408 */}
           <a href={"/purchase/rate-proof?indent=" + proofs.indentId} target="_blank" rel="noreferrer"
              style={{ fontWeight: 700, color: proofs.proofs?.length ? "#a4551f" : "#6b7280",
                border: "1px solid " + (proofs.proofs?.length ? "#a4551f" : "#c9d0d8"), borderRadius: 8,
@@ -249,7 +310,7 @@ function POView() {
       {/* update256: what is still outstanding on this PO. Hidden from print. */}
       {recv.length > 0 && recv.some(r => Number(r.pending_qty) > 0 || Number(r.excess_qty) > 0) && (
         <div className="no-print" style={{ maxWidth: 860, margin: "20px auto 0", border: "1px solid #e2d2c5", borderRadius: 10, padding: "12px 14px" }}>
-          <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 8, color: "#a4551f" }}>Delivery status — what is still outstanding</div>
+          <div style={{ fontWeight: 800, fontSize: 12, marginBottom: 8, color: "#a4551f", textTransform: "uppercase", letterSpacing: ".06em" }}>Delivery status — what is still outstanding</div>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead><tr style={{ textAlign: "left", color: "#6b7280" }}>
               <th style={{ padding: "4px 6px" }}>Item</th>
@@ -283,6 +344,12 @@ function POView() {
         </div>
       )}
 
+      {rateLog.length > 0 && (
+        <div className="no-print" style={{ marginTop: 18, fontSize: 12.5 }}>
+          <div style={{ fontWeight: 800, fontSize: 12, color: "#6b7280", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>Rate corrections (audit)</div>
+          {rateLog.map(r => <div key={r.id} style={{ padding: "4px 0", borderTop: "1px solid #eee" }}>{r.item_name}: {inr(r.old_rate)} → <b>{inr(r.new_rate)}</b>{Number(r.old_discount || 0) !== Number(r.new_discount || 0) ? ` · disc ${r.old_discount ?? 0}% → ${r.new_discount ?? 0}%` : ""} — corrected on {String(r.changed_at).slice(0, 10).split("-").reverse().join("/")} by {r.changed_by_name}{r.reason ? ` · ${r.reason}` : ""}</div>)}
+        </div>
+      )}
       <div style={{ textAlign: "center", marginTop: 26, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }} className="no-print">
         <button onClick={() => window.print()} style={{ padding: "10px 22px", fontSize: 14, background: "#fff", color: "#0F1419", border: "1.5px solid #0F1419", borderRadius: 8, cursor: "pointer" }}>🖨 Print / Save as PDF</button>
         {!draftReview && (
