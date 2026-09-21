@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ITEM_TYPES, searchItems, addItem, recordTxn, logConsumption, recordMultiGRN, getOpenPOs, getReturnableGrns, recordGrnReturn, recordReturn, issueToWorker, issueMultiToWorker, getWorkerList, getHoldings, settleHolding, bulkImport, BULK_TEMPLATE_HEADERS } from "@/lib/stock";
 import { getSession } from "@/lib/auth";
 import { getVendors } from "@/lib/vendors";
+import ExchangePanel from "@/components/ExchangePanel";   // update404
 
 const UNITS = ["Nos", "Rmt", "Mtr", "Kg", "Set", "Box", "Litre", "Bag"];
 
@@ -249,11 +250,13 @@ export default function StockEntry({ siteId, userId, onDone }) {
         {btn("issue", "Issue to worker")}
         {btn("settle", holdings.length ? `Settle (${holdings.length})` : "Settle")}
         {btn("return", "Return to vendor")}
+        {btn("exchange", "⇄ Exchange")}{/* update404 */}
         {btn("item", "New item")}
         {btn("bulk", "⬆ Bulk import (Excel)")}
       </div>
 
       {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)", marginTop: 12 }}>{msg}</div>}
+      {open === "exchange" && <ExchangePanel siteId={chosenSite || siteId} onDone={m => { setMsg(m); onDone && onDone(); }} />}{/* update404 */}
       {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
 
       {/* ---------- MULTI-ITEM GRN ---------- */}
