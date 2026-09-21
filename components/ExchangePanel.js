@@ -12,7 +12,7 @@ export default function ExchangePanel({ siteId, onDone }) {
   const [date, setDate] = useState(today()); const [ret, setRet] = useState({});   // po_item_id -> qty string
   const [rep, setRep] = useState({ item: null, qty: "", rate: "", received_now: true }); const [iq, setIq] = useState(""); const [hits, setHits] = useState([]);
   const [reason, setReason] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false); const [done, setDone] = useState(null);
-  useEffect(() => { setPos(null); setPoId(""); setRet({}); getExchangeablePOs(siteId).then(setPos).catch(e => { setErr(e.message); setPos([]); }); }, [siteId]);
+  useEffect(() => { setPos(null); setPoId(""); setRet({}); getExchangeablePOs("all").then(setPos).catch(e => { setErr(e.message); setPos([]); }); }, []);   // 404c: all sites; the PO decides the site
   useEffect(() => { if (!iq.trim()) { setHits([]); return; } const t = setTimeout(() => searchItems(iq, 12).then(setHits).catch(() => setHits([])), 200); return () => clearTimeout(t); }, [iq]);
   const po = useMemo(() => (pos || []).find(p => String(p.po_id) === String(poId)) || null, [pos, poId]);
   const lines = useMemo(() => po ? po.items.filter(i => Number(ret[i.po_item_id]) > 0).map(i => ({ ...i, return_qty: Number(ret[i.po_item_id]) })) : [], [po, ret]);
@@ -25,7 +25,7 @@ export default function ExchangePanel({ siteId, onDone }) {
   async function confirm() {
     if (!window.confirm(`Confirm exchange on ${po.po_no}?\n\nReturn: ${lines.map(l => `${l.item_name} × ${l.return_qty}`).join(", ")}\nReplacement: ${rep.item.display_name} × ${rep.qty} @ ₹${rep.rate}${rep.received_now ? " (received now)" : " (to be received)"}\nNet: ${net >= 0 ? "₹" + inr(net).replace("₹", "") + " extra payable" : "₹" + inr(-net).replace("₹", "") + " credit"}\n\nThis updates stock and the PO. It cannot be undone.`)) return;
     setBusy(true); setErr("");
-    const r = await confirmExchange({ site_id: Number(siteId), po_id: po.po_id, exchange_date: date, reason: reason.trim(), lines: lines.map(l => ({ po_item_id: l.po_item_id, return_qty: l.return_qty })),
+    const r = await confirmExchange({ site_id: Number(po.site_id), po_id: po.po_id, exchange_date: date, reason: reason.trim(), lines: lines.map(l => ({ po_item_id: l.po_item_id, return_qty: l.return_qty })),
       replacement: { item_id: rep.item.id, item_name: rep.item.display_name, unit: rep.item.unit, qty: Number(rep.qty), rate: Number(rep.rate), received_now: rep.received_now } });
     setBusy(false); if (!r.ok) { setErr(r.error); return; }
     setDone(r); onDone && onDone(`Exchange ${r.exc_no} recorded on ${po.po_no} — net ${r.net_difference >= 0 ? inr(r.net_difference) + " extra payable to vendor" : inr(-r.net_difference) + " credit from vendor"}.`);
@@ -36,10 +36,10 @@ export default function ExchangePanel({ siteId, onDone }) {
     <div style={{ marginTop: 12, border: "1px solid var(--border)", borderRadius: 10, padding: 14 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}><span style={{ fontSize: 20, color: "#FF7A1A" }}>⇄</span><div><b>Material exchange</b><div className="muted" style={{ fontSize: 12 }}>Return received material and take a replacement from the same vendor, in one entry.</div></div></div>
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10, marginBottom: 10 }}>
-        <div><label className="muted">Original PO (received at this site)</label>
+        <div><label className="muted">Original PO (any site with a GRN)</label>
           <select style={inp} value={poId} onChange={e => { setPoId(e.target.value); setRet({}); }}>
-            <option value="">{pos === null ? "Loading…" : pos.length ? "— select —" : "No received POs at this site"}</option>
-            {(pos || []).map(p => <option key={p.po_id} value={p.po_id}>{p.po_no} · {p.vendor}</option>)}
+            <option value="">{pos === null ? "Loading…" : pos.length ? "— select —" : "No PO has a GRN yet"}</option>
+            {(pos || []).map(p => <option key={p.po_id} value={p.po_id}>{p.po_no} · {p.vendor} · {p.site}</option>)}
           </select></div>
         <div><label className="muted">Exchange date</label><input type="date" style={inp} value={date} onChange={e => setDate(e.target.value)} /></div>
       </div>
@@ -64,7 +64,7 @@ export default function ExchangePanel({ siteId, onDone }) {
             <div><label className="muted">Qty{rep.item?.unit ? ` (${rep.item.unit})` : ""}</label><input style={inp} inputMode="decimal" value={rep.qty} onChange={e => setRep(r => ({ ...r, qty: e.target.value.replace(/[^0-9.]/g, "") }))} /></div>
             <div><label className="muted">Net rate ₹</label><input style={inp} inputMode="decimal" value={rep.rate} onChange={e => setRep(r => ({ ...r, rate: e.target.value.replace(/[^0-9.]/g, "") }))} /></div>
           </div>
-          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, marginTop: 10 }}><input type="checkbox" checked={rep.received_now} onChange={e => setRep(r => ({ ...r, received_now: e.target.checked }))} />Replacement received now (adds to this site's stock today). Untick if it arrives later — it stays pending on the PO.</label>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, marginTop: 10 }}><input type="checkbox" checked={rep.received_now} onChange={e => setRep(r => ({ ...r, received_now: e.target.checked }))} />Replacement received now (adds to the PO's site stock today). Untick if it arrives later — it stays pending on the PO.</label>
         </div>
         <div style={{ background: "var(--green-bg)", borderRadius: 8, padding: 10, marginTop: 10, fontSize: 12.5 }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}><span className="muted">Return value {lines.length ? `· ${lines.map(l => `${l.return_qty} × ${inr(l.rate)}`).join(" + ")}` : ""}</span><span style={{ color: "var(--red)", fontWeight: 700 }}>− {inr(retVal)}</span></div>
