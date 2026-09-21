@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { Fragment, useEffect, useState, useRef } from "react";
 import { isDemo } from "@/lib/supabase";
 import { getSession, can } from "@/lib/auth";
 import { canApprove } from "@/lib/perms";
@@ -43,6 +43,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   const [poFvendorSel, setPoFvendorSel] = useState("all");
   const [poFdeliv, setPoFdeliv] = useState("all");
   const [poFstatus, setPoFstatus] = useState("all");
+  const [poX, setPoX] = useState({}); const [poMore, setPoMore] = useState(false);   // update407: expandable PO rows + More filters
   const [poFfrom, setPoFfrom] = useState("");
   const [poFto, setPoFto] = useState("");
   const poShown = pos.filter(p =>
@@ -486,10 +487,10 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
         {isDemo && <div className="demo-banner">Demo mode — sample data.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
 
-        {showInd && <div className="panel">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h2>Open material requests {open.length > 0 && <span className="badge warn">{open.length}</span>}</h2>
-            <button type="button" style={{ marginRight: 8 }} onClick={() => { setAllInd([]); getAllIndents().then(setAllInd); }}>🗂 All Indents</button><button className="primary" onClick={openNewIndent}>＋ New indent</button>
+        {showInd && <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: 16, marginBottom: 20 }}>{/* update407 */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}><span className="muted">📋</span>Open material requests<span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>{open.length}</span></div>
+            <div style={{ display: "flex", gap: 8 }}><button type="button" onClick={() => { setAllInd([]); getAllIndents().then(setAllInd); }}>🗂 All indents</button><button className="primary" onClick={openNewIndent}>＋ New indent</button></div>
           </div>
           {ni && (
             <div style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 14, margin: "10px 0", background: "#FAFBFC" }}>
@@ -577,30 +578,31 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
             <>
             {pager(indPage, setIndPage, open.length)}
             {openPage.map(ind => (
-              <div key={ind.id} style={{ border: "1px solid var(--border)", borderRadius: 10, marginBottom: 10 }}>
-                <div onClick={() => openIndent(ind)} style={{ padding: 12, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <span style={{ fontWeight: 700 }}>{ind.indent_no}</span>
-                    {ind.urgency === "urgent" && <span className="badge a" style={{ marginLeft: 8 }}>Urgent</span>}
-                    {ind.edited_at && <span className="badge h" style={{ marginLeft: 8 }}>⚠ Edited by site</span>}
-                    <div className="muted">{ind.site} · {ind.item_count} items · by {ind.raised_by || "—"} · {ind.date}{ind.required_by ? " · need by " + ind.required_by : ""}</div>
+              <div key={ind.id} style={{ borderTop: "1px solid var(--border)" }}>
+                <div onClick={() => openIndent(ind)} style={{ padding: "12px 0", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 3 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600 }}>{ind.indent_no}</span>
+                      {ind.urgency === "urgent" && <span style={{ background: "#FEE2E2", color: "#B91C1C", fontSize: 10.5, padding: "2px 7px", borderRadius: 999 }}>Urgent</span>}
+                      {ind.edited_at && <span style={{ background: "#E8F0FE", color: "#1D4ED8", fontSize: 10.5, padding: "2px 7px", borderRadius: 999 }}>Edited by site</span>}
+                    </div>
+                    <div className="muted" style={{ fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ind.site} · {ind.item_count} items · by {ind.raised_by || "—"} · {ind.date}{ind.required_by ? " · need by " + ind.required_by : ""}</div>
                   </div>
-                  <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    {/* update337: raiser, Director, or the granted Indent Edit right */}
+                  <span style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
                     {(ind.status === "open" || ind.status === "quoting") && (session?.id === ind.raised_by_id || canEditAnyIndent) && (
-                      <button style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); startWebEdit(ind); }}
-                              title={session?.id === ind.raised_by_id ? "Edit your indent" : "Editing under the Indent Edit right — the change is logged"}>✎ Edit</button>)}
+                      <button type="button" style={{ width: 30, height: 30, padding: 0 }} onClick={e => { e.stopPropagation(); startWebEdit(ind); }}
+                              title={session?.id === ind.raised_by_id ? "Edit your indent" : "Editing under the Indent Edit right — the change is logged"}>✎</button>)}
                     {canEditAnyIndent && ind.edited_at && (
-                      <button style={{ fontSize: 11 }} title="Who changed this indent, and what"
+                      <button type="button" style={{ width: 30, height: 30, padding: 0 }} title="Who changed this indent, and what"
                               onClick={async e => { e.stopPropagation(); try { setEditLog(await getIndentEditAudit(ind.id)); } catch (x) { setErr(x.message); } }}>🕘</button>)}
                     {CAN_DELETE_ROLES.includes(session?.role) && (() => { const live = (ind.pos || []).filter(p => p.status !== "cancelled"); return (
-                      <button style={{ fontSize: 11, color: live.length ? "var(--muted)" : "var(--red)" }} disabled={live.length > 0}
-                        title={live.length ? "Cannot delete — live PO(s): " + live.map(p => p.po_no).join(", ") + ". Cancel them first." : "Delete this indent"}
-                        onClick={e => { e.stopPropagation(); delIndent(ind); }}>🗑 Delete{live.length ? " 🔒" : ""}</button>); })()}
-                    <span className="badge gray">{ind.status}</span>
+                      <span title={live.length ? "Locked — PO already raised: " + live.map(p => p.po_no).join(", ") + ". Cancel the PO(s) first." : "Delete this indent"}>
+                        <button type="button" style={{ width: 30, height: 30, padding: 0, color: live.length ? "var(--muted)" : "var(--red)" }} disabled={live.length > 0}
+                          onClick={e => { e.stopPropagation(); delIndent(ind); }}>{live.length ? "🔒" : "🗑"}</button>
+                      </span>); })()}
+                    <span style={{ background: ind.status === "quoting" ? "#EDE9FE" : ind.status === "open" ? "#DCFCE7" : "#F3F4F6", color: ind.status === "quoting" ? "#6D28D9" : ind.status === "open" ? "#15803D" : "#6B7280", fontSize: 11, padding: "5px 10px", borderRadius: 999, textTransform: "capitalize" }}>{ind.status}</span>
                   </span>
                 </div>
-
                 {openId === ind.id && (
                   <div style={{ padding: "0 12px 14px" }}>
                     <div className="muted" style={{ margin: "4px 0 8px" }}><b>1.</b> Review what's required, <b>2.</b> add the vendors you'll ask, <b>3.</b> tick which items each one should quote, <b>4.</b> enter list rate + discount % (net is auto-calculated), then compare & award.</div>
@@ -914,61 +916,58 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
           )}
         </div>}
 
-        {showPo && <div className="panel">
-          <h2>Purchase orders issued</h2>
-          {/* update184: full PO filter bar — site / indent / raised by / vendor / delivery / status / date range */}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0 10px", alignItems: "center" }}>
-            <select value={poFsite} onChange={e => setPoFsite(e.target.value)}>
-              <option value="all">Site: all</option>
-              {[...new Set(pos.map(p => p.site).filter(Boolean))].sort().map(x => <option key={x} value={x}>{x}</option>)}
-            </select>
-            <input placeholder="🔎 Indent / PO no…" value={poFindent} onChange={e => setPoFindent(e.target.value)} style={{ width: 160 }} />
-            <select value={poFraised} onChange={e => setPoFraised(e.target.value)}>
-              <option value="all">Raised by: all</option>
-              {[...new Set(pos.map(p => p.raised_by).filter(Boolean))].sort().map(x => <option key={x} value={x}>{x}</option>)}
-            </select>
-            <select value={poFvendorSel} onChange={e => setPoFvendorSel(e.target.value)}>
-              <option value="all">Vendor: all</option>
-              {[...new Set(pos.map(p => p.vendor).filter(Boolean))].sort().map(x => <option key={x} value={x}>{x}</option>)}
-            </select>
-            <input placeholder="🔎 Vendor…" value={poFvendor} onChange={e => setPoFvendor(e.target.value)} style={{ width: 140 }} />
-            <select value={poFdeliv} onChange={e => setPoFdeliv(e.target.value)}>
-              <option value="all">Delivery: all</option>
-              {Object.entries(DELIVERY_STATUS).map(([k, v]) => <option key={k} value={k}>{v[0]}</option>)}
-            </select>
-            <select value={poFstatus} onChange={e => setPoFstatus(e.target.value)}>
-              <option value="all">PO status: all</option>
-              <option value="live">Live (not cancelled)</option>
-              {[...new Set(pos.map(p => p.status).filter(Boolean))].sort().map(x => <option key={x} value={x}>{x}</option>)}
-            </select>
-            <span className="muted" style={{ fontSize: 12 }}>PO date</span>
-            <input type="date" value={poFfrom} onChange={e => setPoFfrom(e.target.value)} />
-            <span className="muted" style={{ fontSize: 12 }}>to</span>
-            <input type="date" value={poFto} onChange={e => setPoFto(e.target.value)} />
-            <button style={{ fontSize: 11.5 }} onClick={() => { setPoFsite("all"); setPoFindent(""); setPoFraised("all"); setPoFvendorSel("all"); setPoFvendor(""); setPoFdeliv("all"); setPoFstatus("all"); setPoFfrom(""); setPoFto(""); }}>✕ Clear</button>
-            <span className="muted" style={{ fontSize: 12, marginLeft: "auto" }}>{poShown.length} of {pos.length} POs · {inr(poShown.reduce((s, p) => s + (p.status === "cancelled" ? 0 : Number(p.total || 0)), 0))} (excl. cancelled)</span>
+        {showPo && <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: 16 }}>{/* update407 */}
+          <div style={{ fontSize: 14.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}><span className="muted">🧾</span>Purchase orders issued<span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>{poShown.length} · {inr(poShown.reduce((s2, p) => s2 + (p.status === "cancelled" ? 0 : Number(p.total || 0)), 0))}</span></div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "0 0 12px", alignItems: "center" }}>
+            <select value={poFsite} onChange={e => setPoFsite(e.target.value)} style={{ height: 34 }}><option value="all">Site: all</option>{[...new Set(pos.map(p => p.site).filter(Boolean))].sort().map(x => <option key={x} value={x}>{x}</option>)}</select>
+            <select value={poFvendorSel} onChange={e => setPoFvendorSel(e.target.value)} style={{ height: 34 }}><option value="all">Vendor: all</option>{[...new Set(pos.map(p => p.vendor).filter(Boolean))].sort().map(x => <option key={x} value={x}>{x}</option>)}</select>
+            <select value={poFstatus} onChange={e => setPoFstatus(e.target.value)} style={{ height: 34 }}><option value="all">Status: all</option><option value="live">Live (not cancelled)</option>{[...new Set(pos.map(p => p.status).filter(Boolean))].sort().map(x => <option key={x} value={x}>{x}</option>)}</select>
+            <div style={{ flex: "1 1 160px", display: "flex", alignItems: "center", gap: 6, background: "#fff", border: "1px solid var(--border)", borderRadius: 8, padding: "0 10px", height: 34 }}><span className="muted">🔍</span><input placeholder="PO or indent no…" value={poFindent} onChange={e => setPoFindent(e.target.value)} style={{ border: "none", background: "transparent", outline: "none", width: "100%", fontSize: 13 }} /></div>
+            <button type="button" className={poMore ? "primary" : ""} style={{ height: 34 }} onClick={() => setPoMore(m => !m)}>⚙ More filters{(poFraised !== "all" || poFdeliv !== "all" || poFfrom || poFto || poFvendor) ? " •" : ""}</button>
           </div>
+          {poMore && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", background: "var(--gray-bg)", borderRadius: 8, padding: 10, marginBottom: 12 }}>
+              <select value={poFraised} onChange={e => setPoFraised(e.target.value)}><option value="all">Raised by: all</option>{[...new Set(pos.map(p => p.raised_by).filter(Boolean))].sort().map(x => <option key={x} value={x}>{x}</option>)}</select>
+              <select value={poFdeliv} onChange={e => setPoFdeliv(e.target.value)}><option value="all">Delivery: all</option>{Object.entries(DELIVERY_STATUS).map(([k, v]) => <option key={k} value={k}>{v[0]}</option>)}</select>
+              <input placeholder="Vendor contains…" value={poFvendor} onChange={e => setPoFvendor(e.target.value)} style={{ width: 140 }} />
+              <span className="muted" style={{ fontSize: 12 }}>PO date</span><input type="date" value={poFfrom} onChange={e => setPoFfrom(e.target.value)} /><span className="muted" style={{ fontSize: 12 }}>to</span><input type="date" value={poFto} onChange={e => setPoFto(e.target.value)} />
+              <button type="button" style={{ fontSize: 11.5, marginLeft: "auto" }} onClick={() => { setPoFsite("all"); setPoFindent(""); setPoFraised("all"); setPoFvendorSel("all"); setPoFvendor(""); setPoFdeliv("all"); setPoFstatus("all"); setPoFfrom(""); setPoFto(""); }}>✕ Clear</button>
+            </div>
+          )}
           {pos.length === 0 ? <span className="muted">No POs yet.</span> : poShown.length === 0 ? <span className="muted">No POs match these filters.</span> : (
-            <>{pager(poPage, setPoPage, poShown.length)}
-              <div className="po-wrap" style={{ overflowX: "auto" }}>{/* update283: table on desktop, stacked cards on phones */}
-              <table className="dt-compact po-tbl">
-                <thead><tr><th>PO no</th><th>Date</th><th>Indent</th><th>Raised by</th><th>Site</th><th>Vendor</th><th className="num">Amount</th><th>Approval</th><th className="num">Received</th><th>Delivery</th><th>Status</th><th>Action</th></tr></thead>
+            <>
+              <div style={{ border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
+              <style>{`.po407 tbody tr.po-row:hover td { background: #FAFAFC; } .po407 th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 9px 12px; background: var(--gray-bg); } .po407 td { padding: 10px 12px; font-size: 13px; border-top: 1px solid var(--border); vertical-align: middle; } .po407 .ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } @media (max-width: 720px) { .po407 .hide-m { display: none; } }`}</style>
+              <table className="po407" style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                <colgroup><col style={{ width: "28%" }} /><col style={{ width: "24%" }} /><col style={{ width: "16%" }} /><col className="hide-m" style={{ width: "16%" }} /><col style={{ width: "16%" }} /></colgroup>
+                <thead><tr><th>PO no</th><th>Vendor</th><th style={{ textAlign: "right" }}>Amount</th><th className="hide-m">Received</th><th>Approval</th></tr></thead>
                 <tbody>
                   {poShown.slice((poPage - 1) * PAGE, poPage * PAGE).map(p => {
                     const [dl, dc] = DELIVERY_STATUS[p.delivery_status] || DELIVERY_STATUS.pending;
-                    // update258: a cancelled PO's delivery tracking is meaningless — the row must
-                    // not read as live. Visual only; no data or cancellation logic changes.
-                    const void_ = p.status === "cancelled";
+                    const void_ = p.status === "cancelled"; const xo = !!poX[p.id];
                     return (
-                    <tr key={p.id} className={void_ ? "po-void" : ""}>
-                      <td className="pc-no" style={{ fontWeight: 600 }}>{p.po_no}</td>
-                      <td className="muted pc-d" data-l="Date">{p.date}</td>
-                      <td className="muted pc-d" data-l="Indent">{p.indent_no}</td>
-                      <td className="muted pc-d" data-l="Raised by">{p.raised_by || "—"}</td>
-                      <td className="muted pc-d" data-l="Site">{p.site || "—"}</td>
-                      <td className="pc-vendor" data-l="Vendor">{p.vendor}</td>
-                      <td className="num pc-amt" data-l="Amount">{inr(p.total)}</td>
-                      <td className="pc-d pc-appr" data-l="Approval" style={{ whiteSpace: "nowrap" }}>{/* update198: Director approval */}
+                    <Fragment key={p.id}>
+                    <tr className="po-row" onClick={() => setPoX(x => ({ ...x, [p.id]: !x[p.id] }))} style={{ cursor: "pointer", opacity: void_ ? .6 : 1, background: xo ? "#FAFAFC" : undefined }}>
+                      <td className="ell"><span style={{ fontWeight: 600, textDecoration: void_ ? "line-through" : "none" }}>{xo ? "▾ " : "▸ "}{p.po_no}</span><br /><span className="muted" style={{ fontSize: 11 }}>{p.date} · {p.site || "—"}</span></td>
+                      <td className="ell">{p.vendor}</td>
+                      <td style={{ textAlign: "right" }}>{inr(p.total)}</td>
+                      <td className="hide-m">{p.received_pct === null || p.received_pct === undefined ? <span className="muted">—</span> : (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }} title={p.received_pct + "% received"}><div style={{ flex: 1, height: 5, background: "var(--gray-bg)", borderRadius: 99, overflow: "hidden" }}><div style={{ width: Math.min(100, p.received_pct) + "%", height: "100%", background: void_ ? "var(--muted)" : p.received_pct >= 100 ? "#15803D" : "#FF7A1A" }} /></div><span className="muted" style={{ fontSize: 11, flexShrink: 0 }}>{p.items_complete}/{p.item_count}</span></div>)}</td>
+                      <td>{void_ ? <span style={{ background: "#F3F4F6", color: "#6B7280", fontSize: 11, padding: "2px 8px", borderRadius: 999 }}>Cancelled</span>
+                        : p.approval === "approved" ? <span style={{ background: "#DCFCE7", color: "#15803D", fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>Approved</span>
+                        : p.approval === "rejected" ? <span style={{ background: "#FEE2E2", color: "#B91C1C", fontSize: 11, padding: "2px 8px", borderRadius: 999 }}>Rejected</span>
+                        : <span style={{ background: "#FEF3C7", color: "#92400E", fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>Awaiting approval</span>}</td>
+                    </tr>
+                    {xo && (<tr><td colSpan={5} style={{ background: "#FAFAFC", padding: "10px 14px 14px" }} onClick={e => e.stopPropagation()}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, fontSize: 12.5, marginBottom: 10 }}>
+                        <div><div className="muted" style={{ fontSize: 11 }}>Indent</div>{p.indent_no || "—"}</div>
+                        <div><div className="muted" style={{ fontSize: 11 }}>Raised by</div>{p.raised_by || "—"}</div>
+                        <div><div className="muted" style={{ fontSize: 11 }}>Delivery</div><span className={"badge " + (void_ ? "gray" : dc)}>{dl}</span>{p.expected_delivery && <span className="muted"> · by {p.expected_delivery}</span>}</div>
+                        <div><div className="muted" style={{ fontSize: 11 }}>Received</div>{p.received_pct == null ? "—" : `${p.received_pct}% · ${p.items_complete}/${p.item_count} items`}</div>
+                        <div><div className="muted" style={{ fontSize: 11 }}>PO status</div><span className={"badge " + (void_ ? "red" : "gray")}>{void_ ? "✕ cancelled" : p.status}</span></div>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      <span style={{ fontSize: 12 }}>{/* update198: Director approval */}
                         {p.approval === "approved"
                           ? <span className="badge p" title={p.approved_by ? "Approved by " + p.approved_by + (p.approved_at ? " on " + p.approved_at : "") : "Approved"}>✓ Approved by Director</span>
                           : p.approval === "rejected"
@@ -985,16 +984,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                               onClick={async () => { const why = window.prompt("Reason for rejecting " + p.po_no + ":"); if (why === null) return; const r = await approvePO(p.id, "rejected", why); if (!r.ok) { setErr(r.error); return; } setMsg(p.po_no + " rejected."); load(); }}>✗ Reject</button>
                           </div>
                         )}
-                      </td>
-                      <td className="num pc-d" data-l="Received" style={{ whiteSpace: "nowrap" }}>{p.received_pct === null || p.received_pct === undefined ? <span className="muted">—</span> : <span style={{ color: void_ ? "var(--muted)" : p.received_pct >= 100 ? "var(--green)" : p.received_pct > 0 ? "var(--amber)" : "var(--muted)", textDecoration: void_ ? "line-through" : "none", textDecorationColor: "var(--red)", textDecorationThickness: void_ ? 2 : undefined }}>{p.received_pct}%<span className="muted" style={{ fontSize: 10.5 }}> {p.items_complete}/{p.item_count} items</span></span>}</td>
-                      <td className="pc-d" data-l="Delivery" style={{ whiteSpace: "nowrap" }}>
-                        <span className={"badge " + (void_ ? "gray" : dc)}
-                              style={void_ ? { textDecoration: "line-through", textDecorationColor: "var(--red)", textDecorationThickness: 2 } : undefined}>{dl}</span>
-                        {p.expected_delivery && <div className="muted" style={{ fontSize: 11,
-                          textDecoration: void_ ? "line-through" : "none", textDecorationColor: "var(--red)" }}>by {p.expected_delivery}</div>}
-                      </td>
-                      <td className="pc-status" data-l="Status"><span className={"badge " + (void_ ? "red" : "gray")}>{void_ ? "✕ cancelled" : p.status}</span></td>
-                      <td className="pc-actions" style={{ whiteSpace: "nowrap" }}>
+                      </span>
                         {/* update258: nothing to receive and nothing to send on a cancelled PO */}
                         {void_
                           ? <button style={{ fontSize: 11.5, marginRight: 4 }} disabled title="This PO is cancelled — delivery tracking no longer applies">📦 Delivery</button>
@@ -1021,13 +1011,17 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                           </a>
                         )}
                         {p.status !== "cancelled" && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => doCancel(p)}>Cancel</button>}
-                      </td>
-                    </tr>
+                      </div>
+                    </td></tr>)}
+                    </Fragment>
                   ); })}
                 </tbody>
               </table>
-            </div>
-              {pager(poPage, setPoPage, poShown.length)}</>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 14px", borderTop: "1px solid var(--border)", flexWrap: "wrap", gap: 8 }}>
+                <span className="muted" style={{ fontSize: 12 }}>Showing {(poPage - 1) * PAGE + (poShown.length ? 1 : 0)}–{Math.min(poPage * PAGE, poShown.length)} of {poShown.length} · tap for indent, raised-by and delivery</span>
+                <div style={{ display: "flex", gap: 4 }}><button type="button" style={{ padding: "5px 9px" }} disabled={poPage <= 1} onClick={() => setPoPage(x => x - 1)}>‹</button><button type="button" style={{ padding: "5px 9px" }} disabled={poPage * PAGE >= poShown.length} onClick={() => setPoPage(x => x + 1)}>›</button></div>
+              </div>
+            </div></>
           )}
         </div>}
         {deliv && (
