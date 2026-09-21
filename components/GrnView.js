@@ -8,6 +8,7 @@ import { getSites } from "@/lib/data";
 import { getSession, canSeeModuleAnySite } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
 import { getAdminRights } from "@/lib/access";
+import GrnQuickEntry from "@/components/GrnQuickEntry";   // update405
 
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 const qty = n => Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 });
@@ -72,6 +73,9 @@ export default function GrnView({ siteId = null, embedded = false }) {
   const [msg, setMsg] = useState("");
   // update191: vendor-return history view
   const [view, setView] = useState("grns");   // grns | returns
+  const [page, setPage] = useState(1); const PAGE = 20;   // update405: pagination
+  const [advOpen, setAdvOpen] = useState(false); const [quick, setQuick] = useState(false);   // update405
+  useEffect(() => { setPage(1); }, [q, vendor, who, flag, site, from, to]);
   const [retRows, setRetRows] = useState(null);
   const [retSt, setRetSt] = useState("all");     // update205: status filter
   const [stMenu, setStMenu] = useState(null);    // ref whose status dropdown is open
@@ -126,6 +130,8 @@ export default function GrnView({ siteId = null, embedded = false }) {
     getGrnRegister({ siteId: site, from, to }).then(r => { setRows(r.rows || []); if (r.error) setErr(r.error); setLoading(false); });
   };
   useEffect(load, [site, from, to]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // update405: stats and rows refresh on their own when you come back from entering a GRN (tab focus / app resume)
+  useEffect(() => { const onVis = () => { if (document.visibilityState === "visible") load(); }; document.addEventListener("visibilitychange", onVis); window.addEventListener("focus", onVis); return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", onVis); }; }, [site, from, to]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const shown = useMemo(() => rows.filter(g => {
     const s = q.trim().toLowerCase();
@@ -176,43 +182,34 @@ export default function GrnView({ siteId = null, embedded = false }) {
     <>
       {/* update244: embedded keeps the FILTERS (dates, search, export still needed inside the
           tab) and drops only the page title — the project page already says where you are. */}
-      <div className="page-head">
-          <h1 style={embedded ? { fontSize: 15, fontWeight: 600 } : undefined}>{embedded ? "GRN / Challan" : (view === "returns" ? "Vendor returns" : "GRN register")}
-            <span style={{ marginLeft: 12, fontSize: 13, fontWeight: 400 }}>
-              <a onClick={() => setView("grns")} style={{ cursor: "pointer", fontWeight: view === "grns" ? 700 : 400 }}>Receipts</a>
-              {" · "}
-              <a onClick={() => setView("returns")} style={{ cursor: "pointer", fontWeight: view === "returns" ? 700 : 400 }}>↩ Returns</a>
-            </span>
-          </h1>
-          <div className="filters" style={{ flexWrap: "wrap", gap: 8 }}>
-            {/* update244: inside a project tab the site is fixed by the prop — a dropdown that
-                could widen it would contradict what the tab promises. */}
-            {!embedded && (
-              <select value={site} onChange={e => setSite(e.target.value)}>
-                <option value="all">All sites</option>
-                {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            )}
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)} title="Entered from" />
-            <span className="muted" style={{ fontSize: 12 }}>to</span>
-            <input type="date" value={to} onChange={e => setTo(e.target.value)} title="Entered to" />
-            <button style={{ fontSize: 11.5 }} onClick={() => { setFrom(""); setTo(""); }}>All time</button>
-            <a href="/stock"><button style={{ fontSize: 11.5 }}>＋ New GRN</button></a>
+      {/* update405: header — title + segmented Receipts/Returns, primary New GRN */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <h1 style={embedded ? { fontSize: 15, fontWeight: 600, margin: 0 } : { margin: 0 }}>{embedded ? "GRN / Challan" : "GRN register"}</h1>
+          <div style={{ display: "inline-flex", background: "var(--gray-bg)", borderRadius: 8, padding: 3, gap: 2 }}>
+            {[["grns", "Receipts"], ["returns", "↩ Returns"]].map(([k, l]) => <button key={k} type="button" onClick={() => setView(k)} style={{ border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 13, background: view === k ? "#fff" : "transparent", color: view === k ? "var(--text)" : "var(--muted)", fontWeight: view === k ? 600 : 400, boxShadow: view === k ? "0 0 0 1px var(--border)" : "none", cursor: "pointer" }}>{l}</button>)}
           </div>
         </div>
+        {!embedded && <button className="primary" style={{ padding: "9px 18px", fontSize: 14, borderRadius: 8 }} onClick={() => setQuick(true)}>＋ New GRN</button>}
+      </div>
 
         {isDemo && <div className="demo-banner">Demo mode — no GRN data.</div>}
         {session && !allowed && <div className="error">You don't have Material Stock access.</div>}
 
-        <div className="cards">
-          <div className="card"><div className="label">GRNs (in filter) · cancelled</div><div className="value">{summary.total}<small> · {summary.cancelled}</small></div></div>
-          <div className="card"><div className="label">Against PO · direct</div><div className="value">{summary.po}<small> · {summary.total - summary.po}</small></div></div>
-          <div className="card"><div className="label">This month · today</div><div className="value">{summary.month}<small> · {summary.today}</small></div></div>
-          <div className="card"><div className="label">Sites receiving</div><div className="value">{summary.sites}</div></div>
-          <div className="card"><div className="label">Received value</div><div className="value">{inr(summary.value)}</div></div>
-          <div className="card"><div className="label">With short/excess</div><div className="value" style={{ color: summary.short ? "var(--amber)" : "var(--green)" }}>{summary.short}</div></div>
-          <div className="card"><div className="label">Challan pages · GRNs without any</div><div className="value">{summary.docs}<small> · {summary.nodocs}</small></div></div>
-        </div>
+        {view === "grns" && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12, marginBottom: 18 }}>
+            {[["📋", "#E8F0FE", "#1D4ED8", summary.total, `GRNs in filter · ${summary.cancelled} cancelled`],
+              ["🔗", "#EDE9FE", "#6D28D9", summary.po, `Against PO · ${summary.total - summary.po} direct`],
+              ["📅", "#DCFCE7", "#15803D", summary.today, `Entered today · ${summary.month} this month`],
+              ["₹", "#FFF3E8", "#C2410C", inr(summary.value), `Received · ${summary.sites} site${summary.sites === 1 ? "" : "s"}${summary.short ? ` · ${summary.short} short/excess` : ""}`]].map(([ic, bg, fg, n, l], k) => (
+              <div key={k} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: 16 }}>
+                <div style={{ width: 30, height: 30, borderRadius: 8, background: bg, color: fg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, marginBottom: 10 }}>{ic}</div>
+                <div style={{ fontSize: k === 3 ? 20 : 24, fontWeight: 700, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={String(n)}>{n}</div>
+                <div className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>{l}</div>
+              </div>))}
+          </div>
+        )}
+
 
         {view === "returns" && (
           <div className="panel">
@@ -283,81 +280,69 @@ export default function GrnView({ siteId = null, embedded = false }) {
             <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>Every return-to-vendor transaction, newest first. Value uses each item's rate from the SOURCE GRN. Click a status pill to change it (Directors / IT / stock managers); the receipt opens print-ready — use the browser's Print → Save as PDF.</div>
           </div>
         )}
-        {view === "grns" && <div className="panel">
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-            <input placeholder="🔎 GRN / challan no / vendor / item / person…" value={q} onChange={e => setQ(e.target.value)} style={{ width: 300 }} />
-            <select value={vendor} onChange={e => setVendor(e.target.value)}>
-              <option value="all">Vendor: all</option>
-              {[...new Set(rows.map(g => g.vendor).filter(Boolean))].sort().map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
-            <select value={who} onChange={e => setWho(e.target.value)}>
-              <option value="all">Entered by: all</option>
-              {[...new Set(rows.map(g => g.entered_by).filter(Boolean))].sort().map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
-            <select value={flag} onChange={e => setFlag(e.target.value)}>
-              <option value="all">Show: all</option>
-              <option value="short">Only short / excess</option>
-              <option value="nodocs">Only without challan pages</option>
-              <option value="docs">Only with challan pages</option>
-              <option value="po">Only against a PO</option>
-              <option value="nopo">Only without PO</option>
-              <option value="cancelled">Only cancelled</option>
-              <option value="changes">Only with material change</option>
-            </select>
-            <button style={{ fontSize: 11.5 }} onClick={() => setOpen(allOpen ? {} : Object.fromEntries(shown.map(g => [g.grn_no, true])))}>{allOpen ? "▾ Collapse all" : "▸ Expand all"}</button>
-            <button style={{ fontSize: 11.5 }} onClick={load}>↻ Refresh</button>
-            <button style={{ fontSize: 11.5, marginLeft: "auto" }} onClick={exportCsv} disabled={!shown.length}>⬇ Export Excel</button>
+        {view === "grns" && <div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ flex: "1 1 220px", display: "flex", alignItems: "center", gap: 6, background: "#fff", border: "1px solid var(--border)", borderRadius: 8, padding: "0 10px", height: 36 }}>
+              <span className="muted">🔍</span><input placeholder="Search GRN, vendor, item, person…" value={q} onChange={e => setQ(e.target.value)} style={{ border: "none", background: "transparent", outline: "none", width: "100%", fontSize: 13 }} />
+            </div>
+            {!embedded && <select value={site} onChange={e => setSite(e.target.value)} style={{ height: 36 }}><option value="all">All sites</option>{sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>}
+            <button type="button" className={from === monthStart() && !to ? "primary" : ""} style={{ height: 36 }} onClick={() => { if (from === monthStart() && !to) { setFrom(""); setTo(""); } else { setFrom(monthStart()); setTo(""); } }}>📅 {from === monthStart() && !to ? "This month" : (!from && !to ? "All time" : `${from || "…"} → ${to || "…"}`)}</button>
+            <button type="button" className={advOpen ? "primary" : ""} style={{ height: 36 }} onClick={() => setAdvOpen(a => !a)}>⚙ Filters{(vendor !== "all" || who !== "all" || flag !== "all") ? " •" : ""}</button>
+            <button type="button" style={{ height: 36, marginLeft: "auto" }} onClick={exportCsv} disabled={!shown.length}>⬇ Export</button>
           </div>
+          {advOpen && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
+              <span className="muted" style={{ fontSize: 12 }}>Entered</span><input type="date" value={from} onChange={e => setFrom(e.target.value)} /><span className="muted" style={{ fontSize: 12 }}>to</span><input type="date" value={to} onChange={e => setTo(e.target.value)} />
+              <select value={vendor} onChange={e => setVendor(e.target.value)}><option value="all">Vendor: all</option>{[...new Set(rows.map(g => g.vendor).filter(Boolean))].sort().map(v => <option key={v} value={v}>{v}</option>)}</select>
+              <select value={who} onChange={e => setWho(e.target.value)}><option value="all">Entered by: all</option>{[...new Set(rows.map(g => g.entered_by).filter(Boolean))].sort().map(v => <option key={v} value={v}>{v}</option>)}</select>
+              <select value={flag} onChange={e => setFlag(e.target.value)}>
+                <option value="all">Show: all</option><option value="short">Only short / excess</option><option value="nodocs">Only without challan pages</option><option value="docs">Only with challan pages</option><option value="po">Only against a PO</option><option value="nopo">Only without PO</option><option value="cancelled">Only cancelled</option><option value="changes">Only with material change</option>
+              </select>
+              <button type="button" style={{ fontSize: 11.5 }} onClick={() => setOpen(allOpen ? {} : Object.fromEntries(shown.map(g => [g.grn_no, true])))}>{allOpen ? "▾ Collapse all" : "▸ Expand all"}</button>
+              <button type="button" style={{ fontSize: 11.5 }} onClick={load}>↻ Refresh</button>
+              <button type="button" style={{ fontSize: 11.5, marginLeft: "auto" }} onClick={() => { setVendor("all"); setWho("all"); setFlag("all"); }}>Clear</button>
+            </div>
+          )}
           {err && <div className="error" style={{ marginBottom: 8 }}>{err}</div>}
           {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)", marginBottom: 8 }}>{msg}</div>}
           {isDirector && rows.some(g => g.docs.some(d => d.bucket !== GRN_BUCKET)) && (
             <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>° = page still in the public bucket. <a onClick={runMigration} style={{ cursor: "pointer" }}>Move all challan pages to private storage</a>{migr ? " — " + migr : ""}</div>
           )}
           {loading ? <div className="muted">Loading GRNs…</div> : shown.length === 0 ? <div className="muted">No GRNs match. Widen the date range (top-right) or clear the filters.</div> : (
-            <div style={{ overflowX: "auto" }}>
-              <table className="dt-compact">
-                <thead>
-                  <tr>
-                    <th></th><th>GRN no</th><th>PO</th><th>Entered on</th><th>Entered by</th><th>Site</th><th>Vendor</th>
-                    <th>Supplier challan</th><th>Our challan</th><th>Challan date</th>
-                    <th className="num">Items</th><th className="num">Recd qty</th><th className="num">Value</th>
-                    <th>Supplier pages</th><th>Our pages</th><th>Flags</th><th></th>
-                  </tr>
-                </thead>
+            <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+              <style>{`.grn405 tbody tr.grn-row:hover td { background: #FAFAFC; } .grn405 th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 10px 12px; background: var(--gray-bg); } .grn405 td { padding: 11px 12px; font-size: 13px; border-top: 1px solid var(--border); vertical-align: middle; } .grn405 .ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } @media (max-width: 720px) { .grn405 .hide-m { display: none; } }`}</style>
+              <table className="grn405" style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                <colgroup><col style={{ width: "24%" }} /><col style={{ width: "28%" }} /><col className="hide-m" style={{ width: "14%" }} /><col className="hide-m" style={{ width: "18%" }} /><col style={{ width: "16%" }} /></colgroup>
+                <thead><tr><th>GRN no</th><th>Vendor</th><th className="hide-m">Entered</th><th className="hide-m">Site</th><th>Status</th></tr></thead>
                 <tbody>
-                  {shown.map(g => (
+                  {shown.slice((page - 1) * PAGE, page * PAGE).map(g => (
                     <Fragment key={g.grn_no}>
-                      <tr style={{ cursor: "pointer", background: open[g.grn_no] ? "var(--bg)" : undefined }} onClick={() => toggle(g.grn_no)}>
-                        <td style={{ width: 22 }}>{open[g.grn_no] ? "▾" : "▸"}</td>
-                        <td style={{ fontWeight: 600, textDecoration: g.status === "cancelled" ? "line-through" : "none" }}>{g.grn_no}{g.status === "cancelled" && <div><span className="badge a">Cancelled</span></div>}</td>
-                        <td>{g.po_no ? <a href={"/purchase/po?po=" + g.po_id} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>{g.po_no}</a> : <span className="badge gray">No PO</span>}</td>
-                        <td className="muted">{fmtDT(g.entered_at)}</td>
-                        <td>{g.entered_by || <span className="muted">Not available</span>}</td>
-                        <td>{g.site}</td>
-                        <td>{g.vendor || "—"}</td>
-                        <td>{g.challan_no || <span className="muted">—</span>}</td>
-                        <td>{g.our_challan_no || <span className="muted">—</span>}</td>
-                        <td className="muted">{g.challan_date || "—"}</td>
-                        <td className="num">{g.items}</td>
-                        <td className="num">{qty(g.total_qty)}</td>
-                        <td className="num">{inr(g.value)}</td>
-                        <td onClick={e => e.stopPropagation()}>{g.sup_docs ? <span><button style={{ fontSize: 11 }} onClick={() => openViewer(g, "supplier", 0)}>👁 {g.sup_docs} pg</button> <DocLinks g={g} kind="supplier" /></span> : <span className="muted">none</span>}</td>
-                        <td onClick={e => e.stopPropagation()}>{g.our_docs ? <span><button style={{ fontSize: 11 }} onClick={() => openViewer(g, "company", 0)}>👁 {g.our_docs} pg</button> <DocLinks g={g} kind="company" /></span> : <span className="muted">none</span>}</td>
-                        <td style={{ whiteSpace: "nowrap" }}>
-                          {g.short_lines ? <span className="badge h">⚠ {g.short_lines} short/excess</span> : <span className="badge p">OK</span>}
-                          {(g.changes || []).length > 0 && <span className="badge h" style={{ marginLeft: 4 }}>≠ {g.changes.length} changed</span>}
-                          {g.returned_qty > 0 && <span className="badge a" style={{ marginLeft: 4 }}>↩ {qty(g.returned_qty)} returned</span>}
-                          {g.exported && <span className="badge gray" style={{ marginLeft: 4 }}>Tally</span>}
-                        </td>
-                        <td onClick={e => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
-                          <a href={"/purchase/challan?grn=" + encodeURIComponent(g.grn_no)} target="_blank" rel="noreferrer"><button style={{ fontSize: 11.5 }}>🖨 Print</button></a>
-                          {canEditGrn(g) && g.status !== "cancelled" && <button style={{ fontSize: 11.5, marginLeft: 4 }} onClick={() => openEdit(g)}>✎ Edit</button>}
-                          {canCancel && g.status !== "cancelled" && <button style={{ fontSize: 11.5, marginLeft: 4, color: "var(--red)" }} onClick={() => { setCancelFor(g); setCancelReason(""); }}>Cancel</button>}
-                        </td>
+                      <tr className="grn-row" style={{ cursor: "pointer", background: open[g.grn_no] ? "#FAFAFC" : undefined }} onClick={() => toggle(g.grn_no)}>
+                        <td className="ell" style={{ fontWeight: 600, textDecoration: g.status === "cancelled" ? "line-through" : "none" }}>{open[g.grn_no] ? "▾ " : "▸ "}{g.grn_no}{g.status === "cancelled" && <span className="badge a" style={{ marginLeft: 6 }}>Cancelled</span>}</td>
+                        <td><div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}><div style={{ width: 22, height: 22, borderRadius: "50%", background: ["#E8F0FE", "#EDE9FE", "#DCFCE7", "#FFF3E8", "#FCE7F3"][(g.vendor || "").length % 5], color: ["#1D4ED8", "#6D28D9", "#15803D", "#C2410C", "#BE185D"][(g.vendor || "").length % 5], fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{(g.vendor || "—").split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase()}</div><span className="ell">{g.vendor || "—"}</span></div></td>
+                        <td className="muted hide-m">{g.entered_at ? new Date(g.entered_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"}</td>
+                        <td className="ell hide-m">{g.site}</td>
+                        <td><span style={{ background: g.po_id ? "#E8F0FE" : "#FFF3E8", color: g.po_id ? "#1D4ED8" : "#C2410C", fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>{g.po_id ? "Against PO" : "No PO"}</span>{g.short_lines ? <span style={{ background: "#FEF3C7", color: "#92400E", fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>⚠ {g.short_lines}</span> : null}</td>
                       </tr>
                       {open[g.grn_no] && (
                         <tr>
-                          <td colSpan={17} style={{ background: "var(--bg)", padding: "8px 14px 14px 34px" }}>
+                          <td colSpan={5} style={{ background: "#FAFAFC", padding: "10px 14px 14px" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10, marginBottom: 10, fontSize: 12.5 }}>
+                              <div><div className="muted" style={{ fontSize: 11 }}>PO</div>{g.po_no ? <a href={"/purchase/po?po=" + g.po_id} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>{g.po_no}</a> : <span className="muted">No PO</span>}</div>
+                              <div><div className="muted" style={{ fontSize: 11 }}>Supplier challan</div>{g.challan_no || "—"}{g.challan_date ? <span className="muted"> · {g.challan_date}</span> : null}</div>
+                              <div><div className="muted" style={{ fontSize: 11 }}>Our challan</div>{g.our_challan_no || "—"}</div>
+                              <div><div className="muted" style={{ fontSize: 11 }}>Entered by</div>{g.entered_by || "—"}<span className="muted"> · {fmtDT(g.entered_at)}</span></div>
+                              <div><div className="muted" style={{ fontSize: 11 }}>Items · qty · value</div>{g.items} · {qty(g.total_qty)} · <b>{inr(g.value)}</b></div>
+                              <div><div className="muted" style={{ fontSize: 11 }}>Short / excess</div>{g.short_lines ? <span style={{ color: "var(--amber)" }}>⚠ {g.short_lines} line(s)</span> : <span style={{ color: "var(--green)" }}>OK</span>}{g.returned_qty > 0 && <span className="badge a" style={{ marginLeft: 6 }}>↩ {qty(g.returned_qty)} returned</span>}{(g.changes || []).length > 0 && <span className="badge h" style={{ marginLeft: 6 }}>≠ {g.changes.length} changed</span>}{g.exported && <span className="badge gray" style={{ marginLeft: 6 }}>Tally</span>}</div>
+                            </div>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }} onClick={e => e.stopPropagation()}>
+                              <span className="muted" style={{ fontSize: 12 }}>Supplier pages:</span>{g.sup_docs ? <span><button style={{ fontSize: 11 }} onClick={() => openViewer(g, "supplier", 0)}>👁 {g.sup_docs} pg</button> <DocLinks g={g} kind="supplier" /></span> : <span className="muted" style={{ fontSize: 12 }}>none</span>}
+                              <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>Our pages:</span>{g.our_docs ? <span><button style={{ fontSize: 11 }} onClick={() => openViewer(g, "company", 0)}>👁 {g.our_docs} pg</button> <DocLinks g={g} kind="company" /></span> : <span className="muted" style={{ fontSize: 12 }}>none</span>}
+                              <span style={{ marginLeft: "auto" }} />
+                              <a href={"/purchase/challan?grn=" + encodeURIComponent(g.grn_no)} target="_blank" rel="noreferrer"><button style={{ fontSize: 11.5 }}>🖨 Print</button></a>
+                              {canEditGrn(g) && g.status !== "cancelled" && <button style={{ fontSize: 11.5 }} onClick={() => openEdit(g)}>✎ Edit</button>}
+                              {canCancel && g.status !== "cancelled" && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => { setCancelFor(g); setCancelReason(""); }}>Cancel</button>}
+                            </div>
                             <table className="dt-compact" style={{ width: "auto", minWidth: 620, background: "#fff", border: "1px solid var(--border)", borderRadius: 8 }}>
                               <thead><tr><th>#</th><th>Material</th><th>Unit</th><th className="num">Challan qty</th><th className="num">Received</th><th className="num">↩ Returned</th><th className="num">Short / Excess</th><th className="num">Rate</th><th className="num">Value</th></tr></thead>
                               <tbody>
@@ -406,6 +391,10 @@ export default function GrnView({ siteId = null, embedded = false }) {
                   ))}
                 </tbody>
               </table>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderTop: "1px solid var(--border)", flexWrap: "wrap", gap: 8 }}>
+                <span className="muted" style={{ fontSize: 12 }}>Showing {Math.min((page - 1) * PAGE + 1, shown.length)}–{Math.min(page * PAGE, shown.length)} of {shown.length}</span>
+                <div style={{ display: "flex", gap: 4 }}><button type="button" style={{ padding: "5px 9px" }} disabled={page <= 1} onClick={() => setPage(p => p - 1)}>‹</button><button type="button" style={{ padding: "5px 9px" }} disabled={page * PAGE >= shown.length} onClick={() => setPage(p => p + 1)}>›</button></div>
+              </div>
             </div>
           )}
         </div>}
@@ -472,6 +461,7 @@ export default function GrnView({ siteId = null, embedded = false }) {
             </div>
           </div>
         )}
+      {quick && <GrnQuickEntry sites={sites} rows={rows} onClose={() => setQuick(false)} />}{/* update405 */}
     </>
   );
 }

@@ -46,6 +46,10 @@ export default function StockEntry({ siteId, userId, onDone }) {
   const [grnPO, setGrnPO] = useState(null);
   const [changing, setChanging] = useState(null);   // index of the line whose material is being changed
   useEffect(() => { if (chosenSite) getOpenPOs(chosenSite).then(setOpenPOs); else setOpenPOs([]); }, [chosenSite, msg]);
+  // update405: prefill from the GRN register's quick entry (sessionStorage) — opens GRN mode with site/PO/vendor/challan set
+  const [prefill, setPrefill] = useState(null);
+  useEffect(() => { try { const raw = sessionStorage.getItem("psk_grn_prefill"); if (raw) { const p = JSON.parse(raw); sessionStorage.removeItem("psk_grn_prefill"); setPrefill(p); if (p.site_id) setChosenSite(String(p.site_id)); setOpen("grn"); setGrnHead(h => ({ ...h, vendor: p.vendor || "", challan_no: p.challan_no || "", challan_date: p.challan_date || "" })); } } catch {} }, []);
+  useEffect(() => { if (prefill?.po_id && openPOs.some(p => String(p.id) === String(prefill.po_id))) { pickPO(prefill.po_id); setPrefill(null); } }, [openPOs, prefill]);   // eslint-disable-line react-hooks/exhaustive-deps
   function pickPO(id) {
     const po = openPOs.find(p => String(p.id) === String(id)) || null;
     setGrnPO(po); setChanging(null);
