@@ -6,7 +6,7 @@ import { canApprove } from "@/lib/perms";
 import {
   getOpenIndents, saveQuotes, getQuotes, buildComparison, createPO, getPOs, cancelPO, approvePO, getAllIndents, inr, getRateSuggestions, getItemPriceMap,
   uploadQuoteProof, getQuoteProofs, deleteQuoteProof, getPOProofs,
-  DELIVERY_STATUS, updatePODelivery,
+  DELIVERY_STATUS, updatePODelivery, lastRateForVendor,   // update408
 } from "@/lib/procure";
 import { getVendors } from "@/lib/vendors";
 import { createIndent, editIndent, deleteIndent, quickAddItem, getIndentEditAudit } from "@/lib/stock";   // update337
@@ -278,6 +278,39 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     const strip = obj => { const n = { ...obj }; Object.keys(n).forEach(k => { if (n[k]) { const m = { ...n[k] }; delete m[v]; n[k] = m; } }); return n; };
     setAlloc(strip); setQin(strip);
   }
+  // update408: vendor-specific history — when a vendor is enlisted, this vendor's LAST rate for each
+  // item (any past PO) fills the empty boxes first; the price-list fallback below covers the rest.
+  const [vendHint, setVendHint] = useState({});   // `${itemId}|${vendor}` -> { rate, discount_pct, list_rate, po_no, po_date }
+  useEffect(() => {
+    if (!openId || !enqVendors.length) return;
+    const ind = (indents || []).find(x => x.id === openId); if (!ind) return;
+    let alive = true;
+    (async () => {
+      const found = {};
+      for (const v of enqVendors) for (const it of (ind.items || [])) {
+        const key = `${it.id}|${v}`; if (vendHint[key] !== undefined) { found[key] = vendHint[key]; continue; }
+        found[key] = await lastRateForVendor(v, it.item_id, it.item_name);
+      }
+      if (!alive) return;
+      setVendHint(found);
+      setQin(q => {
+        let changed = false; const n = { ...q };
+        (ind.items || []).forEach(it => enqVendors.forEach(v => {
+          const h = found[`${it.id}|${v}`]; if (!h) return;
+          const cur = n[it.id]?.[v] || {};
+          if ((cur.list == null || cur.list === "") && (cur.disc == null || cur.disc === "") && (cur.rate == null || cur.rate === "")) {
+            n[it.id] = { ...(n[it.id] || {}), [v]: { ...cur, list: h.list_rate != null ? String(h.list_rate) : String(h.rate), disc: h.list_rate != null && h.discount_pct != null ? String(h.discount_pct) : "0" } };
+            changed = true;
+          }
+        }));
+        if (changed && openId) saveDraft(openId, { qin: n, alloc, vendors: enqVendors, t: Date.now() });
+        return changed ? n : q;
+      });
+    })();
+    return () => { alive = false; };
+  }, [enqVendors, openId]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const vendHintLine = (itemId, v) => { const h = vendHint[`${itemId}|${v}`]; return h ? `Last bought from ${v}: ${inr(h.rate)}${h.discount_pct ? `, ${h.discount_pct}% disc` : ""} — ${h.po_no} · ${String(h.po_date).split("-").reverse().join("/")}` : null; };
+
   // update303: the ask — rates appear AUTOMATICALLY. Only EMPTY inputs are filled (typed
   // values and restored drafts are never overwritten); revoking is one keystroke.
   useEffect(() => {
@@ -704,6 +737,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                                           <input style={{ width: 78 }} placeholder="list ₹" value={qin[it.id]?.[v]?.list || ""} onChange={e => setQ(it.id, v, "list", e.target.value)} />
                                           <input style={{ width: 78 }} placeholder="disc %" value={qin[it.id]?.[v]?.disc || ""} onChange={e => setQ(it.id, v, "disc", e.target.value)} />
                                           <div style={{ fontSize: 11.5, fontWeight: 700, color: net != null ? "var(--copper-deep)" : "var(--muted)" }}>{net != null ? "net " + inr(net) : "—"}</div>
+                                          {vendHintLine(it.id, v) && <div style={{ fontSize: 10, color: "#1D4ED8", lineHeight: 1.35 }}>{vendHintLine(it.id, v)}</div>}{/* update408 */}
                                         </div>
                                       )}
                                     </td>
