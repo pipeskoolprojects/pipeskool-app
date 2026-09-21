@@ -188,7 +188,10 @@ function POView() {
           {items.map((it, i) => (
             <tr key={i}>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{i + 1}</td>
-              <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.item_name}{it.spec ? " — " + it.spec : ""}</td>
+              <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.item_name}{it.spec ? " — " + it.spec : ""}
+                {it.line_kind === "exchanged" && <div style={{ fontSize: 10, marginTop: 2 }}><span style={{ background: "#E24B4A", color: "#fff", padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>Exchanged</span> <span style={{ color: "#A32D2D" }}>ordered {it.ordered_qty}, returned {it.returned_qty} · {it.exchange_ref}</span></div>}
+                {it.line_kind === "replacement" && <div style={{ fontSize: 10, marginTop: 2 }}><span style={{ background: "#3B6D11", color: "#fff", padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>Replacement</span> <span style={{ color: "#27500A" }}>{it.exchange_ref}</span></div>}{/* update404 */}
+              </td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{it.qty}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.unit}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{it.list_rate != null ? inr(it.list_rate) : inr(it.rate)}</td>

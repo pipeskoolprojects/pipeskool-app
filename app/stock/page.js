@@ -41,6 +41,7 @@ export default function StockPage() {
           <h1>Material stock &amp; inventory</h1>
           <div className="filters">
             <a href="/stock/grn"><button style={{ fontSize: 12 }}>📋 GRN Register</button></a>
+            <a href="/stock/exchanges"><button style={{ fontSize: 12 }}>⇄ Exchanges</button></a>{/* update404 */}
             <select value={site} onChange={e => setSite(e.target.value)}>
               <option value="all">All sites</option>
               {siteList.map(s => <option key={s.id} value={s.code}>{s.name}</option>)}
