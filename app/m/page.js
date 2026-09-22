@@ -33,7 +33,7 @@ export default function PunchScreen() {
   const [staffSites, setStaffSites] = useState([]);
   async function switchPunchSite(id) {
     setCurrentSite(id);
-    const ov = await siteForPunch(id);
+    const ov = await siteForPunch(id, worker?.id);
     if (!ov) return;
     setWorker(w => { const nw = { ...w, ...ov }; setLocalWorker(nw); return nw; });
     setDist(null);
@@ -94,6 +94,10 @@ export default function PunchScreen() {
           if (ov) { wv = { ...w, ...ov }; setLocalWorker(wv); }
         }
       }
+      // update411: never trust the geofence cached on the phone — re-read the site's current pin/radius
+      // from the server every open (Raju Sahani case: phone said "inside", server said 18 km — stale cache).
+      siteForPunch(wv.site_id, wv.id).then(fresh => { if (fresh) { const nw = { ...wv, ...fresh }; setLocalWorker(nw); setWorker(nw);
+        getPosition().then(p => { if (!p) return; setPos(p); setDist(fresh.geofence_lat == null ? 0 : distanceMeters(p.lat, p.lng, fresh.geofence_lat, fresh.geofence_lng)); }); } });
       setWorker(wv);
       getTodayPunch(wv.id).then(setToday);
       getPosition().then(p => {
@@ -236,7 +240,7 @@ export default function PunchScreen() {
           <div className="stat-box"><div className="k">Hours</div><div className="v">{today.hours_worked != null ? Math.floor(today.hours_worked) + "h " + String(Math.round((today.hours_worked % 1) * 60)).padStart(2, "0") + "m" : "\u2014"}</div></div>
         </div>
 
-        <div className="muted" style={{ textAlign: "center", fontSize: 10, marginTop: 10 }}>Pipeskool v394</div>{/* update289: visible build tag — if this line is missing on the phone, the deploy is not live */}
+        <div className="muted" style={{ textAlign: "center", fontSize: 10, marginTop: 10 }}>Pipeskool v411</div>{/* update289: visible build tag — if this line is missing on the phone, the deploy is not live */}
         {worker.profile_complete === false && (
           <div className="note amber" style={{ textAlign: "left" }}>
             ⚠ Profile incomplete — bank details pending. Show this to your supervisor.
