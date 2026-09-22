@@ -104,7 +104,7 @@ function Voucher() {
             ))}
           </div>
           <div>
-            {[["Voucher No.", v.no], ["Voucher Date", dmy(v.date)], ["Generated", dmy(new Date().toLocaleDateString("en-CA"))], ["Site", v.site]].map(([k, val]) => (   /* update300 */
+            {[["Voucher No.", v.no], ["Voucher Date", dmy(v.date)], ["Site", v.site]].map(([k, val]) => (   /* update300 · update413: "Generated" row removed on Director instruction */
               <div key={k} style={{ display: "grid", gridTemplateColumns: "92px 10px 1fr", alignItems: "end", marginBottom: 9 }}>
                 <span style={L}>{k}</span><span style={L}>:</span><span style={{ ...F, textAlign: "center" }}>{val}</span>
               </div>
