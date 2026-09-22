@@ -6,6 +6,7 @@ import Sidebar from "@/components/Sidebar";
 import { createDeliveryChallan, getDeliveryChallans, convertDcToGrn, cancelDeliveryChallan, uploadDcProof, dcProofUrl, priceDcLines, dcTallyXml, getChallanPOs, editDeliveryChallan } from "@/lib/challan";
 import { getClients, shipBlock, addrLines } from "@/lib/clients";   // update393
 import InternalDispatchTab from "@/components/InternalDispatchTab";   // update403
+import VendorLink from "@/components/VendorLink";   // update410
 import { getTallySettings } from "@/lib/tally";
 import { getSession, canSeeModuleAnySite } from "@/lib/auth";
 
@@ -124,7 +125,7 @@ export default function DeliveryChallans() {
   // ---- listing filters
   const [fVendor, setFVendor] = useState("all"); const [fSite, setFSite] = useState("all");
   const [fFrom, setFFrom] = useState(""); const [fTo, setFTo] = useState("");
-  const [fStatus, setFStatus] = useState("all"); const [fSource, setFSource] = useState("all"); const [q, setQ] = useState("");
+  const [fStatus, setFStatus] = useState("all"); const [fSource, setFSource] = useState("all"); const [q, setQ] = useState(() => { try { return new URLSearchParams(window.location.search).get("q") || ""; } catch { return ""; } });   // update410
   const [pg, setPg] = useState(1); const PAGE = 20; const [xp, setXp] = useState({}); const [moreF, setMoreF] = useState(false);   // update406
   useEffect(() => { setPg(1); }, [fVendor, fSite, fFrom, fTo, fStatus, fSource, q]);
   useEffect(() => { try { const sp = new URLSearchParams(window.location.search).get("site"); if (sp) setFSite(String(sp)); } catch {} }, []);
@@ -326,7 +327,7 @@ export default function DeliveryChallans() {
                     <Fragment key={r.id}>
                     <tr className="dc-row" onClick={() => setXp(x => ({ ...x, [r.id]: !x[r.id] }))} style={{ cursor: "pointer", opacity: r.status === "cancelled" ? 0.6 : 1, background: o ? "#FAFAFC" : undefined }} title={r.status === "cancelled" ? ("Cancelled" + (r.cancelled_by ? " by " + r.cancelled_by : "") + (r.cancel_reason ? " — " + r.cancel_reason : "")) : undefined}>
                       <td className="ell"><span style={{ fontWeight: 600, textDecoration: r.status === "cancelled" ? "line-through" : "none" }}>{o ? "▾ " : "▸ "}{r.dc_ref}</span><br /><span className="muted" style={{ fontSize: 11 }}>{r.date} · {r.site}</span></td>
-                      <td className="ell">{r.vendor}{r.vendor_dc_no && <div className="muted" style={{ fontSize: 10.5 }}>vendor DC {r.vendor_dc_no}</div>}</td>
+                      <td className="ell" onClick={e => e.stopPropagation()}><VendorLink name={r.vendor} />{r.vendor_dc_no && <div className="muted" style={{ fontSize: 10.5 }}>vendor DC {r.vendor_dc_no}</div>}</td>
                       <td className="ell hide-m muted">{r.po_no || "No PO"}</td>
                       <td style={{ textAlign: "right" }}><b>{r.recv}</b>/{r.ord || "—"}</td>
                       <td><span style={{ background: tone[0], color: tone[1], fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>{sl}</span>{!r.grn_no && r.status !== "cancelled" && <span style={{ background: "#E8F0FE", color: "#1D4ED8", fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>→ GRN</span>}</td>
