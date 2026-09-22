@@ -14,6 +14,7 @@
 // letter records that it was hand-edited.
 import { useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
+import SalarySlipForm from "@/components/SalarySlipForm";   // update412
 import Logo from "@/components/Logo";   // update331c: preview shows the same letterhead that prints
 import { getSession, canAnySite } from "@/lib/auth";
 import {
@@ -390,7 +391,24 @@ export default function LettersPage() {
         )}
 
         {/* ============================================================ DOCUMENT */}
-        {!loading && view === "doc" && (
+        {!loading && view === "doc" && code === "salary_slip" && (
+          <div style={{ maxWidth: 760 }}>{/* update412 */}
+            <SalarySlipForm person={person} people={people} onPerson={id => { setPersonId(id); setOverrides({}); setDraft(null); }} issuing={issuing}
+              onIssue={async slip => {
+                setErr(""); setMsg(""); setIssuing(true);
+                try {
+                  const tk = { ...tokens, ...slip, "letter.no": "{{letter.no}}" };
+                  const body = renderTemplate(template.body, tk, {}).text;
+                  const r = await issueLetter({ code: template.code, family, person, issueDate, body, tokens: { ...tokens, ...slip }, clauses: [], wasEdited: false });
+                  if (!r.ok) { setErr(r.error); return; }
+                  try { localStorage.removeItem("psk_slip_draft_" + person.id); } catch {}
+                  setMsg(`Issued ${r.letter_no}. Opening the print view…`); setReg(null);
+                  window.open(`/letters/print?id=${r.id}`, "_blank");
+                } finally { setIssuing(false); }
+              }} />
+          </div>
+        )}
+        {!loading && view === "doc" && code !== "salary_slip" && (
           <div className="lt-two">
             <div className="card lt-side">
               {familiesFor.length > 1 && (
