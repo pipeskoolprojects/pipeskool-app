@@ -168,7 +168,7 @@ export default function Sidebar() {
       {GROUPS.map(g => <Group key={g.label} label={g.label} items={g.items} subs={g.subs} canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} />)}
 
       <Group label="Help" canSee={() => true} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} items={[{ href: "/help?ctx=" + encodeURIComponent(path || "/"), label: "❓ Help Center", module: null }]} />{/* update401 */}
-      {showAccess && <Group label="Admin" canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} items={[{ href: "/access", label: "Access Rights", module: null }, { href: "/sitemaster", label: "Site Master (timings)", module: null }, { href: "/backup", label: "Backup & Restore", module: null }, { href: "/tickets", label: "Support Tickets", module: null }]} />}
+      {showAccess && <Group label="Admin" canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} items={[{ href: "/access", label: "Access Rights", module: null }, { href: "/admin-access", label: "Admin & access (Director)", module: null }, { href: "/sitemaster", label: "Site Master (timings)", module: null }, { href: "/backup", label: "Backup & Restore", module: null }, { href: "/tickets", label: "Support Tickets", module: null }]} />}
 
       <nav style={{ marginTop: 20 }}>
         <a onClick={logout} style={{ cursor: "pointer" }}>Log out</a>
