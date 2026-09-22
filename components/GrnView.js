@@ -9,6 +9,7 @@ import { getSession, canSeeModuleAnySite } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
 import { getAdminRights } from "@/lib/access";
 import GrnQuickEntry from "@/components/GrnQuickEntry";   // update405
+import VendorLink from "@/components/VendorLink";   // update410
 
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 const qty = n => Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 });
@@ -57,7 +58,7 @@ export default function GrnView({ siteId = null, embedded = false }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(() => { try { return new URLSearchParams(window.location.search).get("q") || ""; } catch { return ""; } });   // update410: deep link from vendor profile
   const [vendor, setVendor] = useState("all");
   const [who, setWho] = useState("all");
   const [flag, setFlag] = useState("all");   // all | short | nodocs | docs
@@ -319,7 +320,7 @@ export default function GrnView({ siteId = null, embedded = false }) {
                     <Fragment key={g.grn_no}>
                       <tr className="grn-row" style={{ cursor: "pointer", background: open[g.grn_no] ? "#FAFAFC" : undefined }} onClick={() => toggle(g.grn_no)}>
                         <td className="ell" style={{ fontWeight: 600, textDecoration: g.status === "cancelled" ? "line-through" : "none" }}>{open[g.grn_no] ? "▾ " : "▸ "}{g.grn_no}{g.status === "cancelled" && <span className="badge a" style={{ marginLeft: 6 }}>Cancelled</span>}</td>
-                        <td><div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}><div style={{ width: 22, height: 22, borderRadius: "50%", background: ["#E8F0FE", "#EDE9FE", "#DCFCE7", "#FFF3E8", "#FCE7F3"][(g.vendor || "").length % 5], color: ["#1D4ED8", "#6D28D9", "#15803D", "#C2410C", "#BE185D"][(g.vendor || "").length % 5], fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{(g.vendor || "—").split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase()}</div><span className="ell">{g.vendor || "—"}</span></div></td>
+                        <td><div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}><div style={{ width: 22, height: 22, borderRadius: "50%", background: ["#E8F0FE", "#EDE9FE", "#DCFCE7", "#FFF3E8", "#FCE7F3"][(g.vendor || "").length % 5], color: ["#1D4ED8", "#6D28D9", "#15803D", "#C2410C", "#BE185D"][(g.vendor || "").length % 5], fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{(g.vendor || "—").split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase()}</div><span className="ell" onClick={e => e.stopPropagation()}><VendorLink name={g.vendor} /></span></div></td>
                         <td className="muted hide-m">{g.entered_at ? new Date(g.entered_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"}</td>
                         <td className="ell hide-m">{g.site}</td>
                         <td><span style={{ background: g.po_id ? "#E8F0FE" : "#FFF3E8", color: g.po_id ? "#1D4ED8" : "#C2410C", fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>{g.po_id ? "Against PO" : "No PO"}</span>{g.short_lines ? <span style={{ background: "#FEF3C7", color: "#92400E", fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>⚠ {g.short_lines}</span> : null}</td>

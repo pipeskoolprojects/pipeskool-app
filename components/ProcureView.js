@@ -9,6 +9,7 @@ import {
   DELIVERY_STATUS, updatePODelivery, lastRateForVendor,   // update408
 } from "@/lib/procure";
 import { getVendors } from "@/lib/vendors";
+import VendorLink from "@/components/VendorLink";   // update410
 import { createIndent, editIndent, deleteIndent, quickAddItem, getIndentEditAudit } from "@/lib/stock";   // update337
 import { getSiteAllowance, checkLine } from "@/lib/boqMaterials";   // update372
 import { searchIndentCatalog } from "@/lib/boq";
@@ -43,7 +44,8 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   const [poFvendorSel, setPoFvendorSel] = useState("all");
   const [poFdeliv, setPoFdeliv] = useState("all");
   const [poFstatus, setPoFstatus] = useState("all");
-  const [poX, setPoX] = useState({}); const [poMore, setPoMore] = useState(false);   // update407: expandable PO rows + More filters
+  const [poMore, setPoMore] = useState(false);   // update407 More filters · update410: rows always expanded
+  useEffect(() => { try { const v = new URLSearchParams(window.location.search).get("po"); if (v) { setPoFindent(v); setTimeout(() => document.getElementById("po-list")?.scrollIntoView({ behavior: "smooth" }), 400); } } catch {} }, []);
   const [poFfrom, setPoFfrom] = useState("");
   const [poFto, setPoFto] = useState("");
   const poShown = pos.filter(p =>
@@ -970,35 +972,28 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
           )}
           {pos.length === 0 ? <span className="muted">No POs yet.</span> : poShown.length === 0 ? <span className="muted">No POs match these filters.</span> : (
             <>
-              <div style={{ border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
-              <style>{`.po407 tbody tr.po-row:hover td { background: #FAFAFC; } .po407 th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 9px 12px; background: var(--gray-bg); } .po407 td { padding: 10px 12px; font-size: 13px; border-top: 1px solid var(--border); vertical-align: middle; } .po407 .ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } @media (max-width: 720px) { .po407 .hide-m { display: none; } }`}</style>
-              <table className="po407" style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-                <colgroup><col style={{ width: "28%" }} /><col style={{ width: "24%" }} /><col style={{ width: "16%" }} /><col className="hide-m" style={{ width: "16%" }} /><col style={{ width: "16%" }} /></colgroup>
-                <thead><tr><th>PO no</th><th>Vendor</th><th style={{ textAlign: "right" }}>Amount</th><th className="hide-m">Received</th><th>Approval</th></tr></thead>
-                <tbody>
+              <div id="po-list" style={{ display: "grid", gap: 12 }}>{/* update410: every PO card shows detail + actions, no click */}
                   {poShown.slice((poPage - 1) * PAGE, poPage * PAGE).map(p => {
                     const [dl, dc] = DELIVERY_STATUS[p.delivery_status] || DELIVERY_STATUS.pending;
-                    const void_ = p.status === "cancelled"; const xo = !!poX[p.id];
+                    const void_ = p.status === "cancelled";
                     return (
-                    <Fragment key={p.id}>
-                    <tr className="po-row" onClick={() => setPoX(x => ({ ...x, [p.id]: !x[p.id] }))} style={{ cursor: "pointer", opacity: void_ ? .6 : 1, background: xo ? "#FAFAFC" : undefined }}>
-                      <td className="ell"><span style={{ fontWeight: 600, textDecoration: void_ ? "line-through" : "none" }}>{xo ? "▾ " : "▸ "}{p.po_no}</span><br /><span className="muted" style={{ fontSize: 11 }}>{p.date} · {p.site || "—"}</span></td>
-                      <td className="ell">{p.vendor}</td>
-                      <td style={{ textAlign: "right" }}>{inr(p.total)}</td>
-                      <td className="hide-m">{p.received_pct === null || p.received_pct === undefined ? <span className="muted">—</span> : (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }} title={p.received_pct + "% received"}><div style={{ flex: 1, height: 5, background: "var(--gray-bg)", borderRadius: 99, overflow: "hidden" }}><div style={{ width: Math.min(100, p.received_pct) + "%", height: "100%", background: void_ ? "var(--muted)" : p.received_pct >= 100 ? "#15803D" : "#FF7A1A" }} /></div><span className="muted" style={{ fontSize: 11, flexShrink: 0 }}>{p.items_complete}/{p.item_count}</span></div>)}</td>
-                      <td>{void_ ? <span style={{ background: "#F3F4F6", color: "#6B7280", fontSize: 11, padding: "2px 8px", borderRadius: 999 }}>Cancelled</span>
-                        : p.approval === "approved" ? <span style={{ background: "#DCFCE7", color: "#15803D", fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>Approved</span>
-                        : p.approval === "rejected" ? <span style={{ background: "#FEE2E2", color: "#B91C1C", fontSize: 11, padding: "2px 8px", borderRadius: 999 }}>Rejected</span>
-                        : <span style={{ background: "#FEF3C7", color: "#92400E", fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>Awaiting approval</span>}</td>
-                    </tr>
-                    {xo && (<tr><td colSpan={5} style={{ background: "#FAFAFC", padding: "10px 14px 14px" }} onClick={e => e.stopPropagation()}>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, fontSize: 12.5, marginBottom: 10 }}>
-                        <div><div className="muted" style={{ fontSize: 11 }}>Indent</div>{p.indent_no || "—"}</div>
-                        <div><div className="muted" style={{ fontSize: 11 }}>Raised by</div>{p.raised_by || "—"}</div>
-                        <div><div className="muted" style={{ fontSize: 11 }}>Delivery</div><span className={"badge " + (void_ ? "gray" : dc)}>{dl}</span>{p.expected_delivery && <span className="muted"> · by {p.expected_delivery}</span>}</div>
-                        <div><div className="muted" style={{ fontSize: 11 }}>Received</div>{p.received_pct == null ? "—" : `${p.received_pct}% · ${p.items_complete}/${p.item_count} items`}</div>
-                        <div><div className="muted" style={{ fontSize: 11 }}>PO status</div><span className={"badge " + (void_ ? "red" : "gray")}>{void_ ? "✕ cancelled" : p.status}</span></div>
+                    <div key={p.id} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: 14, opacity: void_ ? .65 : 1 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+                        <div><div style={{ fontSize: 13.5, fontWeight: 600, textDecoration: void_ ? "line-through" : "none" }}>{p.po_no}</div><div className="muted" style={{ fontSize: 11.5 }}>{p.date} · {p.site || "—"}</div></div>
+                        <div style={{ textAlign: "right" }}><div style={{ fontSize: 13 }}>{inr(p.total)}</div>
+                          {void_ ? <span style={{ background: "#F3F4F6", color: "#6B7280", fontSize: 11, padding: "2px 8px", borderRadius: 999 }}>Cancelled</span>
+                          : p.approval === "approved" ? <span style={{ background: "#DCFCE7", color: "#15803D", fontSize: 11, padding: "2px 8px", borderRadius: 999 }}>Approved</span>
+                          : p.approval === "rejected" ? <span style={{ background: "#FEE2E2", color: "#B91C1C", fontSize: 11, padding: "2px 8px", borderRadius: 999 }}>Rejected</span>
+                          : <span style={{ background: "#FEF3C7", color: "#92400E", fontSize: 11, padding: "2px 8px", borderRadius: 999 }}>Awaiting approval</span>}</div>
+                      </div>
+                      <div style={{ fontSize: 13, marginBottom: 8 }}>Vendor: <VendorLink name={p.vendor} /></div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 10, fontSize: 12, padding: "10px 0", borderTop: "1px solid var(--border)", marginBottom: 10 }}>
+                        <div><span className="muted" style={{ display: "block" }}>Indent</span><b style={{ fontWeight: 500 }}>{p.indent_no || "—"}</b></div>
+                        <div><span className="muted" style={{ display: "block" }}>Raised by</span><b style={{ fontWeight: 500 }}>{p.raised_by || "—"}</b></div>
+                        <div><span className="muted" style={{ display: "block" }}>Delivery</span><b style={{ fontWeight: 500 }}>{dl}{p.expected_delivery ? " · by " + p.expected_delivery : ""}</b></div>
+                        <div><span className="muted" style={{ display: "block" }}>Received</span>{p.received_pct == null ? <b style={{ fontWeight: 500 }}>—</b> : <div style={{ display: "flex", alignItems: "center", gap: 6 }}><div style={{ flex: 1, height: 5, background: "var(--gray-bg)", borderRadius: 99, overflow: "hidden" }}><div style={{ width: Math.min(100, p.received_pct) + "%", height: "100%", background: void_ ? "var(--muted)" : p.received_pct >= 100 ? "#15803D" : "#FF7A1A" }} /></div><b style={{ fontWeight: 500, fontSize: 11.5 }}>{p.items_complete}/{p.item_count} items</b></div>}</div>
+                        <div><span className="muted" style={{ display: "block" }}>{p.approval === "approved" ? "Approved by" : p.approval === "rejected" ? "Rejected by" : "Approval"}</span><b style={{ fontWeight: 500 }}>{p.approval === "approved" ? (p.approved_by || "Director") + (p.approved_at ? " · " + p.approved_at : "") : p.approval === "rejected" ? (p.approved_by || "—") + (p.reject_reason ? " — " + p.reject_reason : "") : (canApprPO ? "Your decision needed" : "Sent to Director")}</b></div>
+                        <div><span className="muted" style={{ display: "block" }}>PO status</span><b style={{ fontWeight: 500, textTransform: "capitalize" }}>{void_ ? "Cancelled" : p.status}</b></div>
                       </div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                       <span style={{ fontSize: 12 }}>{/* update198: Director approval */}
@@ -1012,9 +1007,9 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                         {!canApprPO && p.approval === "pending" && <div style={{ fontSize: 10.5, color: "var(--amber)", marginTop: 2 }}>⏳ Sent to Director — not yet active</div>}
                         {canApprPO && p.approval === "pending" && p.status !== "cancelled" && (
                           <div style={{ marginTop: 3 }}>
-                            <button style={{ fontSize: 11, background: "var(--green)", color: "#fff", border: 0, marginRight: 4 }}
+                            <button style={{ fontSize: 12.5, background: "#DCFCE7", color: "#15803D", border: 0, borderRadius: 8, padding: "7px 14px", marginRight: 4 }}
                               onClick={async () => { if (!window.confirm("Approve " + p.po_no + " (" + inr(p.total) + " · " + p.vendor + ")?")) return; const r = await approvePO(p.id, "approved"); if (!r.ok) { setErr(r.error); return; } setMsg(p.po_no + " approved."); load(); }}>✓ Approve</button>
-                            <button style={{ fontSize: 11, color: "var(--red)" }}
+                            <button style={{ fontSize: 12.5, background: "#FEE2E2", color: "#B91C1C", border: 0, borderRadius: 8, padding: "7px 14px" }}
                               onClick={async () => { const why = window.prompt("Reason for rejecting " + p.po_no + ":"); if (why === null) return; const r = await approvePO(p.id, "rejected", why); if (!r.ok) { setErr(r.error); return; } setMsg(p.po_no + " rejected."); load(); }}>✗ Reject</button>
                           </div>
                         )}
@@ -1046,16 +1041,13 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                         )}
                         {p.status !== "cancelled" && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => doCancel(p)}>Cancel</button>}
                       </div>
-                    </td></tr>)}
-                    </Fragment>
+                    </div>
                   ); })}
-                </tbody>
-              </table>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 14px", borderTop: "1px solid var(--border)", flexWrap: "wrap", gap: 8 }}>
-                <span className="muted" style={{ fontSize: 12 }}>Showing {(poPage - 1) * PAGE + (poShown.length ? 1 : 0)}–{Math.min(poPage * PAGE, poShown.length)} of {poShown.length} · tap for indent, raised-by and delivery</span>
-                <div style={{ display: "flex", gap: 4 }}><button type="button" style={{ padding: "5px 9px" }} disabled={poPage <= 1} onClick={() => setPoPage(x => x - 1)}>‹</button><button type="button" style={{ padding: "5px 9px" }} disabled={poPage * PAGE >= poShown.length} onClick={() => setPoPage(x => x + 1)}>›</button></div>
               </div>
-            </div></>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 4px", marginTop: 10, flexWrap: "wrap", gap: 8 }}>
+                <span className="muted" style={{ fontSize: 12 }}>Showing {(poPage - 1) * PAGE + (poShown.length ? 1 : 0)}–{Math.min(poPage * PAGE, poShown.length)} of {poShown.length} · vendor names open the vendor profile</span>
+                <div style={{ display: "flex", gap: 4 }}><button type="button" style={{ padding: "5px 9px" }} disabled={poPage <= 1} onClick={() => setPoPage(x => x - 1)}>‹</button><button type="button" style={{ padding: "5px 9px" }} disabled={poPage * PAGE >= poShown.length} onClick={() => setPoPage(x => x + 1)}>›</button></div>
+              </div></>
           )}
         </div>}
         {deliv && (
