@@ -8,16 +8,29 @@ Use 0 or "" when unreadable. Rates are per unit before GST.`;
 const bigrams = t => { const x = ` ${String(t).toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim()} `; const b = new Set(); for (let i = 0; i < x.length - 1; i++) b.add(x.slice(i, i + 2)); return b; };
 const sim = (a, b) => { const A = bigrams(a), B = bigrams(b); let n = 0; A.forEach(g => { if (B.has(g)) n++; }); return (2 * n) / (A.size + B.size || 1); };
 
+async function geminiOcr(base64, mime) {
+  const gk = process.env.GEMINI_API_KEY; if (!gk) return null;
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: "POST", headers: { "content-type": "application/json", "x-goog-api-key": gk }, body: JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: mime, data: base64 } }, { text: PROMPT }] }], generationConfig: { temperature: 0, maxOutputTokens: 1500 } }) });
+  const j = await r.json().catch(() => ({})); if (!r.ok) { console.warn("GEMINI_OCR_FAILED", JSON.stringify({ status: r.status })); return null; }
+  const text = (j?.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join(""); try { return JSON.parse(text.replace(/```json|```/g, "").trim()); } catch { return null; }
+}
 async function ocr(base64, mime) {
   if (mime === "application/pdf") {
-    const key = process.env.ANTHROPIC_API_KEY; if (!key) return { error: "PDF reading needs ANTHROPIC_API_KEY on the server — upload a JPG/PNG photo of the bill for now." };
+    const key = process.env.ANTHROPIC_API_KEY;
+    if (!key) { const g = await geminiOcr(base64, mime); return g || { error: "Could not read this PDF — upload a JPG/PNG photo of the bill." }; }
     const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1500, messages: [{ role: "user", content: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }, { type: "text", text: PROMPT }] }] }) });
     const j = await r.json(); const text = (j.content || []).map(c => c.text || "").join(""); return JSON.parse(text.replace(/```json|```/g, "").trim());
   }
-  const key = process.env.GROQ_API_KEY; if (!key) return { error: "no_key" };
-  const r = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ model: VISION, temperature: 0, max_tokens: 1500, messages: [{ role: "user", content: [{ type: "text", text: PROMPT }, { type: "image_url", image_url: { url: `data:${mime};base64,${base64}` } }] }] }) });
-  const j = await r.json(); if (!r.ok) return { error: j?.error?.message || "OCR failed" };
-  const text = j?.choices?.[0]?.message?.content || ""; try { return JSON.parse(text.replace(/```json|```/g, "").trim()); } catch { return { error: "Could not read the bill clearly — try a sharper photo." }; }
+  const key = process.env.GROQ_API_KEY;
+  if (key) {
+    const r = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ model: VISION, temperature: 0, max_tokens: 1500, messages: [{ role: "user", content: [{ type: "text", text: PROMPT }, { type: "image_url", image_url: { url: `data:${mime};base64,${base64}` } }] }] }) }).catch(() => null);
+    const j = r ? await r.json().catch(() => ({})) : {};
+    if (r && r.ok) { const text = j?.choices?.[0]?.message?.content || ""; try { return JSON.parse(text.replace(/```json|```/g, "").trim()); } catch {} }
+    else console.warn("GROQ_OCR_FAILED", JSON.stringify({ status: r ? r.status : "network" }));
+  }
+  const g = await geminiOcr(base64, mime);   // update427: automatic fallback
+  return g || { error: key || process.env.GEMINI_API_KEY ? "Could not read the bill clearly — try a sharper photo." : "no_key" };
 }
 
 export async function POST(req) {

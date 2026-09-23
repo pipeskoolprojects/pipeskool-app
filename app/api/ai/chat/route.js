@@ -10,6 +10,9 @@ const MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-20b";
 // update422: fallback chain — each Groq model has its OWN rate-limit bucket, so a 429 on one is not a 429 on the next
 const MODELS = [MODEL, process.env.GROQ_FALLBACK_MODEL || "llama-3.3-70b-versatile", "llama-3.1-8b-instant"].filter((m, i, a) => m && a.indexOf(m) === i);
 const GROQ_TIMEOUT_MS = 25000;
+// update427: Gemini = automatic fallback (same OpenAI-compatible request shape → same tools, messages, context)
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 const IST = () => new Date(Date.now() + 5.5 * 3600 * 1000);
 const iso = d => d.toISOString().slice(0, 10);
 const daysAgo = n => { const d = IST(); d.setUTCDate(d.getUTCDate() - n); return iso(d); };
@@ -457,13 +460,13 @@ function formatAnswer(tool, out, lang, view) {
   if (view === "approval" && tool === "expenses") { const pend = out.by_status?.pending || 0; return `${H ? "Approval ke liye pending expenses" : "Pending expense approvals"}: ${out.pending_approvals || 0} ${H ? "entries" : "entries"} · ${inr(pend)}\n${H ? "Avadhi" : "Period"} ${out.from} → ${out.to}\n${H ? "Site-wise" : "Site-wise"}:\n` + Object.entries(out.by_site || {}).map(([k, v]) => `- ${k}: ${inr(v)}`).join("\n") + `\n${H ? "Aage" : "Next"}: Money → Expenses → Pending, ${H ? "ya yahin likhein" : "or say"} "expense #<id> approve karo".`; }
   return summarize(tool, out, lang);
 }
-export async function GET() { const configured = !!process.env.GROQ_API_KEY; console.log("GROQ_STATUS", JSON.stringify({ configured, model: MODEL, env: process.env.VERCEL_ENV || "local" })); return Response.json({ ok: true, configured, model: MODEL, tools: TOOLS.map(t => t.function.name) }); }
+export async function GET() { const configured = !!(process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY); console.log("GROQ_STATUS", JSON.stringify({ groq: !!process.env.GROQ_API_KEY, gemini: !!process.env.GEMINI_API_KEY, model: MODEL, fallback: GEMINI_MODEL, env: process.env.VERCEL_ENV || "local" })); return Response.json({ ok: true, configured, model: MODEL, fallback: process.env.GEMINI_API_KEY ? GEMINI_MODEL : null, tools: TOOLS.map(t => t.function.name) }); }
 
 export async function POST(req) {
   const t0 = Date.now();
   try {
     const key = process.env.GROQ_API_KEY;
-    if (!key) { console.warn("GROQ_REQUEST_SKIPPED", JSON.stringify({ reason: "GROQ_API_KEY not set" })); return Response.json({ ok: false, error: "no_key" }); }
+    if (!key && !process.env.GEMINI_API_KEY) { console.warn("GROQ_REQUEST_SKIPPED", JSON.stringify({ reason: "no AI key set" })); return Response.json({ ok: false, error: "no_key" }); }
     const { user, sb } = await userClient(req);
     if (!user) { console.warn("GROQ_REQUEST_REJECTED", JSON.stringify({ reason: "no valid JWT" })); return Response.json({ ok: false, error: "Login required." }, { status: 401 }); }
     const { messages = [], lang = "en", role = "", pathname = "", ctx: ctxIn = null } = await req.json();
@@ -524,7 +527,7 @@ ${ctx ? "\nRelevant Help Center articles:\n" + ctx : ""}`;
     let usedModel = MODEL;
     const groq = async body => {
       let last = null;
-      for (const model of MODELS) {
+      for (const model of (key ? MODELS : [])) {
         for (let attempt = 0; attempt < 2; attempt++) {
           const ac = new AbortController(); const tm = setTimeout(() => ac.abort(), GROQ_TIMEOUT_MS);
           let r; try { r = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ ...body, model }), signal: ac.signal }); }
@@ -534,6 +537,19 @@ ${ctx ? "\nRelevant Help Center articles:\n" + ctx : ""}`;
           if (r.status === 429 || r.status >= 500) { const ra = Number(r.headers.get("retry-after")) || 0; last = r; if (attempt === 0 && ra && ra <= 3) { await new Promise(res => setTimeout(res, ra * 1000)); continue; } console.warn("GROQ_MODEL_FALLBACK", JSON.stringify({ model, status: r.status, retryAfter: ra })); break; }
           return r;   // 4xx other than 429 → real error, don't mask it
         }
+      }
+      // ---- every Groq model failed → Gemini, once, with the identical body (tools/messages/context unchanged)
+      const gk = process.env.GEMINI_API_KEY;
+      if (gk) {
+        const ac = new AbortController(); const tm = setTimeout(() => ac.abort(), GROQ_TIMEOUT_MS);
+        try {
+          console.warn("AI_PROVIDER_FALLBACK", JSON.stringify({ from: "groq", to: "gemini", model: GEMINI_MODEL, reason: last ? "status " + last.status : "network/timeout" }));
+          const r = await fetch(GEMINI_URL, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${gk}` }, body: JSON.stringify({ ...body, model: GEMINI_MODEL }), signal: ac.signal });
+          clearTimeout(tm);
+          if (r.ok) { usedModel = GEMINI_MODEL; return r; }
+          console.error("GEMINI_REQUEST_FAILED", JSON.stringify({ status: r.status }));
+          return r;
+        } catch (e) { clearTimeout(tm); console.error("GEMINI_REQUEST_FAILED", JSON.stringify({ reason: e.name === "AbortError" ? "timeout" : "network" })); }
       }
       return last || new Response(JSON.stringify({ error: { message: "all models busy" } }), { status: 503 });
     };
