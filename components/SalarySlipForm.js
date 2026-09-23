@@ -40,7 +40,7 @@ export default function SalarySlipForm({ person, people, onPerson, onIssue, issu
     const line = m => { const r = rows[m]; return `${lbl(m, true).padEnd(15)} Gross ${inr(n(r.gross))}  −  PF ${inr(n(r.pf))}  −  PT ${inr(n(r.pt))}  −  Other ${inr(n(r.other))}  =  Net ${inr(netOf(r))}`; };
     const g = list.reduce((s, m) => s + n(rows[m].gross), 0), d = list.reduce((s, m) => s + n(rows[m].pf) + n(rows[m].pt) + n(rows[m].other), 0);
     return { "slip.period": `${lbl(from, true)} – ${lbl(to, true)} (${list.length} month${list.length === 1 ? "" : "s"})`, "slip.table": list.map(line).join("\n"),
-      "slip.gross_total": inr(g), "slip.deductions_total": inr(d), "slip.net_total": inr(total), "slip.net_words": rupeesInWords(Math.round(total)), "slip.note": note || "" };
+      "slip.gross_total": inr(g), "slip.deductions_total": inr(d), "slip.net_total": inr(total), "slip.net_words": rupeesInWords(Math.round(total)), "slip.note": note.trim() ? "Note: " + note.trim() : "-" };   // update415b: never blank — a blank token is treated as unfilled and the server refuses to issue
   }
   const inp = { width: "100%", boxSizing: "border-box", height: 38 };
   const cell = { width: "92%", height: 28, borderRadius: 6, padding: "0 6px", fontSize: 12 };
