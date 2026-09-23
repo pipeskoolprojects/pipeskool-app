@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { detectLang, answerLang, matchKB, suggestionsFor, liveAnswer, createTicket } from "@/lib/assistant";
+import { detectLang, answerLang, matchKB, suggestionsFor, liveAnswer, createTicket, askAI, aiStatus } from "@/lib/assistant";   // update416/417
 
 const T = {
   en: { title: "Pipeskool Assistant", hint: "Ask anything about the app…", helpful: "Did this help?", yes: "Yes 👍", no: "No — get human help",
@@ -28,7 +28,9 @@ export default function Assistant() {
   const path = usePathname();
   const [sess, setSess] = useState(null);
   const [open, setOpen] = useState(false);
-  const [msgs, setMsgs] = useState([]);       // {who:'u'|'a', text?, steps?, link?, note?, kbId?}
+  const [msgs, setMsgs] = useState([]);
+  const [aiSt, setAiSt] = useState(null);   // update417: { on, model } from GET /api/ai/chat
+  useEffect(() => { if (open && aiSt === null) aiStatus().then(setAiSt); }, [open]);   // eslint-disable-line react-hooks/exhaustive-deps       // {who:'u'|'a', text?, steps?, link?, note?, kbId?}
   const [input, setInput] = useState("");
   const [lang, setLang] = useState("en");
   const [ticket, setTicket] = useState(null); // {route, subject, body, file}
@@ -57,8 +59,12 @@ export default function Assistant() {
     const live = await liveAnswer(clean, sess, L);
     if (live) { setMsgs(m => [...m, { who: "a", note, title: live.title, steps: live.steps, link: live.link }]); return; }
     const hits = matchKB(clean, sess, path);
-    if (hits.length) { renderEntry(hits[0], L, note); if (hits.length > 1) setMsgs(m => [...m, { who: "a", also: hits.slice(1), langUsed: L }]); }
-    else setMsgs(m => [...m, { who: "a", nomatch: true, langUsed: L }]);
+    if (hits.length) { renderEntry(hits[0], L, note); if (hits.length > 1) setMsgs(m => [...m, { who: "a", also: hits.slice(1), langUsed: L }]); return; }
+    // update416: no KB match → ask the Groq-backed assistant (server route, grounded in the Help Center)
+    setMsgs(m => [...m, { who: "a", thinking: true }]);
+    const history = [...msgs.filter(x => x.who === "u" || x.aiText).map(x => x.who === "u" ? { role: "user", content: x.text } : { role: "assistant", content: x.aiText }), { role: "user", content: clean }];
+    const ai = await askAI(history, L, sess, path);
+    setMsgs(m => { const rest = m.filter(x => !x.thinking); return ai?.text ? [...rest, { who: "a", note, aiText: ai.text, langUsed: L }] : [...rest, { who: "a", nomatch: true, langUsed: L, aiError: ai?.error || "AI gave no answer." }]; });
   }
 
   async function sendTicket() {
@@ -84,7 +90,7 @@ export default function Assistant() {
             <span style={{ fontSize: 18 }}>🛟</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 14 }}>{t.title}</div>
-              <div style={{ fontSize: 10.5, opacity: .75 }}>{sess.name} · {sess.role}</div>
+              <div style={{ fontSize: 10.5, opacity: .75 }}>{sess.name} · {sess.role}{aiSt && <span title={aiSt.on ? "Groq AI fallback active · " + aiSt.model : "GROQ_API_KEY not set on server"} style={{ marginLeft: 6, padding: "1px 6px", borderRadius: 8, background: aiSt.on ? "#DCFCE7" : "#FEE2E2", color: aiSt.on ? "#15803D" : "#B91C1C", fontSize: 9.5 }}>AI {aiSt.on ? "on" : "off"}</span>}</div>
             </div>
             {["en", "hi", "gu"].map(l => <button key={l} onClick={() => setLang(l)}
               style={{ fontSize: 10.5, padding: "3px 7px", borderRadius: 7, border: "none", cursor: "pointer",
@@ -112,9 +118,12 @@ export default function Assistant() {
               <div key={i} style={{ margin: "8px 0" }}>
                 <div style={{ background: "#fff", borderRadius: "12px 12px 12px 2px", padding: "10px 12px", fontSize: 13, maxWidth: "92%", border: "1px solid var(--border,#e3e3de)" }}>
                   {m.note && <div style={{ fontSize: 11, color: "#B26A00", marginBottom: 6 }}>{m.note}</div>}
-                  {m.nomatch ? (
+                  {m.thinking ? <div className="muted" style={{ fontSize: 12.5 }}>… thinking</div>
+                  : m.aiText ? (<><div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.aiText}</div><div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>AI answer — verify against the app; not a substitute for the Director's decision.</div></>)
+                  : m.nomatch ? (
                     <>
                       <div>{T[m.langUsed || lang].nomatch}</div>
+                      {m.aiError && <div style={{ fontSize: 11, color: "#B91C1C", marginTop: 4 }}>⚠ AI: {m.aiError}</div>}{/* update417 */}
                       <button style={{ fontSize: 12, marginTop: 8 }} onClick={() => setTicket({ route: "admin", subject: "", body: "", file: null })}>🎫 {t.send}</button>
                     </>
                   ) : m.also ? (
