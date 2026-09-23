@@ -28,6 +28,7 @@ export default function Assistant() {
   const path = usePathname();
   const [sess, setSess] = useState(null);
   const [open, setOpen] = useState(false);
+  const [full, setFull] = useState(false); const [attach, setAttach] = useState(null);   // update424: fullscreen + pending file
   const [msgs, setMsgs] = useState([]);
   const [aiSt, setAiSt] = useState(null);   // update417: { on, model } from GET /api/ai/chat
   useEffect(() => { if (open && aiSt === null) aiStatus().then(setAiSt); }, [open]);   // eslint-disable-line react-hooks/exhaustive-deps       // {who:'u'|'a', text?, steps?, link?, note?, kbId?}
@@ -47,6 +48,18 @@ export default function Assistant() {
     setMsgs(m => [...m, { who: "a", note, title: e[L].q, steps: e[L].a, link: e.link, kbId: e.id }]);
   }
 
+  // update424: single backend hook — text, file (bill/receipt) or both; language = the active pill
+  async function sendMessage(text, file, L0) {
+    const clean = String(text || "").trim(); if (!clean && !file) return;
+    if (file) {
+      const chip = { name: file.name, size: file.size, kind: file.type?.startsWith("image/") ? "image" : "file", url: file.type?.startsWith("image/") ? URL.createObjectURL(file) : null };
+      setMsgs(m => [...m, { who: "u", text: clean, chip }, { who: "a", thinking: true }]); setInput(""); setAttach(null);
+      const r = await uploadBillForMatch(file, sess, null, clean, L0 || lang);
+      setMsgs(m => { const rest = m.filter(x => !x.thinking); return r.ok ? [...rest, { who: "a", aiText: r.text || `Bill read and matched against ${r.bill.po_no || "— no PO found"}.`, bill: { ...r.bill, _file: file }, dataset: r.dataset, tools: ["bill_match"], langUsed: L0 || lang }] : [...rest, { who: "a", aiText: "⚠ " + (r.error || "Could not read the bill."), soft: true }]; });
+      return;
+    }
+    return ask(clean);
+  }
   async function ask(text, forcedEntry) {
     const clean = String(text || "").trim(); if (!clean && !forcedEntry) return;
     if (clean) setMsgs(m => [...m, { who: "u", text: clean }]);
@@ -87,26 +100,33 @@ export default function Assistant() {
 
   return (
     <>
-      <button onClick={() => setOpen(o => !o)} title="Pipeskool Assistant" className="no-print asst-fab"
+      {!open && <button onClick={() => setOpen(true)} title="Pipeskool Assistant" className="no-print asst-fab"
         style={{ position: "fixed", right: 14, bottom: (path || "").startsWith("/m") ? "calc(74px + env(safe-area-inset-bottom, 0px))" : 18, zIndex: 150, width: 52, height: 52, borderRadius: "50%",
-          background: "var(--copper, #FF7A1A)", color: "#fff", fontSize: 22, border: "none", boxShadow: "0 4px 14px rgba(0,0,0,.25)", cursor: "pointer" }}>
-        {open ? "✕" : "💬"}
-      </button>
+          background: "linear-gradient(180deg,#FF7A45,#E8622B)", color: "#1a1207", fontSize: 24, border: "none", boxShadow: "0 4px 14px rgba(0,0,0,.25)", cursor: "pointer" }}>🤖</button>}
       {open && (
-        <div className="asst-panel" style={{ position: "fixed", right: 14, bottom: (path || "").startsWith("/m") ? "calc(136px + env(safe-area-inset-bottom, 0px))" : 80, zIndex: 150, width: "min(94vw, 380px)", height: "min(70vh, 560px)",
-          background: "#fff", borderRadius: 16, boxShadow: "0 10px 34px rgba(0,0,0,.28)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ background: "var(--deep, #0F1419)", color: "#fff", padding: "12px 14px", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 18 }}>🛟</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>{t.title}</div>
-              <div style={{ fontSize: 10.5, opacity: .75 }}>{sess.name} · {sess.role}{aiSt && <span title={aiSt.on ? "Groq AI fallback active · " + aiSt.model : "GROQ_API_KEY not set on server"} style={{ marginLeft: 6, padding: "1px 6px", borderRadius: 8, background: aiSt.on ? "#DCFCE7" : "#FEE2E2", color: aiSt.on ? "#15803D" : "#B91C1C", fontSize: 9.5 }}>AI {aiSt.on ? "on" : "off"}</span>}</div>
+        <div className="asst-panel no-print" style={full
+          ? { position: "fixed", inset: 16, zIndex: 200, width: "auto", height: "auto" }
+          : { position: "fixed", right: 14, bottom: (path || "").startsWith("/m") ? "calc(74px + env(safe-area-inset-bottom, 0px))" : 18, zIndex: 150, width: "min(94vw, 380px)", height: "min(80vh, 540px)" }}>
+          <style>{`.asst-dots span{display:inline-block;width:6px;height:6px;margin:0 2px;border-radius:50%;background:#9096A0;animation:asstb 1.2s infinite}.asst-dots span:nth-child(2){animation-delay:.2s}.asst-dots span:nth-child(3){animation-delay:.4s}@keyframes asstb{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}`}</style>
+          <div style={{ height: "100%", background: "linear-gradient(180deg,#1C2025,#15181C)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 20, boxShadow: "0 10px 34px rgba(0,0,0,.35)", display: "flex", flexDirection: "column", overflow: "hidden", color: "#F5F3EF" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderBottom: "1px solid rgba(255,255,255,.07)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(180deg,#FF7A45,#E8622B)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 17 }}>✦</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap" }}>{t.title}</div>
+                <div style={{ fontSize: 10.5, color: "#9096A0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sess.name} · {sess.role}{aiSt && <span title={aiSt.on ? "AI active · " + aiSt.model : "AI not configured on server"} style={{ marginLeft: 6, padding: "1px 6px", borderRadius: 8, background: aiSt.on ? "#1F3D2B" : "#4A2323", color: aiSt.on ? "#7DD3A0" : "#F5A3A3", fontSize: 9.5 }}>AI {aiSt.on ? "on" : "off"}</span>}</div>
+              </div>
             </div>
-            {["en", "hi", "gu"].map(l => <button key={l} onClick={() => setLang(l)}
-              style={{ fontSize: 10.5, padding: "3px 7px", borderRadius: 7, border: "none", cursor: "pointer",
-                background: lang === l ? "var(--copper,#FF7A1A)" : "rgba(255,255,255,.12)", color: "#fff" }}>{l.toUpperCase()}</button>)}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+              <div style={{ display: "flex", background: "#23272D", borderRadius: 999, padding: 2 }}>
+                {["en", "hi", "gu"].map(l => <button key={l} type="button" onClick={() => setLang(l)} style={{ fontSize: 10, fontWeight: 700, padding: "4px 8px", borderRadius: 999, border: "none", cursor: "pointer", background: lang === l ? "#E8622B" : "transparent", color: lang === l ? "#1a1207" : "#9096A0" }}>{l.toUpperCase()}</button>)}
+              </div>
+              <button type="button" onClick={() => setFull(f => !f)} title={full ? "Minimize" : "Fullscreen"} style={{ width: 28, height: 28, borderRadius: 8, background: "#23272D", border: "none", color: "#9096A0", cursor: "pointer", fontSize: 14 }}>{full ? "⤡" : "⤢"}</button>
+              <button type="button" onClick={() => { setOpen(false); setFull(false); }} title="Close" style={{ width: 28, height: 28, borderRadius: 8, background: "#23272D", border: "none", color: "#9096A0", cursor: "pointer", fontSize: 14 }}>✕</button>
+            </div>
           </div>
 
-          <div style={{ flex: 1, overflowY: "auto", padding: 12, background: "#F7F7F5" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: full ? "16px 8%" : 14, display: "flex", flexDirection: "column", gap: 12 }}>
             {msgs.length === 0 && (
               <div>
                 <div style={{ fontSize: 12.5, marginBottom: 8 }}>
@@ -120,18 +140,29 @@ export default function Assistant() {
               </div>
             )}
             {msgs.map((m, i) => m.who === "u" ? (
-              <div key={i} style={{ textAlign: "right", margin: "8px 0" }}>
-                <span style={{ display: "inline-block", background: "var(--copper,#FF7A1A)", color: "#fff", borderRadius: "12px 12px 2px 12px", padding: "8px 11px", fontSize: 13, maxWidth: "85%" }}>{m.text}</span>
+              <div key={i} style={{ alignSelf: "flex-end", maxWidth: full ? "70%" : "78%", background: "linear-gradient(180deg,#FF7A45,#E8622B)", color: "#1a1207", borderRadius: "14px 14px 3px 14px", padding: "10px 13px", fontSize: 12.5 }}>
+                {m.chip && <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(0,0,0,.18)", borderRadius: 8, padding: "5px 8px", marginBottom: m.text ? 6 : 0, fontSize: 11.5 }}>{m.chip.url ? <img src={m.chip.url} alt="" style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 5 }} /> : <span>📄</span>}<span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.chip.name}</span><span style={{ opacity: .7 }}>{(m.chip.size / 1024).toFixed(0)} KB</span></div>}
+                {m.text}
               </div>
             ) : (
-              <div key={i} style={{ margin: "8px 0" }}>
-                <div style={{ background: "#fff", borderRadius: "12px 12px 12px 2px", padding: "10px 12px", fontSize: 13, maxWidth: "92%", border: "1px solid var(--border,#e3e3de)" }}>
+              <div key={i} style={{ alignSelf: "flex-start", maxWidth: full ? "80%" : "92%", display: "flex", gap: 9 }}>
+                <div style={{ width: 26, height: 26, borderRadius: 8, background: "#23272D", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2, color: "#FF7A45", fontSize: 13 }}>✦</div>
+                <div style={{ background: "#23272D", borderRadius: "3px 14px 14px 14px", padding: "12px 14px", fontSize: 12.5, lineHeight: 1.6, minWidth: 0, flex: 1 }}>
                   {m.note && <div style={{ fontSize: 11, color: "#B26A00", marginBottom: 6 }}>{m.note}</div>}
-                  {m.thinking ? <div className="muted" style={{ fontSize: 12.5 }}>… thinking</div>
+                  {m.thinking ? <div className="asst-dots" aria-label="typing"><span /><span /><span /></div>
                   : m.aiText ? (<><div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.aiText}</div>
                       {m.dataset?.rows?.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}><button type="button" style={{ fontSize: 11.5 }} onClick={() => downloadDataset(m.dataset, { by: sess?.name, at: new Date().toLocaleString("en-IN") })}>📊 Export Excel</button><button type="button" style={{ fontSize: 11.5 }} onClick={() => openPdfReport(m.dataset, { by: sess?.name, at: new Date().toLocaleString("en-IN") })}>📄 Download PDF</button><span className="muted" style={{ fontSize: 10.5, alignSelf: "center" }}>{m.dataset.title} · {m.dataset.rows.length} rows</span></div>}
-                      {m.bill && (<div style={{ marginTop: 8, background: m.bill.status === "matched" ? "#ECFDF5" : "#FEF2F2", border: "1px solid " + (m.bill.status === "matched" ? "#A7F3D0" : "#FECACA"), borderRadius: 8, padding: 8, fontSize: 12 }}>
+                      {m.bill && (<div style={{ marginTop: 8, background: m.bill.status === "matched" ? "#1F3D2B" : "#4A2323", border: "1px solid " + (m.bill.status === "matched" ? "#2E6B47" : "#7A3A3A"), borderRadius: 8, padding: 8, fontSize: 12 }}>
                         <div style={{ fontWeight: 700 }}>{m.bill.verdict}</div>
+                        {m.bill.expense_match?.candidates?.length > 0 && (<div style={{ marginTop: 6, fontSize: 11.5 }}>
+                          <div style={{ fontWeight: 600 }}>Matching expense / petty-cash entries</div>
+                          {m.bill.expense_match.candidates.map(c => <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                            <span style={{ flex: 1, minWidth: 0 }}>#{c.id} · {c.category} · ₹{c.amount.toLocaleString("en-IN")} · {c.date} · {c.site}{c.petty ? " · petty cash" : ""} · {c.status}{c.has_bill ? " · bill attached" : ""}</span>
+                            {!m.bill.attachedTo && m.bill._file && <button type="button" style={{ fontSize: 11 }} onClick={async () => { const { addExpenseBills } = await import("@/lib/money"); const r = await addExpenseBills(c.id, [m.bill._file]); setMsgs(x => x.map(y => y === m ? { ...y, bill: { ...y.bill, attachedTo: r?.ok === false ? null : c.id, attachErr: r?.ok === false ? r.error : null } } : y)); }}>Attach to #{c.id}</button>}
+                          </div>)}
+                          {m.bill.attachedTo && <div style={{ color: "#7DD3A0", marginTop: 4 }}>✅ Bill attached to expense #{m.bill.attachedTo}</div>}
+                          {m.bill.attachErr && <div style={{ color: "#F5A3A3", marginTop: 4 }}>⚠ {m.bill.attachErr}</div>}
+                        </div>)}
                         <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>📎 {m.bill.file_name} · uploaded by {m.bill.uploaded_by} · {String(m.bill.uploaded_at).slice(0, 16).replace("T", " ")}</div>
                         <div style={{ marginTop: 4 }}>Vendor: <b>{m.bill.vendor || "—"}</b>{m.bill.gstin ? ` · GSTIN ${m.bill.gstin}` : ""} · Invoice: <b>{m.bill.invoice_no || "—"}</b>{m.bill.invoice_date ? ` (${m.bill.invoice_date})` : ""} · PO: <b>{m.bill.po_no || "not found"}</b>{m.bill.site ? ` · ${m.bill.site}` : ""} · Bill total: <b>₹{Number(m.bill.total || 0).toLocaleString("en-IN")}</b></div>
                         {m.bill.lines?.map((l, i) => <div key={i} style={{ marginTop: 4, paddingTop: 4, borderTop: "1px solid rgba(0,0,0,.06)" }}>{l.ok ? "✅" : "⚠️"} {l.bill_item}{l.po_item && l.po_item !== l.bill_item ? ` → ${l.po_item}` : ""}<div className="muted" style={{ fontSize: 11 }}>PO {l.po_qty ?? "—"} · GRN {l.grn_qty ?? "—"} · Bill {l.bill_qty} @ ₹{l.bill_rate}{l.po_rate != null ? ` (PO ₹${l.po_rate})` : ""}{l.issues.length ? " — " + l.issues.join("; ") : ""}</div></div>)}
@@ -145,7 +176,7 @@ export default function Assistant() {
                         </div>
                         <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>Applied through the app with your permissions; logged under your name.</div>
                       </div>)}
-                      {!m.soft && <div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>{m.tools?.length ? "Live ERP data" : "AI answer — verify against the app."}</div>}</>)
+                      {!m.soft && <div style={{ fontSize: 10, marginTop: 6, color: "#565B63" }}>{m.tools?.length ? "Live ERP data" : "AI answer — verify against the app."}</div>}</>)
                   : m.nomatch ? (
                     <>
                       <div>{T[m.langUsed || lang].nomatch}</div>
@@ -196,11 +227,21 @@ export default function Assistant() {
             <div ref={endRef} />
           </div>
 
-          <div style={{ display: "flex", gap: 6, padding: 10, borderTop: "1px solid var(--border,#e3e3de)", background: "#fff" }}>
-            <label title="Upload a vendor bill (JPG/PNG/PDF) for PO + GRN matching" style={{ cursor: "pointer", alignSelf: "center", fontSize: 18 }}>📎<input type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={async e => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; setMsgs(m => [...m, { who: "u", text: `📎 ${f.name}` }, { who: "a", thinking: true }]); const r = await uploadBillForMatch(f, sess, null); setMsgs(m => { const rest = m.filter(x => !x.thinking); return r.ok ? [...rest, { who: "a", aiText: `Bill read and matched against ${r.bill.po_no || "— no PO found"}.`, bill: r.bill, dataset: r.dataset, tools: ["bill_match"] }] : [...rest, { who: "a", aiText: "⚠ " + (r.error || "Could not read the bill."), soft: true }]; }); }} /></label>{/* update421 */}
-            <input style={{ flex: 1 }} placeholder={t.hint} value={input}
-              onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && ask(input)} />
-            <button className="primary" onClick={() => ask(input)}>➤</button>
+          <div style={{ padding: "10px 14px 14px", borderTop: "1px solid rgba(255,255,255,.07)" }}>
+            {attach && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#23272D", borderRadius: 10, padding: "6px 10px", marginBottom: 8, fontSize: 12 }}>
+                {attach.type?.startsWith("image/") ? <img src={URL.createObjectURL(attach)} alt="" style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 6 }} /> : <span style={{ fontSize: 22 }}>📄</span>}
+                <div style={{ flex: 1, minWidth: 0 }}><div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{attach.name}</div><div style={{ color: "#9096A0", fontSize: 10.5 }}>{(attach.size / 1024).toFixed(0)} KB · will be read and matched to expenses / POs</div></div>
+                <button type="button" onClick={() => setAttach(null)} style={{ background: "transparent", border: "none", color: "#F5A3A3", cursor: "pointer", fontSize: 12 }}>Remove</button>
+              </div>
+            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#23272D", border: "1px solid rgba(255,255,255,.1)", borderRadius: 12, padding: "8px 10px" }}>
+              <label title="Attach a bill / receipt (JPG, PNG, PDF)" style={{ cursor: "pointer", fontSize: 16, color: "#9096A0", flexShrink: 0 }}>📎<input type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) setAttach(f); }} /></label>
+              <input placeholder={t.hint} value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendMessage(input, attach, lang)}
+                style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#F5F3EF", fontSize: 12.5 }} />
+              <button type="button" onClick={() => sendMessage(input, attach, lang)} style={{ width: 30, height: 30, borderRadius: 8, background: "linear-gradient(180deg,#FF7A45,#E8622B)", border: "none", color: "#1a1207", cursor: "pointer", flexShrink: 0 }}>➤</button>
+            </div>
+          </div>
           </div>
         </div>
       )}
