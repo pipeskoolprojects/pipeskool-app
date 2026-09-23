@@ -278,7 +278,7 @@ export default function LettersPage() {
 
   const shown = draft != null ? draft : auto.text;
   const unfilled = [...asked.typed, ...asked.missing].filter(k => !String(overrides[k] || "").trim());
-  const blocked = draft != null ? /\{\{/.test(draft) : unfilled.length > 0;
+  const blocked = code === "salary_slip" ? false : (draft != null ? /\{\{/.test(draft) : unfilled.length > 0);   // update415: the slip form fills its own tokens
 
   function openDoc(c) {
     const fams = templates.filter(t => t.code === c).map(t => t.family);
