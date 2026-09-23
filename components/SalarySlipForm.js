@@ -1,109 +1,107 @@
 "use client";
-// update412: SALARY SLIP form (Letters & Documents → Salary Slip). Slabs: one implicit slab when the
-// mid-period toggle is off; validated (inside range, no overlap, no gaps); issued through the SAME letter
-// pipeline (fn_issue_letter → PSP/SLP series → Document Register → frozen print).
+// update414: SALARY SLIP — month-wise entry (one editable row per month in the range), Confirm & review
+// step, then issued through the letters pipeline (fn_issue_letter → PSP/SLP series → Document Register
+// → the frozen print page with the browser's native Print / Save as PDF).
 import { useEffect, useMemo, useState } from "react";
 import { inr } from "@/lib/data";
-import { rupeesInWords, fmtDate } from "@/lib/letters";
+import { rupeesInWords } from "@/lib/letters";
 
 const M = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const ML = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const ym = s => { const [y, m] = String(s).split("-").map(Number); return y * 12 + (m - 1); };
-const lbl = s => { const [y, m] = String(s).split("-").map(Number); return `${M[m - 1]} ${y}`; };
-const months = (a, b) => { const out = []; for (let i = ym(a); i <= ym(b); i++) out.push(`${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`); return out; };
+const lbl = (s, long) => { const [y, m] = String(s).split("-").map(Number); return `${(long ? ML : M)[m - 1]} ${y}`; };
+const months = (a, b) => { const out = []; for (let i = ym(a); i <= ym(b) && out.length < 36; i++) out.push(`${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`); return out; };
 const n = v => Number(v) || 0;
 const thisMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 const DRAFT = id => "psk_slip_draft_" + id;
+const num = v => v.replace(/[^0-9.]/g, "");
 
 export default function SalarySlipForm({ person, people, onPerson, onIssue, issuing }) {
   const [from, setFrom] = useState(thisMonth()); const [to, setTo] = useState(thisMonth());
-  const [std, setStd] = useState({ gross: "", pf: "", pt: "", others: [] });   // others: [{label, amount}]
-  const [multi, setMulti] = useState(false); const [slabs, setSlabs] = useState([]);
-  const [err, setErr] = useState(""); const [note, setNote] = useState("");
-  useEffect(() => { if (!person) return; try { const d = JSON.parse(localStorage.getItem(DRAFT(person.id)) || "null"); if (d) { setFrom(d.from); setTo(d.to); setStd(d.std); setMulti(d.multi); setSlabs(d.slabs); setNote(d.note || ""); } } catch {} }, [person?.id]);
-  useEffect(() => { if (person?.monthly_salary && !std.gross) setStd(s => ({ ...s, gross: String(person.monthly_salary) })); }, [person?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const [rows, setRows] = useState({});          // "yyyy-mm" -> { gross, pf, pt, other }
+  const [note, setNote] = useState(""); const [review, setReview] = useState(false); const [err, setErr] = useState("");
+  useEffect(() => { if (!person) return; try { const d = JSON.parse(localStorage.getItem(DRAFT(person.id)) || "null"); if (d) { setFrom(d.from); setTo(d.to); setRows(d.rows || {}); setNote(d.note || ""); } } catch {} }, [person?.id]);
 
-  const effSlabs = useMemo(() => multi ? slabs : [{ from, to, gross: std.gross, pf: std.pf, pt: std.pt }], [multi, slabs, from, to, std]);
-  const otherTotal = std.others.reduce((s, o) => s + n(o.amount), 0);   // other deductions apply once per month across the period
-  const validation = useMemo(() => {
-    if (!from || !to || ym(from) > ym(to)) return "From month must be on or before To month.";
-    if (multi) {
-      if (!slabs.length) return "Add at least one slab or switch the mid-period toggle off.";
-      const sorted = [...slabs].sort((a, b) => ym(a.from) - ym(b.from));
-      for (const s of sorted) { if (!s.from || !s.to || ym(s.from) > ym(s.to)) return "Each slab needs From ≤ To."; if (ym(s.from) < ym(from) || ym(s.to) > ym(to)) return `Slab ${lbl(s.from)}–${lbl(s.to)} is outside ${lbl(from)}–${lbl(to)}.`; if (!(n(s.gross) > 0)) return `Slab ${lbl(s.from)}–${lbl(s.to)}: gross salary is required.`; }
-      for (let i = 1; i < sorted.length; i++) { if (ym(sorted[i].from) <= ym(sorted[i - 1].to)) return `Slabs ${lbl(sorted[i - 1].from)}–${lbl(sorted[i - 1].to)} and ${lbl(sorted[i].from)}–${lbl(sorted[i].to)} overlap.`; if (ym(sorted[i].from) !== ym(sorted[i - 1].to) + 1) return `Gap between ${lbl(sorted[i - 1].to)} and ${lbl(sorted[i].from)} — every month in the period needs a slab.`; }
-      if (ym(sorted[0].from) !== ym(from) || ym(sorted[sorted.length - 1].to) !== ym(to)) return "Slabs must cover the whole period.";
-    } else if (!(n(std.gross) > 0)) return "Gross salary is required.";
-    return "";
-  }, [from, to, multi, slabs, std]);
-  // month-wise rows: each month takes its slab's gross/PF/PT; other deductions each month
-  const rows = useMemo(() => validation ? [] : months(from, to).map(m => { const s = effSlabs.find(x => ym(x.from) <= ym(m) && ym(m) <= ym(x.to)); const g = n(s?.gross), pf = n(s?.pf), pt = n(s?.pt); return { m, gross: g, pf, pt, other: otherTotal, net: g - pf - pt - otherTotal }; }), [validation, from, to, effSlabs, otherTotal]);
-  const tot = rows.reduce((a, r) => ({ gross: a.gross + r.gross, pf: a.pf + r.pf, pt: a.pt + r.pt, other: a.other + r.other, net: a.net + r.net }), { gross: 0, pf: 0, pt: 0, other: 0, net: 0 });
-  const stdNet = n(std.gross) - n(std.pf) - n(std.pt) - otherTotal;
+  const list = useMemo(() => (from && to && ym(from) <= ym(to)) ? months(from, to) : [], [from, to]);
+  // new months in range get the employee's salary pre-filled (or the previous month's numbers)
+  useEffect(() => {
+    setRows(r => { const nr = { ...r }; let prev = null;
+      list.forEach(m => { if (!nr[m]) nr[m] = prev ? { ...prev } : { gross: person?.monthly_salary ? String(person.monthly_salary) : "", pf: "", pt: "", other: "" }; prev = nr[m]; });
+      return nr; });
+  }, [list, person?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const setCell = (m, k, v) => setRows(r => ({ ...r, [m]: { ...r[m], [k]: num(v) } }));
+  const netOf = r => n(r?.gross) - n(r?.pf) - n(r?.pt) - n(r?.other);
+  const total = list.reduce((s, m) => s + netOf(rows[m]), 0);
+  const missing = list.filter(m => !(n(rows[m]?.gross) > 0));
+  const ready = !!person && list.length > 0 && missing.length === 0;
 
-  function saveDraft() { if (!person) { setErr("Pick an employee first."); return; } localStorage.setItem(DRAFT(person.id), JSON.stringify({ from, to, std, multi, slabs, note })); setErr(""); alert("Draft saved on this device for " + person.full_name + "."); }
-  function buildBody() {
-    const line = r => `${lbl(r.m).padEnd(9)}  Gross ${inr(r.gross)}  −  PF ${inr(r.pf)}  −  PT ${inr(r.pt)}${r.other ? `  −  Other ${inr(r.other)}` : ""}  =  Net ${inr(r.net)}`;
-    const table = rows.map(line).join("\n");
-    const others = std.others.filter(o => o.label || n(o.amount)).map(o => `${o.label || "Other deduction"}: ${inr(n(o.amount))}/month`).join("; ");
-    const slabTxt = multi ? "Salary revised mid-period: " + [...slabs].sort((a, b) => ym(a.from) - ym(b.from)).map(s => `${lbl(s.from)}–${lbl(s.to)} gross ${inr(n(s.gross))}`).join("; ") + "." : "";
-    return {
-      "slip.period": `${lbl(from)} – ${lbl(to)} (${rows.length} month${rows.length === 1 ? "" : "s"})`,
-      "slip.table": table + (others ? `\nOther deductions each month — ${others}` : ""),
-      "slip.gross_total": inr(tot.gross), "slip.deductions_total": inr(tot.pf + tot.pt + tot.other), "slip.net_total": inr(tot.net),
-      "slip.net_words": rupeesInWords(Math.round(tot.net)) , "slip.note": [slabTxt, note].filter(Boolean).join("\n"),
-    };
+  function saveDraft() { if (!person) { setErr("Pick an employee first."); return; } try { localStorage.setItem(DRAFT(person.id), JSON.stringify({ from, to, rows, note })); } catch {} setErr(""); alert(`Draft saved on this device for ${person.full_name}.`); }
+  function tokens() {
+    const line = m => { const r = rows[m]; return `${lbl(m, true).padEnd(15)} Gross ${inr(n(r.gross))}  −  PF ${inr(n(r.pf))}  −  PT ${inr(n(r.pt))}  −  Other ${inr(n(r.other))}  =  Net ${inr(netOf(r))}`; };
+    const g = list.reduce((s, m) => s + n(rows[m].gross), 0), d = list.reduce((s, m) => s + n(rows[m].pf) + n(rows[m].pt) + n(rows[m].other), 0);
+    return { "slip.period": `${lbl(from, true)} – ${lbl(to, true)} (${list.length} month${list.length === 1 ? "" : "s"})`, "slip.table": list.map(line).join("\n"),
+      "slip.gross_total": inr(g), "slip.deductions_total": inr(d), "slip.net_total": inr(total), "slip.net_words": rupeesInWords(Math.round(total)), "slip.note": note || "" };
   }
-  const inp = { width: "100%", boxSizing: "border-box" };
+  const inp = { width: "100%", boxSizing: "border-box", height: 38 };
+  const cell = { width: "92%", height: 28, borderRadius: 6, padding: "0 6px", fontSize: 12 };
+  const grid = "1.1fr 1fr .8fr .8fr 1fr 1fr";
+
+  if (review) return (
+    <div className="card" style={{ padding: 16 }}>
+      <div style={{ fontWeight: 700, marginBottom: 2 }}>Review before generating</div>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>Read-only. Go back to change anything; nothing is issued until you press Generate.</div>
+      <div style={{ background: "var(--gray-bg)", borderRadius: 10, padding: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}><b style={{ fontSize: 13 }}>Pipeskool Projects Pvt Ltd</b><span className="muted" style={{ fontSize: 11 }}>Salary Slip · {lbl(from)}–{lbl(to)}</span></div>
+        <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>{person.full_name} · {person.role_label || person.role || ""} · #{person.id}</div>
+        <div style={{ display: "grid", gridTemplateColumns: grid, fontSize: 11, color: "var(--muted)", padding: "6px 0", borderTop: "1px solid var(--border)" }}><span>Month</span><span>Gross</span><span>PF</span><span>PT</span><span>Other</span><span style={{ textAlign: "right" }}>Net</span></div>
+        {list.map(m => <div key={m} style={{ display: "grid", gridTemplateColumns: grid, fontSize: 12.5, padding: "4px 0", borderTop: "1px solid var(--border)" }}><span>{lbl(m)}</span><span>{inr(n(rows[m].gross))}</span><span>{inr(n(rows[m].pf))}</span><span>{inr(n(rows[m].pt))}</span><span>{inr(n(rows[m].other))}</span><b style={{ textAlign: "right" }}>{inr(netOf(rows[m]))}</b></div>)}
+        <div style={{ display: "flex", justifyContent: "space-between", borderTop: "2px solid var(--border)", marginTop: 4, paddingTop: 8, fontWeight: 700 }}><span>Total net pay · {list.length} month{list.length === 1 ? "" : "s"}</span><span>{inr(total)}</span></div>
+        <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>{rupeesInWords(Math.round(total))}</div>
+        {note && <div style={{ fontSize: 12, marginTop: 8 }}><b>Note:</b> {note}</div>}
+      </div>
+      {err && <div className="error" style={{ marginTop: 8 }}>{err}</div>}
+      <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+        <button type="button" onClick={() => setReview(false)} disabled={issuing}>← Back to edit</button>
+        <button className="primary" style={{ flex: 1 }} disabled={issuing} onClick={() => { setErr(""); onIssue(tokens()); }}>{issuing ? "Generating…" : "✓ Generate slip · opens Print / Save as PDF"}</button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="card" style={{ padding: 16 }}>
-      <div style={{ fontWeight: 700, marginBottom: 2 }}>Salary Slip details</div>
-      <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>Fill in the pay period and components. Add a revision slab if the salary changed mid-period.</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <div style={{ fontWeight: 700, marginBottom: 2 }}>Salary slip</div>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>Enter each month's salary separately, then confirm to generate.</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
         <div><label className="muted">Employee</label><select style={inp} value={person?.id || ""} onChange={e => onPerson(e.target.value)}><option value="">Select employee</option>{people.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}</select></div>
-        <div><label className="muted">Employee ID / Department</label><input style={inp} disabled value={person ? `#${person.id} · ${person.role_label || person.role || ""}` : ""} placeholder="Auto-filled on selection" /></div>
+        <div><label className="muted">Employee ID / department</label><input style={inp} disabled value={person ? `#${person.id} · ${person.role_label || person.role || ""}` : ""} placeholder="Auto-filled on selection" /></div>
         <div><label className="muted">From month</label><input type="month" style={inp} value={from} onChange={e => setFrom(e.target.value)} /></div>
         <div><label className="muted">To month</label><input type="month" style={inp} value={to} onChange={e => setTo(e.target.value)} /></div>
       </div>
-      {!multi && (<>
-        <div style={{ fontWeight: 600, fontSize: 12.5, margin: "14px 0 6px" }}>Salary components (standard, applies to the whole period)</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
-          <div><label className="muted">Gross salary (₹ / month)</label><input style={inp} inputMode="decimal" value={std.gross} onChange={e => setStd(s => ({ ...s, gross: e.target.value.replace(/[^0-9.]/g, "") }))} /></div>
-          <div><label className="muted">PF (₹ / month)</label><input style={inp} inputMode="decimal" value={std.pf} onChange={e => setStd(s => ({ ...s, pf: e.target.value.replace(/[^0-9.]/g, "") }))} /></div>
-          <div><label className="muted">PT (₹ / month)</label><input style={inp} inputMode="decimal" value={std.pt} onChange={e => setStd(s => ({ ...s, pt: e.target.value.replace(/[^0-9.]/g, "") }))} /></div>
+      {list.length === 0 ? <div className="note amber">From month must be on or before To month.</div> : (<>
+        <div className="muted" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".03em", marginBottom: 8 }}>Monthly breakdown — {list.length} month{list.length === 1 ? "" : "s"}</div>
+        <div style={{ border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", marginBottom: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: grid, background: "var(--gray-bg)", padding: "8px 10px", fontSize: 11, color: "var(--muted)" }}><span>Month</span><span>Gross ₹</span><span>PF ₹</span><span>PT ₹</span><span>Other ded. ₹</span><span style={{ textAlign: "right" }}>Net</span></div>
+          {list.map((m, i) => { const r = rows[m] || {}; const changed = i > 0 && n(r.gross) !== n(rows[list[i - 1]]?.gross); return (
+            <div key={m} style={{ display: "grid", gridTemplateColumns: grid, padding: "8px 10px", alignItems: "center", borderTop: changed ? "1.5px solid #FF7A1A" : "1px solid var(--border)", background: changed ? "#FFF9F5" : "#fff" }}>
+              <span style={{ fontSize: 12.5, fontWeight: changed ? 600 : 400 }}>{lbl(m, true)}</span>
+              <input style={{ ...cell, border: changed ? "1px solid #FF7A1A" : undefined }} inputMode="decimal" value={r.gross ?? ""} onChange={e => setCell(m, "gross", e.target.value)} />
+              <input style={{ ...cell, width: "80%" }} inputMode="decimal" value={r.pf ?? ""} placeholder="0" onChange={e => setCell(m, "pf", e.target.value)} />
+              <input style={{ ...cell, width: "80%" }} inputMode="decimal" value={r.pt ?? ""} placeholder="0" onChange={e => setCell(m, "pt", e.target.value)} />
+              <input style={cell} inputMode="decimal" value={r.other ?? ""} placeholder="0" onChange={e => setCell(m, "other", e.target.value)} />
+              <span style={{ fontSize: 12.5, fontWeight: 700, textAlign: "right", color: changed ? "#C2410C" : "inherit" }}>{inr(netOf(r))}</span>
+            </div>); })}
+        </div>
+        <div className="muted" style={{ fontSize: 11, marginBottom: 14 }}>ⓘ One row per month in range — edit any month's numbers independently. A month whose gross differs from the previous one is highlighted.</div>
+        <div style={{ background: "#ECFDF5", borderRadius: 10, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontSize: 13, color: "#15803D" }}>Total net pay · {list.length} month{list.length === 1 ? "" : "s"}</span><b style={{ fontSize: 17, color: "#15803D" }}>{inr(total)}</b>
         </div>
       </>)}
-      <div style={{ fontWeight: 600, fontSize: 12.5, margin: "14px 0 6px" }}>Other deductions (each month) <button type="button" style={{ fontSize: 11, marginLeft: 8 }} onClick={() => setStd(s => ({ ...s, others: [...s.others, { label: "", amount: "" }] }))}>＋ Add line</button></div>
-      {std.others.map((o, i) => <div key={i} style={{ display: "grid", gridTemplateColumns: "2fr 1fr auto", gap: 8, marginBottom: 6 }}><input style={inp} placeholder="e.g. Loan EMI, advance" value={o.label} onChange={e => setStd(s => { const l = [...s.others]; l[i] = { ...l[i], label: e.target.value }; return { ...s, others: l }; })} /><input style={inp} inputMode="decimal" placeholder="₹" value={o.amount} onChange={e => setStd(s => { const l = [...s.others]; l[i] = { ...l[i], amount: e.target.value.replace(/[^0-9.]/g, "") }; return { ...s, others: l }; })} /><button type="button" style={{ fontSize: 11 }} onClick={() => setStd(s => ({ ...s, others: s.others.filter((_, j) => j !== i) }))}>Remove</button></div>)}
-      {!multi && <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, marginTop: 6 }}><div><label className="muted">Net pay / month (auto)</label><input style={inp} disabled value={n(std.gross) ? inr(stdNet) : ""} /></div></div>}
-
-      <div style={{ background: "var(--gray-bg)", borderRadius: 10, padding: 12, marginTop: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div><div style={{ fontWeight: 700, fontSize: 13 }}>Salary changed mid-period</div><div className="muted" style={{ fontSize: 11.5 }}>Turn this on if pay was lower in earlier months and increased partway through</div></div>
-          <label style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="checkbox" checked={multi} onChange={e => { setMulti(e.target.checked); if (e.target.checked && !slabs.length) setSlabs([{ from, to, gross: std.gross, pf: std.pf, pt: std.pt }]); }} /></label>
-        </div>
-        {multi && (<div style={{ marginTop: 10 }}>
-          {slabs.map((s, i) => (
-            <div key={i} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 8, padding: 10, marginBottom: 8, display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
-              <div><label className="muted">From</label><input type="month" style={inp} value={s.from} onChange={e => setSlabs(l => l.map((x, j) => j === i ? { ...x, from: e.target.value } : x))} /></div>
-              <div><label className="muted">To</label><input type="month" style={inp} value={s.to} onChange={e => setSlabs(l => l.map((x, j) => j === i ? { ...x, to: e.target.value } : x))} /></div>
-              <div><label className="muted">Gross ₹</label><input style={inp} inputMode="decimal" value={s.gross} onChange={e => setSlabs(l => l.map((x, j) => j === i ? { ...x, gross: e.target.value.replace(/[^0-9.]/g, "") } : x))} /></div>
-              <div><label className="muted">PF ₹</label><input style={inp} inputMode="decimal" value={s.pf} onChange={e => setSlabs(l => l.map((x, j) => j === i ? { ...x, pf: e.target.value.replace(/[^0-9.]/g, "") } : x))} /></div>
-              <div><label className="muted">PT ₹</label><input style={inp} inputMode="decimal" value={s.pt} onChange={e => setSlabs(l => l.map((x, j) => j === i ? { ...x, pt: e.target.value.replace(/[^0-9.]/g, "") } : x))} /></div>
-              <button type="button" style={{ fontSize: 11, color: "var(--red)" }} onClick={() => setSlabs(l => l.filter((_, j) => j !== i))}>Remove</button>
-            </div>))}
-          <button type="button" style={{ fontSize: 12 }} onClick={() => { const last = slabs[slabs.length - 1]; const nf = last ? `${Math.floor((ym(last.to) + 1) / 12)}-${String(((ym(last.to) + 1) % 12) + 1).padStart(2, "0")}` : from; setSlabs(l => [...l, { from: nf, to, gross: last?.gross || "", pf: last?.pf || "", pt: last?.pt || "" }]); }}>＋ Add another slab</button>
-        </div>)}
-      </div>
-      {validation ? <div className="note amber" style={{ marginTop: 10 }}>{validation}</div> : (
-        <div style={{ marginTop: 12, background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 8, padding: "10px 12px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700 }}><span>Total net pay for selected period ({rows.length} month{rows.length === 1 ? "" : "s"})</span><span>{inr(tot.net)}</span></div>
-          <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>Gross {inr(tot.gross)} − PF {inr(tot.pf)} − PT {inr(tot.pt)}{tot.other ? ` − other ${inr(tot.other)}` : ""}</div>
-        </div>)}
-      <div style={{ marginTop: 10 }}><label className="muted">Note on the slip (optional)</label><input style={inp} value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. Includes arrears for August" /></div>
-      {err && <div className="error" style={{ marginTop: 8 }}>{err}</div>}
-      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-        <button className="primary" disabled={issuing || !person || !!validation} onClick={() => { setErr(""); onIssue(buildBody()); }}>{issuing ? "Generating…" : "Generate slip →"}</button>
-        <button type="button" onClick={saveDraft}>Save as draft</button>
+      <div style={{ marginBottom: 12 }}><label className="muted">Note on the slip (optional)</label><input style={{ ...inp, height: 34 }} value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. Includes arrears for August" /></div>
+      {missing.length > 0 && list.length > 0 && <div className="muted" style={{ fontSize: 11.5, marginBottom: 8 }}>Gross salary missing for: {missing.map(m => lbl(m)).join(", ")}</div>}
+      {err && <div className="error" style={{ marginBottom: 8 }}>{err}</div>}
+      <div style={{ display: "flex", gap: 10 }}>
+        <button className="primary" style={{ flex: 1, padding: "11px 0" }} disabled={!ready} onClick={() => { setErr(""); setReview(true); }}>✓ Confirm &amp; review</button>
+        <button type="button" onClick={saveDraft} style={{ padding: "11px 18px" }}>Save as draft</button>
       </div>
     </div>
   );
