@@ -36,7 +36,8 @@ const TOOLS = [
   { type: "function", function: { name: "person_attendance", description: "One person's attendance (staff or worker) for a date range: day-wise in/out/hours/status and totals; also their site and role. Use for 'X ki attendance', 'X kis site par kaam karta hai', 'X ka September attendance'.", parameters: { type: "object", properties: { person: { type: "string" }, last_n_days: I, date_from: S, date_to: S }, required: ["person"] } } },
   { type: "function", function: { name: "item_rate_history", description: "Purchase rate history of a product from past POs: vendor, rate, list/discount, qty, PO no, date, site, GST — latest first. Use for 'is product ka rate', 'pehle kis vendor se liya', 'last 5 purchase rate', 'Turakhia se is item ka last rate'.", parameters: { type: "object", properties: { item: { type: "string" }, vendor: S, limit: I }, required: ["item"] } } },
   { type: "function", function: { name: "vendor_report", description: "One vendor's purchase report for a period: PO count, total value, PO-wise date/site/amount/items/status/approval/delivery/received. Use for 'is month Turakhia ko kitne PO', 'vendor ka pura month ka purchase detail'.", parameters: { type: "object", properties: { vendor: { type: "string" }, last_n_days: I, date_from: S, date_to: S }, required: ["vendor"] } } },
-  { type: "function", function: { name: "propose_action", description: "Prepare an ERP CHANGE for the user's confirmation. Never performs the change itself. action = mark_po_delivered (needs po_no) | approve_expense (needs expense_id) | reject_expense (expense_id, reason). Returns current state + a confirmation card the app shows; the change happens only after the user taps Confirm, through the app's own permission-checked function.", parameters: { type: "object", properties: { action: { type: "string" }, po_no: S, expense_id: I, reason: S }, required: ["action"] } } },
+  { type: "function", function: { name: "items", description: "Item / material master list or search: name, type, unit, min stock. Use for 'product list', 'CPVC items'.", parameters: { type: "object", properties: { search: S, type: S, limit: I }, required: [] } } },
+  { type: "function", function: { name: "propose_action", description: "Prepare an ERP CHANGE for the user's confirmation. Never performs the change itself. action = mark_po_delivered (needs po_no) | approve_expense (needs expense_id) | reject_expense (expense_id, reason). Returns current state + a confirmation card the app shows; the change happens only after the user taps Confirm, through the app's own permission-checked function.", parameters: { type: "object", properties: { action: { type: "string", description: "mark_po_delivered | approve_expense | reject_expense | assign_task" }, po_no: S, expense_id: I, reason: S, title: S, assignee: S, due: S }, required: ["action"] } } },
 ];
 // update422: send only the tools the question needs (root cause of the 429s: 16 schemas ≈ 1,800 tokens on EVERY round)
 const TOOL_HINTS = [
@@ -162,7 +163,7 @@ async function runTool(sb, name, a = {}) {
     let q = sb.from("expenses").select("id, expense_date, category, amount, paid_to, status, site_id, claimant_user_id, worker_id, note").gte("expense_date", from).lte("expense_date", to).order("expense_date", { ascending: false }).limit(1000);
     q = who.kind === "staff" ? q.or(`claimant_user_id.eq.${who.id},paid_to.ilike.%${who.name}%`) : q.or(`worker_id.eq.${who.id},paid_to.ilike.%${who.name}%`);
     const d = (await q).data || [];
-    const rows = d.map(x => ({ date: x.expense_date, site: sname(x.site_id), category: x.category, paid_to: x.paid_to, amount: Number(x.amount || 0), status: x.status, note: x.note || "" }));
+    const rows = d.filter(x => !a.status || x.status === a.status).map(x => ({ date: x.expense_date, site: sname(x.site_id), category: x.category, paid_to: x.paid_to, amount: Number(x.amount || 0), status: x.status, note: x.note || "" }));   // update425: status filter
     const sum = k => rows.reduce((m, r) => (m[r[k] || "—"] = (m[r[k] || "—"] || 0) + r.amount, m), {});
     return { person: who, from, to, count: rows.length, total: rows.reduce((s2, r) => s2 + r.amount, 0), by_site: sum("site"), by_category: sum("category"), by_status: sum("status"), rows: rows.slice(0, 60), dataset: { title: `Expenses ${who.name} ${from} to ${to}`, columns: ["Date", "Site", "Category", "Paid to", "Amount", "Status", "Note"], rows: rows.map(r => Object.values(r)) } };
   }
@@ -195,6 +196,14 @@ async function runTool(sb, name, a = {}) {
     const rc = {}; (rv || []).forEach(r => { rc[r.po_id] = r; });
     const rows = list.map(p => ({ po_no: p.po_no, date: String(p.created_at).slice(0, 10), site: sname(p.site_id), amount: Number(p.total_amount || 0), items: (p.po_items || []).length, item_list: (p.po_items || []).slice(0, 6).map(i => `${i.item_name} × ${i.qty} ${i.unit || ""}`).join("; "), approval: p.approval_status, delivery: p.delivery_status || "", received: rc[p.id] ? `${rc[p.id].items_complete}/${rc[p.id].item_count} items` : "—" }));
     return { vendor: a.vendor, from, to, count: rows.length, total_value: rows.reduce((s2, r) => s2 + r.amount, 0), by_site: rows.reduce((m, r) => (m[r.site] = (m[r.site] || 0) + r.amount, m), {}), pos: rows.slice(0, 40), dataset: { title: `POs ${a.vendor} ${from} to ${to}`.slice(0, 60), columns: ["PO", "Date", "Site", "Amount", "Items", "Item list", "Approval", "Delivery", "Received"], rows: rows.map(r => Object.values(r)) } };
+  }
+  if (name === "items") {
+    let q = sb.from("item_master").select("id, display_name, item_type, material, unit, min_stock, is_active").eq("is_active", true).order("display_name").limit(Math.min(Number(a.limit) || 60, 400));
+    if (a.search) { const w = String(a.search).toLowerCase().split(/\s+/).filter(Boolean); w.forEach(x => { q = q.ilike("display_name", `%${x}%`); }); } if (a.type) q = q.ilike("item_type", `%${a.type}%`);
+    const d = (await q).data || [];
+    const { count } = await sb.from("item_master").select("id", { count: "exact", head: true }).eq("is_active", true);
+    const byType = d.reduce((m, r) => (m[r.item_type || "—"] = (m[r.item_type || "—"] || 0) + 1, m), {});
+    return { total_items_in_master: count || null, count: d.length, by_type: byType, items: d.slice(0, 40).map(r => ({ item: r.display_name, type: r.item_type, unit: r.unit, min: Number(r.min_stock || 0) })), dataset: { title: a.search ? `Items · ${a.search}` : "Item master", columns: ["Item", "Type", "Material", "Unit", "Min stock"], rows: d.map(r => [r.display_name, r.item_type || "", r.material || "", r.unit || "", Number(r.min_stock || 0)]) } };
   }
   if (name === "pending_deliveries") {
     let q = sb.from("purchase_orders").select("id, po_no, vendor_name, created_at, site_id, delivery_status, expected_delivery, approval_status, status").neq("status", "cancelled").order("created_at", { ascending: false }).limit(300);
@@ -249,6 +258,13 @@ async function runTool(sb, name, a = {}) {
       if (po.status === "cancelled") return { found: true, blocked: "PO is cancelled" };
       return { found: true, current: { po_no: po.po_no, vendor: po.vendor_name, site: sname(po.site_id), delivery_status: po.delivery_status, approval: po.approval_status }, confirm: { action: "mark_po_delivered", label: `Mark ${po.po_no} (${po.vendor_name}) as DELIVERED`, params: { po_id: po.id, po_no: po.po_no } }, message: "Ask the user to confirm; the app applies it after Confirm." };
     }
+    if (a.action === "assign_task") {
+      const who = a.assignee || "director"; const { data: u } = await sb.from("app_users").select("id, full_name, role").eq("is_active", true);
+      const people = (u || []); const target = /director/i.test(who) ? people.filter(x => x.role === "director") : people.filter(x => sim(who, x.full_name) >= 0.5 || x.full_name.toLowerCase().includes(String(who).toLowerCase()));
+      if (!target.length) return { found: false, message: `no user matching '${who}'` };
+      const title = String(a.title || "").trim(); if (!title) return { found: true, need: "title", message: "Task title needed — ask the user what the task is." };
+      return { found: true, confirm: { action: "assign_task", label: `Assign task "${title}" to ${target.map(x => x.full_name).join(", ")}`, params: { title, assignee_ids: target.map(x => x.id), assignee_names: target.map(x => x.full_name), due: a.due || null } }, message: "Ask the user to confirm; the task is created by the app after Confirm." };
+    }
     if (a.action === "approve_expense" || a.action === "reject_expense") {
       if (!a.expense_id) return { error: "expense_id required" };
       const { data: e } = await sb.from("expenses").select("id, expense_date, category, amount, paid_to, status, site_id, is_vendor_direct").eq("id", a.expense_id).maybeSingle();
@@ -285,7 +301,7 @@ function summarize(tool, o, lang) {
   const H = lang === "hi", L = [];
   const kv = obj => Object.entries(obj || {}).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `- ${k}: ${typeof v === "number" && v > 999 ? inr(v) : v}`).join("\n");
   if (o.error) return (H ? "यह जानकारी नहीं मिली: " : "Could not fetch: ") + o.error;
-  if (o.found === false || o.count === 0 || o.total_workers === 0) return H ? "यह जानकारी Pipeskool ERP में नहीं मिली।" + (o.similar?.length ? " मिलते-जुलते: " + o.similar.map(x => x.po_no).join(", ") : "") : "I couldn't find this information in the Pipeskool ERP." + (o.similar?.length ? " Similar: " + o.similar.map(x => x.po_no).join(", ") : "");
+  if (o.found === false || o.count === 0 || o.total_workers === 0) return (H ? "ERP me is information ka verified record nahi mila." : "No verified record found in the ERP for this.") + (o.similar?.length ? (H ? " मिलते-जुलते: " : " Similar: ") + o.similar.map(x => x.po_no).join(", ") : "");
   switch (tool) {
     case "person_expenses": L.push(`${o.person?.name || o.person} — ${H ? "खर्च" : "expenses"} ${o.from} → ${o.to}`, `${H ? "कुल" : "Total"}: ${inr(o.total)} (${o.count} ${H ? "एंट्री" : "entries"})`, H ? "स्थिति-वार:" : "By status:", kv(o.by_status), H ? "श्रेणी-वार:" : "By category:", kv(o.by_category), H ? "साइट-वार:" : "By site:", kv(o.by_site)); break;
     case "expenses": L.push(`${H ? "खर्च" : "Expenses"} ${o.from} → ${o.to}`, `${H ? "कुल" : "Total"}: ${inr(o.total)} · ${o.count} ${H ? "एंट्री" : "entries"} · ${H ? "अनुमोदन बाकी" : "pending approvals"}: ${o.pending_approvals}`, H ? "साइट-वार:" : "Site-wise:", kv(o.by_site), H ? "श्रेणी-वार:" : "Category-wise:", kv(o.by_category), o.highest ? `${H ? "सबसे बड़ा" : "Highest"}: ${inr(o.highest.amount)} · ${o.highest.paid_to || ""} · ${o.highest.site || ""}` : ""); break;
@@ -299,11 +315,11 @@ function summarize(tool, o, lang) {
     case "pending_deliveries": L.push(`${o.count} PO(s) ${H ? "की डिलीवरी बाकी" : "with pending delivery"}`); (o.pos || []).slice(0, 15).forEach(p => L.push(`- ${p.po_no} · ${p.vendor} · ${p.site} · pending ${p.pending} (${p.items_done})`)); break;
     case "vendor_outstanding": L.push(`${H ? "कुल बकाया" : "Total outstanding"} ${inr(o.total_outstanding)} (${o.count} vendors)`); (o.vendors || []).slice(0, 15).forEach(v => L.push(`- ${v.vendor}: PO ${inr(v.po_value)} − paid ${inr(v.paid)} = ${inr(v.outstanding)}`)); L.push(o.note || ""); break;
     case "stock_position": L.push(`${o.count} items · ${H ? "मूल्य" : "value"} ${inr(o.total_value)} · low stock: ${o.low_stock}`); (o.items || []).slice(0, 15).forEach(i => L.push(`- ${i.item} · ${i.site} · ${i.balance} ${i.unit}`)); break;
+    case "items": L.push(`${o.count} item(s)${o.total_items_in_master ? ` (${H ? "मास्टर में कुल" : "master total"} ${o.total_items_in_master})` : ""}`, kv(o.by_type)); (o.items || []).slice(0, 20).forEach(i => L.push(`- ${i.item} · ${i.type || ""} · ${i.unit || ""}`)); if (o.count > 20) L.push(H ? "… पूरी सूची Excel/PDF में" : "… full list in Excel / PDF"); break;
     case "company_people": L.push(`${H ? "निदेशक" : "Directors"}: ${(o.directors || []).join(", ") || "—"}`); (o.people || []).slice(0, 20).forEach(p => L.push(`- ${p.name} · ${p.role}${p.site ? " · " + p.site : ""}`)); break;
-    case "company_people": L.push(`${o.person.name} · ${o.person.role} · ${o.person.site}`); break;
     default: L.push(JSON.stringify(o).slice(0, 800));
   }
-  return L.filter(Boolean).join("\n") + (H ? "\n(सीधा ERP डेटा — AI इस समय व्यस्त है)" : "\n(Direct ERP data — AI phrasing unavailable right now)");
+  return L.filter(Boolean).join("\n");
 }
 // update422: when no model is reachable at all, answer the common questions straight from the tools
 async function directAnswer(sb, text, lang) {
@@ -328,6 +344,69 @@ async function directAnswer(sb, text, lang) {
   if (/rate|bhav/.test(tl) && /last|pehle|purchase/.test(tl)) { const item = (t.match(/(?:rate of|rate for)\s+(.+?)\??$/i) || [])[1]; if (item) return run("item_rate_history", { item }); }
   return null;
 }
+// ===================== update425: deterministic ERP engine (runs BEFORE any LLM call) =====================
+const MONTHS = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+const ymOf = m => { const i = MONTHS.indexOf(m.toLowerCase()); if (i < 0) return null; const now = IST(); let y = now.getUTCFullYear(); if (i > now.getUTCMonth()) y -= 1; return `${y}-${String(i + 1).padStart(2, "0")}`; };
+function extract(text) {
+  const t = String(text || ""), tl = t.toLowerCase(); const e = {};
+  const po = t.match(/PO\s*\/\s*\d{4}\s*\/\s*\d{3,4}/i); if (po) e.po_no = po[0].replace(/\s+/g, "").toUpperCase();
+  const ind = t.match(/IND\s*\/\s*\d+\s*\/\s*\d{4}\s*\/\s*\d{3}/i); if (ind) e.indent_no = ind[0].replace(/\s+/g, "").toUpperCase();
+  const mon = tl.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/); if (mon) e.month = ymOf(mon[1]);
+  const nd = tl.match(/last\s+(\d+)\s*(days?|din)/) || tl.match(/pichle\s+(\d+)\s*din/) || tl.match(/(\d+)\s*din\s*se/) || tl.match(/(\d+)\s*days?/); if (nd) e.last_n_days = Number(nd[1]);
+  if (/\b(aaj|today|aj)\b/.test(tl)) e.last_n_days = 1;
+  if (/\b(kal|yesterday)\b/.test(tl)) e.last_n_days = 2;
+  if (/this month|is (month|mahine|mahina)|current month/.test(tl)) e.month = daysAgo(0).slice(0, 7);
+  if (/\b(pending|baki|bakaya|awaiting)\b/.test(tl) && !/pending deliver/.test(tl)) e.status = "pending";
+  if (/\b(approved|approve ho)\b/.test(tl)) e.status = "approved"; if (/\b(rejected|reject)\b/.test(tl)) e.status = "rejected";
+  const site = tl.match(/\b(kei|soul|atos|citadel|saptarshi|creek|mas|dm house|scents|suryam|ifsca|head office|micron|capesite)\b/); if (site) e.site = site[1];
+  const nm = t.match(/([A-Za-z][A-Za-z.]+(?:\s+[A-Za-z][A-Za-z.]+){0,2})\s+(?:ka|ki|ke|ko|se|ke liye)\b/i);
+  const SITEW = /^(kei|soul|atos|citadel|saptarshi|creek|mas|dm|scents|suryam|ifsca|head|micron|capesite|industries|campus|office)$/i;
+  if (nm) { const cand = nm[1].trim(); const skip = /^(aaj|kal|last|pichle|total|only|is|iska|isko|iski|ye|yeh|po|indent|expense|kitne|kitna|september|august|october|july|june|director|sir|site|product|item|excel|pdf|report|list|detail|show|pending|approved|month|this|current|all|vendor|us|un|unka|unke|ab|abhi|kaun|kon|kya|jo|wo|wale|walo|sabhi|sab|mujhe|muje|humne|hum|hamne)$/i; const w = cand.split(" "); const clean = w.filter(x => !skip.test(x) && !SITEW.test(x)); if (clean.length && !skip.test(clean[clean.length - 1])) e.name = clean.join(" "); }
+  const it = t.match(/(?:product|item|material)\s+(.+?)\s+(?:ka|ki|ke)\s+(?:last|rate|price|bhav)/i) || t.match(/(?:rate|price|bhav)\s+(?:of|for)\s+(.+?)\??$/i) || t.match(/^(.+?)\s+ka\s+(?:last\s+)?(?:purchase\s+)?(?:rate|price|bhav)/i); if (it && !/^(is|ye|yeh|this|iska|is product|is item)$/i.test(it[1].trim())) e.item = it[1].trim();
+  if (e.item) { const vs = e.item.match(/^(.+?)\s+se\s+(.+)$/i); if (vs) { e.name = vs[1].trim(); e.item = vs[2].trim(); } e.item = e.item.replace(/^(is|ye|yeh|this)\s+/i, ""); }
+  return e;
+}
+function intentOf(text, ctx) {
+  const tl = String(text || "").toLowerCase().trim(); const e = extract(text);
+  const follow = /^(only|sirf|bas|isme se|inme se|iska|iski|isko|isse|is report|is ka|in ka|inka|unka|us ka|aur|and)\b/.test(tl) || (tl.split(/\s+/).length <= 3 && /pending|approved|rejected|today|aaj|kei|soul|atos|site|excel|pdf|detail|wale|wala/.test(tl));
+  if (/\b(excel|xlsx|spreadsheet)\b/.test(tl)) return { kind: "EXPORT", fmt: "xlsx", e };
+  if (/\bpdf\b/.test(tl)) return { kind: "EXPORT", fmt: "pdf", e };
+  if (/(delivered|deliver ho|deliver kar|delivery ho gayi|delivery ho gyi)/.test(tl) && /(kar do|karo|mark|update|kardo)/.test(tl)) return { kind: "ACTION", action: "mark_po_delivered", e };
+  if (/task\s*(assign|de do|do|bana|create)|assign.*task|kaam de do/.test(tl)) return { kind: "ACTION", action: "assign_task", e };
+  if (/(approve kar|approve karo|approve kardo|approval de do|reject kar|reject karo)/.test(tl) && /expense|kharch|claim|voucher|#\d+/.test(tl)) return { kind: "ACTION", action: /reject/.test(tl) ? "reject_expense" : "approve_expense", e };
+  if (follow && ctx?.tool) return { kind: "FOLLOWUP", e };
+  if (e.po_no) return { kind: "READ", tool: "purchase_orders", args: { po_no: e.po_no }, e };
+  if (e.indent_no) return { kind: "READ", tool: "indents", args: { indent_no: e.indent_no }, e };
+  if (/(pending|approval).*(expense|kharch)|(expense|kharch).*(pending|approval)|approve karna baki|approval baki/.test(tl) && !e.name) return { kind: "READ", tool: "expenses", args: { status: "pending", month: e.month, last_n_days: e.month ? null : (e.last_n_days || 90), site: e.site }, e, view: "approval" };
+  if (e.item || /(last|pehle|pichhli|pichli)\s*(purchase\s*)?(rate|price|bhav)|kis vendor se|kitne rate me/.test(tl)) return e.item ? { kind: "READ", tool: "item_rate_history", args: { item: e.item, vendor: (e.name && !e.item.toLowerCase().includes(e.name.toLowerCase()) && !/\b(is|ye|yeh)\s+vendor/.test(tl)) ? e.name : null }, e } : { kind: "ASK", text: "Kis product / item ka rate chahiye? Naam likhiye (jaise: AG4 cutting wheel).", e };
+  if (e.name && /expense|kharch|voucher|claim/.test(tl)) return { kind: "READ", tool: "person_expenses", args: { person: e.name, month: e.month, last_n_days: e.month ? null : (e.last_n_days || 365), status: e.status }, e };
+  if (e.name && /attendance|hazir|upasthit|punch|present|absent/.test(tl)) return { kind: "READ", tool: "person_attendance", args: { person: e.name, month: e.month, last_n_days: e.month ? null : (e.last_n_days || 30) }, e };
+  if (e.name && /\bpo\b|purchase|bheje|order/.test(tl)) return { kind: "READ", tool: "vendor_report", args: { vendor: e.name, month: e.month, last_n_days: e.month ? null : (e.last_n_days || 30), site: e.site }, e };
+  if (/(product|item|material)s?\s*(list|dikhao|batao|master|dikha)/.test(tl) || /item master/.test(tl)) return { kind: "READ", tool: "items", args: { search: (tl.match(/\b(cpvc|upvc|pvc|gi|ss|swr|valve|cement|tape|solvent)\b/) || [])[1] || null }, e };
+  if (/absent|present|hazir|upasthit|nahi aa|attendance/.test(tl)) return e.last_n_days > 1 ? { kind: "READ", tool: "absent_streak", args: { days: e.last_n_days, site: e.site }, e } : { kind: "READ", tool: "attendance_summary", args: { site: e.site }, e };
+  if (/indent/.test(tl)) return { kind: "READ", tool: "indents", args: { last_n_days: e.last_n_days || (e.month ? null : 30), month: e.month, status: e.status === "pending" ? "open" : e.status, site: e.site }, e };
+  if (/pending deliver|delivery pending|material (receive|aaya) nahi|receive nahi hua/.test(tl)) return { kind: "READ", tool: "pending_deliveries", args: { site: e.site, vendor: e.name || null }, e };
+  if (/\bpo\b|purchase order/.test(tl)) return { kind: "READ", tool: "purchase_orders", args: { approval: e.status, last_n_days: e.last_n_days, month: e.month, site: e.site, vendor: e.name || null }, e };
+  if (/outstanding|bakaya|payable|payment pending/.test(tl)) return { kind: "READ", tool: "vendor_outstanding", args: { vendor: e.name || null }, e };
+  if (/grn|material aaya|received/.test(tl)) return { kind: "READ", tool: "grn_receipts", args: { last_n_days: e.last_n_days || 7, site: e.site, vendor: e.name || null }, e };
+  if (/stock|inventory|balance/.test(tl)) return { kind: "READ", tool: "stock_position", args: { site: e.site }, e };
+  if (/purchase summary|total purchase|kitna kharida/.test(tl)) return { kind: "READ", tool: "purchase_summary", args: { last_n_days: e.last_n_days || 7, month: e.month, site: e.site }, e };
+  if (/expense|kharch|voucher/.test(tl)) return { kind: "READ", tool: "expenses", args: { status: e.status, last_n_days: e.last_n_days, month: e.month, site: e.site }, e };
+  if (/director|accountant|supervisor|staff list|employee list|kaun hai|kon hai|kis site (par|pe) (kaam|hai)/.test(tl)) return { kind: "READ", tool: "company_people", args: { name: e.name || null, role: (tl.match(/director|accountant|supervisor|it executive/) || [])[0] || null, site: e.site }, e };
+  return { kind: "GENERAL", e };
+}
+function mergeFollowup(ctx, e, text) {
+  const tl = String(text || "").toLowerCase(); const args = { ...(ctx.args || {}) };
+  if (e.status) { if (ctx.tool === "purchase_orders") args.approval = e.status; else if (ctx.tool === "indents") args.status = e.status === "pending" ? "open" : e.status; else args.status = e.status; }
+  if (e.site) args.site = e.site; if (e.month) { args.month = e.month; delete args.last_n_days; delete args.date_from; delete args.date_to; } if (e.last_n_days) { args.last_n_days = e.last_n_days; delete args.month; delete args.date_from; delete args.date_to; }
+  if (/detail|pura|full/.test(tl) && ctx.entities?.po_no) return { tool: "purchase_orders", args: { po_no: ctx.entities.po_no } };
+  return { tool: ctx.tool, args };
+}
+function formatAnswer(tool, out, lang, view) {
+  const H = lang === "hi"; if (out?.error) return H ? "ERP se data nahi aa saka. Thodi der baad phir try karein." : "Could not fetch that from the ERP right now. Please try again.";
+  if (view === "approval" && tool === "expenses") { const pend = out.by_status?.pending || 0; return `${H ? "Approval ke liye pending expenses" : "Pending expense approvals"}: ${out.pending_approvals || 0} ${H ? "entries" : "entries"} · ${inr(pend)}\n${H ? "Avadhi" : "Period"} ${out.from} → ${out.to}\n${H ? "Site-wise" : "Site-wise"}:\n` + Object.entries(out.by_site || {}).map(([k, v]) => `- ${k}: ${inr(v)}`).join("\n") + `\n${H ? "Aage" : "Next"}: Money → Expenses → Pending, ${H ? "ya yahin likhein" : "or say"} "expense #<id> approve karo".`; }
+  return summarize(tool, out, lang);
+}
 export async function GET() { const configured = !!process.env.GROQ_API_KEY; console.log("GROQ_STATUS", JSON.stringify({ configured, model: MODEL, env: process.env.VERCEL_ENV || "local" })); return Response.json({ ok: true, configured, model: MODEL, tools: TOOLS.map(t => t.function.name) }); }
 
 export async function POST(req) {
@@ -337,10 +416,38 @@ export async function POST(req) {
     if (!key) { console.warn("GROQ_REQUEST_SKIPPED", JSON.stringify({ reason: "GROQ_API_KEY not set" })); return Response.json({ ok: false, error: "no_key" }); }
     const { user, sb } = await userClient(req);
     if (!user) { console.warn("GROQ_REQUEST_REJECTED", JSON.stringify({ reason: "no valid JWT" })); return Response.json({ ok: false, error: "Login required." }, { status: 401 }); }
-    const { messages = [], lang = "en", role = "", pathname = "" } = await req.json();
+    const { messages = [], lang = "en", role = "", pathname = "", ctx: ctxIn = null } = await req.json();
     const recent = messages.filter(m => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string").slice(-10).map(m => ({ role: m.role, content: m.content.slice(0, 3000) }));
     if (!recent.length) return Response.json({ ok: false, error: "Empty message." });
     const lastUser = [...recent].reverse().find(m => m.role === "user")?.content || "";
+    // ---------- update425: deterministic ERP engine first — facts never depend on the LLM ----------
+    const it = intentOf(lastUser, ctxIn);
+    console.log("AI_INTENT", JSON.stringify({ kind: it.kind, tool: it.tool || it.action || null, e: it.e, hasCtx: !!ctxIn?.tool }));
+    const finish = async (tool, args, view) => {
+      const a = normArgs(args); const out = await runTool(sb, tool, a); const dataset = out?.dataset || null; if (dataset) { delete out.dataset; dataset.generated_by = user.email || user.id.slice(0, 8); }
+      console.log("ERP_TOOL_CALL", JSON.stringify({ tool, args: a })); console.log("ERP_TOOL_RESULT", JSON.stringify({ tool, rows: out?.count ?? out?.total_workers ?? (out?.found === false ? 0 : out?.found ? 1 : null), error: out?.error || null }));
+      const text = formatAnswer(tool, out, lang, view);
+      const entities = { ...(ctxIn?.entities || {}), ...(it.e || {}) }; if (out?.po?.po_no) entities.po_no = out.po.po_no;
+      return Response.json({ ok: true, text, tools: [tool], dataset, confirm: out?.confirm || null, ctx: { tool, args: a, entities, view: view || null } });
+    };
+    if (it.kind === "READ") return finish(it.tool, it.args, it.view);
+    if (it.kind === "FOLLOWUP") { const m = mergeFollowup(ctxIn, it.e, lastUser); return finish(m.tool, m.args, (m.tool === "expenses" && m.args.status === "pending") ? "approval" : null); }
+    if (it.kind === "ASK") return Response.json({ ok: true, text: it.text, ctx: ctxIn });
+    if (it.kind === "EXPORT") return Response.json({ ok: true, text: lang === "hi" ? `${it.fmt === "pdf" ? "PDF" : "Excel"} taiyaar kiya ja raha hai…` : `Preparing the ${it.fmt === "pdf" ? "PDF" : "Excel"}…`, export: it.fmt, ctx: ctxIn });
+    if (it.kind === "ACTION") {
+      const a = it.action === "mark_po_delivered" ? { action: "mark_po_delivered", po_no: it.e.po_no || ctxIn?.entities?.po_no || null }
+        : it.action === "assign_task" ? { action: "assign_task", assignee: /director/i.test(lastUser) ? "director" : (it.e.name || "director"), title: (lastUser.match(/task\s*[:\-]\s*(.+)$/i) || lastUser.match(/"([^"]+)"/) || [])[1] || null }
+        : { action: it.action, expense_id: Number((lastUser.match(/#\s*(\d+)/) || [])[1]) || null };
+      if (a.action === "mark_po_delivered" && !a.po_no) return Response.json({ ok: true, text: lang === "hi" ? "Kaunsa PO? PO number likhiye (jaise PO/2609/0077)." : "Which PO? Please give the PO number (e.g. PO/2609/0077).", ctx: ctxIn });
+      if (a.action === "assign_task" && !a.title) return Response.json({ ok: true, text: lang === "hi" ? "Task ka title kya rakhein? Likhiye: task: <kaam ka naam>" : "What is the task? Reply as: task: <title>", ctx: { ...(ctxIn || {}), pendingAction: "assign_task", assignee: a.assignee } });
+      if ((a.action === "approve_expense" || a.action === "reject_expense") && !a.expense_id) return Response.json({ ok: true, text: lang === "hi" ? "Kaunsa expense? ID likhiye (jaise #392) — pending list ke liye kahen: pending expense batao." : "Which expense? Give its id (e.g. #392) — say 'pending expenses' to list them.", ctx: ctxIn });
+      const out = await runTool(sb, "propose_action", a);
+      const cur = out.current ? Object.entries(out.current).map(([k, v]) => `${k}: ${v}`).join(" · ") : "";
+      const txt = out.found === false ? (lang === "hi" ? "ERP me is information ka verified record nahi mila." : "No verified record found in the ERP for this.") : out.blocked ? out.blocked : out.confirm ? (lang === "hi" ? `${cur ? "Abhi: " + cur + "\n" : ""}Confirm karein — badlav app ke permissions se hi hoga.` : `${cur ? "Current: " + cur + "\n" : ""}Please confirm — the change is applied with your app permissions.`) : (out.message || "");
+      return Response.json({ ok: true, text: txt, confirm: out.confirm || null, ctx: ctxIn });
+    }
+    if (ctxIn?.pendingAction === "assign_task" && lastUser.trim()) { const title = lastUser.replace(/^task\s*[:\-]\s*/i, "").trim(); const out = await runTool(sb, "propose_action", { action: "assign_task", assignee: ctxIn.assignee || "director", title }); return Response.json({ ok: true, text: out.confirm ? (lang === "hi" ? "Confirm karein:" : "Please confirm:") : (out.message || ""), confirm: out.confirm || null, ctx: { ...ctxIn, pendingAction: null } }); }
+    // ---------- GENERAL / unresolved → LLM ----------
     const ctx = await helpContext(sb, lastUser);
     const langLine = lang === "hi" ? "Reply in the user's language: Hindi (Devanagari) unless they wrote in English." : lang === "gu" ? "Reply in Gujarati unless they wrote in English." : "Reply in the language the user wrote in (English / Hindi / Gujarati / Hinglish → reply in Hindi or Hinglish as they did).";
     const system = `You are the Pipeskool Assistant: a general-purpose AI (answer any normal question — AI, Excel formulas, calculations, translations, business, technical, explanations) AND an ERP agent for Pipeskool Projects Pvt. Ltd. (plumbing/MEP contractor, Ahmedabad). ${langLine}
@@ -388,10 +495,9 @@ ${ctx ? "\nRelevant Help Center articles:\n" + ctx : ""}`;
       if (!r.ok) {
         const msg = j?.error?.message || ""; console.error("GROQ_REQUEST_FAILED", JSON.stringify({ status: r.status, error: msg.slice(0, 200) || null, round, ms: Date.now() - t0 }));
         // update422: the ERP data is already here — never lose it because the phrasing model is busy
-        if (lastOut) { const text = summarize(lastToolName, lastOut, lang); console.log("GROQ_REQUEST_SUCCESS", JSON.stringify({ model: "erp-direct", chars: text.length, tools: toolsUsed, rounds: round + 1, ms: Date.now() - t0 })); if (dataset) dataset.generated_by = user.email || user.id.slice(0, 8); return Response.json({ ok: true, text, tools: toolsUsed, dataset, confirm, direct: true }); }
+        if (lastOut) { const text = summarize(lastToolName, lastOut, lang); console.log("GROQ_REQUEST_SUCCESS", JSON.stringify({ model: "erp-direct", chars: text.length, tools: toolsUsed, rounds: round + 1, ms: Date.now() - t0 })); if (dataset) dataset.generated_by = user.email || user.id.slice(0, 8); return Response.json({ ok: true, text, tools: toolsUsed, dataset, confirm, ctx: { tool: lastToolName, args: {}, entities: it.e || {} } }); }
         const direct = await directAnswer(sb, lastUser, lang); if (direct) { console.log("GROQ_REQUEST_SUCCESS", JSON.stringify({ model: "erp-direct", chars: direct.text.length, tools: direct.tools, ms: Date.now() - t0 })); return Response.json({ ok: true, ...direct }); }
-        const clean = r.status === 429 || r.status >= 500 ? BUSY : /validation|schema|tool call/i.test(msg) ? "I couldn't process that request. Please rephrase it in one line." : BUSY;
-        return Response.json({ ok: false, error: clean });
+        return Response.json({ ok: true, text: lang === "hi" ? "Abhi general AI jawab uplabdh nahi hai — thodi der baad phir poochhein. ERP ke sawal (expense, PO, attendance, indent, stock) seedhe poochh sakte hain." : "General AI answers are unavailable for a moment — please try again shortly. ERP questions (expenses, POs, attendance, indents, stock) still work.", soft: true, ctx: ctxIn });
       }
       const msg = j?.choices?.[0]?.message || {};
       const calls = msg.tool_calls || [];
@@ -399,7 +505,7 @@ ${ctx ? "\nRelevant Help Center articles:\n" + ctx : ""}`;
         const text = (msg.content || "").trim();
         console.log("GROQ_REQUEST_SUCCESS", JSON.stringify({ model: usedModel, chars: text.length, tools: toolsUsed, rounds: round + 1, ms: Date.now() - t0, usage: j?.usage || null }));
         if (dataset) dataset.generated_by = user.email || user.id.slice(0, 8);
-        return Response.json({ ok: true, text, tools: toolsUsed, dataset, confirm });
+        return Response.json({ ok: true, text, tools: toolsUsed, dataset, confirm, ctx: toolsUsed.length ? { tool: toolsUsed[toolsUsed.length - 1], args: {}, entities: it.e || {} } : ctxIn });
       }
       chat.push({ role: "assistant", content: msg.content || "", tool_calls: calls });
       for (const c of calls) {
