@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { detectLang, answerLang, matchKB, suggestionsFor, liveAnswer, createTicket, askAI, aiStatus, isDataQuery, wantsExcel, downloadDataset, performAssistantAction } from "@/lib/assistant";   // update416-420
+import { detectLang, answerLang, matchKB, suggestionsFor, liveAnswer, createTicket, askAI, aiStatus, isDataQuery, wantsExcel, wantsPdf, downloadDataset, openPdfReport, performAssistantAction, uploadBillForMatch } from "@/lib/assistant";   // update416-421
 
 const T = {
   en: { title: "Pipeskool Assistant", hint: "Ask anything about the app…", helpful: "Did this help?", yes: "Yes 👍", no: "No — get human help",
@@ -58,6 +58,14 @@ export default function Assistant() {
     if (forcedEntry) { renderEntry(forcedEntry, L, null); return; }
     const live = await liveAnswer(clean, sess, L);
     if (live) { setMsgs(m => [...m, { who: "a", note, title: live.title, steps: live.steps, link: live.link }]); return; }
+    // update421: "Excel/PDF bana do" with no new question → export the LAST result directly
+    const lastDs = [...msgs].reverse().find(x => x.dataset?.rows?.length)?.dataset;
+    if (lastDs && (wantsExcel(clean) || wantsPdf(clean)) && clean.split(/\s+/).length <= 8) {
+      const meta = { by: sess?.name, at: new Date().toLocaleString("en-IN") };
+      if (wantsPdf(clean)) openPdfReport(lastDs, meta); else downloadDataset(lastDs, meta);
+      setMsgs(m => [...m, { who: "a", aiText: (wantsPdf(clean) ? "📄 PDF report opened in a new tab — use Print / Save as PDF there." : "📊 Excel file downloaded.") + ` (${lastDs.title}, ${lastDs.rows.length} rows)`, langUsed: L, soft: true }]);
+      return;
+    }
     const hits = isDataQuery(clean) ? [] : matchKB(clean, sess, path);   // update418: real-data questions go to the ERP agent, not the how-to KB
     if (hits.length) { renderEntry(hits[0], L, note); if (hits.length > 1) setMsgs(m => [...m, { who: "a", also: hits.slice(1), langUsed: L }]); return; }
     // update416: no KB match → ask the Groq-backed assistant (server route, grounded in the Help Center)
@@ -65,7 +73,7 @@ export default function Assistant() {
     const history = [...msgs.filter(x => x.who === "u" || x.aiText).map(x => x.who === "u" ? { role: "user", content: x.text } : { role: "assistant", content: x.aiText }), { role: "user", content: clean }];
     const ai = await askAI(history, L, sess, path);
     setMsgs(m => { const rest = m.filter(x => !x.thinking); return ai?.text ? [...rest, { who: "a", note, aiText: ai.text, langUsed: L, dataset: ai.dataset, tools: ai.tools, confirm: ai.confirm }] : [...rest, { who: "a", aiText: ai?.error || "AI service is temporarily busy. Please try again.", langUsed: L, soft: true }]; });
-    if (ai?.dataset && wantsExcel(clean)) downloadDataset(ai.dataset);   // update418: "Excel bana do" → file from the exact ERP rows
+    if (ai?.dataset && wantsPdf(clean)) openPdfReport(ai.dataset, { by: sess?.name, at: new Date().toLocaleString("en-IN") }); else if (ai?.dataset && wantsExcel(clean)) downloadDataset(ai.dataset, { by: sess?.name, at: new Date().toLocaleString("en-IN") });   // update418/421
   }
 
   async function sendTicket() {
@@ -121,7 +129,14 @@ export default function Assistant() {
                   {m.note && <div style={{ fontSize: 11, color: "#B26A00", marginBottom: 6 }}>{m.note}</div>}
                   {m.thinking ? <div className="muted" style={{ fontSize: 12.5 }}>… thinking</div>
                   : m.aiText ? (<><div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.aiText}</div>
-                      {m.dataset?.rows?.length > 0 && <button type="button" style={{ fontSize: 11.5, marginTop: 8 }} onClick={() => downloadDataset(m.dataset)}>⬇ Excel · {m.dataset.title} ({m.dataset.rows.length} rows)</button>}
+                      {m.dataset?.rows?.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}><button type="button" style={{ fontSize: 11.5 }} onClick={() => downloadDataset(m.dataset, { by: sess?.name, at: new Date().toLocaleString("en-IN") })}>📊 Export Excel</button><button type="button" style={{ fontSize: 11.5 }} onClick={() => openPdfReport(m.dataset, { by: sess?.name, at: new Date().toLocaleString("en-IN") })}>📄 Download PDF</button><span className="muted" style={{ fontSize: 10.5, alignSelf: "center" }}>{m.dataset.title} · {m.dataset.rows.length} rows</span></div>}
+                      {m.bill && (<div style={{ marginTop: 8, background: m.bill.status === "matched" ? "#ECFDF5" : "#FEF2F2", border: "1px solid " + (m.bill.status === "matched" ? "#A7F3D0" : "#FECACA"), borderRadius: 8, padding: 8, fontSize: 12 }}>
+                        <div style={{ fontWeight: 700 }}>{m.bill.verdict}</div>
+                        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>📎 {m.bill.file_name} · uploaded by {m.bill.uploaded_by} · {String(m.bill.uploaded_at).slice(0, 16).replace("T", " ")}</div>
+                        <div style={{ marginTop: 4 }}>Vendor: <b>{m.bill.vendor || "—"}</b>{m.bill.gstin ? ` · GSTIN ${m.bill.gstin}` : ""} · Invoice: <b>{m.bill.invoice_no || "—"}</b>{m.bill.invoice_date ? ` (${m.bill.invoice_date})` : ""} · PO: <b>{m.bill.po_no || "not found"}</b>{m.bill.site ? ` · ${m.bill.site}` : ""} · Bill total: <b>₹{Number(m.bill.total || 0).toLocaleString("en-IN")}</b></div>
+                        {m.bill.lines?.map((l, i) => <div key={i} style={{ marginTop: 4, paddingTop: 4, borderTop: "1px solid rgba(0,0,0,.06)" }}>{l.ok ? "✅" : "⚠️"} {l.bill_item}{l.po_item && l.po_item !== l.bill_item ? ` → ${l.po_item}` : ""}<div className="muted" style={{ fontSize: 11 }}>PO {l.po_qty ?? "—"} · GRN {l.grn_qty ?? "—"} · Bill {l.bill_qty} @ ₹{l.bill_rate}{l.po_rate != null ? ` (PO ₹${l.po_rate})` : ""}{l.issues.length ? " — " + l.issues.join("; ") : ""}</div></div>)}
+                        {!m.bill.saved && <div style={{ color: "#B91C1C", fontSize: 11, marginTop: 4 }}>Not saved: {m.bill.save_error}</div>}
+                      </div>)}
                       {m.confirm && !m.confirmDone && (<div style={{ marginTop: 8, background: "#FFF7ED", border: "1px solid #FDBA74", borderRadius: 8, padding: 8 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Confirm: {m.confirm.label}</div>
                         <div style={{ display: "flex", gap: 6 }}>
@@ -182,6 +197,7 @@ export default function Assistant() {
           </div>
 
           <div style={{ display: "flex", gap: 6, padding: 10, borderTop: "1px solid var(--border,#e3e3de)", background: "#fff" }}>
+            <label title="Upload a vendor bill (JPG/PNG/PDF) for PO + GRN matching" style={{ cursor: "pointer", alignSelf: "center", fontSize: 18 }}>📎<input type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={async e => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; setMsgs(m => [...m, { who: "u", text: `📎 ${f.name}` }, { who: "a", thinking: true }]); const r = await uploadBillForMatch(f, sess, null); setMsgs(m => { const rest = m.filter(x => !x.thinking); return r.ok ? [...rest, { who: "a", aiText: `Bill read and matched against ${r.bill.po_no || "— no PO found"}.`, bill: r.bill, dataset: r.dataset, tools: ["bill_match"] }] : [...rest, { who: "a", aiText: "⚠ " + (r.error || "Could not read the bill."), soft: true }]; }); }} /></label>{/* update421 */}
             <input style={{ flex: 1 }} placeholder={t.hint} value={input}
               onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && ask(input)} />
             <button className="primary" onClick={() => ask(input)}>➤</button>
