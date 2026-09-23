@@ -28,7 +28,7 @@ export async function POST(req) {
     const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false } });
     const { data: ud } = await sb.auth.getUser(token); const user = ud?.user; if (!user) return Response.json({ ok: false, error: "Login required." }, { status: 401 });
     const { data: me } = await sb.from("app_users").select("id, full_name").eq("auth_id", user.id).maybeSingle();
-    const { file_name, mime, data_base64, po_hint, file_path } = await req.json();
+    const { file_name, mime, data_base64, po_hint, file_path, text = "", lang = "en" } = await req.json();
     if (!data_base64) return Response.json({ ok: false, error: "No file received." });
     console.log("BILL_UPLOAD_STARTED", JSON.stringify({ mime, kb: Math.round(data_base64.length * 0.75 / 1024) }));
     const x = await ocr(data_base64, mime || "image/jpeg");
@@ -38,6 +38,14 @@ export async function POST(req) {
     let po = null; const key = String(x.po_no || po_hint || "").replace(/\s+/g, "").toUpperCase();
     if (key) { const tail = key.split("/").pop(); const { data: h } = await sb.from("purchase_orders").select("id, po_no, vendor_name, site_id, created_at, total_amount, approval_status, po_items(id, item_id, item_name, qty, unit, rate, gst_pct, returned_qty)").or(`po_no.ilike.%${key}%,po_no.ilike.%/${tail}`).neq("status", "cancelled").limit(5); po = (h || []).find(p => p.po_no.toUpperCase() === key) || ((h || []).length === 1 ? h[0] : null); }
     if (!po && x.vendor) { const { data: h } = await sb.from("purchase_orders").select("id, po_no, vendor_name, site_id, created_at, total_amount, approval_status, po_items(id, item_id, item_name, qty, unit, rate, gst_pct, returned_qty)").neq("status", "cancelled").order("created_at", { ascending: false }).limit(300); const cand = (h || []).filter(p => sim(x.vendor, p.vendor_name) >= 0.5); if (cand.length) { const inv = x.invoice_date ? new Date(x.invoice_date) : null; cand.sort((p, q) => inv ? Math.abs(new Date(p.created_at) - inv) - Math.abs(new Date(q.created_at) - inv) : 0); po = cand[0]; } }
+    // update424: match the bill to Petty Cash / Expense entries too (amount ±2 %, date ±10 days, paid-to / category similarity)
+    let expenseMatch = null; try {
+      const total = Number(x.total || 0); const inv = x.invoice_date && /^\d{4}-\d{2}-\d{2}$/.test(x.invoice_date) ? new Date(x.invoice_date) : null;
+      const { data: ex } = await sb.from("expenses").select("id, expense_date, category, amount, paid_to, status, site_id, funding_source, note, expense_bills(path)").order("expense_date", { ascending: false }).limit(600);
+      const hint = String(text || "").toLowerCase();
+      const cands = (ex || []).map(e => { let sc = 0; const amt = Number(e.amount || 0); if (total > 0 && amt > 0 && Math.abs(amt - total) / total <= 0.02) sc += 3; else if (total > 0 && amt > 0 && Math.abs(amt - total) / total <= 0.1) sc += 1; if (inv && e.expense_date && Math.abs(new Date(e.expense_date) - inv) <= 10 * 86400000) sc += 2; if (x.vendor && e.paid_to && sim(x.vendor, e.paid_to) >= 0.5) sc += 2; if (hint && e.category && hint.includes(String(e.category).toLowerCase())) sc += 1; if (hint && e.note && sim(hint, e.note) >= 0.4) sc += 1; if ((e.expense_bills || []).length === 0) sc += 0.5; return { e, sc }; }).filter(c => c.sc >= 3).sort((a, b) => b.sc - a.sc).slice(0, 3);
+      if (cands.length) expenseMatch = { best: cands[0].sc >= 5 ? cands[0].e.id : null, candidates: cands.map(c => ({ id: c.e.id, date: c.e.expense_date, category: c.e.category, paid_to: c.e.paid_to, amount: Number(c.e.amount || 0), status: c.e.status, site: sname(c.e.site_id), petty: c.e.funding_source === "petty_cash", has_bill: (c.e.expense_bills || []).length > 0, score: c.sc })) };
+    } catch (e) { console.warn("BILL_EXPENSE_MATCH_SKIPPED", JSON.stringify({ error: String(e.message || e).slice(0, 100) })); }
     // ---- GRN quantities for the PO (ledger rows by po_id or GRN header)
     let recv = {}; if (po) {
       const { data: hdr } = await sb.from("grn_headers").select("grn_no").eq("po_id", po.id).neq("status", "cancelled"); const nos = (hdr || []).map(h => h.grn_no);
@@ -64,9 +72,12 @@ export async function POST(req) {
     if (ie) console.warn("BILL_SAVE_FAILED", JSON.stringify({ error: ie.message.slice(0, 120) }));
     console.log("BILL_MATCH_DONE", JSON.stringify({ status, issues: issues.length, po: !!po, ms: Date.now() - t0 }));
     const verdict = status === "matched" ? "✅ MATCHED — payment eligible" : status === "no_po" ? "⚠ NO PO FOUND — payment not eligible" : `❌ PAYMENT NOT ELIGIBLE — ${issues.length} mismatch(es)`;
-    const bill = { id: saved?.id || null, file_name: rec.file_name, uploaded_by: rec.uploaded_by_name, uploaded_at: saved?.uploaded_at || new Date().toISOString(), vendor: rec.vendor_name || "—", gstin: rec.vendor_gstin || "", invoice_no: rec.invoice_no || "—", invoice_date: rec.invoice_date || "", total: rec.total, po_no: po?.po_no || null, site: po ? sname(po.site_id) : "", status, verdict, lines, issues, saved: !ie, save_error: ie ? "not saved — run pipeskool_vendor_bills.sql (update 421)" : null };
+    const bill = { expense_match: expenseMatch, id: saved?.id || null, file_name: rec.file_name, uploaded_by: rec.uploaded_by_name, uploaded_at: saved?.uploaded_at || new Date().toISOString(), vendor: rec.vendor_name || "—", gstin: rec.vendor_gstin || "", invoice_no: rec.invoice_no || "—", invoice_date: rec.invoice_date || "", total: rec.total, po_no: po?.po_no || null, site: po ? sname(po.site_id) : "", status, verdict, lines, issues, saved: !ie, save_error: ie ? "not saved — run pipeskool_vendor_bills.sql (update 421)" : null };
     const dataset = lines.length ? { title: `Bill match · ${bill.invoice_no}`, filters: `PO ${bill.po_no || "—"} · ${bill.vendor}`, columns: ["Bill item", "Bill qty", "Bill rate", "PO item", "PO qty", "PO rate", "GRN qty", "OK", "Issues"], rows: lines.map(l => [l.bill_item, l.bill_qty, l.bill_rate, l.po_item || "", l.po_qty ?? "", l.po_rate ?? "", l.grn_qty ?? "", l.ok ? "Yes" : "No", l.issues.join("; ")]) } : null;
-    return Response.json({ ok: true, bill, dataset });
+    const H = lang === "hi";
+    const em = expenseMatch ? (H ? `\nखर्च से मिलान: ${expenseMatch.candidates.map(c => `#${c.id} ${c.category} ₹${c.amount.toLocaleString("en-IN")} (${c.date}${c.petty ? " · petty cash" : ""}${c.has_bill ? " · bill already attached" : ""})`).join("; ")}` : `\nExpense match: ${expenseMatch.candidates.map(c => `#${c.id} ${c.category} ₹${c.amount.toLocaleString("en-IN")} (${c.date}${c.petty ? " · petty cash" : ""}${c.has_bill ? " · bill already attached" : ""})`).join("; ")}`) : (H ? "\nकिसी खर्च/petty-cash एंट्री से मेल नहीं मिला।" : "\nNo matching expense / petty-cash entry found.");
+    const head = po ? (H ? `बिल पढ़ा गया और ${po.po_no} से मिलाया गया।` : `Bill read and matched against ${po.po_no}.`) : (H ? "बिल पढ़ा गया — कोई PO नंबर नहीं मिला।" : "Bill read — no PO found on it.");
+    return Response.json({ ok: true, text: head + em, bill, dataset });
   } catch (e) {
     console.error("BILL_FAILED", JSON.stringify({ error: (e.message || String(e)).slice(0, 160) }));
     return Response.json({ ok: false, error: "Could not process the bill. Please try again with a clearer image." });
