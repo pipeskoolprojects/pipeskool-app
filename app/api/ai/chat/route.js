@@ -14,14 +14,24 @@ const daysAgo = n => { const d = IST(); d.setUTCDate(d.getUTCDate() - n); return
 const MODULES = `Pipeskool ERP modules (for how-to answers): Attendance & Labour (geofenced selfie punch, Daily Muster verify/mark-out/OT, proxy attendance, missing punch-out auto-close, Calendar holidays, Sunday policy) · Payroll (Muster Roll & Wages, staff salary sheet, advances, PT ₹200 rule) · Procurement (Indent & Purchase: indents, vendor quotes, rate proofs, POs with Director approval, PO page Edit/Download/Send/Duplicate) · Stock & GRN (GRN register, Delivery Challans, Internal dispatch IDC, Pending Deliveries, Material Exchange, Item/Vendor/Client masters) · Money (expense claims, cash vouchers, direct vendor payment, petty cash, advances, contractor advances, Tally export) · Letters & Documents (HR letters, Salary Slip) · Reports & Admin (Payroll/Site summaries, Access Rights, Admin & access, Backup, Help Center at /help). Roles: director, it_executive, accountant, supervisor, staff.`;
 
 // ---------------- ERP tools (read-only, user-scoped) ----------------
+// update419: every optional parameter is nullable (the model sometimes sends null — Groq validates the schema
+// strictly) and normArgs() strips null/empty values before the tool runs. last_n_days avoids date arithmetic errors.
+const S = { type: ["string", "null"] }; const I = { type: ["integer", "null"] };
 const TOOLS = [
-  { type: "function", function: { name: "attendance_summary", description: "Attendance for ONE date: per site present/absent counts and the absent worker names. Use for 'aaj kitne log absent/present', 'who is absent today', site-wise attendance.", parameters: { type: "object", properties: { date: { type: "string", description: "YYYY-MM-DD; default today (IST)" }, site: { type: "string", description: "optional site name filter (partial ok)" } }, required: [] } } },
-  { type: "function", function: { name: "absent_streak", description: "Workers with NO punch for the last N days (consecutive absence). Use for 'N din se kaun nahi aa raha'.", parameters: { type: "object", properties: { days: { type: "integer", description: "default 5" }, site: { type: "string" } }, required: [] } } },
-  { type: "function", function: { name: "indents", description: "Material indents in a date range with status, site, item count. Use for 'aaj ke indent', 'open indents', 'pending material requests'.", parameters: { type: "object", properties: { date_from: { type: "string" }, date_to: { type: "string" }, status: { type: "string", description: "open|quoting|closed|all (default all)" }, site: { type: "string" } }, required: [] } } },
-  { type: "function", function: { name: "purchase_orders", description: "Purchase orders with approval status, vendor, amount, site. Use for 'pending PO kitne', 'POs this month', 'POs of vendor X'.", parameters: { type: "object", properties: { date_from: { type: "string" }, date_to: { type: "string" }, approval: { type: "string", description: "pending|approved|rejected|all (default all)" }, vendor: { type: "string" }, site: { type: "string" } }, required: [] } } },
-  { type: "function", function: { name: "expenses", description: "Expense claims / vouchers in a date range: rows plus totals by site and category. Use for 'last 5 days ka expense', 'is month ka kharcha site-wise'.", parameters: { type: "object", properties: { date_from: { type: "string" }, date_to: { type: "string" }, site: { type: "string" }, status: { type: "string", description: "pending|approved|rejected|all (default all)" } }, required: [] } } },
-  { type: "function", function: { name: "grn_receipts", description: "Goods received (GRN) in a date range: GRN no, vendor, site, lines. Use for 'aaj kya material aaya', 'GRN this week'.", parameters: { type: "object", properties: { date_from: { type: "string" }, date_to: { type: "string" }, site: { type: "string" }, vendor: { type: "string" } }, required: [] } } },
+  { type: "function", function: { name: "attendance_summary", description: "Attendance for ONE date: per site present/absent counts and absent worker names. Use for 'aaj kitne log absent/present', 'who is absent today', site-wise attendance. All parameters optional.", parameters: { type: "object", properties: { date: { ...S, description: "YYYY-MM-DD; omit for today (IST)" }, site: { ...S, description: "site name filter, partial ok; omit for all sites" } }, required: [] } } },
+  { type: "function", function: { name: "absent_streak", description: "Workers with NO punch for the last N days. Use for 'N din se kaun nahi aa raha'. All parameters optional.", parameters: { type: "object", properties: { days: { ...I, description: "omit for 5" }, site: S }, required: [] } } },
+  { type: "function", function: { name: "indents", description: "Material indents: list with status, site, item count. Use for 'aaj ke indent', 'open indents', 'last N days indents'. All parameters optional; omit what the user did not say.", parameters: { type: "object", properties: { indent_no: { ...S, description: "exact/partial indent number for a direct lookup" }, last_n_days: { ...I, description: "1 = today, 5 = last 5 days" }, date_from: S, date_to: S, status: { ...S, description: "open|quoting|closed" }, site: S }, required: [] } } },
+  { type: "function", function: { name: "purchase_orders", description: "Purchase orders. For a SPECIFIC PO number pass po_no only (returns full detail with line items). Otherwise filter by last_n_days (1 = today), approval (pending|approved|rejected), vendor, site. Every parameter is optional — omit anything the user did not mention; never send null.", parameters: { type: "object", properties: { po_no: { ...S, description: "e.g. PO/2608/0077 or just 0077" }, last_n_days: I, date_from: S, date_to: S, approval: S, vendor: S, site: S }, required: [] } } },
+  { type: "function", function: { name: "expenses", description: "Expense claims / vouchers: rows plus totals by site, category, status. Use for 'last 5 days ka expense', 'is month ka kharcha site-wise'. All parameters optional.", parameters: { type: "object", properties: { last_n_days: I, date_from: S, date_to: S, site: S, status: { ...S, description: "pending|approved|rejected" } }, required: [] } } },
+  { type: "function", function: { name: "grn_receipts", description: "Goods received (GRN): GRN no, vendor, site, lines, value. Use for 'aaj kya material aaya', 'GRN this week'. All parameters optional.", parameters: { type: "object", properties: { grn_no: S, last_n_days: I, date_from: S, date_to: S, site: S, vendor: S }, required: [] } } },
 ];
+// strip null / undefined / "" / "null" / "all"; resolve last_n_days → date_from/date_to; never invent anything else
+function normArgs(a) {
+  const o = {}; for (const [k, v] of Object.entries(a || {})) { if (v == null) continue; const sv = typeof v === "string" ? v.trim() : v; if (sv === "" || sv === "null" || sv === "undefined" || sv === "all") continue; o[k] = sv; }
+  if (o.last_n_days != null) { const n = Math.min(Math.max(Number(o.last_n_days) || 1, 1), 366); if (!o.date_from) o.date_from = daysAgo(n - 1); if (!o.date_to) o.date_to = daysAgo(0); delete o.last_n_days; }
+  for (const k of ["date_from", "date_to", "date"]) if (o[k] && !/^\d{4}-\d{2}-\d{2}$/.test(o[k])) delete o[k];
+  return o;
+}
 
 async function runTool(sb, name, a = {}) {
   const siteLike = a.site ? String(a.site).trim() : "";
@@ -50,10 +60,23 @@ async function runTool(sb, name, a = {}) {
   }
   if (name === "indents") {
     let q = sb.from("material_indents").select("id, indent_no, status, urgency, required_by, created_at, site_id, raiser:raised_by(full_name), material_indent_items(id)").order("created_at", { ascending: false }).limit(300);
+    if (a.indent_no) q = q.ilike("indent_no", `%${String(a.indent_no).replace(/\s+/g, "")}%`);
     if (a.date_from) q = q.gte("created_at", a.date_from); if (a.date_to) q = q.lte("created_at", a.date_to + "T23:59:59"); if (a.status && a.status !== "all") q = q.eq("status", a.status); if (siteIds) q = q.in("site_id", siteIds);
     const d = (await q).data || [];
     const rows = d.map(x => ({ indent_no: x.indent_no, date: String(x.created_at).slice(0, 10), site: sname(x.site_id), status: x.status, urgent: x.urgency === "urgent", items: (x.material_indent_items || []).length, need_by: x.required_by, raised_by: x.raiser?.full_name || "" }));
     return { count: rows.length, by_status: rows.reduce((m, r) => (m[r.status] = (m[r.status] || 0) + 1, m), {}), indents: rows.slice(0, 50), dataset: { title: "Indents", columns: ["Indent", "Date", "Site", "Status", "Urgent", "Items", "Need by", "Raised by"], rows: rows.map(r => [r.indent_no, r.date, r.site, r.status, r.urgent ? "Yes" : "", r.items, r.need_by || "", r.raised_by]) } };
+  }
+  if (name === "purchase_orders" && a.po_no) {
+    const key = String(a.po_no).replace(/\s+/g, "").toUpperCase(); const tail = key.split("/").pop();
+    const { data: hits } = await sb.from("purchase_orders").select("id, po_no, vendor_name, total_amount, status, approval_status, approved_at, reject_reason, created_at, site_id, delivery_status, expected_delivery, approver:approved_by(full_name), material_indents(indent_no), po_items(item_name, qty, unit, rate, discount_pct, gst_pct, returned_qty, line_kind)").or(`po_no.ilike.%${key}%,po_no.ilike.%/${tail}`).limit(5);
+    const exact = (hits || []).find(h => h.po_no.toUpperCase() === key) || ((hits || []).length === 1 ? hits[0] : null);
+    if (!exact) {
+      const { data: sim } = await sb.from("purchase_orders").select("po_no, vendor_name, created_at").ilike("po_no", `%${tail.slice(-3)}%`).order("created_at", { ascending: false }).limit(5);
+      return { found: false, message: `PO ${a.po_no} not found (or not visible to you)`, similar: (sim || []).map(x => ({ po_no: x.po_no, vendor: x.vendor_name, date: String(x.created_at).slice(0, 10) })) };
+    }
+    const lines = (exact.po_items || []).map(l => ({ item: l.item_name, qty: Number(l.qty) - Number(l.returned_qty || 0), unit: l.unit, rate: Number(l.rate || 0), amount: (Number(l.qty) - Number(l.returned_qty || 0)) * Number(l.rate || 0), gst_pct: l.gst_pct, kind: l.line_kind || "" }));
+    return { found: true, po: { po_no: exact.po_no, date: String(exact.created_at).slice(0, 10), vendor: exact.vendor_name, site: sname(exact.site_id), indent: exact.material_indents?.indent_no || "", amount_incl_gst: Number(exact.total_amount || 0), status: exact.status, approval: exact.approval_status, approved_by: exact.approver?.full_name || "", approved_at: exact.approved_at ? String(exact.approved_at).slice(0, 10) : "", reject_reason: exact.reject_reason || "", delivery: exact.delivery_status, expected_delivery: exact.expected_delivery || "", print_url: `/purchase/po?po=${exact.id}` }, lines,
+      dataset: { title: `PO ${exact.po_no}`, columns: ["Item", "Qty", "Unit", "Rate", "Amount", "GST %", "Type"], rows: lines.map(l => [l.item, l.qty, l.unit, l.rate, Math.round(l.amount * 100) / 100, l.gst_pct, l.kind]) } };
   }
   if (name === "purchase_orders") {
     let q = sb.from("purchase_orders").select("id, po_no, vendor_name, total_amount, status, approval_status, created_at, site_id, delivery_status").order("created_at", { ascending: false }).limit(400);
@@ -74,7 +97,7 @@ async function runTool(sb, name, a = {}) {
   if (name === "grn_receipts") {
     const from = a.date_from || daysAgo(7), to = a.date_to || daysAgo(0);
     let q = sb.from("stock_txns").select("grn_no, created_at, site_id, supplier, vendor, item_id, qty, rate, item_master(display_name, unit)").eq("txn_type", "grn").gte("created_at", from).lte("created_at", to + "T23:59:59").order("created_at", { ascending: false }).limit(1500);
-    if (siteIds) q = q.in("site_id", siteIds); if (a.vendor) q = q.or(`supplier.ilike.%${a.vendor}%,vendor.ilike.%${a.vendor}%`);
+    if (siteIds) q = q.in("site_id", siteIds); if (a.vendor) q = q.or(`supplier.ilike.%${a.vendor}%,vendor.ilike.%${a.vendor}%`); if (a.grn_no) q = q.ilike("grn_no", `%${a.grn_no}%`);
     const d = (await q).data || [];
     const g = {}; d.forEach(t => { const k = t.grn_no || "—"; g[k] = g[k] || { grn_no: k, date: String(t.created_at).slice(0, 10), site: sname(t.site_id), vendor: t.supplier || t.vendor || "", lines: 0, value: 0, items: [] }; g[k].lines++; g[k].value += Number(t.qty || 0) * Number(t.rate || 0); g[k].items.push(`${t.item_master?.display_name || t.item_id} × ${t.qty} ${t.item_master?.unit || ""}`); });
     const rows = Object.values(g);
@@ -119,6 +142,7 @@ export async function POST(req) {
 Today (IST): ${daysAgo(0)}. The user is logged in as role "${role || "unknown"}" on page "${pathname}".
 RULES
 1. Real ERP data (counts, lists, totals, who/what/how many, today/last N days/this month, pending, absent, expenses, indents, POs, GRNs): ALWAYS call the matching tool. Never estimate or invent ERP numbers. If a tool returns nothing, say so. Tools only see what this user is allowed to see.
+   Tool arguments: pass ONLY what the user said; OMIT every other parameter (do not send null, "", or "all"). A specific document number (PO/2608/0077, IND/…, GRN/…) → pass po_no / indent_no / grn_no alone. "aaj / today" → last_n_days: 1. "last 5 days / pichle 5 din" → last_n_days: 5. "this month" → date_from = first of this month. "pending PO" → approval: "pending". Site names may be partial ("KEI"). Never invent dates, sites, vendors or IDs.
 2. Analysis: compute totals, counts, date ranges, site-wise summaries and trends from the tool results; show a compact table or bullet list; state the date range used.
 3. Export: if the user asks for Excel/xlsx/export/report, answer briefly with the summary — the app attaches an Excel file of the exact data automatically (tell them "Excel file attached below").
 4. How-to questions about the app: prefer the Help Center articles given below; name menu → button → result. Never invent buttons.
@@ -143,10 +167,12 @@ ${ctx ? "\nRelevant Help Center articles:\n" + ctx : ""}`;
       }
       chat.push({ role: "assistant", content: msg.content || "", tool_calls: calls });
       for (const c of calls) {
-        let args = {}; try { args = JSON.parse(c.function?.arguments || "{}"); } catch {}
+        let raw = {}; try { raw = JSON.parse(c.function?.arguments || "{}"); } catch {}
+        const args = normArgs(raw);
         const name = c.function?.name; toolsUsed.push(name);
         console.log("ERP_TOOL_CALL", JSON.stringify({ tool: name, args }));
         let out; try { out = await runTool(sb, name, args); } catch (e) { out = { error: e.message || "tool failed" }; }
+        console.log("ERP_TOOL_RESULT", JSON.stringify({ tool: name, rows: out?.count ?? out?.total_workers ?? (out?.found === false ? 0 : out?.found ? 1 : null), error: out?.error || null }));
         if (out?.dataset) { dataset = out.dataset; delete out.dataset; }
         chat.push({ role: "tool", tool_call_id: c.id, name, content: JSON.stringify(out).slice(0, 12000) });
       }
