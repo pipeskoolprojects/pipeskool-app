@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { detectLang, answerLang, matchKB, suggestionsFor, liveAnswer, createTicket, askAI, aiStatus } from "@/lib/assistant";   // update416/417
+import { detectLang, answerLang, matchKB, suggestionsFor, liveAnswer, createTicket, askAI, aiStatus, isDataQuery, wantsExcel, downloadDataset } from "@/lib/assistant";   // update416/417/418
 
 const T = {
   en: { title: "Pipeskool Assistant", hint: "Ask anything about the app…", helpful: "Did this help?", yes: "Yes 👍", no: "No — get human help",
@@ -58,13 +58,14 @@ export default function Assistant() {
     if (forcedEntry) { renderEntry(forcedEntry, L, null); return; }
     const live = await liveAnswer(clean, sess, L);
     if (live) { setMsgs(m => [...m, { who: "a", note, title: live.title, steps: live.steps, link: live.link }]); return; }
-    const hits = matchKB(clean, sess, path);
+    const hits = isDataQuery(clean) ? [] : matchKB(clean, sess, path);   // update418: real-data questions go to the ERP agent, not the how-to KB
     if (hits.length) { renderEntry(hits[0], L, note); if (hits.length > 1) setMsgs(m => [...m, { who: "a", also: hits.slice(1), langUsed: L }]); return; }
     // update416: no KB match → ask the Groq-backed assistant (server route, grounded in the Help Center)
     setMsgs(m => [...m, { who: "a", thinking: true }]);
     const history = [...msgs.filter(x => x.who === "u" || x.aiText).map(x => x.who === "u" ? { role: "user", content: x.text } : { role: "assistant", content: x.aiText }), { role: "user", content: clean }];
     const ai = await askAI(history, L, sess, path);
-    setMsgs(m => { const rest = m.filter(x => !x.thinking); return ai?.text ? [...rest, { who: "a", note, aiText: ai.text, langUsed: L }] : [...rest, { who: "a", nomatch: true, langUsed: L, aiError: ai?.error || "AI gave no answer." }]; });
+    setMsgs(m => { const rest = m.filter(x => !x.thinking); return ai?.text ? [...rest, { who: "a", note, aiText: ai.text, langUsed: L, dataset: ai.dataset, tools: ai.tools }] : [...rest, { who: "a", nomatch: true, langUsed: L, aiError: ai?.error || "AI gave no answer." }]; });
+    if (ai?.dataset && wantsExcel(clean)) downloadDataset(ai.dataset);   // update418: "Excel bana do" → file from the exact ERP rows
   }
 
   async function sendTicket() {
@@ -119,7 +120,9 @@ export default function Assistant() {
                 <div style={{ background: "#fff", borderRadius: "12px 12px 12px 2px", padding: "10px 12px", fontSize: 13, maxWidth: "92%", border: "1px solid var(--border,#e3e3de)" }}>
                   {m.note && <div style={{ fontSize: 11, color: "#B26A00", marginBottom: 6 }}>{m.note}</div>}
                   {m.thinking ? <div className="muted" style={{ fontSize: 12.5 }}>… thinking</div>
-                  : m.aiText ? (<><div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.aiText}</div><div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>AI answer — verify against the app; not a substitute for the Director's decision.</div></>)
+                  : m.aiText ? (<><div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.aiText}</div>
+                      {m.dataset?.rows?.length > 0 && <button type="button" style={{ fontSize: 11.5, marginTop: 8 }} onClick={() => downloadDataset(m.dataset)}>⬇ Excel · {m.dataset.title} ({m.dataset.rows.length} rows)</button>}
+                      <div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>{m.tools?.length ? `Live ERP data (${m.tools.join(", ")}) · read-only` : "AI answer — verify against the app."}</div></>)
                   : m.nomatch ? (
                     <>
                       <div>{T[m.langUsed || lang].nomatch}</div>
