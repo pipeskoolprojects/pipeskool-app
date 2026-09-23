@@ -166,7 +166,7 @@ export default function ItemsPage() {
     { key: "disc_pct", label: "Disc %", type: "num", render: r => r.disc_pct != null && r.rate != null
         ? <span onClick={isDirector ? async e => {   /* update325: item override — wins over the group % */
               e.stopPropagation();
-              const v = prompt("Discount override for: " + r.display_name + String.fromCharCode(10) + (r.overridden ? "Currently OVERRIDDEN at " + r.disc_pct + "%." : "Group gives " + r.disc_pct + "%.") + String.fromCharCode(10) + "Enter a % for THIS item only, or leave empty to follow the group:", r.overridden ? String(r.disc_pct) : "");
+              const v = prompt("Discount override for: " + r.display_name + "\n" + (r.overridden ? "Currently OVERRIDDEN at " + r.disc_pct + "%." : "Group gives " + r.disc_pct + "%.") + "\n" + "Enter a % for THIS item only, or leave empty to follow the group:", r.overridden ? String(r.disc_pct) : "");
               if (v === null) return;
               const pct = v.trim() === "" ? null : Number(v);
               if (pct !== null && !(pct >= 0 && pct < 100)) { alert("Enter 0-99.99, or empty to clear."); return; }

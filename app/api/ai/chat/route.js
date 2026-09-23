@@ -7,6 +7,9 @@
 import { createClient } from "@supabase/supabase-js";
 
 const MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-20b";
+// update422: fallback chain — each Groq model has its OWN rate-limit bucket, so a 429 on one is not a 429 on the next
+const MODELS = [MODEL, process.env.GROQ_FALLBACK_MODEL || "llama-3.3-70b-versatile", "llama-3.1-8b-instant"].filter((m, i, a) => m && a.indexOf(m) === i);
+const GROQ_TIMEOUT_MS = 25000;
 const IST = () => new Date(Date.now() + 5.5 * 3600 * 1000);
 const iso = d => d.toISOString().slice(0, 10);
 const daysAgo = n => { const d = IST(); d.setUTCDate(d.getUTCDate() - n); return iso(d); };
@@ -35,6 +38,25 @@ const TOOLS = [
   { type: "function", function: { name: "vendor_report", description: "One vendor's purchase report for a period: PO count, total value, PO-wise date/site/amount/items/status/approval/delivery/received. Use for 'is month Turakhia ko kitne PO', 'vendor ka pura month ka purchase detail'.", parameters: { type: "object", properties: { vendor: { type: "string" }, last_n_days: I, date_from: S, date_to: S }, required: ["vendor"] } } },
   { type: "function", function: { name: "propose_action", description: "Prepare an ERP CHANGE for the user's confirmation. Never performs the change itself. action = mark_po_delivered (needs po_no) | approve_expense (needs expense_id) | reject_expense (expense_id, reason). Returns current state + a confirmation card the app shows; the change happens only after the user taps Confirm, through the app's own permission-checked function.", parameters: { type: "object", properties: { action: { type: "string" }, po_no: S, expense_id: I, reason: S }, required: ["action"] } } },
 ];
+// update422: send only the tools the question needs (root cause of the 429s: 16 schemas ≈ 1,800 tokens on EVERY round)
+const TOOL_HINTS = [
+  [/absent|present|attendance|punch|nahi aa|haazir|hazir|upasthit|kaun aaya|late/i, ["attendance_summary", "absent_streak", "person_attendance", "company_people"]],
+  [/expense|kharch|voucher|petty|claim|bill(?! ?match)|payment pending|approve.*expense|expense.*approve/i, ["expenses", "person_expenses", "company_people", "propose_action"]],
+  [/indent|material request|requisition/i, ["indents"]],
+  [/\bpo\b|purchase order|po\/|approve.*po|po.*approve|deliver/i, ["purchase_orders", "pending_deliveries", "vendor_report", "propose_action"]],
+  [/rate|price|bhav|kis vendor se|last purchase|liya tha|kharida/i, ["item_rate_history", "vendor_report"]],
+  [/vendor|supplier|turakhia|outstanding|baki|payable|bheje/i, ["vendor_report", "vendor_outstanding", "purchase_orders", "pending_deliveries"]],
+  [/grn|received|receive|material aaya|aaya/i, ["grn_receipts", "pending_deliveries"]],
+  [/stock|inventory|balance|material.*(hai|kitna)|low stock/i, ["stock_position"]],
+  [/purchase summary|total purchase|kitna kharida|purchase report/i, ["purchase_summary", "vendor_report"]],
+  [/director|staff|employee|supervisor|accountant|kaun hai|kon hai|works? at|kis site|kaam karta/i, ["company_people", "company_people", "person_attendance"]],
+];
+function pickTools(text) {
+  const t = String(text || ""); const names = new Set();
+  TOOL_HINTS.forEach(([re, list]) => { if (re.test(t)) list.forEach(n => names.add(n)); });
+  if (!names.size) return null;   // general question → no tools at all
+  return TOOLS.filter(x => names.has(x.function.name));
+}
 // strip null / undefined / "" / "null" / "all"; resolve last_n_days → date_from/date_to; never invent anything else
 function normArgs(a) {
   const o = {}; for (const [k, v] of Object.entries(a || {})) { if (v == null) continue; const sv = typeof v === "string" ? v.trim() : v; if (sv === "" || sv === "null" || sv === "undefined" || sv === "all") continue; o[k] = sv; }
@@ -257,6 +279,55 @@ async function helpContext(sb, query) {
   } catch { return ""; }
 }
 
+// update422: model-free formatting of a tool result (used when every model is busy) — numbers straight from the tool
+const inr = n => "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN");
+function summarize(tool, o, lang) {
+  const H = lang === "hi", L = [];
+  const kv = obj => Object.entries(obj || {}).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `- ${k}: ${typeof v === "number" && v > 999 ? inr(v) : v}`).join("\n");
+  if (o.error) return (H ? "यह जानकारी नहीं मिली: " : "Could not fetch: ") + o.error;
+  if (o.found === false || o.count === 0 || o.total_workers === 0) return H ? "यह जानकारी Pipeskool ERP में नहीं मिली।" + (o.similar?.length ? " मिलते-जुलते: " + o.similar.map(x => x.po_no).join(", ") : "") : "I couldn't find this information in the Pipeskool ERP." + (o.similar?.length ? " Similar: " + o.similar.map(x => x.po_no).join(", ") : "");
+  switch (tool) {
+    case "person_expenses": L.push(`${o.person?.name || o.person} — ${H ? "खर्च" : "expenses"} ${o.from} → ${o.to}`, `${H ? "कुल" : "Total"}: ${inr(o.total)} (${o.count} ${H ? "एंट्री" : "entries"})`, H ? "स्थिति-वार:" : "By status:", kv(o.by_status), H ? "श्रेणी-वार:" : "By category:", kv(o.by_category), H ? "साइट-वार:" : "By site:", kv(o.by_site)); break;
+    case "expenses": L.push(`${H ? "खर्च" : "Expenses"} ${o.from} → ${o.to}`, `${H ? "कुल" : "Total"}: ${inr(o.total)} · ${o.count} ${H ? "एंट्री" : "entries"} · ${H ? "अनुमोदन बाकी" : "pending approvals"}: ${o.pending_approvals}`, H ? "साइट-वार:" : "Site-wise:", kv(o.by_site), H ? "श्रेणी-वार:" : "Category-wise:", kv(o.by_category), o.highest ? `${H ? "सबसे बड़ा" : "Highest"}: ${inr(o.highest.amount)} · ${o.highest.paid_to || ""} · ${o.highest.site || ""}` : ""); break;
+    case "attendance_summary": L.push(`${H ? "उपस्थिति" : "Attendance"} ${o.date}: ${H ? "उपस्थित" : "present"} ${o.present} / ${o.total_workers} · ${H ? "अनुपस्थित" : "absent"} ${o.absent}`); (o.sites || []).forEach(s2 => L.push(`- ${s2.site}: ${s2.present}/${s2.total}${s2.absent ? " · " + (H ? "अनुपस्थित" : "absent") + ": " + s2.absent_names.slice(0, 12).join(", ") : ""}`)); break;
+    case "absent_streak": L.push(`${o.count} ${H ? "लोग" : "workers"} ${H ? "पिछले" : "with no attendance in the last"} ${o.days} ${H ? "दिन से नहीं आए" : "days"} (${o.since} →)`); (o.workers || []).slice(0, 25).forEach(w => L.push(`- ${w.name} · ${w.site} · ${H ? "आख़िरी" : "last"} ${w.last_attendance} · ${w.days_absent} ${H ? "दिन" : "days"}`)); if (o.note) L.push(o.note); break;
+    case "indents": L.push(`${o.count} ${H ? "इंडेंट" : "indent(s)"}`, kv(o.by_status)); (o.indents || []).slice(0, 15).forEach(i => L.push(`- ${i.indent_no} · ${i.site} · ${i.items} items · ${i.status}${i.pos ? " · PO " + i.pos : ""}${i.raised_by ? " · " + i.raised_by : ""}`)); break;
+    case "purchase_orders": if (o.found && o.po) { const p = o.po; L.push(`${p.po_no} · ${p.vendor} · ${p.site}`, `${H ? "राशि" : "Amount"} ${inr(p.amount_incl_gst)} (incl. GST) · ${H ? "अनुमोदन" : "approval"}: ${p.approval}${p.approved_by ? " by " + p.approved_by : ""} · ${H ? "डिलीवरी" : "delivery"}: ${p.delivery}${p.indent ? " · indent " + p.indent : ""}`); (o.lines || []).forEach((l, i) => L.push(`${i + 1}. ${l.item} — ${l.qty} ${l.unit} × ${inr(l.rate)} = ${inr(l.amount)}`)); } else { L.push(`${o.count} PO(s)${o.vendor_matched ? " · " + o.vendor_matched : ""} · ${H ? "कुल" : "total"} ${inr(o.total_amount)}`, kv(o.by_approval)); (o.pos || []).slice(0, 15).forEach(p => L.push(`- ${p.po_no} · ${p.date} · ${p.vendor} · ${p.site} · ${inr(p.amount)} · ${p.approval}`)); } break;
+    case "vendor_report": L.push(`${o.vendor} · ${o.from} → ${o.to}`, `${o.count ?? o.po_count ?? 0} PO · ${H ? "कुल" : "total"} ${inr(o.total_value)}`, o.by_site ? (H ? "साइट-वार:" : "Site-wise:") : "", o.by_site ? kv(o.by_site) : ""); (o.pos || []).slice(0, 15).forEach(p => L.push(`- ${p.po_no} · ${p.date} · ${p.site} · ${inr(p.amount)}${p.approval ? " · " + p.approval : ""}${p.delivery ? " · " + p.delivery : ""}${p.received ? " · recd " + p.received : ""}`)); break;
+    case "item_rate_history": L.push(`${H ? "आख़िरी खरीद" : "Last purchase"}: ${o.item || o.latest?.item} — ${inr(o.latest?.rate)}/${o.latest?.unit || ""} · ${o.latest?.vendor} · ${o.latest?.po_no} · ${o.latest?.date} · ${o.latest?.site || ""}`, o.lowest ? `${H ? "सबसे कम" : "Lowest"}: ${inr(o.lowest.rate)} · ${o.lowest.vendor} · ${o.lowest.po_no}` : "", o.vendors ? `${H ? "विक्रेता" : "Vendors"}: ${o.vendors.join(", ")}` : ""); (o.history || []).slice(1, 8).forEach(h => L.push(`- ${h.date} · ${h.vendor} · ${inr(h.rate)} · ${h.qty} ${h.unit} · ${h.po_no}`)); break;
+    case "person_attendance": if (o.message && !o.rows) { L.push(o.message); break; } L.push(`${o.person?.name || o.person} · ${o.from} → ${o.to}`, `${H ? "उपस्थित दिन" : "Present days"} ${o.days_present} / ${o.days_recorded} ${H ? "रिकॉर्ड" : "recorded"} · ${H ? "कुल घंटे" : "hours"} ${Math.round(o.total_hours || 0)} · OT ${Math.round(o.total_ot || 0)}`); (o.rows || []).slice(-15).forEach(d => L.push(`- ${d.date} · ${d.in || "—"}–${d.out || "—"} · ${d.status || ""}${d.site ? " · " + d.site : ""}`)); break;
+    case "pending_deliveries": L.push(`${o.count} PO(s) ${H ? "की डिलीवरी बाकी" : "with pending delivery"}`); (o.pos || []).slice(0, 15).forEach(p => L.push(`- ${p.po_no} · ${p.vendor} · ${p.site} · pending ${p.pending} (${p.items_done})`)); break;
+    case "vendor_outstanding": L.push(`${H ? "कुल बकाया" : "Total outstanding"} ${inr(o.total_outstanding)} (${o.count} vendors)`); (o.vendors || []).slice(0, 15).forEach(v => L.push(`- ${v.vendor}: PO ${inr(v.po_value)} − paid ${inr(v.paid)} = ${inr(v.outstanding)}`)); L.push(o.note || ""); break;
+    case "stock_position": L.push(`${o.count} items · ${H ? "मूल्य" : "value"} ${inr(o.total_value)} · low stock: ${o.low_stock}`); (o.items || []).slice(0, 15).forEach(i => L.push(`- ${i.item} · ${i.site} · ${i.balance} ${i.unit}`)); break;
+    case "company_people": L.push(`${H ? "निदेशक" : "Directors"}: ${(o.directors || []).join(", ") || "—"}`); (o.people || []).slice(0, 20).forEach(p => L.push(`- ${p.name} · ${p.role}${p.site ? " · " + p.site : ""}`)); break;
+    case "company_people": L.push(`${o.person.name} · ${o.person.role} · ${o.person.site}`); break;
+    default: L.push(JSON.stringify(o).slice(0, 800));
+  }
+  return L.filter(Boolean).join("\n") + (H ? "\n(सीधा ERP डेटा — AI इस समय व्यस्त है)" : "\n(Direct ERP data — AI phrasing unavailable right now)");
+}
+// update422: when no model is reachable at all, answer the common questions straight from the tools
+async function directAnswer(sb, text, lang) {
+  const t = String(text || ""); const tl = t.toLowerCase();
+  const person = (t.match(/([A-Za-z]+\s+[A-Za-z]+)\s+k[aei]\s+(total|approved|pending|attendance|expense|kharch|hazir)/i) || [])[1] || (t.match(/^([A-Za-z]+\s+[A-Za-z]+)\s+k[aei]\b/i) || [])[1];
+  const nDays = (tl.match(/last\s+(\d+)\s*(days?|din)/) || tl.match(/pichle\s+(\d+)\s*din/) || tl.match(/(\d+)\s*din\s*se/) || [])[1];
+  const poNo = (t.match(/PO\/\d{4}\/\d{3,4}/i) || [])[0];
+  const month = (tl.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/) || [])[1];
+  const mNum = month ? ["january","february","march","april","may","june","july","august","september","october","november","december"].indexOf(month) + 1 : null;
+  const ym = mNum ? `${IST().getUTCFullYear()}-${String(mNum).padStart(2, "0")}` : null;
+  const run = async (name, args) => { const a = normArgs(args); const out = await runTool(sb, name, a); const dataset = out?.dataset || null; delete out.dataset; return { text: summarize(name, out, lang), tools: [name], dataset, confirm: null, direct: true }; };
+  if (poNo) return run("purchase_orders", { po_no: poNo });
+  if (person && /expense|kharch/.test(tl)) return run("person_expenses", { person, month: ym });
+  if (person && /attendance|hazir|upasthit|punch/.test(tl)) return run("person_attendance", { person, month: ym, last_n_days: ym ? null : 30 });
+  if (person && /kis site|kaam karta|kaun hai|kon hai/.test(tl)) return run("company_people", { name: person });
+  if (/absent|nahi aa|nahi aaya|aa raha/.test(tl) && nDays) return run("absent_streak", { days: Number(nDays) });
+  if (/absent|present|hazir|upasthit/.test(tl)) return run("attendance_summary", {});
+  if (/indent/.test(tl)) return run("indents", { last_n_days: /aaj|today/.test(tl) ? 1 : nDays ? Number(nDays) : 30 });
+  if (/turakhia|vendor/.test(tl) && /po|purchase|bheje/.test(tl)) { const v = (t.match(/([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+(?:ko|ka|ke)\b/i) || [])[1]; if (v) return run("vendor_report", { vendor: v, month: ym, last_n_days: ym ? null : 30 }); }
+  if (/pending/.test(tl) && /po|purchase/.test(tl)) return run("purchase_orders", { approval: "pending" });
+  if (/expense|kharch/.test(tl)) return run("expenses", { last_n_days: nDays ? Number(nDays) : /aaj|today/.test(tl) ? 1 : 30 });
+  if (/rate|bhav/.test(tl) && /last|pehle|purchase/.test(tl)) { const item = (t.match(/(?:rate of|rate for)\s+(.+?)\??$/i) || [])[1]; if (item) return run("item_rate_history", { item }); }
+  return null;
+}
 export async function GET() { const configured = !!process.env.GROQ_API_KEY; console.log("GROQ_STATUS", JSON.stringify({ configured, model: MODEL, env: process.env.VERCEL_ENV || "local" })); return Response.json({ ok: true, configured, model: MODEL, tools: TOOLS.map(t => t.function.name) }); }
 
 export async function POST(req) {
@@ -291,14 +362,34 @@ ${ctx ? "\nRelevant Help Center articles:\n" + ctx : ""}`;
     const chat = [{ role: "system", content: system }, ...recent];
     let dataset = null, confirm = null; const toolsUsed = [];
     const BUSY = "AI service is temporarily busy. Please try again.";
-    const groq = async body => { for (let i = 0; i < 3; i++) { const r = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify(body) }); if (r.status !== 429 && r.status < 500) return r; const ra = Number(r.headers.get("retry-after")) || 0; const wait = Math.min(ra ? ra * 1000 : 1500 * (i + 1), 6000); console.warn("GROQ_RETRY", JSON.stringify({ status: r.status, attempt: i + 1, wait })); if (i === 2) return r; await new Promise(res => setTimeout(res, wait)); } };
+    // update422: try each model in MODELS; per model: one quick retry on 429 (honouring retry-after ≤ 3 s), then move on; 25 s timeout each
+    let usedModel = MODEL;
+    const groq = async body => {
+      let last = null;
+      for (const model of MODELS) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const ac = new AbortController(); const tm = setTimeout(() => ac.abort(), GROQ_TIMEOUT_MS);
+          let r; try { r = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ ...body, model }), signal: ac.signal }); }
+          catch (e) { clearTimeout(tm); console.warn("GROQ_MODEL_FALLBACK", JSON.stringify({ model, reason: e.name === "AbortError" ? "timeout" : "network" })); last = null; break; }
+          clearTimeout(tm);
+          if (r.ok) { usedModel = model; return r; }
+          if (r.status === 429 || r.status >= 500) { const ra = Number(r.headers.get("retry-after")) || 0; last = r; if (attempt === 0 && ra && ra <= 3) { await new Promise(res => setTimeout(res, ra * 1000)); continue; } console.warn("GROQ_MODEL_FALLBACK", JSON.stringify({ model, status: r.status, retryAfter: ra })); break; }
+          return r;   // 4xx other than 429 → real error, don't mask it
+        }
+      }
+      return last || new Response(JSON.stringify({ error: { message: "all models busy" } }), { status: 503 });
+    };
     console.log("GROQ_REQUEST_STARTED", JSON.stringify({ model: MODEL, turns: recent.length, lang, ctxArticles: ctx ? (ctx.match(/^## /gm) || []).length : 0 }));
-    for (let round = 0; round < 5; round++) {
-      const r = await groq({ model: MODEL, temperature: 0.2, max_tokens: 700, messages: chat, tools: TOOLS, tool_choice: "auto" });
+    const toolset = pickTools(lastUser); let lastOut = null, lastToolName = null;
+    for (let round = 0; round < 3; round++) {
+      const body = { temperature: 0.2, max_tokens: 600, messages: chat }; if (toolset && toolset.length) { body.tools = toolset; body.tool_choice = "auto"; }
+      const r = await groq(body);
       const j = await r.json().catch(() => ({}));
       if (!r.ok) {
-        const msg = j?.error?.message || ""; console.error("GROQ_REQUEST_FAILED", JSON.stringify({ status: r.status, error: msg.slice(0, 200) || null, ms: Date.now() - t0 }));
-        // user-facing text is always clean — no model ids, org ids, limits or schema errors
+        const msg = j?.error?.message || ""; console.error("GROQ_REQUEST_FAILED", JSON.stringify({ status: r.status, error: msg.slice(0, 200) || null, round, ms: Date.now() - t0 }));
+        // update422: the ERP data is already here — never lose it because the phrasing model is busy
+        if (lastOut) { const text = summarize(lastToolName, lastOut, lang); console.log("GROQ_REQUEST_SUCCESS", JSON.stringify({ model: "erp-direct", chars: text.length, tools: toolsUsed, rounds: round + 1, ms: Date.now() - t0 })); if (dataset) dataset.generated_by = user.email || user.id.slice(0, 8); return Response.json({ ok: true, text, tools: toolsUsed, dataset, confirm, direct: true }); }
+        const direct = await directAnswer(sb, lastUser, lang); if (direct) { console.log("GROQ_REQUEST_SUCCESS", JSON.stringify({ model: "erp-direct", chars: direct.text.length, tools: direct.tools, ms: Date.now() - t0 })); return Response.json({ ok: true, ...direct }); }
         const clean = r.status === 429 || r.status >= 500 ? BUSY : /validation|schema|tool call/i.test(msg) ? "I couldn't process that request. Please rephrase it in one line." : BUSY;
         return Response.json({ ok: false, error: clean });
       }
@@ -306,7 +397,7 @@ ${ctx ? "\nRelevant Help Center articles:\n" + ctx : ""}`;
       const calls = msg.tool_calls || [];
       if (!calls.length) {
         const text = (msg.content || "").trim();
-        console.log("GROQ_REQUEST_SUCCESS", JSON.stringify({ model: MODEL, chars: text.length, tools: toolsUsed, rounds: round + 1, ms: Date.now() - t0, usage: j?.usage || null }));
+        console.log("GROQ_REQUEST_SUCCESS", JSON.stringify({ model: usedModel, chars: text.length, tools: toolsUsed, rounds: round + 1, ms: Date.now() - t0, usage: j?.usage || null }));
         if (dataset) dataset.generated_by = user.email || user.id.slice(0, 8);
         return Response.json({ ok: true, text, tools: toolsUsed, dataset, confirm });
       }
@@ -317,12 +408,14 @@ ${ctx ? "\nRelevant Help Center articles:\n" + ctx : ""}`;
         const name = c.function?.name; toolsUsed.push(name);
         console.log("ERP_TOOL_CALL", JSON.stringify({ tool: name, args }));
         let out; try { out = await runTool(sb, name, args); } catch (e) { out = { error: e.message || "tool failed" }; }
+        lastOut = out; lastToolName = name;
         console.log("ERP_TOOL_RESULT", JSON.stringify({ tool: name, rows: out?.count ?? out?.total_workers ?? (out?.found === false ? 0 : out?.found ? 1 : null), error: out?.error || null }));
         if (out?.dataset) { dataset = out.dataset; delete out.dataset; }
         if (out?.confirm) { confirm = out.confirm; }
-        chat.push({ role: "tool", tool_call_id: c.id, name, content: JSON.stringify(out).slice(0, 12000) });
+        chat.push({ role: "tool", tool_call_id: c.id, name, content: JSON.stringify(out).slice(0, 6000) });   // update422: smaller tool payloads
       }
     }
+    if (lastOut) { const text = summarize(lastToolName, lastOut, lang); if (dataset) dataset.generated_by = user.email || user.id.slice(0, 8); return Response.json({ ok: true, text, tools: toolsUsed, dataset, confirm, direct: true }); }
     return Response.json({ ok: false, error: "I couldn't finish that request. Please try a simpler question." });
   } catch (e) {
     console.error("GROQ_REQUEST_FAILED", JSON.stringify({ error: (e.message || String(e)).slice(0, 200), ms: Date.now() - t0 }));
