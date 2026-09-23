@@ -36,12 +36,20 @@ async function helpContext(query) {
   } catch { return ""; }
 }
 
+// GET /api/ai/chat → configuration status only (no secrets). Used by the Assistant header badge.
+export async function GET() {
+  const configured = !!process.env.GROQ_API_KEY;
+  console.log("GROQ_STATUS", JSON.stringify({ configured, model: MODEL, env: process.env.VERCEL_ENV || "local" }));
+  return Response.json({ ok: true, configured, model: MODEL });
+}
+
 export async function POST(req) {
+  const t0 = Date.now();
   try {
     const key = process.env.GROQ_API_KEY;
-    if (!key) return Response.json({ ok: false, error: "no_key" }, { status: 200 });
+    if (!key) { console.warn("GROQ_REQUEST_SKIPPED", JSON.stringify({ reason: "GROQ_API_KEY not set", env: process.env.VERCEL_ENV || "local" })); return Response.json({ ok: false, error: "no_key" }, { status: 200 }); }
     const user = await userFromRequest(req);
-    if (!user) return Response.json({ ok: false, error: "Login required." }, { status: 401 });
+    if (!user) { console.warn("GROQ_REQUEST_REJECTED", JSON.stringify({ reason: "no valid JWT" })); return Response.json({ ok: false, error: "Login required." }, { status: 401 }); }
     const { messages = [], lang = "en", role = "", pathname = "" } = await req.json();
     const recent = messages.filter(m => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string").slice(-8).map(m => ({ role: m.role, content: m.content.slice(0, 2000) }));
     if (!recent.length) return Response.json({ ok: false, error: "Empty message." });
@@ -52,15 +60,18 @@ export async function POST(req) {
 Answer ONLY about how to use this ERP. Be concrete: name the menu (e.g. "Material & Procurement → Indent & Purchase"), the button, and what happens next. Keep answers short (≤ 8 lines); use numbered steps for procedures. If something is not possible in the app, say so plainly and suggest the nearest real feature or creating a Support Ticket (Assistant → Create ticket). Never invent buttons, data, amounts or approvals. Do not give legal/tax advice beyond what the app does. The user is logged in as role "${role || "unknown"}" on page "${pathname}".
 ${MODULES}
 ${ctx ? "\nRelevant Help Center articles (source of truth):\n" + ctx : ""}`;
+    console.log("GROQ_REQUEST_STARTED", JSON.stringify({ model: MODEL, turns: recent.length, lang, ctxArticles: ctx ? (ctx.match(/^## /gm) || []).length : 0, userId: user.id.slice(0, 8) }));
     const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
       body: JSON.stringify({ model: MODEL, temperature: 0.2, max_tokens: 600, messages: [{ role: "system", content: system }, ...recent] }),
     });
-    const j = await r.json();
-    if (!r.ok) return Response.json({ ok: false, error: j?.error?.message || `Groq error ${r.status}` });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { console.error("GROQ_REQUEST_FAILED", JSON.stringify({ status: r.status, error: j?.error?.message || null, ms: Date.now() - t0 })); return Response.json({ ok: false, error: j?.error?.message || `Groq error ${r.status}` }); }
     const text = j?.choices?.[0]?.message?.content?.trim() || "";
+    console.log("GROQ_REQUEST_SUCCESS", JSON.stringify({ model: MODEL, chars: text.length, ms: Date.now() - t0, usage: j?.usage || null }));
     return Response.json({ ok: true, text, model: MODEL });
   } catch (e) {
+    console.error("GROQ_REQUEST_FAILED", JSON.stringify({ error: e.message || String(e), ms: Date.now() - t0 }));
     return Response.json({ ok: false, error: e.message || "AI unavailable" });
   }
 }
