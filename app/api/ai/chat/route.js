@@ -418,7 +418,14 @@ function intentOf(text, ctx) {
   if (/task\s*(assign|de do|do|bana|create)|assign.*task|kaam de do/.test(tl)) return { kind: "ACTION", action: "assign_task", e };
   if (/(approve kar|approve karo|approve kardo|approval de do|reject kar|reject karo)/.test(tl) && /expense|kharch|claim|voucher|#\d+/.test(tl)) return { kind: "ACTION", action: /reject/.test(tl) ? "reject_expense" : "approve_expense", e };
   if (/^(only|sirf|bas)\s+(present|absent|aaye|nahi aaye)/.test(tl) && ctx?.tool === "attendance_summary") return { kind: "FOLLOWUP", e };
-  if (follow && ctx?.tool) return { kind: "FOLLOWUP", e };
+  // update428: with a live context, short messages are follow-ups, never general chat
+  const words = tl.split(/\s+/).filter(Boolean).length;
+  if (ctx?.tool && /^(approve|reject|approve karo|reject karo|approve kar do)$/.test(tl)) return { kind: "ASK", text: "Kaunsa expense approve/reject karna hai? ID likhiye — jaise: expense #392 approve karo. (Pending list upar hai; 'detail' likhne par IDs ke saath list milegi.)", e };
+  const generalQ = /(kya hai|kya hota|kya hoti|kaise|kaun sa|explain|samjhao|samjha|batao ki|write|likho|likh do|code|program|translate|anuvad|meaning|matlab|difference|formula|calculate|kitna hota|\?$)/.test(tl) && !/(detail|one by one|har ek|wale|only|sirf)/.test(tl);
+  const cue = /(detail|details|one by one|har ek|sab dikhao|sabhi dikhao|list do|list dikhao|poori list|puri list|full list|batao sab|expand|rows|dikhao|batao|do$|de do)/.test(tl);
+  const bareFilter = words <= 3 && (e.status || e.site || e.kind || e.last_n_days || e.month);
+  if (ctx?.tool && !generalQ && !e.po_no && !e.indent_no && !e.name && !e.item && (cue && words <= 8 || bareFilter)) return { kind: "FOLLOWUP", e, view: /(detail|one by one|har ek|sab dikhao|sabhi dikhao|list|full|expand|rows)/.test(tl) && !e.status && !e.site && !e.kind ? "rows" : undefined };
+  if (follow && ctx?.tool && !e.po_no && !e.indent_no && !e.name && !e.item) return { kind: "FOLLOWUP", e };
   if (e.all_people && !/attendance|hazir|aaye|absent|present/.test(tl)) return { kind: "READ", tool: "workers_list", args: { kind: e.kind === "staff" ? "staff" : (e.kind || "all"), site: e.site }, e };
   if (/(worker|staff|employee|log)\s*(list|data|dikhao|batao|do\b|chahiye|khojo|dhundo)|list of (workers|staff|employees)/.test(tl) && !/attendance|aaye|absent|present/.test(tl)) return { kind: "READ", tool: "workers_list", args: { kind: e.kind === "staff" ? "staff" : (e.kind || "all"), site: e.site }, e };
   if ((e.att_view || /attend[ae]nc[ea]|attendence|hazri|haziri|hajri|kitne (log|worker|workers|staff)|kaun kaun|kis kis/.test(tl)) && !e.name && !e.item && !/expense|kharch|\bpo\b|indent/.test(tl)) {
@@ -446,8 +453,9 @@ function intentOf(text, ctx) {
   if (/director|accountant|supervisor|staff list|employee list|kaun hai|kon hai|kis site (par|pe) (kaam|hai)/.test(tl)) return { kind: "READ", tool: "company_people", args: { name: e.name || null, role: (tl.match(/director|accountant|supervisor|it executive/) || [])[0] || null, site: e.site }, e };
   return { kind: "GENERAL", e };
 }
-function mergeFollowup(ctx, e, text) {
+function mergeFollowup(ctx, e, text, wantRows) {
   const tl = String(text || "").toLowerCase(); const args = { ...(ctx.args || {}) };
+  if (wantRows && !e.status && !e.site && !e.month && !e.last_n_days && !e.kind) return { tool: ctx.tool, args, view: "rows" };
   if (ctx.tool === "attendance_summary") { if (e.kind) args.kind = e.kind === "staff" ? "all" : e.kind; if (e.site) args.site = e.site; if (e.last_n_days === 2) args.date = daysAgo(1); return { tool: "attendance_summary", args, view: e.att_view || ctx.view || null }; }
   if (ctx.tool === "workers_list") { if (e.kind) args.kind = e.kind === "staff" ? "staff" : e.kind; if (e.site) args.site = e.site; return { tool: "workers_list", args }; }
   if (e.status) { if (ctx.tool === "purchase_orders") args.approval = e.status; else if (ctx.tool === "indents") args.status = e.status === "pending" ? "open" : e.status; else args.status = e.status; }
@@ -455,8 +463,15 @@ function mergeFollowup(ctx, e, text) {
   if (/detail|pura|full/.test(tl) && ctx.entities?.po_no) return { tool: "purchase_orders", args: { po_no: ctx.entities.po_no } };
   return { tool: ctx.tool, args };
 }
-function formatAnswer(tool, out, lang, view) {
+function rowsView(ds, lang) {
+  if (!ds?.rows?.length) return lang === "hi" ? "ERP me iska verified record nahi mila." : "No verified record found in the ERP for this.";
+  const L = [`${ds.title} — ${ds.rows.length} ${lang === "hi" ? "records" : "records"}${ds.rows.length > 40 ? (lang === "hi" ? " (pehle 40; poori list Excel/PDF me)" : " (first 40; full list in Excel/PDF)") : ""}`];
+  ds.rows.slice(0, 40).forEach((r, i) => L.push(`${i + 1}. ` + ds.columns.map((c, j) => (r[j] === "" || r[j] == null) ? null : `${c}: ${typeof r[j] === "number" && /amount|value|total|rate/i.test(c) ? inr(r[j]) : r[j]}`).filter(Boolean).join(" · ")));
+  return L.join("\n");
+}
+function formatAnswer(tool, out, lang, view, ds) {
   const H = lang === "hi"; if (out?.error) return H ? "ERP se data nahi aa saka. Thodi der baad phir try karein." : "Could not fetch that from the ERP right now. Please try again.";
+  if (view === "rows") return rowsView(ds, lang);
   if (view === "approval" && tool === "expenses") { const pend = out.by_status?.pending || 0; return `${H ? "Approval ke liye pending expenses" : "Pending expense approvals"}: ${out.pending_approvals || 0} ${H ? "entries" : "entries"} · ${inr(pend)}\n${H ? "Avadhi" : "Period"} ${out.from} → ${out.to}\n${H ? "Site-wise" : "Site-wise"}:\n` + Object.entries(out.by_site || {}).map(([k, v]) => `- ${k}: ${inr(v)}`).join("\n") + `\n${H ? "Aage" : "Next"}: Money → Expenses → Pending, ${H ? "ya yahin likhein" : "or say"} "expense #<id> approve karo".`; }
   return summarize(tool, out, lang);
 }
@@ -480,12 +495,12 @@ export async function POST(req) {
       const a = normArgs(args); const out = await runTool(sb, tool, a); const dataset = out?.dataset || null; if (dataset) { delete out.dataset; dataset.generated_by = user.email || user.id.slice(0, 8); }
       console.log("ERP_TOOL_CALL", JSON.stringify({ tool, args: a })); console.log("ERP_TOOL_RESULT", JSON.stringify({ tool, rows: out?.count ?? out?.total_workers ?? (out?.found === false ? 0 : out?.found ? 1 : null), error: out?.error || null }));
       if (view && tool === "attendance_summary") out.view = view;
-      const text = formatAnswer(tool, out, lang, view);
+      const text = formatAnswer(tool, out, lang, view, dataset);
       const entities = { ...(ctxIn?.entities || {}), ...(it.e || {}) }; if (out?.po?.po_no) entities.po_no = out.po.po_no;
       return Response.json({ ok: true, text, tools: [tool], dataset, confirm: out?.confirm || null, export: it.autoExport || null, ctx: { tool, args: a, entities, view: view || null } });
     };
     if (it.kind === "READ") return finish(it.tool, it.args, it.view);
-    if (it.kind === "FOLLOWUP") { const m = mergeFollowup(ctxIn, it.e, lastUser); return finish(m.tool, m.args, m.view || ((m.tool === "expenses" && m.args.status === "pending") ? "approval" : null)); }
+    if (it.kind === "FOLLOWUP") { const m = mergeFollowup(ctxIn, it.e, lastUser, it.view === "rows"); return finish(m.tool, m.args, m.view || ((m.tool === "expenses" && m.args.status === "pending") ? "approval" : null)); }
     if (it.kind === "ASK") return Response.json({ ok: true, text: it.text, ctx: ctxIn });
     if (it.kind === "EXPORT") return Response.json({ ok: true, text: lang === "hi" ? `${it.fmt === "pdf" ? "PDF" : "Excel"} taiyaar kiya ja raha hai…` : `Preparing the ${it.fmt === "pdf" ? "PDF" : "Excel"}…`, export: it.fmt, ctx: ctxIn });
     if (it.kind === "ACTION") {
@@ -501,6 +516,17 @@ export async function POST(req) {
       return Response.json({ ok: true, text: txt, confirm: out.confirm || null, ctx: ctxIn });
     }
     if (ctxIn?.pendingAction === "assign_task" && lastUser.trim()) { const title = lastUser.replace(/^task\s*[:\-]\s*/i, "").trim(); const out = await runTool(sb, "propose_action", { action: "assign_task", assignee: ctxIn.assignee || "director", title }); return Response.json({ ok: true, text: out.confirm ? (lang === "hi" ? "Confirm karein:" : "Please confirm:") : (out.message || ""), confirm: out.confirm || null, ctx: { ...ctxIn, pendingAction: null } }); }
+    // ---------- update428: current / live information → Gemini with Google Search grounding ----------
+    if (process.env.GEMINI_API_KEY && /\b(latest|current|today's|aaj ka|aaj ki|abhi ka|news|khabar|weather|mausam|temperature|gold rate|silver rate|petrol|diesel|share price|stock price|nifty|sensex|exchange rate|dollar rate|score|match|election|who won|kaun jeeta|rate today|price today|2026)\b/i.test(lastUser) && it.kind === "GENERAL") {
+      try {
+        const gm = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${gm}:generateContent`, { method: "POST", headers: { "content-type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY }, body: JSON.stringify({ contents: [{ parts: [{ text: `${lang === "hi" ? "Reply in Hindi/Hinglish as the user wrote." : "Reply in the user's language."} Be concise (≤ 8 lines) and cite the source name inline.\n\nQuestion: ${lastUser}` }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0.2, maxOutputTokens: 600 } }) });
+        const j = await r.json().catch(() => ({}));
+        const text = (j?.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("").trim();
+        console.log(r.ok ? "GEMINI_SEARCH_SUCCESS" : "GEMINI_SEARCH_FAILED", JSON.stringify({ status: r.status, chars: text.length, ms: Date.now() - t0 }));
+        if (r.ok && text) return Response.json({ ok: true, text, tools: ["web_search"], ctx: ctxIn });
+      } catch (e) { console.warn("GEMINI_SEARCH_FAILED", JSON.stringify({ reason: String(e.message || e).slice(0, 80) })); }
+    }
     // ---------- GENERAL / unresolved → LLM ----------
     const ctx = await helpContext(sb, lastUser);
     const langLine = lang === "hi" ? "Reply in the user's language: Hindi (Devanagari) unless they wrote in English." : lang === "gu" ? "Reply in Gujarati unless they wrote in English." : "Reply in the language the user wrote in (English / Hindi / Gujarati / Hinglish → reply in Hindi or Hinglish as they did).";
@@ -554,9 +580,10 @@ ${ctx ? "\nRelevant Help Center articles:\n" + ctx : ""}`;
       return last || new Response(JSON.stringify({ error: { message: "all models busy" } }), { status: 503 });
     };
     console.log("GROQ_REQUEST_STARTED", JSON.stringify({ model: MODEL, turns: recent.length, lang, ctxArticles: ctx ? (ctx.match(/^## /gm) || []).length : 0 }));
-    const toolset = pickTools(lastUser); let lastOut = null, lastToolName = null;
+    let toolset = pickTools(lastUser); let lastOut = null, lastToolName = null;
+    if (!toolset && ctxIn?.tool) toolset = TOOLS.filter(x => x.function.name === ctxIn.tool || x.function.name === "propose_action");   // update428: context tool stays reachable
     for (let round = 0; round < 3; round++) {
-      const body = { temperature: 0.2, max_tokens: 600, messages: chat }; if (toolset && toolset.length) { body.tools = toolset; body.tool_choice = "auto"; }
+      const body = { temperature: toolset ? 0.2 : 0.5, max_tokens: toolset ? 600 : 1200, messages: chat }; if (toolset && toolset.length) { body.tools = toolset; body.tool_choice = "auto"; }
       const r = await groq(body);
       const j = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -564,12 +591,17 @@ ${ctx ? "\nRelevant Help Center articles:\n" + ctx : ""}`;
         // update422: the ERP data is already here — never lose it because the phrasing model is busy
         if (lastOut) { const text = summarize(lastToolName, lastOut, lang); console.log("GROQ_REQUEST_SUCCESS", JSON.stringify({ model: "erp-direct", chars: text.length, tools: toolsUsed, rounds: round + 1, ms: Date.now() - t0 })); if (dataset) dataset.generated_by = user.email || user.id.slice(0, 8); return Response.json({ ok: true, text, tools: toolsUsed, dataset, confirm, ctx: { tool: lastToolName, args: {}, entities: it.e || {} } }); }
         const direct = await directAnswer(sb, lastUser, lang); if (direct) { console.log("GROQ_REQUEST_SUCCESS", JSON.stringify({ model: "erp-direct", chars: direct.text.length, tools: direct.tools, ms: Date.now() - t0 })); return Response.json({ ok: true, ...direct }); }
-        return Response.json({ ok: true, text: lang === "hi" ? "Abhi general AI jawab uplabdh nahi hai — thodi der baad phir poochhein. ERP ke sawal (expense, PO, attendance, indent, stock) seedhe poochh sakte hain." : "General AI answers are unavailable for a moment — please try again shortly. ERP questions (expenses, POs, attendance, indents, stock) still work.", soft: true, ctx: ctxIn });
+        return Response.json({ ok: true, text: lang === "hi" ? "Is sawaal ka jawab abhi nahi de paya. Ek baar phir poochhein, ya thoda alag shabdon me likhein." : "I couldn't answer that just now. Please ask once more, or phrase it a little differently.", soft: true, ctx: ctxIn });
       }
       const msg = j?.choices?.[0]?.message || {};
       const calls = msg.tool_calls || [];
       if (!calls.length) {
-        const text = (msg.content || "").trim();
+        let text = (msg.content || "").trim();
+        // update428: an answer with no tool call must never present ERP-looking data (ids, ₹ amounts, PO numbers)
+        if (!toolsUsed.length && /₹|\b(PO|IND|GRN)\/\d|\|\s*\d{2,}\s*\|/.test(text) && /expense|po|indent|grn|worker|attendance|vendor|stock|salary|approve/i.test(lastUser)) {
+          console.warn("AI_GUARD_BLOCKED", JSON.stringify({ reason: "erp-looking answer without tool" }));
+          text = lang === "hi" ? "Is sawaal ke liye ERP ka verified record chahiye — thoda spasht likhiye (jaise: 'pending expense batao', 'expense #392 approve karo', 'PO/2609/0077 ka detail')." : "That needs verified ERP data — please ask it a little more specifically (e.g. 'pending expenses', 'expense #392 approve karo', 'PO/2609/0077 ka detail').";
+        }
         console.log("GROQ_REQUEST_SUCCESS", JSON.stringify({ model: usedModel, chars: text.length, tools: toolsUsed, rounds: round + 1, ms: Date.now() - t0, usage: j?.usage || null }));
         if (dataset) dataset.generated_by = user.email || user.id.slice(0, 8);
         return Response.json({ ok: true, text, tools: toolsUsed, dataset, confirm, ctx: toolsUsed.length ? { tool: toolsUsed[toolsUsed.length - 1], args: {}, entities: it.e || {} } : ctxIn });
