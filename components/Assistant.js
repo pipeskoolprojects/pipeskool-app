@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { detectLang, answerLang, matchKB, suggestionsFor, liveAnswer, createTicket, askAI, aiStatus, isDataQuery, wantsExcel, downloadDataset } from "@/lib/assistant";   // update416/417/418
+import { detectLang, answerLang, matchKB, suggestionsFor, liveAnswer, createTicket, askAI, aiStatus, isDataQuery, wantsExcel, downloadDataset, performAssistantAction } from "@/lib/assistant";   // update416-420
 
 const T = {
   en: { title: "Pipeskool Assistant", hint: "Ask anything about the app…", helpful: "Did this help?", yes: "Yes 👍", no: "No — get human help",
@@ -64,7 +64,7 @@ export default function Assistant() {
     setMsgs(m => [...m, { who: "a", thinking: true }]);
     const history = [...msgs.filter(x => x.who === "u" || x.aiText).map(x => x.who === "u" ? { role: "user", content: x.text } : { role: "assistant", content: x.aiText }), { role: "user", content: clean }];
     const ai = await askAI(history, L, sess, path);
-    setMsgs(m => { const rest = m.filter(x => !x.thinking); return ai?.text ? [...rest, { who: "a", note, aiText: ai.text, langUsed: L, dataset: ai.dataset, tools: ai.tools }] : [...rest, { who: "a", nomatch: true, langUsed: L, aiError: ai?.error || "AI gave no answer." }]; });
+    setMsgs(m => { const rest = m.filter(x => !x.thinking); return ai?.text ? [...rest, { who: "a", note, aiText: ai.text, langUsed: L, dataset: ai.dataset, tools: ai.tools, confirm: ai.confirm }] : [...rest, { who: "a", aiText: ai?.error || "AI service is temporarily busy. Please try again.", langUsed: L, soft: true }]; });
     if (ai?.dataset && wantsExcel(clean)) downloadDataset(ai.dataset);   // update418: "Excel bana do" → file from the exact ERP rows
   }
 
@@ -122,7 +122,15 @@ export default function Assistant() {
                   {m.thinking ? <div className="muted" style={{ fontSize: 12.5 }}>… thinking</div>
                   : m.aiText ? (<><div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.aiText}</div>
                       {m.dataset?.rows?.length > 0 && <button type="button" style={{ fontSize: 11.5, marginTop: 8 }} onClick={() => downloadDataset(m.dataset)}>⬇ Excel · {m.dataset.title} ({m.dataset.rows.length} rows)</button>}
-                      <div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>{m.tools?.length ? `Live ERP data (${m.tools.join(", ")}) · read-only` : "AI answer — verify against the app."}</div></>)
+                      {m.confirm && !m.confirmDone && (<div style={{ marginTop: 8, background: "#FFF7ED", border: "1px solid #FDBA74", borderRadius: 8, padding: 8 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Confirm: {m.confirm.label}</div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button type="button" className="primary" style={{ fontSize: 11.5 }} onClick={async () => { const r = await performAssistantAction(m.confirm, sess); setMsgs(x => x.map(y => y === m ? { ...y, confirmDone: true } : y).concat([{ who: "a", aiText: r.ok ? r.text : "⚠ " + (r.error || "Not allowed — the app refused this change for your role."), langUsed: m.langUsed }])); }}>✓ Confirm</button>
+                          <button type="button" style={{ fontSize: 11.5 }} onClick={() => setMsgs(x => x.map(y => y === m ? { ...y, confirmDone: true } : y).concat([{ who: "a", aiText: "Cancelled — nothing was changed.", langUsed: m.langUsed }]))}>Cancel</button>
+                        </div>
+                        <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>Applied through the app with your permissions; logged under your name.</div>
+                      </div>)}
+                      {!m.soft && <div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>{m.tools?.length ? "Live ERP data" : "AI answer — verify against the app."}</div>}</>)
                   : m.nomatch ? (
                     <>
                       <div>{T[m.langUsed || lang].nomatch}</div>
