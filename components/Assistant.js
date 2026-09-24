@@ -4,7 +4,8 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { detectLang, answerLang, matchKB, suggestionsFor, liveAnswer, createTicket, askAI, aiStatus, isDataQuery, wantsExcel, wantsPdf, downloadDataset, openPdfReport, performAssistantAction, uploadBillForMatch } from "@/lib/assistant";   // update416-421
+import { detectLang, answerLang, matchKB, suggestionsFor, liveAnswer, createTicket, askAI, aiStatus, isDataQuery, wantsExcel, wantsPdf, downloadDataset, openPdfReport, performAssistantAction, uploadBillForMatch, resetAiCtx, getAiCtx, setAiCtx } from "@/lib/assistant";   // update416-429
+import { listChats, loadChat, saveChat, renameChat, archiveChat, autoTitle } from "@/lib/aiChats";   // update429
 
 const T = {
   en: { title: "Pipeskool Assistant", hint: "Ask anything about the app…", helpful: "Did this help?", yes: "Yes 👍", no: "No — get human help",
@@ -29,9 +30,16 @@ export default function Assistant() {
   const [sess, setSess] = useState(null);
   const [open, setOpen] = useState(false);
   const [full, setFull] = useState(false); const [attach, setAttach] = useState(null);   // update424: fullscreen + pending file
+  // update429: chat history (server-side)
+  const [chatId, setChatId] = useState(null); const [chatTitle, setChatTitle] = useState(""); const [hist, setHist] = useState(null); const [histQ, setHistQ] = useState(""); const [histErr, setHistErr] = useState("");
+  const persist = async (nextMsgs, firstText) => { try { if (!sess?.id) return; const title = chatId ? null : autoTitle(firstText); const r = await saveChat(chatId, { userId: sess.id, title, messages: nextMsgs, ctx: getAiCtx(), lang }); if (r.ok && !chatId) { setChatId(r.id); setChatTitle(title); } } catch {} };
+  const newChat = () => { setMsgs([]); setChatId(null); setChatTitle(""); resetAiCtx(); setHist(null); };
+  const openChat = async id => { try { const c = await loadChat(id); if (!c) return; setMsgs(c.messages || []); setChatId(c.id); setChatTitle(c.title); setAiCtx(c.ctx || null); if (c.lang) setLang(c.lang); setHist(null); } catch (e) { setHistErr(e.message); } };
+  const openHistory = async () => { setHistErr(""); try { setHist(await listChats(histQ)); } catch (e) { setHistErr(e.message); setHist([]); } };
   const [msgs, setMsgs] = useState([]);
   const [aiSt, setAiSt] = useState(null);   // update417: { on, model } from GET /api/ai/chat
-  useEffect(() => { if (open && aiSt === null) aiStatus().then(setAiSt); }, [open]);   // eslint-disable-line react-hooks/exhaustive-deps       // {who:'u'|'a', text?, steps?, link?, note?, kbId?}
+  useEffect(() => { if (open && aiSt === null) aiStatus().then(setAiSt); }, [open]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const last = msgs[msgs.length - 1]; if (!last || last.thinking || last.who !== "a" || msgs.length < 2) return; const first = msgs.find(m => m.who === "u"); persist(msgs, first?.text || ""); }, [msgs]);   // eslint-disable-line react-hooks/exhaustive-deps       // {who:'u'|'a', text?, steps?, link?, note?, kbId?}
   const [input, setInput] = useState("");
   const [lang, setLang] = useState("en");
   const [ticket, setTicket] = useState(null); // {route, subject, body, file}
@@ -123,12 +131,28 @@ export default function Assistant() {
               <div style={{ display: "flex", background: "#23272D", borderRadius: 999, padding: 2 }}>
                 {["en", "hi", "gu"].map(l => <button key={l} type="button" onClick={() => setLang(l)} style={{ fontSize: 10, fontWeight: 700, padding: "4px 8px", borderRadius: 999, border: "none", cursor: "pointer", background: lang === l ? "#E8622B" : "transparent", color: lang === l ? "#1a1207" : "#9096A0" }}>{l.toUpperCase()}</button>)}
               </div>
+              <button type="button" onClick={() => hist ? setHist(null) : openHistory()} title="Chat history" style={{ width: 28, height: 28, borderRadius: 8, background: hist ? "#E8622B" : "#23272D", border: "none", color: hist ? "#1a1207" : "#9096A0", cursor: "pointer", fontSize: 14 }}>🕘</button>
+              <button type="button" onClick={newChat} title="New chat" style={{ width: 28, height: 28, borderRadius: 8, background: "#23272D", border: "none", color: "#9096A0", cursor: "pointer", fontSize: 14 }}>＋</button>
               <button type="button" onClick={() => setFull(f => !f)} title={full ? "Minimize" : "Fullscreen"} style={{ width: 28, height: 28, borderRadius: 8, background: "#23272D", border: "none", color: "#9096A0", cursor: "pointer", fontSize: 14 }}>{full ? "⤡" : "⤢"}</button>
               <button type="button" onClick={() => { setOpen(false); setFull(false); }} title="Close" style={{ width: 28, height: 28, borderRadius: 8, background: "#23272D", border: "none", color: "#9096A0", cursor: "pointer", fontSize: 14 }}>✕</button>
             </div>
           </div>
 
-          <div style={{ flex: 1, overflowY: "auto", padding: full ? "16px 8%" : 14, display: "flex", flexDirection: "column", gap: 12 }}>
+          {hist && (
+            <div style={{ flex: 1, overflowY: "auto", padding: 14 }}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}><input placeholder="Search chats…" value={histQ} onChange={e => setHistQ(e.target.value)} onKeyDown={e => e.key === "Enter" && openHistory()} style={{ flex: 1, background: "#23272D", border: "1px solid rgba(255,255,255,.1)", borderRadius: 10, padding: "8px 10px", color: "#F5F3EF", fontSize: 12.5 }} /><button type="button" onClick={openHistory} style={{ borderRadius: 8, background: "#23272D", border: "none", color: "#9096A0", padding: "0 12px" }}>Search</button><button type="button" onClick={newChat} style={{ borderRadius: 8, background: "linear-gradient(180deg,#FF7A45,#E8622B)", border: "none", color: "#1a1207", padding: "0 12px", fontWeight: 600 }}>＋ New chat</button></div>
+              {histErr && <div style={{ color: "#F5A3A3", fontSize: 12, marginBottom: 8 }}>{histErr}</div>}
+              {hist.length === 0 && !histErr && <div style={{ color: "#9096A0", fontSize: 12.5 }}>No saved chats yet.</div>}
+              {hist.map(c => (
+                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, background: c.id === chatId ? "#2C3139" : "#23272D", borderRadius: 10, padding: "9px 12px", marginBottom: 6 }}>
+                  <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => openChat(c.id)}><div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.title}</div><div style={{ fontSize: 10.5, color: "#9096A0" }}>{new Date(c.updated_at).toLocaleString("en-IN")}</div></div>
+                  <button type="button" title="Rename" style={{ background: "transparent", border: "none", color: "#9096A0", cursor: "pointer" }} onClick={async () => { const t = window.prompt("Chat title:", c.title); if (t && t.trim()) { await renameChat(c.id, t.trim()); openHistory(); if (c.id === chatId) setChatTitle(t.trim()); } }}>✎</button>
+                  <button type="button" title="Archive" style={{ background: "transparent", border: "none", color: "#F5A3A3", cursor: "pointer" }} onClick={async () => { if (window.confirm(`Archive "${c.title}"?`)) { await archiveChat(c.id); if (c.id === chatId) newChat(); openHistory(); } }}>🗑</button>
+                </div>))}
+            </div>
+          )}
+          <div style={{ flex: 1, overflowY: "auto", padding: full ? "16px 8%" : 14, display: hist ? "none" : "flex", flexDirection: "column", gap: 12 }}>
+            {chatTitle && <div style={{ fontSize: 11, color: "#9096A0", textAlign: "center" }}>{chatTitle}</div>}
             {msgs.length === 0 && (
               <div>
                 <div style={{ fontSize: 12.5, marginBottom: 8 }}>
