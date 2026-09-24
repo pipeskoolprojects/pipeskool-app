@@ -43,6 +43,7 @@ const TOOLS = [
   { type: "function", function: { name: "item_rate_history", description: "Purchase rate history of a product from past POs: vendor, rate, list/discount, qty, PO no, date, site, GST — latest first. Use for 'is product ka rate', 'pehle kis vendor se liya', 'last 5 purchase rate', 'Turakhia se is item ka last rate'.", parameters: { type: "object", properties: { item: { type: "string" }, vendor: S, limit: I }, required: ["item"] } } },
   { type: "function", function: { name: "vendor_report", description: "One vendor's purchase report for a period: PO count, total value, PO-wise date/site/amount/items/status/approval/delivery/received. Use for 'is month Turakhia ko kitne PO', 'vendor ka pura month ka purchase detail'.", parameters: { type: "object", properties: { vendor: { type: "string" }, last_n_days: I, date_from: S, date_to: S }, required: ["vendor"] } } },
   { type: "function", function: { name: "workers_list", description: "List of people: workers (labour), site staff, office staff — name, type, designation, site. kind = worker|site_staff|office_staff|staff|all.", parameters: { type: "object", properties: { kind: S, site: S, search: S }, required: [] } } },
+  { type: "function", function: { name: "petty_cash", description: "Petty cash: requests awaiting approval (count + amount, by site/person), approved/paid grants, returns. Use for 'petty cash kitna approve karna baki', 'petty cash ledger'.", parameters: { type: "object", properties: { status: S, last_n_days: I, date_from: S, date_to: S, site: S }, required: [] } } },
   { type: "function", function: { name: "items", description: "Item / material master list or search: name, type, unit, min stock. Use for 'product list', 'CPVC items'.", parameters: { type: "object", properties: { search: S, type: S, limit: I }, required: [] } } },
   { type: "function", function: { name: "propose_action", description: "Prepare an ERP CHANGE for the user's confirmation. Never performs the change itself. action = mark_po_delivered (needs po_no) | approve_expense (needs expense_id) | reject_expense (expense_id, reason). Returns current state + a confirmation card the app shows; the change happens only after the user taps Confirm, through the app's own permission-checked function.", parameters: { type: "object", properties: { action: { type: "string", description: "mark_po_delivered | approve_expense | reject_expense | assign_task" }, po_no: S, expense_id: I, reason: S, title: S, assignee: S, due: S }, required: ["action"] } } },
 ];
@@ -246,6 +247,17 @@ async function runTool(sb, name, a = {}) {
     const rows = list.map(p => ({ po_no: p.po_no, date: String(p.created_at).slice(0, 10), site: sname(p.site_id), amount: Number(p.total_amount || 0), items: (p.po_items || []).length, item_list: (p.po_items || []).slice(0, 6).map(i => `${i.item_name} × ${i.qty} ${i.unit || ""}`).join("; "), approval: p.approval_status, delivery: p.delivery_status || "", received: rc[p.id] ? `${rc[p.id].items_complete}/${rc[p.id].item_count} items` : "—" }));
     return { vendor: a.vendor, from, to, count: rows.length, total_value: rows.reduce((s2, r) => s2 + r.amount, 0), by_site: rows.reduce((m, r) => (m[r.site] = (m[r.site] || 0) + r.amount, m), {}), pos: rows.slice(0, 40), dataset: { title: `POs ${a.vendor} ${from} to ${to}`.slice(0, 60), columns: ["PO", "Date", "Site", "Amount", "Items", "Item list", "Approval", "Delivery", "Received"], rows: rows.map(r => Object.values(r)) } };
   }
+  if (name === "petty_cash") {
+    const from = a.date_from || daysAgo(89), to = a.date_to || daysAgo(0);
+    let q = sb.from("petty_cash_requests").select("id, site_id, amount, approved_amount, purpose, status, created_at, reviewed_at, requester:requested_by(full_name), reviewer:reviewed_by(full_name)").gte("created_at", from).lte("created_at", to + "T23:59:59").order("created_at", { ascending: false }).limit(500);
+    if (a.status) q = q.eq("status", a.status); if (siteIds) q = q.in("site_id", siteIds);
+    const d = (await q).data || [];
+    const rows = d.map(x => ({ id: x.id, date: String(x.created_at).slice(0, 10), site: sname(x.site_id), requested_by: x.requester?.full_name || "", purpose: x.purpose || "", amount: Number(x.amount || 0), approved: x.approved_amount != null ? Number(x.approved_amount) : "", status: x.status, reviewed_by: x.reviewer?.full_name || "" }));
+    const pend = rows.filter(r => r.status === "pending");
+    const by = (arr, k) => arr.reduce((m, r) => (m[r[k] || "—"] = (m[r[k] || "—"] || 0) + r.amount, m), {});
+    let grants = []; try { let g = sb.from("petty_cash_grants").select("amount, note, created_at, site_id").gte("created_at", from).lte("created_at", to + "T23:59:59"); if (siteIds) g = g.in("site_id", siteIds); grants = (await g).data || []; } catch {}
+    return { from, to, count: rows.length, pending_count: pend.length, pending_amount: pend.reduce((s2, r) => s2 + r.amount, 0), pending_by_site: by(pend, "site"), pending_by_person: by(pend, "requested_by"), by_status: rows.reduce((m, r) => (m[r.status] = (m[r.status] || 0) + 1, m), {}), granted_amount: grants.reduce((s2, g) => s2 + Number(g.amount || 0), 0), requests: rows.slice(0, 40), dataset: { title: `Petty cash requests ${from} to ${to}`, filters: a.status ? `Status: ${a.status}` : "All statuses", columns: ["ID", "Date", "Site", "Requested by", "Purpose", "Amount", "Approved", "Status", "Reviewed by"], rows: rows.map(r => Object.values(r)) } };
+  }
   if (name === "items") {
     let q = sb.from("item_master").select("id, display_name, item_type, material, unit, min_stock, is_active").eq("is_active", true).order("display_name").limit(Math.min(Number(a.limit) || 60, 400));
     if (a.search) { const w = String(a.search).toLowerCase().split(/\s+/).filter(Boolean); w.forEach(x => { q = q.ilike("display_name", `%${x}%`); }); } if (a.type) q = q.ilike("item_type", `%${a.type}%`);
@@ -376,6 +388,7 @@ function summarize(tool, o, lang) {
     case "pending_deliveries": L.push(`${o.count} PO(s) ${H ? "की डिलीवरी बाकी" : "with pending delivery"}`); (o.pos || []).slice(0, 15).forEach(p => L.push(`- ${p.po_no} · ${p.vendor} · ${p.site} · pending ${p.pending} (${p.items_done})`)); break;
     case "vendor_outstanding": L.push(`${H ? "कुल बकाया" : "Total outstanding"} ${inr(o.total_outstanding)} (${o.count} vendors)`); (o.vendors || []).slice(0, 15).forEach(v => L.push(`- ${v.vendor}: PO ${inr(v.po_value)} − paid ${inr(v.paid)} = ${inr(v.outstanding)}`)); L.push(o.note || ""); break;
     case "stock_position": L.push(`${o.count} items · ${H ? "मूल्य" : "value"} ${inr(o.total_value)} · low stock: ${o.low_stock}`); (o.items || []).slice(0, 15).forEach(i => L.push(`- ${i.item} · ${i.site} · ${i.balance} ${i.unit}`)); break;
+    case "petty_cash": L.push(`${H ? "Petty cash — approval ke liye pending" : "Petty cash — pending approval"}: ${o.pending_count} ${H ? "request" : "request(s)"} · ${inr(o.pending_amount)} (${o.from} → ${o.to})`, o.pending_count ? (H ? "Site-wise:" : "Site-wise:") : "", o.pending_count ? kv(o.pending_by_site) : "", o.pending_count ? (H ? "Person-wise:" : "Person-wise:") : "", o.pending_count ? kv(o.pending_by_person) : "", `${H ? "Is avadhi me kul request" : "All requests in period"}: ${o.count} · ${Object.entries(o.by_status).map(([k, v]) => `${k} ${v}`).join(", ")} · ${H ? "granted" : "granted"} ${inr(o.granted_amount)}`); (o.requests || []).filter(r => r.status === "pending").slice(0, 15).forEach(r => L.push(`- #${r.id} · ${r.date} · ${r.requested_by} · ${r.site} · ${inr(r.amount)} · ${r.purpose}`)); L.push(H ? "Aage: Money → Petty cash requests → Approve." : "Next: Money → Petty cash requests → Approve."); break;
     case "items": L.push(`${o.count} item(s)${o.total_items_in_master ? ` (${H ? "मास्टर में कुल" : "master total"} ${o.total_items_in_master})` : ""}`, kv(o.by_type)); (o.items || []).slice(0, 20).forEach(i => L.push(`- ${i.item} · ${i.type || ""} · ${i.unit || ""}`)); if (o.count > 20) L.push(H ? "… पूरी सूची Excel/PDF में" : "… full list in Excel / PDF"); break;
     case "company_people": L.push(`${H ? "निदेशक" : "Directors"}: ${(o.directors || []).join(", ") || "—"}`); (o.people || []).slice(0, 20).forEach(p => L.push(`- ${p.name} · ${p.role}${p.site ? " · " + p.site : ""}`)); break;
     default: L.push(JSON.stringify(o).slice(0, 800));
@@ -432,8 +445,18 @@ function extract(text) {
   if (e.item) { const vs = e.item.match(/^(.+?)\s+se\s+(.+)$/i); if (vs) { e.name = vs[1].trim(); e.item = vs[2].trim(); } e.item = e.item.replace(/^(is|ye|yeh|this)\s+/i, ""); }
   return e;
 }
+// update431: ERP DOMAIN GATE — a message is ERP only if it names ERP data (or is a follow-up in an ERP context).
+// General knowledge ("Virat Kohli kaun hai", "cricket kya hai", "Python code likho") never touches ERP tables.
+const ERP_WORDS = /(attend[ae]nc[ea]|attendence|hazri|haziri|hajri|punch|present|absent|aaye|nahi aaye|worker|workers|labour|labor|mazdoor|staff|employee|karmchari|salary|payroll|wage|wages|overtime|\bot\b|expense|expenses|kharch|kharcha|voucher|claim|petty|cash|advance|approval|approve|reject|indent|\bpo\b|purchase order|purchase|vendor|supplier|turakhia|grn|challan|delivery|deliver|stock|inventory|material|item|product|rate|bhav|price list|site|sites|kei|soul|atos|citadel|saptarshi|creek|mas|project|bill|invoice|payment|outstanding|bakaya|task|director|pipeskool|hamari company|humari company|hamare|humare|office)/i;
+const ERP_ID = /PO\s*\/\s*\d|IND\s*\/\s*\d|GRN\s*\/|PSP\s*\/|EXC\s*\/|#\s*\d{2,}|^(pvc|cpvc|upvc|gi|ss|swr|hdpe|ppr|ms)\b/i;
+function isErpDomain(text, ctx) { const t = String(text || ""); return ERP_WORDS.test(t) || ERP_ID.test(t) || (!!ctx?.tool && t.trim().split(/\s+/).length <= 4 && !/(kaun hai|kon hai|kya hai|kya hota|who is|what is|explain|samjhao|likho|code)/i.test(t)); }
+// update431: a follow-up must stay in the same ERP family as the context; naming a different object starts a new query
+const FAMILY = { attendance_summary: "att", person_attendance: "att", absent_streak: "att", expenses: "exp", person_expenses: "exp", purchase_orders: "po", vendor_report: "po", pending_deliveries: "po", vendor_outstanding: "po", purchase_summary: "po", indents: "ind", stock_position: "stock", grn_receipts: "grn", petty_cash: "petty", items: "items", item_rate_history: "items", workers_list: "people", company_people: "people" };
+function familyOf(tl) { if (/attend|hazri|haziri|hajri|punch|aaye|absent|present/.test(tl)) return "att"; if (/petty/.test(tl)) return "petty"; if (/expense|kharch|voucher|claim/.test(tl)) return "exp"; if (/\bpo\b|purchase|vendor|supplier|deliver/.test(tl)) return "po"; if (/indent/.test(tl)) return "ind"; if (/stock|inventory/.test(tl)) return "stock"; if (/grn|received/.test(tl)) return "grn"; if (/item|product|material|rate|bhav/.test(tl)) return "items"; if (/worker|staff|employee|director/.test(tl)) return "people"; return null; }
+function sameFamily(tl, ctx) { const f = familyOf(tl); return !f || !ctx?.tool || FAMILY[ctx.tool] === f; }
 function intentOf(text, ctx) {
   const tl = String(text || "").toLowerCase().trim(); const e = extract(text);
+  if (!isErpDomain(text, ctx)) return { kind: "GENERAL", e: {}, domain: "general" };
   const follow = /^(only|sirf|bas|isme se|inme se|iska|iski|isko|isse|is report|is ka|in ka|inka|unka|us ka|aur|and)\b/.test(tl) || (tl.split(/\s+/).length <= 3 && /pending|approved|rejected|today|aaj|kei|soul|atos|site|excel|pdf|detail|wale|wala/.test(tl));
   if (e.template) return { kind: "READ", tool: "workers_list", args: { kind: e.kind === "staff" ? "staff" : (e.kind && !e.all_people ? e.kind : "all"), site: e.site, template: true }, e, autoExport: "xlsx" };
   const fmt = /\b(excel|xlsx|spreadsheet)\b/.test(tl) ? "xlsx" : /\bpdf\b/.test(tl) ? "pdf" : null;
@@ -453,8 +476,8 @@ function intentOf(text, ctx) {
   const generalQ = /(kya hai|kya hota|kya hoti|kaise|kaun sa|explain|samjhao|samjha|batao ki|write|likho|likh do|code|program|translate|anuvad|meaning|matlab|difference|formula|calculate|kitna hota|\?$)/.test(tl) && !/(detail|one by one|har ek|wale|only|sirf)/.test(tl);
   const cue = /(detail|details|one by one|har ek|sab dikhao|sabhi dikhao|list do|list dikhao|poori list|puri list|full list|batao sab|expand|rows|dikhao|batao|do$|de do)/.test(tl);
   const bareFilter = words <= 4 && (e.status || e.site || e.kind || e.last_n_days || e.month || e.att_view);
-  if (ctx?.tool && !generalQ && !e.po_no && !e.indent_no && !e.name && !e.item && (cue && words <= 8 || bareFilter)) return { kind: "FOLLOWUP", e, view: /(detail|one by one|har ek|sab dikhao|sabhi dikhao|list|full|expand|rows)/.test(tl) && !e.status && !e.site && !e.kind ? "rows" : undefined };
-  if (follow && ctx?.tool && !e.po_no && !e.indent_no && !e.name && !e.item) return { kind: "FOLLOWUP", e };
+  if (ctx?.tool && !generalQ && !e.po_no && !e.indent_no && !e.name && !e.item && sameFamily(tl, ctx) && (cue && words <= 8 || bareFilter)) return { kind: "FOLLOWUP", e, view: /(detail|one by one|har ek|sab dikhao|sabhi dikhao|list|full|expand|rows)/.test(tl) && !e.status && !e.site && !e.kind ? "rows" : undefined };
+  if (follow && ctx?.tool && !e.po_no && !e.indent_no && !e.name && !e.item && sameFamily(tl, ctx)) return { kind: "FOLLOWUP", e };
   if (e.all_people && !/attendance|hazir|aaye|absent|present/.test(tl)) return { kind: "READ", tool: "workers_list", args: { kind: e.kind === "staff" ? "staff" : (e.kind || "all"), site: e.site }, e };
   if (/(worker|staff|employee|log)\s*(list|data|dikhao|batao|do\b|chahiye|khojo|dhundo)|list of (workers|staff|employees)/.test(tl) && !/attendance|aaye|absent|present/.test(tl)) return { kind: "READ", tool: "workers_list", args: { kind: e.kind === "staff" ? "staff" : (e.kind || "all"), site: e.site }, e };
   if ((e.att_view || /attend[ae]nc[ea]|attendence|hazri|haziri|hajri|kitne (log|worker|workers|staff)|kaun kaun|kis kis/.test(tl)) && !e.name && !e.item && !/expense|kharch|\bpo\b|indent/.test(tl)) {
@@ -469,6 +492,7 @@ function intentOf(text, ctx) {
   if (e.name && /expense|kharch|voucher|claim/.test(tl)) return { kind: "READ", tool: "person_expenses", args: { person: e.name, month: e.month, last_n_days: e.month ? null : (e.last_n_days || 365), status: e.status }, e };
   if (e.name && /attend|hazir|hazri|haziri|upasthit|punch|present|absent|history/.test(tl)) return { kind: "READ", tool: "person_attendance", args: { person: e.name, month: e.month, last_n_days: e.month ? null : (e.last_n_days || (/(full|pura|poori|puri|history|record)/.test(tl) ? 90 : 30)), view: e.att_view || null }, e };
   if (e.name && /\bpo\b|purchase|bheje|order/.test(tl)) return { kind: "READ", tool: "vendor_report", args: { vendor: e.name, month: e.month, last_n_days: e.month ? null : (e.last_n_days || 30), site: e.site }, e };
+  if (/^(pvc|cpvc|upvc|gi|ss|swr|hdpe|ppr|ms)\b/.test(tl) && tl.split(/\s+/).length <= 5) return { kind: "READ", tool: "items", args: { search: tl.replace(/\b(pipes|fittings)\b/g, m => m.slice(0, -1)) }, e };
   if (/(product|item|material)s?\s*(list|dikhao|batao|master|dikha)/.test(tl) || /item master/.test(tl)) return { kind: "READ", tool: "items", args: { search: (tl.match(/\b(cpvc|upvc|pvc|gi|ss|swr|valve|cement|tape|solvent)\b/) || [])[1] || null }, e };
   if (/absent|present|hazir|upasthit|nahi aa|attendance/.test(tl)) return e.last_n_days > 1 ? { kind: "READ", tool: "absent_streak", args: { days: e.last_n_days, site: e.site }, e } : { kind: "READ", tool: "attendance_summary", args: { site: e.site }, e };
   if (/indent/.test(tl)) return { kind: "READ", tool: "indents", args: { last_n_days: e.last_n_days || (e.month ? null : 30), month: e.month, status: e.status === "pending" ? "open" : e.status, site: e.site }, e };
@@ -478,8 +502,10 @@ function intentOf(text, ctx) {
   if (/grn|material aaya|received/.test(tl)) return { kind: "READ", tool: "grn_receipts", args: { last_n_days: e.last_n_days || 7, site: e.site, vendor: e.name || null }, e };
   if (/stock|inventory|balance/.test(tl)) return { kind: "READ", tool: "stock_position", args: { site: e.site }, e };
   if (/purchase summary|total purchase|kitna kharida/.test(tl)) return { kind: "READ", tool: "purchase_summary", args: { last_n_days: e.last_n_days || 7, month: e.month, site: e.site }, e };
+  if (/petty\s*cash|petty|pettycash/.test(tl)) return { kind: "READ", tool: "petty_cash", args: { status: /(approve|approval|baki|pending|karna hai)/.test(tl) ? "pending" : e.status, last_n_days: e.last_n_days, month: e.month, site: e.site }, e };
   if (/expense|kharch|voucher/.test(tl)) return { kind: "READ", tool: "expenses", args: { status: e.status, last_n_days: e.last_n_days, month: e.month, site: e.site }, e };
-  if (/director|accountant|supervisor|staff list|employee list|kaun hai|kon hai|kis site (par|pe) (kaam|hai)/.test(tl)) return { kind: "READ", tool: "company_people", args: { name: e.name || null, role: (tl.match(/director|accountant|supervisor|it executive/) || [])[0] || null, site: e.site }, e };
+  if (/(director|accountant|supervisor|it executive|site engineer|storekeeper|staff list|employee list|pipeskool|hamari company|humari company|hamare|humare)/.test(tl) && /(kaun|kon|who|list|naam|name|batao|dikhao|kis site|kaam karta|kahan)/.test(tl)) return { kind: "READ", tool: "company_people", args: { name: e.name || null, role: (tl.match(/director|accountant|supervisor|it executive|site engineer|storekeeper/) || [])[0] || null, site: e.site }, e };
+  if (tl.split(/\s+/).filter(Boolean).length <= 6 && /(pipe|pipes|fitting|fittings|valve|valves|cpvc|upvc|pvc|swr|gi\b|ss\b|elbow|tee|coupler|reducer|nipple|union|flange|solvent|cement|tank|pump|tape|clamp|\d+\s*mm)/.test(tl) && !/rate|price|bhav|kitne|stock|kharida/.test(tl)) return { kind: "READ", tool: "items", args: { search: tl.replace(/\b(list|dikhao|batao|do|ka|ki|ke|items?|products?|wale|wala)\b/g, " ").replace(/\s+/g, " ").trim() }, e };
   return { kind: "GENERAL", e };
 }
 function mergeFollowup(ctx, e, text, wantRows) {
@@ -514,19 +540,20 @@ export async function POST(req) {
     if (!key && !process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY) { console.warn("GROQ_REQUEST_SKIPPED", JSON.stringify({ reason: "no AI key set" })); return Response.json({ ok: false, error: "no_key" }); }
     const { user, sb } = await userClient(req);
     if (!user) { console.warn("GROQ_REQUEST_REJECTED", JSON.stringify({ reason: "no valid JWT" })); return Response.json({ ok: false, error: "Login required." }, { status: 401 }); }
-    const { messages = [], lang = "en", role = "", pathname = "", ctx: ctxIn = null } = await req.json();
+    const { messages = [], lang = "en", role = "", pathname = "", ctx: ctxIn = null, engineOnly = false, skipEngine = false } = await req.json();
     const recent = messages.filter(m => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string").slice(-10).map(m => ({ role: m.role, content: m.content.slice(0, 3000) }));
     if (!recent.length) return Response.json({ ok: false, error: "Empty message." });
     const lastUser = [...recent].reverse().find(m => m.role === "user")?.content || "";
     // ---------- update425: deterministic ERP engine first — facts never depend on the LLM ----------
-    let it = intentOf(lastUser, ctxIn);
+    let it = skipEngine ? { kind: "GENERAL", e: {}, domain: "general" } : intentOf(lastUser, ctxIn);
     // update429: a name with no ka/ki/ke ("Tanveer Ahmed attendance batao", "Tanveer Ahmed") — validate the leading words against the master
-    if (!it.e?.name && !it.e?.po_no && !it.e?.item && (it.kind === "GENERAL" || it.tool === "attendance_summary" || it.tool === "expenses" || it.tool === "workers_list")) {
+    if (it.domain !== "general" && !it.e?.name && !it.e?.po_no && !it.e?.item && (it.tool === "attendance_summary" || it.tool === "expenses" || it.tool === "person_expenses" || (it.kind === "GENERAL" && /attend|hazri|expense|kharch|salary/i.test(lastUser)))) {
       const ln = await leadingName(sb, lastUser);
       if (ln) { const tl = lastUser.toLowerCase(); const e = { ...it.e, name: ln.name };
         if (/attend|hazri|haziri|present|absent|history|punch/.test(tl)) it = { kind: "READ", tool: "person_attendance", args: { person: ln.name, month: e.month, last_n_days: e.month ? null : (e.last_n_days === 1 ? 1 : e.last_n_days || (/(full|pura|poori|puri|history|record)/.test(tl) ? 90 : 30)), view: e.att_view || null }, e };
         else if (/expense|kharch|voucher|claim/.test(tl)) it = { kind: "READ", tool: "person_expenses", args: { person: ln.name, month: e.month, last_n_days: e.month ? null : (e.last_n_days || 365), status: e.status }, e };
         else it = { kind: "READ", tool: "company_people", args: { name: ln.name }, e, personCard: true };
+        console.log("AI_ENTITY", JSON.stringify({ name: ln.name, resolved: ln.r?.name || null, ambiguous: !!ln.r?.ambiguous, tool: it.tool }));
       }
     }
     console.log("AI_INTENT", JSON.stringify({ kind: it.kind, tool: it.tool || it.action || null, e: it.e, hasCtx: !!ctxIn?.tool }));
@@ -538,6 +565,10 @@ export async function POST(req) {
       const entities = { ...(ctxIn?.entities || {}), ...(it.e || {}) }; if (out?.po?.po_no) entities.po_no = out.po.po_no;
       return Response.json({ ok: true, text, tools: [tool], dataset, confirm: out?.confirm || null, export: it.autoExport || null, ctx: { tool, args: a, entities, view: view || null } });
     };
+    if (it.kind === "READ" && (it.tool === "person_attendance" || it.tool === "person_expenses") && it.args.person) {
+      const who = await resolvePerson(sb, it.args.person); console.log("AI_ENTITY", JSON.stringify({ name: it.args.person, resolved: who?.ambiguous ? "ambiguous" : (who?.name || null) }));
+      if (!who) return Response.json({ ok: true, text: lang === "hi" ? `"${it.args.person}" ka Pipeskool ERP me koi verified record nahi mila (staff/worker master me nahi hai).` : `No verified Pipeskool ERP record for "${it.args.person}" (not in the staff/worker master).`, tools: [it.tool], ctx: ctxIn });
+    }
     if (it.kind === "READ") return finish(it.tool, it.args, it.view);
     if (it.kind === "FOLLOWUP") { const m = mergeFollowup(ctxIn, it.e, lastUser, it.view === "rows"); return finish(m.tool, m.args, m.view || ((m.tool === "expenses" && m.args.status === "pending") ? "approval" : null)); }
     if (it.kind === "ASK") return Response.json({ ok: true, text: it.text, ctx: ctxIn });
@@ -555,6 +586,7 @@ export async function POST(req) {
       return Response.json({ ok: true, text: txt, confirm: out.confirm || null, ctx: ctxIn });
     }
     if (ctxIn?.pendingAction === "assign_task" && lastUser.trim()) { const title = lastUser.replace(/^task\s*[:\-]\s*/i, "").trim(); const out = await runTool(sb, "propose_action", { action: "assign_task", assignee: ctxIn.assignee || "director", title }); return Response.json({ ok: true, text: out.confirm ? (lang === "hi" ? "Confirm karein:" : "Please confirm:") : (out.message || ""), confirm: out.confirm || null, ctx: { ...ctxIn, pendingAction: null } }); }
+    if (engineOnly && it.kind === "GENERAL") return Response.json({ ok: true, general: true, ctx: ctxIn });   // update431: client tries the Help Center before an LLM call
     // ---------- update428: current / live information → Gemini with Google Search grounding ----------
     if (process.env.GEMINI_API_KEY && /\b(latest|current|today's|aaj ka|aaj ki|abhi ka|news|khabar|weather|mausam|temperature|gold rate|silver rate|petrol|diesel|share price|stock price|nifty|sensex|exchange rate|dollar rate|score|match|election|who won|kaun jeeta|rate today|price today|2026)\b/i.test(lastUser) && it.kind === "GENERAL") {
       try {
