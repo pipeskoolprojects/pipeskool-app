@@ -80,7 +80,17 @@ async function resolvePerson(sb, q) {
   const [{ data: u }, { data: w }] = await Promise.all([sb.from("app_users").select("id, full_name, role, mobile, site_id, sites:site_id(name)").eq("is_active", true), sb.from("workers").select("id, full_name, category, mobile, site_id, sites:site_id(name)").eq("is_active", true)]);
   // staff punch through a mirror worker row with the same mobile (staffpay rule) → attendance is keyed by that worker_id
   const all = [...(u || []).map(x => ({ kind: "staff", id: x.id, name: x.full_name, role: x.role, site: x.sites?.name || "", site_id: x.site_id, worker_id: ((w || []).find(y => y.mobile && y.mobile === x.mobile) || {}).id || null })), ...(w || []).filter(x => !(u || []).some(y => y.mobile && y.mobile === x.mobile)).map(x => ({ kind: "worker", id: x.id, name: x.full_name, role: x.category, site: x.sites?.name || "", site_id: x.site_id, worker_id: x.id }))];
-  const hit = bestName(q, all.map(x => x.name)); return hit ? all.find(x => x.name === hit) : null;
+  const ql = String(q).trim().toLowerCase().replace(/\s+/g, " ");
+  const tiers = [all.filter(x => x.name.toLowerCase().replace(/\s+/g, " ") === ql), all.filter(x => x.name.toLowerCase().startsWith(ql)), all.filter(x => x.name.toLowerCase().includes(ql)), all.filter(x => ql.split(" ").every(w => x.name.toLowerCase().includes(w)))];
+  for (const t of tiers) { if (t.length === 1) return t[0]; if (t.length > 1) { const w = t.filter(x => x.kind === "worker" || x.worker_id); if (w.length === 1) return w[0]; return { ambiguous: true, options: t.slice(0, 6).map(x => ({ name: x.name, kind: x.kind, site: x.site, role: x.role || x.category })) }; } }
+  const hit = bestName(q, all.map(x => x.name), 0.55); return hit ? all.find(x => x.name === hit) : null;
+}
+// update429: detect a person name that has no ka/ki/ke after it ("Tanveer Ahmed attendance batao") by checking the leading words against the master
+async function leadingName(sb, text) {
+  const words = String(text || "").trim().split(/\s+/); const STOP = /^(aaj|ajj|kal|last|pichle|total|only|sirf|bas|mujhko|mujhe|muje|mujhko|mera|meri|mere|humko|hume|batao|btao|bata|dikhao|dikha|do|de|kar|attendance|attendence|attendanc[a-z]*|hazri|haziri|expense|expenses|kharch|po|indent|full|pura|puri|poora|history|record|report|september|august|october|july|june|month|ka|ki|ke|ko|se|dekhni|dekhna|hai|chahiye|worker|workers|staff|log|kitne|kitna|din|days|present|absent|the|tha|thi)$/i;
+  const lead = []; for (const w of words) { if (STOP.test(w) || /[^A-Za-z.]/.test(w)) break; lead.push(w); if (lead.length === 3) break; }
+  for (let n = lead.length; n >= 1; n--) { const cand = lead.slice(0, n).join(" "); if (cand.length < 3) continue; const r = await resolvePerson(sb, cand); if (r && (r.ambiguous || cand.length >= 4)) return { name: cand, r }; }
+  return null;
 }
 // update426: one definition of who is who — worker (labour, workers table, not a staff mobile), site staff, office staff (HEAD OFFICE / office roles)
 const OFFICE_RE = /head\s*office|ho\b|office/i;
@@ -196,14 +206,22 @@ async function runTool(sb, name, a = {}) {
     return { person: who, from, to, count: rows.length, total: rows.reduce((s2, r) => s2 + r.amount, 0), by_site: sum("site"), by_category: sum("category"), by_status: sum("status"), rows: rows.slice(0, 60), dataset: { title: `Expenses ${who.name} ${from} to ${to}`, columns: ["Date", "Site", "Category", "Paid to", "Amount", "Status", "Note"], rows: rows.map(r => Object.values(r)) } };
   }
   if (name === "person_attendance") {
-    const who = await resolvePerson(sb, a.person); if (!who) return { found: false, message: `No staff/worker named like "${a.person}"` };
+    let who = await resolvePerson(sb, a.person); if (!who) return { found: false, message: `No staff/worker named like "${a.person}"` };
+    if (who.ambiguous) return { found: true, ambiguous: true, options: who.options, message: "more than one person matches — ask which one" };
     const from = a.date_from || daysAgo(29), to = a.date_to || daysAgo(0);
-    if (!who.worker_id) return { found: true, person: who, message: `${who.name} is staff without a punch profile — no attendance rows exist for them.` };
+    if (!who.worker_id) { const { data: wf } = await sb.from("workers").select("id, full_name, site_id").ilike("full_name", `%${who.name.split(" ")[0]}%`).limit(3); const w1 = (wf || []).find(x => x.full_name.toLowerCase() === who.name.toLowerCase()) || ((wf || []).length === 1 ? wf[0] : null); if (w1) who = { ...who, worker_id: w1.id }; }
+    if (!who.worker_id) return { found: true, person: who, message: `${who.name} has no punch profile — no attendance rows exist for them.` };
     const d = (await sb.from("attendance").select("att_date, site_id, punch_in, punch_out, hours_worked, status, ot_approved_hours, punch_type").gte("att_date", from).lte("att_date", to).eq("worker_id", who.worker_id).order("att_date")).data || [];
     const t = x => x ? String(x).slice(11, 16) : "";
-    const rows = d.map(x => ({ date: x.att_date, site: sname(x.site_id), in: t(x.punch_in), out: t(x.punch_out), hours: Number(x.hours_worked || 0), ot: Number(x.ot_approved_hours || 0), status: x.status || (x.punch_in ? "present" : ""), via: x.punch_type || "" }));
+    const rows = d.map(x => ({ date: x.att_date, site: sname(x.site_id), in: t(x.punch_in), out: t(x.punch_out), hours: Number(x.hours_worked || 0), ot: Number(x.ot_approved_hours || 0), status: x.status || (x.punch_in ? "present" : "absent"), via: x.punch_type || "" }));
     const present = rows.filter(r => r.in || r.status === "present" || r.status === "half").length;
-    return { person: who, from, to, days_present: present, days_recorded: rows.length, total_hours: rows.reduce((s2, r) => s2 + r.hours, 0), total_ot: rows.reduce((s2, r) => s2 + r.ot, 0), rows: rows.slice(0, 62), dataset: { title: `Attendance ${who.name} ${from} to ${to}`, columns: ["Date", "Site", "In", "Out", "Hours", "OT", "Status", "Via"], rows: rows.map(r => Object.values(r)) } };
+    // calendar view: every date in the range, so absent dates are explicit (Sundays / holidays marked)
+    const hol = new Set((((await sb.from("company_holidays").select("holiday_date").gte("holiday_date", from).lte("holiday_date", to).neq("is_active", false)).data) || []).map(h => h.holiday_date));
+    const byD = {}; rows.forEach(r => { byD[r.date] = r; }); const cal = [];
+    for (let dt = new Date(from + "T00:00:00Z"); dt <= new Date(to + "T00:00:00Z"); dt.setUTCDate(dt.getUTCDate() + 1)) { const k = iso(dt); const r = byD[k]; const sun = dt.getUTCDay() === 0; cal.push(r ? { ...r, status: r.status || "present" } : { date: k, site: "", in: "", out: "", hours: 0, ot: 0, status: hol.has(k) ? "holiday" : sun ? "sunday" : "absent", via: "" }); }
+    const absent_dates = cal.filter(r => r.status === "absent").map(r => r.date);
+    const view = a.view || null; const shownRows = view === "absent" ? cal.filter(r => r.status === "absent") : view === "present" ? cal.filter(r => r.in || r.status === "present" || r.status === "half") : cal;
+    return { person: who, from, to, days_present: present, days_absent: absent_dates.length, absent_dates, sundays: cal.filter(r => r.status === "sunday").length, holidays: cal.filter(r => r.status === "holiday").length, view, days_recorded: rows.length, total_hours: rows.reduce((s2, r) => s2 + r.hours, 0), total_ot: rows.reduce((s2, r) => s2 + r.ot, 0), rows: shownRows.slice(0, 62), dataset: { title: `Attendance ${who.name} ${from} to ${to}`, columns: ["Date", "Site", "In", "Out", "Hours", "OT", "Status", "Via"], rows: shownRows.map(r => Object.values(r)) } };
   }
   if (name === "item_rate_history") {
     const lim = Math.min(Number(a.limit) || 10, 50);
@@ -344,7 +362,14 @@ function summarize(tool, o, lang) {
     case "purchase_orders": if (o.found && o.po) { const p = o.po; L.push(`${p.po_no} · ${p.vendor} · ${p.site}`, `${H ? "राशि" : "Amount"} ${inr(p.amount_incl_gst)} (incl. GST) · ${H ? "अनुमोदन" : "approval"}: ${p.approval}${p.approved_by ? " by " + p.approved_by : ""} · ${H ? "डिलीवरी" : "delivery"}: ${p.delivery}${p.indent ? " · indent " + p.indent : ""}`); (o.lines || []).forEach((l, i) => L.push(`${i + 1}. ${l.item} — ${l.qty} ${l.unit} × ${inr(l.rate)} = ${inr(l.amount)}`)); } else { L.push(`${o.count} PO(s)${o.vendor_matched ? " · " + o.vendor_matched : ""} · ${H ? "कुल" : "total"} ${inr(o.total_amount)}`, kv(o.by_approval)); (o.pos || []).slice(0, 15).forEach(p => L.push(`- ${p.po_no} · ${p.date} · ${p.vendor} · ${p.site} · ${inr(p.amount)} · ${p.approval}`)); } break;
     case "vendor_report": L.push(`${o.vendor} · ${o.from} → ${o.to}`, `${o.count ?? o.po_count ?? 0} PO · ${H ? "कुल" : "total"} ${inr(o.total_value)}`, o.by_site ? (H ? "साइट-वार:" : "Site-wise:") : "", o.by_site ? kv(o.by_site) : ""); (o.pos || []).slice(0, 15).forEach(p => L.push(`- ${p.po_no} · ${p.date} · ${p.site} · ${inr(p.amount)}${p.approval ? " · " + p.approval : ""}${p.delivery ? " · " + p.delivery : ""}${p.received ? " · recd " + p.received : ""}`)); break;
     case "item_rate_history": L.push(`${H ? "आख़िरी खरीद" : "Last purchase"}: ${o.item || o.latest?.item} — ${inr(o.latest?.rate)}/${o.latest?.unit || ""} · ${o.latest?.vendor} · ${o.latest?.po_no} · ${o.latest?.date} · ${o.latest?.site || ""}`, o.lowest ? `${H ? "सबसे कम" : "Lowest"}: ${inr(o.lowest.rate)} · ${o.lowest.vendor} · ${o.lowest.po_no}` : "", o.vendors ? `${H ? "विक्रेता" : "Vendors"}: ${o.vendors.join(", ")}` : ""); (o.history || []).slice(1, 8).forEach(h => L.push(`- ${h.date} · ${h.vendor} · ${inr(h.rate)} · ${h.qty} ${h.unit} · ${h.po_no}`)); break;
-    case "person_attendance": if (o.message && !o.rows) { L.push(o.message); break; } L.push(`${o.person?.name || o.person} · ${o.from} → ${o.to}`, `${H ? "उपस्थित दिन" : "Present days"} ${o.days_present} / ${o.days_recorded} ${H ? "रिकॉर्ड" : "recorded"} · ${H ? "कुल घंटे" : "hours"} ${Math.round(o.total_hours || 0)} · OT ${Math.round(o.total_ot || 0)}`); (o.rows || []).slice(-15).forEach(d => L.push(`- ${d.date} · ${d.in || "—"}–${d.out || "—"} · ${d.status || ""}${d.site ? " · " + d.site : ""}`)); break;
+    case "person_attendance": {
+      if (o.ambiguous) { L.push(H ? "Ek se zyada log is naam ke hain — kaun sa?" : "More than one person matches — which one?"); (o.options || []).forEach((p, i) => L.push(`${i + 1}. ${p.name} · ${p.role || p.kind} · ${p.site || ""}`)); L.push(H ? "Poora naam ya site likhiye." : "Reply with the full name or the site."); break; }
+      if (o.message && !o.rows) { L.push(o.message); break; }
+      const nm = o.person?.name || o.person;
+      if (o.view === "absent") { L.push(`${nm} · ${H ? "absent dates" : "absent dates"} ${o.from} → ${o.to}: ${o.days_absent}`); (o.absent_dates || []).slice(0, 60).forEach(d => L.push(`- ${d}`)); if (!o.days_absent) L.push(H ? "Koi absent din nahi." : "No absent days."); break; }
+      L.push(`${nm} · ${o.from} → ${o.to}`, `${H ? "Present" : "Present"} ${o.days_present} ${H ? "din" : "days"} · ${H ? "absent" : "absent"} ${o.days_absent} · ${H ? "Sunday" : "Sundays"} ${o.sundays} · ${H ? "holiday" : "holidays"} ${o.holidays} · ${H ? "ghante" : "hours"} ${Math.round(o.total_hours || 0)} · OT ${Math.round(o.total_ot || 0)}`);
+      (o.rows || []).filter(r => r.in || r.status === "absent" || r.status === "present" || r.status === "half").slice(-20).forEach(d => L.push(`- ${d.date} · ${d.in || "—"}${d.out ? "–" + d.out : ""} · ${d.status}${d.site ? " · " + d.site : ""}${d.via ? " · " + d.via : ""}`));
+      L.push(H ? "Kahen: 'only absent' / 'only present' / 'September ka' — ya Excel/PDF niche." : "Say 'only absent' / 'only present' / 'September ka' — or export below."); break; }
     case "pending_deliveries": L.push(`${o.count} PO(s) ${H ? "की डिलीवरी बाकी" : "with pending delivery"}`); (o.pos || []).slice(0, 15).forEach(p => L.push(`- ${p.po_no} · ${p.vendor} · ${p.site} · pending ${p.pending} (${p.items_done})`)); break;
     case "vendor_outstanding": L.push(`${H ? "कुल बकाया" : "Total outstanding"} ${inr(o.total_outstanding)} (${o.count} vendors)`); (o.vendors || []).slice(0, 15).forEach(v => L.push(`- ${v.vendor}: PO ${inr(v.po_value)} − paid ${inr(v.paid)} = ${inr(v.outstanding)}`)); L.push(o.note || ""); break;
     case "stock_position": L.push(`${o.count} items · ${H ? "मूल्य" : "value"} ${inr(o.total_value)} · low stock: ${o.low_stock}`); (o.items || []).slice(0, 15).forEach(i => L.push(`- ${i.item} · ${i.site} · ${i.balance} ${i.unit}`)); break;
@@ -417,13 +442,14 @@ function intentOf(text, ctx) {
   if (/(delivered|deliver ho|deliver kar|delivery ho gayi|delivery ho gyi)/.test(tl) && /(kar do|karo|mark|update|kardo)/.test(tl)) return { kind: "ACTION", action: "mark_po_delivered", e };
   if (/task\s*(assign|de do|do|bana|create)|assign.*task|kaam de do/.test(tl)) return { kind: "ACTION", action: "assign_task", e };
   if (/(approve kar|approve karo|approve kardo|approval de do|reject kar|reject karo)/.test(tl) && /expense|kharch|claim|voucher|#\d+/.test(tl)) return { kind: "ACTION", action: /reject/.test(tl) ? "reject_expense" : "approve_expense", e };
+  if (e.all_people && !/attendance|attend|hazir|aaye|absent|present/.test(tl)) return { kind: "READ", tool: "workers_list", args: { kind: e.kind === "staff" ? "staff" : (e.kind || "all"), site: e.site }, e };   // update429: "all workers data" is never a follow-up
   if (/^(only|sirf|bas)\s+(present|absent|aaye|nahi aaye)/.test(tl) && ctx?.tool === "attendance_summary") return { kind: "FOLLOWUP", e };
   // update428: with a live context, short messages are follow-ups, never general chat
   const words = tl.split(/\s+/).filter(Boolean).length;
   if (ctx?.tool && /^(approve|reject|approve karo|reject karo|approve kar do)$/.test(tl)) return { kind: "ASK", text: "Kaunsa expense approve/reject karna hai? ID likhiye — jaise: expense #392 approve karo. (Pending list upar hai; 'detail' likhne par IDs ke saath list milegi.)", e };
   const generalQ = /(kya hai|kya hota|kya hoti|kaise|kaun sa|explain|samjhao|samjha|batao ki|write|likho|likh do|code|program|translate|anuvad|meaning|matlab|difference|formula|calculate|kitna hota|\?$)/.test(tl) && !/(detail|one by one|har ek|wale|only|sirf)/.test(tl);
   const cue = /(detail|details|one by one|har ek|sab dikhao|sabhi dikhao|list do|list dikhao|poori list|puri list|full list|batao sab|expand|rows|dikhao|batao|do$|de do)/.test(tl);
-  const bareFilter = words <= 3 && (e.status || e.site || e.kind || e.last_n_days || e.month);
+  const bareFilter = words <= 4 && (e.status || e.site || e.kind || e.last_n_days || e.month || e.att_view);
   if (ctx?.tool && !generalQ && !e.po_no && !e.indent_no && !e.name && !e.item && (cue && words <= 8 || bareFilter)) return { kind: "FOLLOWUP", e, view: /(detail|one by one|har ek|sab dikhao|sabhi dikhao|list|full|expand|rows)/.test(tl) && !e.status && !e.site && !e.kind ? "rows" : undefined };
   if (follow && ctx?.tool && !e.po_no && !e.indent_no && !e.name && !e.item) return { kind: "FOLLOWUP", e };
   if (e.all_people && !/attendance|hazir|aaye|absent|present/.test(tl)) return { kind: "READ", tool: "workers_list", args: { kind: e.kind === "staff" ? "staff" : (e.kind || "all"), site: e.site }, e };
@@ -438,7 +464,7 @@ function intentOf(text, ctx) {
   if (/(pending|approval).*(expense|kharch)|(expense|kharch).*(pending|approval)|approve karna baki|approval baki/.test(tl) && !e.name) return { kind: "READ", tool: "expenses", args: { status: "pending", month: e.month, last_n_days: e.month ? null : (e.last_n_days || 90), site: e.site }, e, view: "approval" };
   if (e.item || /(last|pehle|pichhli|pichli)\s*(purchase\s*)?(rate|price|bhav)|kis vendor se|kitne rate me/.test(tl)) return e.item ? { kind: "READ", tool: "item_rate_history", args: { item: e.item, vendor: (e.name && !e.item.toLowerCase().includes(e.name.toLowerCase()) && !/\b(is|ye|yeh)\s+vendor/.test(tl)) ? e.name : null }, e } : { kind: "ASK", text: "Kis product / item ka rate chahiye? Naam likhiye (jaise: AG4 cutting wheel).", e };
   if (e.name && /expense|kharch|voucher|claim/.test(tl)) return { kind: "READ", tool: "person_expenses", args: { person: e.name, month: e.month, last_n_days: e.month ? null : (e.last_n_days || 365), status: e.status }, e };
-  if (e.name && /attendance|hazir|upasthit|punch|present|absent/.test(tl)) return { kind: "READ", tool: "person_attendance", args: { person: e.name, month: e.month, last_n_days: e.month ? null : (e.last_n_days || 30) }, e };
+  if (e.name && /attend|hazir|hazri|haziri|upasthit|punch|present|absent|history/.test(tl)) return { kind: "READ", tool: "person_attendance", args: { person: e.name, month: e.month, last_n_days: e.month ? null : (e.last_n_days || (/(full|pura|poori|puri|history|record)/.test(tl) ? 90 : 30)), view: e.att_view || null }, e };
   if (e.name && /\bpo\b|purchase|bheje|order/.test(tl)) return { kind: "READ", tool: "vendor_report", args: { vendor: e.name, month: e.month, last_n_days: e.month ? null : (e.last_n_days || 30), site: e.site }, e };
   if (/(product|item|material)s?\s*(list|dikhao|batao|master|dikha)/.test(tl) || /item master/.test(tl)) return { kind: "READ", tool: "items", args: { search: (tl.match(/\b(cpvc|upvc|pvc|gi|ss|swr|valve|cement|tape|solvent)\b/) || [])[1] || null }, e };
   if (/absent|present|hazir|upasthit|nahi aa|attendance/.test(tl)) return e.last_n_days > 1 ? { kind: "READ", tool: "absent_streak", args: { days: e.last_n_days, site: e.site }, e } : { kind: "READ", tool: "attendance_summary", args: { site: e.site }, e };
@@ -456,6 +482,7 @@ function intentOf(text, ctx) {
 function mergeFollowup(ctx, e, text, wantRows) {
   const tl = String(text || "").toLowerCase(); const args = { ...(ctx.args || {}) };
   if (wantRows && !e.status && !e.site && !e.month && !e.last_n_days && !e.kind) return { tool: ctx.tool, args, view: "rows" };
+  if (ctx.tool === "person_attendance" || ctx.tool === "person_expenses") { if (e.month) { args.month = e.month; delete args.last_n_days; } if (e.last_n_days) { args.last_n_days = e.last_n_days; delete args.month; } if (ctx.tool === "person_attendance") { if (e.att_view) args.view = e.att_view; else if (/(full|history|sab|pura|poori|puri)/.test(tl)) args.view = null; } if (ctx.tool === "person_expenses" && e.status) args.status = e.status; return { tool: ctx.tool, args }; }
   if (ctx.tool === "attendance_summary") { if (e.kind) args.kind = e.kind === "staff" ? "all" : e.kind; if (e.site) args.site = e.site; if (e.last_n_days === 2) args.date = daysAgo(1); return { tool: "attendance_summary", args, view: e.att_view || ctx.view || null }; }
   if (ctx.tool === "workers_list") { if (e.kind) args.kind = e.kind === "staff" ? "staff" : e.kind; if (e.site) args.site = e.site; return { tool: "workers_list", args }; }
   if (e.status) { if (ctx.tool === "purchase_orders") args.approval = e.status; else if (ctx.tool === "indents") args.status = e.status === "pending" ? "open" : e.status; else args.status = e.status; }
@@ -489,7 +516,16 @@ export async function POST(req) {
     if (!recent.length) return Response.json({ ok: false, error: "Empty message." });
     const lastUser = [...recent].reverse().find(m => m.role === "user")?.content || "";
     // ---------- update425: deterministic ERP engine first — facts never depend on the LLM ----------
-    const it = intentOf(lastUser, ctxIn);
+    let it = intentOf(lastUser, ctxIn);
+    // update429: a name with no ka/ki/ke ("Tanveer Ahmed attendance batao", "Tanveer Ahmed") — validate the leading words against the master
+    if (!it.e?.name && !it.e?.po_no && !it.e?.item && (it.kind === "GENERAL" || it.tool === "attendance_summary" || it.tool === "expenses" || it.tool === "workers_list")) {
+      const ln = await leadingName(sb, lastUser);
+      if (ln) { const tl = lastUser.toLowerCase(); const e = { ...it.e, name: ln.name };
+        if (/attend|hazri|haziri|present|absent|history|punch/.test(tl)) it = { kind: "READ", tool: "person_attendance", args: { person: ln.name, month: e.month, last_n_days: e.month ? null : (e.last_n_days === 1 ? 1 : e.last_n_days || (/(full|pura|poori|puri|history|record)/.test(tl) ? 90 : 30)), view: e.att_view || null }, e };
+        else if (/expense|kharch|voucher|claim/.test(tl)) it = { kind: "READ", tool: "person_expenses", args: { person: ln.name, month: e.month, last_n_days: e.month ? null : (e.last_n_days || 365), status: e.status }, e };
+        else it = { kind: "READ", tool: "company_people", args: { name: ln.name }, e, personCard: true };
+      }
+    }
     console.log("AI_INTENT", JSON.stringify({ kind: it.kind, tool: it.tool || it.action || null, e: it.e, hasCtx: !!ctxIn?.tool }));
     const finish = async (tool, args, view) => {
       const a = normArgs(args); const out = await runTool(sb, tool, a); const dataset = out?.dataset || null; if (dataset) { delete out.dataset; dataset.generated_by = user.email || user.id.slice(0, 8); }
