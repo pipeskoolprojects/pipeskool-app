@@ -13,6 +13,9 @@ const GROQ_TIMEOUT_MS = 25000;
 // update427: Gemini = automatic fallback (same OpenAI-compatible request shape → same tools, messages, context)
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+// update430: OpenRouter = 3rd fallback, FREE router only (openrouter/free) — never a paid model, never credits
+const OPENROUTER_MODEL = "openrouter/free";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const IST = () => new Date(Date.now() + 5.5 * 3600 * 1000);
 const iso = d => d.toISOString().slice(0, 10);
 const daysAgo = n => { const d = IST(); d.setUTCDate(d.getUTCDate() - n); return iso(d); };
@@ -502,13 +505,13 @@ function formatAnswer(tool, out, lang, view, ds) {
   if (view === "approval" && tool === "expenses") { const pend = out.by_status?.pending || 0; return `${H ? "Approval ke liye pending expenses" : "Pending expense approvals"}: ${out.pending_approvals || 0} ${H ? "entries" : "entries"} · ${inr(pend)}\n${H ? "Avadhi" : "Period"} ${out.from} → ${out.to}\n${H ? "Site-wise" : "Site-wise"}:\n` + Object.entries(out.by_site || {}).map(([k, v]) => `- ${k}: ${inr(v)}`).join("\n") + `\n${H ? "Aage" : "Next"}: Money → Expenses → Pending, ${H ? "ya yahin likhein" : "or say"} "expense #<id> approve karo".`; }
   return summarize(tool, out, lang);
 }
-export async function GET() { const configured = !!(process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY); console.log("GROQ_STATUS", JSON.stringify({ groq: !!process.env.GROQ_API_KEY, gemini: !!process.env.GEMINI_API_KEY, model: MODEL, fallback: GEMINI_MODEL, env: process.env.VERCEL_ENV || "local" })); return Response.json({ ok: true, configured, model: MODEL, fallback: process.env.GEMINI_API_KEY ? GEMINI_MODEL : null, tools: TOOLS.map(t => t.function.name) }); }
+export async function GET() { const configured = !!(process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY); const chain = [process.env.GROQ_API_KEY && "groq", process.env.GEMINI_API_KEY && "gemini", process.env.OPENROUTER_API_KEY && "openrouter/free"].filter(Boolean); console.log("GROQ_STATUS", JSON.stringify({ chain, model: MODEL, env: process.env.VERCEL_ENV || "local" })); return Response.json({ ok: true, configured, model: MODEL, chain, tools: TOOLS.map(t => t.function.name) }); }
 
 export async function POST(req) {
   const t0 = Date.now();
   try {
     const key = process.env.GROQ_API_KEY;
-    if (!key && !process.env.GEMINI_API_KEY) { console.warn("GROQ_REQUEST_SKIPPED", JSON.stringify({ reason: "no AI key set" })); return Response.json({ ok: false, error: "no_key" }); }
+    if (!key && !process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY) { console.warn("GROQ_REQUEST_SKIPPED", JSON.stringify({ reason: "no AI key set" })); return Response.json({ ok: false, error: "no_key" }); }
     const { user, sb } = await userClient(req);
     if (!user) { console.warn("GROQ_REQUEST_REJECTED", JSON.stringify({ reason: "no valid JWT" })); return Response.json({ ok: false, error: "Login required." }, { status: 401 }); }
     const { messages = [], lang = "en", role = "", pathname = "", ctx: ctxIn = null } = await req.json();
@@ -609,9 +612,21 @@ ${ctx ? "\nRelevant Help Center articles:\n" + ctx : ""}`;
           const r = await fetch(GEMINI_URL, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${gk}` }, body: JSON.stringify({ ...body, model: GEMINI_MODEL }), signal: ac.signal });
           clearTimeout(tm);
           if (r.ok) { usedModel = GEMINI_MODEL; return r; }
-          console.error("GEMINI_REQUEST_FAILED", JSON.stringify({ status: r.status }));
-          return r;
+          console.error("GEMINI_REQUEST_FAILED", JSON.stringify({ status: r.status })); last = r;
         } catch (e) { clearTimeout(tm); console.error("GEMINI_REQUEST_FAILED", JSON.stringify({ reason: e.name === "AbortError" ? "timeout" : "network" })); }
+      }
+      // ---- Groq and Gemini both failed → OpenRouter free router, once, same body (tools/messages/context unchanged)
+      const ok = process.env.OPENROUTER_API_KEY;
+      if (ok) {
+        const ac = new AbortController(); const tm = setTimeout(() => ac.abort(), GROQ_TIMEOUT_MS);
+        try {
+          console.warn("AI_PROVIDER_FALLBACK", JSON.stringify({ from: "gemini", to: "openrouter", model: OPENROUTER_MODEL }));
+          const r = await fetch(OPENROUTER_URL, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${ok}`, "HTTP-Referer": "https://pipeskool-app.vercel.app", "X-Title": "Pipeskool Assistant" }, body: JSON.stringify({ ...body, model: OPENROUTER_MODEL }), signal: ac.signal });
+          clearTimeout(tm);
+          if (r.ok) { usedModel = OPENROUTER_MODEL; return r; }
+          console.error("OPENROUTER_REQUEST_FAILED", JSON.stringify({ status: r.status }));
+          return r;
+        } catch (e) { clearTimeout(tm); console.error("OPENROUTER_REQUEST_FAILED", JSON.stringify({ reason: e.name === "AbortError" ? "timeout" : "network" })); }
       }
       return last || new Response(JSON.stringify({ error: { message: "all models busy" } }), { status: 503 });
     };
