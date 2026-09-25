@@ -8,7 +8,7 @@ import CollapseCard from "@/components/CollapseCard";
 import { billUrl, isPdf } from "@/lib/bills";
 import { isDemo } from "@/lib/supabase";
 import {
-  getAdvanceQueue, reviewAdvance, getExpenseClaimQueue, reviewExpenseClaim,
+  getAdvanceQueue, reviewAdvance, getExpenseClaimQueue, reviewExpenseClaim, requestExpenseReversal, ackExpenseReversal, getExpenseReversals,
   getBeneficiaries, raiseAdvanceSalary,
   getPettyReturnQueue, confirmPettyReturn, getPettyLedger,
   getPettyReconciliation, catLabel, inr, markAdvancePosted, markExpensePosted,
@@ -39,6 +39,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
 
   const [adv, setAdv] = useState(null);
   const [pettyReqs, setPettyReqs] = useState(null);
+  const [reversals, setReversals] = useState(null); const [reverseExp, setReverseExp] = useState(null); const [revReason, setRevReason] = useState({ code: "duplicate", text: "" });   // update433
   const [pettyForm, setPettyForm] = useState({ amount: "", purpose: "", required_date: "", remarks: "" });
   const [pettyMsg, setPettyMsg] = useState("");
   const [pettyAmt, setPettyAmt] = useState({});   // per-request approve-amount inputs (update164)
@@ -100,6 +101,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
     getAdvanceQueue(scope).then(setAdv);
     getExpenseClaimQueue(scope).then(setClaims);
     getPettyReconciliation().then(setPetty);
+    getExpenseReversals().then(setReversals);   // update433
   };
   useEffect(() => {
     const st = getSession(); setSession(st); load();
@@ -122,10 +124,10 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
          : status === "approved" ? `Approved ${inr(res.amount)}.` : "Updated.");
     load();
   }
-  async function actClaim(id, status) {
+  async function actClaim(id, status, opts = {}) {
     let note = null;
     if (status === "queried") { note = prompt("Query to send back:"); if (!note) return; }
-    await reviewExpenseClaim(id, status, note, session?.id); setMsg("Updated."); load();
+    const r = await reviewExpenseClaim(id, status, note, session?.id, opts); setMsg(r?.ok === false ? "⚠ " + r.error : "Updated."); load();
   }
 
   async function togglePostAdv(r) { await markAdvancePosted(r.id, !r.posted, session?.id); load(); }
@@ -228,7 +230,9 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
         </span>,
       exportValue: r => (r.bills || []).length + " file(s)" },
     { key: "status", label: "Status", filter: "select", render: r => <span>
-        {r.status === "approved" ? <span className="badge p">Approved</span> : r.status === "rejected" ? <span className="badge a">Rejected</span> : r.status === "queried" ? <span className="badge h">Queried</span> : <span className="badge gray">Pending</span>}
+        {r.status === "approved" ? <span className="badge p">Approved</span> : r.status === "rejected" ? <span className="badge a">Rejected</span> : r.status === "queried" ? <span className="badge h">Queried</span> : r.status === "reversed" ? <span className="badge a" title={"Reversed by entry #" + r.reversed_by}>Reversed</span> : <span className="badge gray">Pending</span>}
+        {r.reversal_of && <div style={{ fontSize: 10, color: "var(--amber)" }}>↩ Reversal of #{r.reversal_of}</div>}
+        {r.possible_duplicate && !r.not_duplicate_confirmed && r.status !== "reversed" && <div style={{ fontSize: 10, color: "var(--red,#c0392b)", fontWeight: 600 }} title="Same claimant, amount, site and category within 3 days — or the same bill photo">⚠ Possible duplicate of #{r.duplicate_of}</div>}
         {r.approved_by && <div className="muted" style={{ fontSize: 10 }}>{r.approved_by}{r.approved_on ? " · " + r.approved_on : ""}</div>}</span> },
     { key: "approved_on", label: "Appr. date", hidden: true, exportValue: r => r.approved_on || "" },
     { key: "approved_by", label: "Appr. by", filter: "select", hidden: true, exportValue: r => r.approved_by || "" },
@@ -246,10 +250,12 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
         {session && r.claimant_id === session.id && (
           <button style={{ fontSize: 11.5, marginRight: 4 }} title="Edit before it is approved" onClick={() => setEditExp({ ...r })}>✎</button>
         )}
-        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actClaim(r.id, "approved")}>✓</button>
+        <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => { if (r.possible_duplicate && !r.not_duplicate_confirmed) { if (!window.confirm(`#${r.id} looks like a duplicate of #${r.duplicate_of} (same claimant, amount, site, category within 3 days, or same bill).\n\nApprove anyway? This records that you confirmed it is NOT a duplicate.`)) return; actClaim(r.id, "approved", { notDuplicate: true }); } else actClaim(r.id, "approved"); }}>✓</button>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => actClaim(r.id, "queried")}>?</button>
         <button style={{ fontSize: 11.5 }} onClick={() => actClaim(r.id, "rejected")}>✕</button>
         </>) : null}
+        {session?.role === "director" && r.status === "approved" && !r.posted && (
+        <button style={{ fontSize: 11.5, marginRight: 4, color: "var(--red,#c0392b)" }} title="Reverse this approved expense (needs a second Director/Accountant acknowledgement)" onClick={() => setReverseExp(r)}>↩ Reverse</button>)}
       </span>) },
   ];
   // update212: six sections as TABS — one fixed-height scroll panel, page never grows
@@ -292,6 +298,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
     getPersonMoneyProfile(staffId).then(pr => setProfile(pr ? { ...pr, loading: false } : null));
   }   // update214: ⛶ full-page browsing (same DOM — filters/state preserved)
   const MT = [
+    ["corrections", "↩", "Corrections (reversals)", () => (reversals || []).filter(r => r.status === "pending_ack").length],   // update433
     ["pettyreq", "🪙", "Petty cash requests", () => (pettyReqs || []).filter(r => r.status === "pending").length],
     ["advreq", "📄", "Advance salary requests", () => (adv || []).length],
     ["claims", "💳", "Expenses ledger", () => (claims || []).length],
@@ -406,6 +413,52 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
             {fullView ? "✕ Close" : "⛶ Expand"}</button>}
         </div>
         <div className="panel money-tab-panel" style={{ marginTop: 0, marginBottom: 8, borderTopLeftRadius: 0, flex: 1, minHeight: 260, overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 4px 14px rgba(15,20,25,0.05)" }}>
+        {/* update433: Corrections — reversal requests awaiting a second acknowledgement + the permanent log */}
+        <div className={mtab === "corrections" ? "money-sec" : undefined} style={{ display: mtab === "corrections" ? "flex" : "none", flexDirection: "column", overflowY: "auto", gap: 10 }}>
+          <div className="card" style={{ padding: 12 }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>How corrections work</div>
+            <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5 }}>Approved expenses are locked — no field can be edited by anyone. A Director requests a <b>reversal</b> with a reason; a <b>different</b> Director or the Accountant acknowledges it; the app then posts a negative entry against the original and marks it Reversed. Entries already posted to Tally must be reversed in Tally first. Every step is recorded below.</div>
+          </div>
+          {(reversals || []).filter(r => r.status === "pending_ack").length > 0 && (
+            <div className="card" style={{ padding: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>⏳ Awaiting acknowledgement</div>
+              {(reversals || []).filter(r => r.status === "pending_ack").map(r => (
+                <div key={r.id} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid var(--border,#e3e3de)" }}>
+                  <div style={{ flex: 1, minWidth: 260 }}><b>#{r.expense_id}</b> · {inr(r.amount)} · {r.category} · {r.paid_to || ""} · {r.site} · {r.claimant}<div className="muted" style={{ fontSize: 11.5 }}>Reason: {r.reason}{r.reason_text ? " — " + r.reason_text : ""} · requested by {r.requested_by} · {r.requested_at}</div></div>
+                  {(session?.role === "director" || session?.role === "accountant") && (
+                    <span style={{ whiteSpace: "nowrap" }}>
+                      <button style={{ fontSize: 12, marginRight: 6 }} onClick={async () => { if (!window.confirm(`Acknowledge reversal of #${r.expense_id} (${inr(r.amount)})? A negative entry will be posted and the original marked Reversed.`)) return; const x = await ackExpenseReversal(r.id, false); setMsg(x.ok ? `Reversed — entry #${x.reversal_expense_id} posted.` : "⚠ " + x.error); load(); }}>✓ Acknowledge</button>
+                      <button style={{ fontSize: 12 }} onClick={async () => { const n = window.prompt("Reason for declining:"); if (n == null) return; const x = await ackExpenseReversal(r.id, true, n); setMsg(x.ok ? "Declined." : "⚠ " + x.error); load(); }}>✕ Decline</button>
+                    </span>)}
+                </div>))}
+            </div>)}
+          <div className="card" style={{ padding: 12 }}>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Corrections log</div>
+            {(reversals || []).length === 0 && <div className="muted" style={{ fontSize: 12.5 }}>No reversals yet.</div>}
+            <DataTable columns={[
+              { key: "requested_at", label: "Requested" }, { key: "expense_id", label: "Expense #" }, { key: "amount", label: "Amount", render: r => inr(r.amount) }, { key: "claimant", label: "Claimant" }, { key: "site", label: "Site" },
+              { key: "reason", label: "Reason", render: r => <span>{r.reason}{r.reason_text ? <div className="muted" style={{ fontSize: 11 }}>{r.reason_text}</div> : null}</span> },
+              { key: "requested_by", label: "By" }, { key: "acknowledged_by", label: "Acknowledged", render: r => r.acknowledged_by ? <span>{r.acknowledged_by}<div className="muted" style={{ fontSize: 11 }}>{r.acknowledged_at}</div></span> : <span className="muted">—</span> },
+              { key: "status", label: "Status", render: r => r.status === "applied" ? <span className="badge p">Applied · #{r.reversal_expense_id}</span> : r.status === "declined" ? <span className="badge a" title={r.decline_note || ""}>Declined</span> : <span className="badge h">Pending ack</span> },
+              { key: "recovery_amount", label: "Recovery", render: r => r.recovery_amount ? <span title={r.recovery_note || ""}>{inr(r.recovery_amount)}</span> : <span className="muted">—</span> },
+            ]} rows={reversals || []} exportName="expense_corrections" pageSize={10} />
+          </div>
+        </div>
+        {reverseExp && (
+          <div className="modal-bg" onClick={() => setReverseExp(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div className="card" onClick={e => e.stopPropagation()} style={{ width: "min(94vw, 460px)", padding: 16 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>↩ Reverse approved expense #{reverseExp.id}</div>
+              <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>{inr(reverseExp.amount)} · {reverseExp.category} · {reverseExp.paid_to || ""} · {reverseExp.site} · {reverseExp.claimant} · {reverseExp.date}</div>
+              <label style={{ fontSize: 12.5 }}>Reason<select value={revReason.code} onChange={e => setRevReason(v => ({ ...v, code: e.target.value }))} style={{ display: "block", width: "100%", marginTop: 4 }}>
+                <option value="duplicate">Duplicate entry</option><option value="wrong_amount">Wrong amount</option><option value="wrong_site">Wrong site</option><option value="wrong_claimant">Wrong claimant</option><option value="not_admissible">Not admissible</option><option value="other">Other</option></select></label>
+              <label style={{ fontSize: 12.5, display: "block", marginTop: 8 }}>Details (mandatory)<textarea value={revReason.text} onChange={e => setRevReason(v => ({ ...v, text: e.target.value }))} rows={3} placeholder={reverseExp.duplicate_of ? `Duplicate of #${reverseExp.duplicate_of}` : "Why is this being reversed?"} style={{ display: "block", width: "100%", marginTop: 4 }} /></label>
+              <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Nothing changes yet. A different Director or the Accountant must acknowledge this in Money → Corrections; then a −{inr(reverseExp.amount)} entry is posted and #{reverseExp.id} is marked Reversed. {reverseExp.posted ? "This entry is posted to Tally — reverse it in Tally first." : ""}</div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+                <button onClick={() => setReverseExp(null)}>Cancel</button>
+                <button className="primary" disabled={!revReason.text.trim()} onClick={async () => { const x = await requestExpenseReversal(reverseExp.id, revReason.code, revReason.text.trim()); setMsg(x.ok ? "Reversal requested — awaiting a second acknowledgement." : "⚠ " + x.error); setReverseExp(null); setRevReason({ code: "duplicate", text: "" }); load(); }}>Request reversal</button>
+              </div>
+            </div>
+          </div>)}
         <div className={mtab === "pettyreq" ? "money-sec" : undefined} style={{ display: mtab === "pettyreq" ? "flex" : "none", overflowY: "auto" }}>
           {session && canAnySite(session, "money", "create") && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginBottom: 12, alignItems: "end" }}>
