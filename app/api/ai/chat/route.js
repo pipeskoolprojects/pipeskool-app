@@ -471,6 +471,7 @@ function extract(text) {
   if (/\b(pending|baki|bakaya|awaiting)\b/.test(tl) && !/pending deliver/.test(tl)) e.status = "pending";
   if (/\b(approved|approve ho|approve hua|approve huaa|approve hue)\b/.test(tl)) e.status = "approved"; if (/\b(rejected|reject hua|reject ho)\b/.test(tl)) e.status = "rejected";
   if (/\b(queried|query wala|query wale|query me|query mein|query status|jinpe query|jis pe query)\b/.test(tl)) e.status = "queried";
+  if (/\b(reversed|reverse hua|reversal|ulta|cancel hua)\b/.test(tl)) e.status = "reversed";
   if (/\b(mera|meri|mere|my|mine|apna|apni|apne|khud ka|maine)\b/.test(tl)) e.mine = true;
   if (/\b(last|latest|aakhri|akhri|akhiri|pichla|pichhla|sabse naya|recent)\b/.test(tl) && /\b(kon sa|konsa|kaun sa|kaunsa|which|wala|hua|huaa|tha|thi|kya|one)\b/.test(tl)) e.point = true;
   const site = tl.match(/\b(kei|soul|atos|citadel|saptarshi|creek|mas|dm house|scents|suryam|ifsca|head office|micron|capesite)\b/); if (site) e.site = site[1];
