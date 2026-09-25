@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { detectLang, answerLang, matchKB, suggestionsFor, liveAnswer, createTicket, askAI, aiStatus, isDataQuery, wantsExcel, wantsPdf, downloadDataset, openPdfReport, performAssistantAction, uploadBillForMatch, resetAiCtx, getAiCtx, setAiCtx } from "@/lib/assistant";   // update416-429
 import { listChats, loadChat, saveChat, renameChat, archiveChat, autoTitle } from "@/lib/aiChats";   // update429
+import AssistantMd from "./AssistantMd";   // update432: real bold/lists/tables
 
 const T = {
   en: { title: "Pipeskool Assistant", hint: "Ask anything about the app…", helpful: "Did this help?", yes: "Yes 👍", no: "No — get human help",
@@ -180,7 +181,7 @@ export default function Assistant() {
                 <div style={{ background: "#23272D", borderRadius: "3px 14px 14px 14px", padding: "12px 14px", fontSize: 12.5, lineHeight: 1.6, minWidth: 0, flex: 1 }}>
                   {m.note && <div style={{ fontSize: 11, color: "#B26A00", marginBottom: 6 }}>{m.note}</div>}
                   {m.thinking ? <div className="asst-dots" aria-label="typing"><span /><span /><span /></div>
-                  : m.aiText ? (<><div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.aiText}</div>
+                  : m.aiText ? (<><AssistantMd text={m.aiText} />
                       {m.dataset?.rows?.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}><button type="button" style={{ fontSize: 11.5 }} onClick={() => downloadDataset(m.dataset, { by: sess?.name, at: new Date().toLocaleString("en-IN") })}>📊 Export Excel</button><button type="button" style={{ fontSize: 11.5 }} onClick={() => openPdfReport(m.dataset, { by: sess?.name, at: new Date().toLocaleString("en-IN") })}>📄 Download PDF</button><span className="muted" style={{ fontSize: 10.5, alignSelf: "center" }}>{m.dataset.title} · {m.dataset.rows.length} rows</span></div>}
                       {m.bill && (<div style={{ marginTop: 8, background: m.bill.status === "matched" ? "#1F3D2B" : "#4A2323", border: "1px solid " + (m.bill.status === "matched" ? "#2E6B47" : "#7A3A3A"), borderRadius: 8, padding: 8, fontSize: 12 }}>
                         <div style={{ fontWeight: 700 }}>{m.bill.verdict}</div>
