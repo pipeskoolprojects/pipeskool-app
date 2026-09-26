@@ -3,7 +3,7 @@
 // listed + filtered, then Convert -> GRN. Print / PDF / Tally per row and in bulk.
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
-import { createDeliveryChallan, getDeliveryChallans, convertDcToGrn, cancelDeliveryChallan, uploadDcProof, dcProofUrl, priceDcLines, dcTallyXml, getChallanPOs, editDeliveryChallan } from "@/lib/challan";
+import { setChallanPosted, createDeliveryChallan, getDeliveryChallans, convertDcToGrn, cancelDeliveryChallan, uploadDcProof, dcProofUrl, priceDcLines, dcTallyXml, getChallanPOs, editDeliveryChallan } from "@/lib/challan";
 import { getClients, shipBlock, addrLines } from "@/lib/clients";   // update393
 import InternalDispatchTab from "@/components/InternalDispatchTab";   // update403
 import VendorLink from "@/components/VendorLink";   // update410
@@ -125,9 +125,14 @@ export default function DeliveryChallans() {
   // ---- listing filters
   const [fVendor, setFVendor] = useState("all"); const [fSite, setFSite] = useState("all");
   const [fFrom, setFFrom] = useState(""); const [fTo, setFTo] = useState("");
-  const [fStatus, setFStatus] = useState("all"); const [fSource, setFSource] = useState("all"); const [q, setQ] = useState(() => { try { return new URLSearchParams(window.location.search).get("q") || ""; } catch { return ""; } });   // update410
+  const [fStatus, setFStatus] = useState("all"); const [fSource, setFSource] = useState("all"); const [fTally, setFTally] = useState("all"); const [sel, setSel] = useState({}); /* update435 */ const [q, setQ] = useState(() => { try { return new URLSearchParams(window.location.search).get("q") || ""; } catch { return ""; } });   // update410
   const [pg, setPg] = useState(1); const PAGE = 20; const [xp, setXp] = useState({}); const [moreF, setMoreF] = useState(false);   // update406
-  useEffect(() => { setPg(1); }, [fVendor, fSite, fFrom, fTo, fStatus, fSource, q]);
+  useEffect(() => { setPg(1); }, [fVendor, fSite, fFrom, fTo, fStatus, fSource, fTally, q]);
+  const canPost = ["director", "accountant", "it_executive"].includes(session?.role);   // update435
+  async function markPosted(ids, posted) {
+    const r = await setChallanPosted(ids, posted); if (!r.ok) { window.alert(r.error); return; }
+    setSel({}); setMsg(`${r.changed} challan(s) marked ${posted ? "posted" : "not posted"} in Tally — logged under your name.`); load();
+  }
   useEffect(() => { try { const sp = new URLSearchParams(window.location.search).get("site"); if (sp) setFSite(String(sp)); } catch {} }, []);
   const vendors = useMemo(() => [...new Set((rows || []).map(r => r.vendor).filter(Boolean))].sort(), [rows]);
   const siteOpts = useMemo(() => { const m = {}; (rows || []).forEach(r => { m[r.site_id] = r.site; }); return Object.entries(m); }, [rows]);
@@ -137,6 +142,7 @@ export default function DeliveryChallans() {
     (!fFrom || r.date >= fFrom) && (!fTo || r.date <= fTo) &&
     (fStatus === "all" || (fStatus === "pending_grn" ? !r.grn_no : r.status === fStatus)) &&
     (fSource === "all" || r.source === fSource) &&
+    (fTally === "all" || (fTally === "posted" ? r.posted : !r.posted)) &&
     (!q || (r.dc_ref + " " + r.vendor_dc_no + " " + r.po_no + " " + r.grn_no).toLowerCase().includes(q.toLowerCase()))
   ), [rows, fVendor, fSite, fFrom, fTo, fStatus, fSource, q]);
   const lineValue = l => Number(l.received_qty) * (rates[l.po_item_id] || 0);
@@ -300,6 +306,7 @@ export default function DeliveryChallans() {
         <div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
             <div style={{ flex: "1 1 200px", display: "flex", alignItems: "center", gap: 6, background: "#fff", border: "1px solid var(--border)", borderRadius: 8, padding: "0 10px", height: 36 }}><span className="muted">🔍</span><input placeholder="Search PO / DC / GRN no…" value={q} onChange={e => setQ(e.target.value)} style={{ border: "none", background: "transparent", outline: "none", width: "100%", fontSize: 13 }} /></div>
+            <select value={fTally} onChange={e => setFTally(e.target.value)} style={{ height: 36 }} title="Tally posting status"><option value="all">Tally: all</option><option value="posted">Posted</option><option value="not_posted">Not posted</option></select>
             <select value={fStatus} onChange={e => setFStatus(e.target.value)} style={{ height: 36 }}><option value="all">Status: all</option><option value="matched">Matched</option><option value="mismatch">Mismatch</option><option value="pending">No PO</option><option value="pending_grn">Pending → GRN</option><option value="cancelled">Cancelled</option></select>
             <button type="button" className={moreF ? "primary" : ""} style={{ height: 36 }} onClick={() => setMoreF(m => !m)}>⚙ More filters{(fVendor !== "all" || fSite !== "all" || fFrom || fTo || fSource !== "all") ? " •" : ""}</button>
             <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
@@ -320,17 +327,20 @@ export default function DeliveryChallans() {
             <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
               <style>{`.dc406 tbody tr.dc-row:hover td { background: #FAFAFC; } .dc406 th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 10px 12px; background: var(--gray-bg); } .dc406 td { padding: 11px 12px; font-size: 13px; border-top: 1px solid var(--border); vertical-align: middle; } .dc406 .ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } @media (max-width: 720px) { .dc406 .hide-m { display: none; } }`}</style>
               <table className="dc406" style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-                <colgroup><col style={{ width: "24%" }} /><col style={{ width: "26%" }} /><col className="hide-m" style={{ width: "20%" }} /><col style={{ width: "14%" }} /><col style={{ width: "16%" }} /></colgroup>
-                <thead><tr><th>DC ref</th><th>Vendor</th><th className="hide-m">Against PO</th><th style={{ textAlign: "right" }}>Qty</th><th>Match</th></tr></thead>
+                <colgroup>{canPost && <col style={{ width: "4%" }} />}<col style={{ width: "22%" }} /><col style={{ width: "22%" }} /><col className="hide-m" style={{ width: "17%" }} /><col style={{ width: "11%" }} /><col style={{ width: "12%" }} /><col style={{ width: "12%" }} /></colgroup>
+                <thead><tr>{canPost && <th><input type="checkbox" title="Select all on this page" checked={shown.length > 0 && shown.slice((pg - 1) * PAGE, pg * PAGE).every(r => sel[r.id])} onChange={e => { const on = e.target.checked; setSel(s => { const n = { ...s }; shown.slice((pg - 1) * PAGE, pg * PAGE).forEach(r => { if (on) n[r.id] = true; else delete n[r.id]; }); return n; }); }} /></th>}<th>DC ref</th><th>Vendor</th><th className="hide-m">Against PO</th><th style={{ textAlign: "right" }}>Qty</th><th>Match</th><th>Tally</th></tr></thead>
                 <tbody>
                   {shown.slice((pg - 1) * PAGE, pg * PAGE).map(r => { const [sl] = stBadge[r.status] || ["?"]; const tone = r.status === "matched" ? ["#DCFCE7", "#15803D"] : r.status === "mismatch" ? ["#FEE2E2", "#B91C1C"] : r.status === "pending" ? ["#FEF3C7", "#92400E"] : ["#F3F4F6", "#6B7280"]; const o = !!xp[r.id]; return (
                     <Fragment key={r.id}>
                     <tr className="dc-row" onClick={() => setXp(x => ({ ...x, [r.id]: !x[r.id] }))} style={{ cursor: "pointer", opacity: r.status === "cancelled" ? 0.6 : 1, background: o ? "#FAFAFC" : undefined }} title={r.status === "cancelled" ? ("Cancelled" + (r.cancelled_by ? " by " + r.cancelled_by : "") + (r.cancel_reason ? " — " + r.cancel_reason : "")) : undefined}>
+                      {canPost && <td onClick={e => e.stopPropagation()}><input type="checkbox" checked={!!sel[r.id]} onChange={e => setSel(s => { const n = { ...s }; if (e.target.checked) n[r.id] = true; else delete n[r.id]; return n; })} /></td>}
                       <td className="ell"><span style={{ fontWeight: 600, textDecoration: r.status === "cancelled" ? "line-through" : "none" }}>{o ? "▾ " : "▸ "}{r.dc_ref}</span><br /><span className="muted" style={{ fontSize: 11 }}>{r.date} · {r.site}</span></td>
                       <td className="ell" onClick={e => e.stopPropagation()}><VendorLink name={r.vendor} />{r.vendor_dc_no && <div className="muted" style={{ fontSize: 10.5 }}>vendor DC {r.vendor_dc_no}</div>}</td>
                       <td className="ell hide-m muted">{r.po_no || "No PO"}</td>
                       <td style={{ textAlign: "right" }}><b>{r.recv}</b>/{r.ord || "—"}</td>
                       <td><span style={{ background: tone[0], color: tone[1], fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>{sl}</span>{!r.grn_no && r.status !== "cancelled" && <span style={{ background: "#E8F0FE", color: "#1D4ED8", fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>→ GRN</span>}</td>
+                      <td onClick={e => e.stopPropagation()}>{r.posted ? <span title={`Posted by ${r.posted_by} · ${r.posted_at}`} style={{ background: "#DCFCE7", color: "#15803D", fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>✓ Posted</span> : <span style={{ background: "#F3F4F6", color: "#6B7280", fontSize: 11, padding: "2px 8px", borderRadius: 999, border: "1px solid var(--border)", whiteSpace: "nowrap" }}>Not posted</span>}
+                        {canPost && r.status !== "cancelled" && <button type="button" title={r.posted ? "Mark as NOT posted (logged)" : "Mark as posted in Tally (logged)"} style={{ fontSize: 10.5, marginLeft: 4, padding: "0 5px" }} onClick={() => markPosted([r.id], !r.posted)}>{r.posted ? "↺" : "✓"}</button>}</td>
                     </tr>
                     {o && (
                       <tr><td colSpan={5} style={{ background: "#FAFAFC", padding: "10px 14px 14px" }} onClick={e => e.stopPropagation()}>
@@ -346,6 +356,9 @@ export default function DeliveryChallans() {
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                           <a href={"/stock/dc-print?ids=" + r.id} target="_blank" rel="noreferrer"><button type="button" style={{ fontSize: 11.5 }}>🖨 Print / PDF</button></a>
                           <button type="button" style={{ fontSize: 11.5 }} disabled={!tally} onClick={() => dlTally([r], r.dc_ref.replace(/\//g, "-") + ".xml")}>📊 Tally XML</button>
+                          {canPost && r.status !== "cancelled" && (r.posted
+                            ? <button type="button" style={{ fontSize: 11.5 }} title={`Posted by ${r.posted_by} · ${r.posted_at}`} onClick={() => markPosted([r.id], false)}>↺ Mark as not posted</button>
+                            : <button type="button" className="primary" style={{ fontSize: 11.5 }} onClick={() => markPosted([r.id], true)}>☑ Mark as posted</button>)}
                           {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5 }} onClick={() => setEdit({ id: r.id, dc_ref: r.dc_ref, dc_date: r.date, client_id: r.client_id || "", vendor_dc_no: r.vendor_dc_no || "" })}>✎ Edit</button>}
                           {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" className="primary" style={{ fontSize: 11.5 }} disabled={conv === r.id} onClick={() => convert(r)}>{conv === r.id ? "…" : "Convert → GRN"}</button>}
                           {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5, color: "var(--red)", borderColor: "var(--red)" }} onClick={() => cancelDc(r)}>✕ Cancel</button>}
@@ -356,6 +369,14 @@ export default function DeliveryChallans() {
                   ); })}
                 </tbody>
               </table>
+              {canPost && Object.keys(sel).length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderTop: "1px solid var(--border)", background: "#FFF7ED", flexWrap: "wrap" }}>
+                  <span className="muted" style={{ fontSize: 12 }}>{Object.keys(sel).length} selected</span>
+                  <button type="button" className="primary" style={{ fontSize: 12 }} onClick={() => markPosted(Object.keys(sel).map(Number), true)}>☑ Mark selected as posted</button>
+                  <button type="button" style={{ fontSize: 12 }} onClick={() => markPosted(Object.keys(sel).map(Number), false)}>↺ Mark selected as not posted</button>
+                  <button type="button" style={{ fontSize: 12, marginLeft: "auto" }} onClick={() => setSel({})}>Clear</button>
+                </div>)}
+              <div className="muted" style={{ fontSize: 10.5, padding: "6px 14px" }}>Marking posted is manual — exporting Tally XML / Tally batch does not mark a challan as posted. Every mark and un-mark is logged with who and when.</div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderTop: "1px solid var(--border)", flexWrap: "wrap", gap: 8 }}>
                 <span className="muted" style={{ fontSize: 12 }}>Showing {Math.min((pg - 1) * PAGE + 1, shown.length)}–{Math.min(pg * PAGE, shown.length)} of {shown.length} · tap a row for GRN, proof and source</span>
                 <div style={{ display: "flex", gap: 4 }}><button type="button" style={{ padding: "5px 9px" }} disabled={pg <= 1} onClick={() => setPg(p => p - 1)}>‹</button><button type="button" style={{ padding: "5px 9px" }} disabled={pg * PAGE >= shown.length} onClick={() => setPg(p => p + 1)}>›</button></div>
