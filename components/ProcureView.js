@@ -11,6 +11,7 @@ import {
 import { getVendors } from "@/lib/vendors";
 import VendorLink from "@/components/VendorLink";   // update410
 import { createIndent, editIndent, deleteIndent, quickAddItem, getIndentEditAudit } from "@/lib/stock";   // update337
+import { deleteIndentItem, closeEmptyIndent } from "@/lib/procure";   // update434
 import { getSiteAllowance, checkLine } from "@/lib/boqMaterials";   // update372
 import { searchIndentCatalog } from "@/lib/boq";
 import { getSites } from "@/lib/data";
@@ -181,6 +182,17 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     setEditingId(ind.id); setEditingNo(ind.indent_no); setErr("");
     setMsg(locked ? locked + " item(s) on this indent are already under a PO and cannot be changed — they stay exactly as they are." : "");
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  // update434: delete ONE item (blocked when a live PO covers it); emptied indent → close or leave
+  async function delItem(ind, it) {
+    const reason = window.prompt(`Delete "${it.item_name}" (${it.qty} ${it.unit}) from ${ind.indent_no}?\n\nReason (required — this is logged with your name):`);
+    if (reason == null) return; if (!reason.trim()) { window.alert("A reason is required."); return; }
+    const r = await deleteIndentItem(it.id, reason.trim());
+    if (!r.ok) { window.alert(r.error); return; }
+    if (r.remaining === 0) {
+      if (window.confirm(`${ind.indent_no} now has no items left.\n\nOK = close (cancel) the indent\nCancel = leave it open and empty`)) { const x = await closeEmptyIndent(ind.id, "all items deleted"); if (!x.ok) window.alert(x.error); }
+    }
+    setMsg(`Item deleted from ${ind.indent_no} (logged).`); load();
   }
   async function delIndent(ind) {
     if (!window.confirm("Delete " + ind.indent_no + " permanently? This cannot be undone.")) return;
@@ -636,6 +648,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                           onClick={e => { e.stopPropagation(); delIndent(ind); }}>{live.length ? "🔒" : "🗑"}</button>
                       </span>); })()}
                     <span style={{ background: ind.status === "quoting" ? "#EDE9FE" : ind.status === "open" ? "#DCFCE7" : "#F3F4F6", color: ind.status === "quoting" ? "#6D28D9" : ind.status === "open" ? "#15803D" : "#6B7280", fontSize: 11, padding: "5px 10px", borderRadius: 999, textTransform: "capitalize" }}>{ind.status}</span>
+                    {(() => { const n = (ind.items || []).length, k = (ind.items || []).filter(x => x.ordered).length; return n && k && k < n ? <span className="muted" style={{ fontSize: 11, marginLeft: 6 }} title="Items covered by a PO / total items">🔒 {k}/{n} under PO</span> : null; })()}
                   </span>
                 </div>
                 {openId === ind.id && (
@@ -651,7 +664,10 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                           {ind.items.map((it, idx) => (
                             <tr key={it.id}>
                               <td className="muted">{idx + 1}</td>
-                              <td style={{ fontWeight: 600, opacity: it.ordered ? 0.55 : 1 }}>{it.item_name}{it.spec ? <span className="muted" style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}{it.ordered ? <span className="badge p" style={{ marginLeft: 6, fontSize: 10.5 }}>🔒 PO issued</span> : ""}</td>
+                              <td style={{ fontWeight: 600, opacity: it.ordered ? 0.55 : 1 }}>{it.item_name}{it.spec ? <span className="muted" style={{ fontWeight: 400 }}> — {it.spec}</span> : ""}{it.ordered ? <a className="badge p" href={`/procure?po=${encodeURIComponent(it.po_no || "")}`} onClick={e => e.stopPropagation()} title="Open the PO" style={{ marginLeft: 6, fontSize: 10.5, textDecoration: "none" }}>🔒 PO issued{it.po_no ? " · " + it.po_no : ""}</a> : <span className="badge gray" style={{ marginLeft: 6, fontSize: 10.5 }}>pending</span>}
+                                {!it.ordered && (ind.status === "open" || ind.status === "quoting") && (session?.role === "director" || session?.role === "it_executive" || session?.role === "accountant" || ind.raised_by_id === session?.id) && (
+                                  <button type="button" title="Delete this item (needs a reason; logged)" onClick={e => { e.stopPropagation(); delItem(ind, it); }} style={{ marginLeft: 6, fontSize: 11, padding: "0 6px", color: "var(--red,#c0392b)" }}>🗑</button>)}
+                                {it.ordered && <span className="muted" title={`Can't delete — already covered by ${it.po_no || "a PO"}`} style={{ marginLeft: 4, fontSize: 10.5 }}>🔒</span>}</td>
                               <td className="num rq-qty">{it.qty} {it.unit}</td>
                               <td className="muted rq-pur">{it.purpose || "—"}</td>
                             </tr>
