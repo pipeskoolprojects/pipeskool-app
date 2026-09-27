@@ -7,7 +7,7 @@ import { isDemo } from "@/lib/supabase";
 import { getWorkerSiteOptions } from "@/lib/mobile";
 import { getLocalWorker, setLocalWorker, findWorkerByMobile, createStaffPunchProfile, getPosition, distanceMeters, getTodayPunch, punch } from "@/lib/mobile";
 import { getSession, refreshSessionMobile, setCurrentSite } from "@/lib/auth";
-import { siteForPunch } from "@/lib/mobile";
+import { siteForPunch, workerRaiseAdvance, workerMyAdvances } from "@/lib/mobile";   // update436
 import { getLang, t } from "@/lib/i18n";
 import Logo from "@/components/Logo";
 import CameraCapture from "@/components/CameraCapture";
@@ -240,15 +240,50 @@ export default function PunchScreen() {
           <div className="stat-box"><div className="k">Hours</div><div className="v">{today.hours_worked != null ? Math.floor(today.hours_worked) + "h " + String(Math.round((today.hours_worked % 1) * 60)).padStart(2, "0") + "m" : "\u2014"}</div></div>
         </div>
 
-        <div className="muted" style={{ textAlign: "center", fontSize: 10, marginTop: 10 }}>Pipeskool v411</div>{/* update289: visible build tag — if this line is missing on the phone, the deploy is not live */}
+        <div className="muted" style={{ textAlign: "center", fontSize: 10, marginTop: 10 }}>Pipeskool v436</div>{/* update289: visible build tag — if this line is missing on the phone, the deploy is not live */}
         {worker.profile_complete === false && (
           <div className="note amber" style={{ textAlign: "left" }}>
             ⚠ Profile incomplete — bank details pending. Show this to your supervisor.
           </div>
         )}
+        {worker.contractor_id && !staffRole && <WorkerAdvanceCard worker={worker} />}{/* update436: contractor worker raises his own request */}
       </div>
       <MobileNav />
     </div>
     </>
+  );
+}
+
+// update436: contractor workers can raise an advance / wage / petty request themselves (same approval flow; Director chooses "Pay to")
+function WorkerAdvanceCard({ worker }) {
+  const [open, setOpen] = useState(false); const [amt, setAmt] = useState(""); const [reason, setReason] = useState(""); const [kind, setKind] = useState("advance");
+  const [mine, setMine] = useState(null); const [msg, setMsg] = useState(""); const [busy, setBusy] = useState(false);
+  const refresh = () => workerMyAdvances(worker).then(setMine);
+  useEffect(() => { refresh(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  const L = { advance: "Advance", wage: "Wage payment", petty: "Petty cash" };
+  return (
+    <div className="card" style={{ textAlign: "left", marginTop: 12, padding: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontWeight: 700 }}>💸 Paise ki request / पैसे की मांग</div>
+        <button type="button" onClick={() => setOpen(o => !o)} style={{ fontSize: 12.5 }}>{open ? "Band karo" : "+ Nayi request"}</button>
+      </div>
+      {open && (
+        <div style={{ marginTop: 8 }}>
+          <select value={kind} onChange={e => setKind(e.target.value)} style={{ width: "100%", marginBottom: 6 }}><option value="advance">Advance (एडवांस)</option><option value="wage">Wage payment (मजदूरी)</option><option value="petty">Petty cash (छोटा खर्च)</option></select>
+          <input type="number" inputMode="numeric" placeholder="Amount ₹ / रकम" value={amt} onChange={e => setAmt(e.target.value)} style={{ width: "100%", marginBottom: 6 }} />
+          <input placeholder="Reason / कारण (jaise: ghar bhejna, dawai)" value={reason} onChange={e => setReason(e.target.value)} style={{ width: "100%", marginBottom: 6 }} />
+          <div className="muted" style={{ fontSize: 11.5, marginBottom: 6 }}>Yeh request Director ke paas jayegi. Paise aapke thekedaar ko ya seedhe aapke khaate me — yeh Director tay karenge.</div>
+          <button type="button" className="primary" disabled={busy || !Number(amt)} style={{ width: "100%" }} onClick={async () => { setBusy(true); setMsg(""); const r = await workerRaiseAdvance(worker, amt, reason, kind); setBusy(false); setMsg(r.ok ? `✅ Request ${r.req_no} bhej di gayi.` : "⚠ " + r.error); if (r.ok) { setAmt(""); setReason(""); setOpen(false); refresh(); } }}>{busy ? "Bhej rahe hain…" : "Request bhejo"}</button>
+        </div>)}
+      {msg && <div style={{ fontSize: 12.5, marginTop: 6 }}>{msg}</div>}
+      {mine && mine.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          {mine.slice(0, 5).map(r => (
+            <div key={r.req_no} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "6px 0", borderTop: "1px solid var(--border,#e3e3de)" }}>
+              <div><b>₹{Number(r.approved_amount ?? r.amount).toLocaleString("en-IN")}</b> · {L[r.kind] || r.kind}<div className="muted" style={{ fontSize: 11 }}>{String(r.raised_at).slice(0, 10)} · {r.req_no}{r.recipient ? " · " + r.recipient : ""}</div></div>
+              <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, alignSelf: "center", background: r.status === "approved" || r.status === "paid" ? "#DCFCE7" : r.status === "rejected" ? "#FEE2E2" : "#F3F4F6", color: r.status === "approved" || r.status === "paid" ? "#15803D" : r.status === "rejected" ? "#B91C1C" : "#374151" }}>{r.status}</span>
+            </div>))}
+        </div>)}
+    </div>
   );
 }
