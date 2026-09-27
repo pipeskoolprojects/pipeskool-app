@@ -85,6 +85,15 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
     if (!advForm.beneficiary || !advForm.amount) { setAdvErr("Select a person and enter the amount."); return; }
     const b = bens.find(x => `${x.kind}:${x.id}` === advForm.beneficiary);
     setAdvBusy(true);
+    if (b.kind === "labour" && b.contractor_id) {   // update436: contractor worker → contractor-advance request tagged to this worker; approver chooses "Pay to"
+      const { raiseContractorAdvance, setContractorAdvanceForWorker } = await import("@/lib/contractorAdvance");
+      const r = await raiseContractorAdvance({ contractorId: b.contractor_id, amount: Number(advForm.amount), reason: advForm.reason, forWorkers: b.name, siteId: b.site_id || session?.currentSite || null });
+      if (r.ok) { const { data: row } = await (await import("@/lib/supabase")).supabase.from("contractor_advances").select("id").eq("req_no", r.req_no).maybeSingle(); if (row?.id) await setContractorAdvanceForWorker(row.id, b.id); }
+      setAdvBusy(false);
+      if (!r.ok) { setAdvErr(r.error); return; }
+      setMsg(`${r.req_no} raised for ${b.name} (engaged through ${b.contractor_name}). At approval the Director chooses whether to pay ${b.contractor_name}'s account or ${b.name} directly — see Contractor advances.`);
+      setAdvForm({ beneficiary: "", amount: "", reason: "" }); load(); return;
+    }
     const res = await raiseAdvanceSalary({
       site_id: b.site_id || session?.currentSite || null, beneficiary_id: b.id, beneficiary_kind: b.kind,
       beneficiary_name: b.name, amount: Number(advForm.amount), reason: advForm.reason,

@@ -8,8 +8,7 @@ import { getSession } from "@/lib/auth";
 import { getSites, inr } from "@/lib/data";
 import {
   getContractors, raiseContractorAdvance, reviewContractorAdvance,
-  listContractorAdvances, getContractorNetting,
-} from "@/lib/contractorAdvance";
+  listContractorAdvances, getContractorNetting, setContractorAdvanceRecipient, getContractorWorkers, getContractorWorkerBalances } from "@/lib/contractorAdvance";   // update436
 import { todayLocal } from "@/lib/today";
 
 const NAVY = "#1f2a4b";
@@ -64,13 +63,21 @@ export default function ContractorAdvancePanel() {
     setForm(null); load();
   }
 
+  const [payTo, setPayTo] = useState(null);   // update436: { row, mode: "contractor"|"worker", workerId, workers, amount }
+  const [balances, setBalances] = useState(null);
+  async function openApprove(row) { const workers = await getContractorWorkers(row.contractor_id); setPayTo({ row, mode: "contractor", workerId: row.for_worker_id || (workers[0]?.id ?? ""), workers, amount: String(row.amount) }); }
+  async function confirmApprove() {
+    const { row, mode, workerId, amount } = payTo;
+    const rec = await setContractorAdvanceRecipient(row.id, mode, mode === "worker" ? workerId : null);
+    if (!rec.ok) { setErr(rec.error); return; }
+    if (!window.confirm(`Paying ${inr(Number(amount || row.amount))} to: ${rec.recipient}\n\n${row.req_no} · requested for ${row.for_worker_name || row.for_workers || row.contractor_name}${row.requested_by_worker_id ? " (raised by the worker himself)" : ""}\n\nConfirm approval?`)) return;
+    const r = await reviewContractorAdvance(row.id, "approved", amount, null);
+    if (!r.ok) { setErr(r.error); return; }
+    setMsg(`${row.req_no} approved — ${inr(Number(amount || row.amount))} to ${rec.recipient}.`); setPayTo(null); load();
+  }
   async function review(row, action) {
     let amt = null, note = null;
-    if (action === "approved") {
-      const v = prompt(`Approve ${row.req_no} for ${row.contractor_name}.\n\nRequested ${inr(row.amount)}. Approve how much?`, String(row.amount));
-      if (v === null) return;
-      amt = v;
-    }
+    if (action === "approved") { openApprove(row); return; }
     if (action === "rejected") {
       note = prompt(`Reject ${row.req_no}? Reason:`);
       if (!note || !note.trim()) return;
@@ -84,6 +91,33 @@ export default function ContractorAdvancePanel() {
 
   return (
     <>
+      {payTo && (   /* update436: explicit Pay-to before approval */
+        <div onClick={() => setPayTo(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className="card" onClick={e => e.stopPropagation()} style={{ width: "min(94vw, 520px)", padding: 16 }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Approve {payTo.row.req_no} · {payTo.row.contractor_name}</div>
+            <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>Requested {inr(payTo.row.amount)}{payTo.row.for_worker_name ? ` for ${payTo.row.for_worker_name}` : ""}{payTo.row.requested_by_worker_id ? " · raised by the worker himself" : ""}{payTo.row.reason ? ` · ${payTo.row.reason}` : ""}</div>
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Pay to *</div>
+            <label style={{ display: "block", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 6, cursor: "pointer", background: payTo.mode === "contractor" ? "#FFF7ED" : "transparent" }}>
+              <input type="radio" name="payto" checked={payTo.mode === "contractor"} onChange={() => setPayTo(p => ({ ...p, mode: "contractor" }))} /> <b>Contractor account</b> — {payTo.row.contractor_name} distributes to their workers (default)</label>
+            <label style={{ display: "block", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 6, cursor: "pointer", background: payTo.mode === "worker" ? "#EFF6FF" : "transparent" }}>
+              <input type="radio" name="payto" checked={payTo.mode === "worker"} onChange={() => setPayTo(p => ({ ...p, mode: "worker" }))} /> <b>Directly to the worker&apos;s own account</b> — bypasses the contractor
+              {payTo.mode === "worker" && (
+                <select value={payTo.workerId} onChange={e => setPayTo(p => ({ ...p, workerId: e.target.value }))} style={{ display: "block", width: "100%", marginTop: 6 }}>
+                  {payTo.workers.length === 0 && <option value="">No active workers under this contractor</option>}
+                  {payTo.workers.map(w => <option key={w.id} value={w.id}>{w.name} · {w.site}{w.bank ? "" : " · ⚠ bank details missing"}</option>)}
+                </select>)}
+            </label>
+            <label style={{ display: "block", fontSize: 12.5, marginTop: 8 }}>Approve amount ₹<input type="number" value={payTo.amount} onChange={e => setPayTo(p => ({ ...p, amount: e.target.value }))} style={{ display: "block", width: 160, marginTop: 4 }} /></label>
+            <div style={{ marginTop: 10, padding: "8px 10px", background: "#F3F4F6", borderRadius: 8, fontSize: 13 }}>
+              Paying <b>{inr(Number(payTo.amount || payTo.row.amount))}</b> to: <b>{payTo.mode === "worker" ? `${payTo.workers.find(w => String(w.id) === String(payTo.workerId))?.name || "—"} — own account (under ${payTo.row.contractor_name})` : `${payTo.row.contractor_name} account`}</b>
+              {payTo.row.for_worker_name ? <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>Either way this reduces <b>{payTo.row.for_worker_name}</b>&apos;s dues under {payTo.row.contractor_name} and the contractor&apos;s running balance.</div> : null}
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+              <button onClick={() => setPayTo(null)}>Cancel</button>
+              <button className="primary" disabled={payTo.mode === "worker" && !payTo.workerId} onClick={confirmApprove}>Approve &amp; record recipient</button>
+            </div>
+          </div>
+        </div>)}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
         <div className="muted" style={{ fontSize: 12.5, maxWidth: 640 }}>
           Advances paid to a <b>contractor</b>, who passes them to their workers. Recovered from the contractor&apos;s next payment — never from a worker&apos;s wage. A contractor&apos;s worker cannot raise an advance here; the database refuses it.
@@ -157,8 +191,8 @@ export default function ContractorAdvancePanel() {
           <div style={{ overflowX: "auto", marginTop: 8 }}>
             <table>
               <thead><tr>
-                <th>Req No.</th><th>Raised</th><th>Contractor</th><th>Site</th><th>For</th>
-                <th className="num">Requested</th><th className="num">Approved</th><th>Status</th>
+                <th>Req No.</th><th>Raised</th><th>Contractor</th><th>Site</th><th>For worker</th>
+                <th className="num">Requested</th><th className="num">Approved</th><th>Status</th><th>Paid to</th>
                 <th>Raised by</th><th>Reviewed by</th><th></th>
               </tr></thead>
               <tbody>
@@ -168,10 +202,11 @@ export default function ContractorAdvancePanel() {
                     <td style={{ whiteSpace: "nowrap" }}>{d(r.raised_at)}</td>
                     <td style={{ fontWeight: 600 }}>{r.contractor_name}</td>
                     <td style={{ fontSize: 12 }}>{r.site}</td>
-                    <td style={{ fontSize: 11.5, maxWidth: 220 }}>{r.for_workers || r.reason || "—"}</td>
+                    <td style={{ fontSize: 11.5, maxWidth: 220 }}>{r.for_worker_name ? <b>{r.for_worker_name}</b> : (r.for_workers || <span className="muted">contractor pool</span>)}{r.reason ? <div className="muted" style={{ fontSize: 11 }}>{r.reason}</div> : null}{r.kind && r.kind !== "advance" ? <span className="badge gray" style={{ marginLeft: 4, fontSize: 10 }}>{r.kind}</span> : null}</td>
                     <td className="num">{inr(r.amount)}</td>
                     <td className="num" style={{ fontWeight: 700 }}>{r.approved_amount != null ? inr(r.approved_amount) : "—"}</td>
                     <td><Badge s={r.status} /></td>
+                    <td style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>{r.recipient_name ? <span style={{ background: r.pay_to === "worker" ? "#DBEAFE" : "#F3F4F6", color: r.pay_to === "worker" ? "#1D4ED8" : "#374151", padding: "2px 8px", borderRadius: 999 }} title={r.recipient_name}>{r.pay_to === "worker" ? "👤 Worker direct" : "🏢 Contractor"}</span> : <span className="muted">— not chosen</span>}</td>
                     <td style={{ fontSize: 11.5 }}>{r.raised_by_name || "—"}</td>
                     <td style={{ fontSize: 11.5 }}>{r.reviewed_by_name || "—"}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
@@ -272,6 +307,15 @@ export default function ContractorAdvancePanel() {
           </div>
         </div>
       )}
+      <div className="card" style={{ padding: 12, marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><div style={{ fontWeight: 700 }}>Worker-wise balance under contractors</div><button style={{ fontSize: 11.5 }} onClick={async () => setBalances(await getContractorWorkerBalances())}>{balances ? "↻ Refresh" : "Load"}</button></div>
+        <div className="muted" style={{ fontSize: 12 }}>Each worker&apos;s advances (whether paid to the contractor or directly to the worker) minus what has been recovered from the contractor&apos;s payments.</div>
+        {balances && (balances.length === 0 ? <div className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>No worker-tagged advances yet.</div> : (
+          <div className="dt-scroll" style={{ marginTop: 8 }}><table className="tbl" style={{ fontSize: 12.5 }}>
+            <thead><tr><th>Contractor</th><th>Worker</th><th className="num">Advanced</th><th className="num">via contractor</th><th className="num">direct</th><th className="num">Recovered</th><th className="num">Outstanding</th></tr></thead>
+            <tbody>{balances.filter(b => Number(b.advanced) > 0).map(b => <tr key={b.worker_id}><td>{b.contractor_name}</td><td style={{ fontWeight: 600 }}>{b.worker_name}</td><td className="num">{inr(b.advanced)}</td><td className="num">{inr(b.paid_via_contractor)}</td><td className="num">{inr(b.paid_direct)}</td><td className="num">{inr(b.recovered)}</td><td className="num" style={{ fontWeight: 700 }}>{inr(b.outstanding)}</td></tr>)}</tbody>
+          </table></div>))}
+      </div>
     </>
   );
 }
