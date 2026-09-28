@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
-import { getWorkerCategories, addWorkerCategory } from "@/lib/data";
+import { getWorkerCategories, addWorkerCategory, workerExitCheck, workerExit, workerRejoin, applyExits, getExitedWorkers } from "@/lib/data";   // update439
 import { getWorkers, saveWorker, uploadAadhaarDoc, uploadBankDoc, uploadAadhaarFiles, inr, deleteWorker, deleteStaff, getWorkerAllotments, setWorkerAllotments } from "@/lib/data";   // update374/377
 import { getContractors, getSitesList } from "@/lib/mobile";
 import { getStaff, addStaff, updateStaff, getRoles, addRole, renameRole, deleteRole, resetStaffPassword, getUserSites, assignSite, removeSite } from "@/lib/access";
@@ -46,7 +46,17 @@ export default function WorkersPage() {
   const [rows, setRows] = useState(null);
   const [sites, setSites] = useState([]);
   const [contractors, setContractors] = useState([]);
-  const [tab, setTab] = useState("workers");    // workers | staff
+  const [tab, setTab] = useState("workers");    // workers | staff | exited
+  const [exitM, setExitM] = useState(null);     // update439: { w, last, designation, type, reason, check }
+  const [exited, setExited] = useState(null); const [exq, setExq] = useState("");
+  async function openExit(w) { const check = await workerExitCheck(w.id); setExitM({ w, last: new Date().toISOString().slice(0, 10), designation: w.category || "", type: "resigned", reason: "", check }); }
+  async function confirmExit() {
+    const { w, last, designation, type, reason } = exitM; if (!last) { window.alert("Last working day is required."); return; }
+    if (!window.confirm(`Confirm exit — ${w.full_name} leaves on ${last} (${type.replace("_", " ")}, ${designation}).\n\nLogin & punch are disabled from that day; they are removed from every live list after it; history stays.`)) return;
+    const r = await workerExit(w.id, last, designation, type, reason); if (!r.ok) { window.alert(r.error); return; }
+    setExitM(null); setModal(null); setMsg(`${w.full_name} marked as exited (${last}).`); load(); getExitedWorkers().then(setExited);
+  }
+  async function rejoin(r) { const d = window.prompt(`Rejoin ${r.full_name}? New joining date (YYYY-MM-DD):`, new Date().toISOString().slice(0, 10)); if (!d) return; const x = await workerRejoin(r.id, d); if (!x.ok) { window.alert(x.error); return; } setMsg(`${r.full_name} rejoined — back on all active lists.`); load(); getExitedWorkers().then(setExited); }
   const [roles, setRoles] = useState([]);
   const [roleModal, setRoleModal] = useState(false);
   const [newRole, setNewRole] = useState("");
@@ -76,7 +86,7 @@ export default function WorkersPage() {
     supabase.from("admin_rights").select("capability").eq("user_id", sess.id)
       .then(({ data }) => { if ((data || []).some(r => r.capability === "manage_staff")) setStaffAdmin(true); });
   }, [sess?.id]);
-  const load = () => { getWorkers().then(setRows); getStaff().then(setStaff); getRoles().then(setRoles); };
+  const load = () => { applyExits().then(() => { getWorkers().then(setRows); getStaff().then(setStaff); getRoles().then(setRoles); }); };   // update439: future-dated exits become effective on load
   const roleLabel = r => (roles.find(x => x.code === r) || { label: r }).label;
   useEffect(() => { load(); getSitesList().then(setSites); getContractors().then(setContractors); }, []);
 
@@ -252,6 +262,7 @@ export default function WorkersPage() {
       render: r => r.complete ? <span className="badge p">Complete</span> : <span className="badge warn">Incomplete</span>,
       exportValue: r => r.complete ? "Complete" : "Incomplete" },
     { key: "_edit", label: "", render: r => <button style={{ fontSize: 11.5 }} onClick={() => { setErr(""); setModal({ id: r.id, ...r.raw }); }}>✎ Edit</button>, exportValue: () => "" },
+    { key: "_exit", label: "", exportValue: () => "", render: r => ["director", "hr", "it_executive"].includes(sess?.role) ? <button style={{ fontSize: 11.5, color: "var(--red,#c0392b)" }} title="Mark as exited (left company)" onClick={() => openExit({ id: r.id, ...(r.raw || r) })}>🚪</button> : null },   // update439
   ];
 
   return (
@@ -270,6 +281,7 @@ export default function WorkersPage() {
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           <button className={tab === "workers" ? "primary" : ""} onClick={() => setTab("workers")}>Workers (labour)</button>
           <button className={tab === "staff" ? "primary" : ""} onClick={() => setTab("staff")}>Staff (login users)</button>
+          <button className={tab === "exited" ? "primary" : ""} onClick={() => { setTab("exited"); getExitedWorkers().then(setExited); }}>Exited{exited ? " · " + exited.length : ""}</button>
         </div>
         {isDemo && <div className="demo-banner">Demo mode — sample worker master shown.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
@@ -297,6 +309,49 @@ export default function WorkersPage() {
             {!staffAdmin && <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>Only Directors — or staff granted "Manage staff" in Admin capabilities — can add or edit staff.</div>}
           </div>
         )}
+        {tab === "exited" && (   /* update439 */
+          <div className="card" style={{ padding: 12 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
+              <input placeholder="🔍 Search name / site…" value={exq} onChange={e => setExq(e.target.value)} style={{ width: 220 }} />
+              <span className="muted" style={{ fontSize: 12 }}>People who have left. History up to the last working day is kept everywhere; from the next day they are on no live list.</span>
+            </div>
+            {!exited ? <div className="muted">Loading…</div> : (
+              <DataTable columns={[
+                { key: "full_name", label: "Name", render: r => <span><b>{r.full_name}</b><div className="muted" style={{ fontSize: 11 }}>{r.mobile} · {r.labour_type === "contractor" ? (r.contractor_name || "contractor") : "Own"}</div></span> },
+                { key: "exit_designation", label: "Designation at exit", filter: "select" }, { key: "site_name", label: "Site", filter: "select" },
+                { key: "joining_date", label: "Joining date" }, { key: "last_working_day", label: "Last working day" },
+                { key: "exit_type", label: "Exit type", filter: "select", render: r => <span style={{ background: "#FEE2E2", color: "#B91C1C", fontSize: 11, padding: "2px 8px", borderRadius: 999, textTransform: "capitalize" }}>{String(r.exit_type || "").replace("_", " ")}</span> },
+                { key: "exit_reason", label: "Reason" }, { key: "marked_by", label: "Marked by", render: r => <span>{r.marked_by}<div className="muted" style={{ fontSize: 11 }}>{r.exited_at}</div></span> },
+                { key: "act", label: "", render: r => <button style={{ fontSize: 11.5 }} onClick={() => rejoin(r)}>↩ Rejoin</button> },
+              ]} rows={(exited || []).filter(r => !exq || `${r.full_name} ${r.site_name} ${r.exit_designation}`.toLowerCase().includes(exq.toLowerCase()))} exportName="exited_employees" />)}
+          </div>)}
+        {exitM && (
+          <div onClick={() => setExitM(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div className="card" onClick={e => e.stopPropagation()} style={{ width: "min(94vw, 640px)", padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border,#e3e3de)", fontSize: 18, fontWeight: 700 }}>Mark as exited — {exitM.w.full_name}</div>
+              <div style={{ padding: "14px 20px" }}>
+                <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>{exitM.w.category || "—"} · {exitM.w.labour_type === "contractor" ? "Contractor" : "Own"} · {exitM.w.site || ""}{exitM.w.joining_date ? " · joined " + exitM.w.joining_date : ""} · mobile {exitM.w.mobile}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <label style={{ fontSize: 12 }}>Last working day *<input type="date" value={exitM.last} onChange={e => setExitM(x => ({ ...x, last: e.target.value }))} style={{ display: "block", width: "100%", marginTop: 4 }} /></label>
+                  <label style={{ fontSize: 12 }}>Designation at exit *<input list="exit-desig" value={exitM.designation} onChange={e => setExitM(x => ({ ...x, designation: e.target.value }))} style={{ display: "block", width: "100%", marginTop: 4 }} /><datalist id="exit-desig">{(cats || []).map(ct => <option key={ct.name || ct} value={ct.name || ct} />)}</datalist></label>
+                  <label style={{ fontSize: 12 }}>Exit type *<select value={exitM.type} onChange={e => setExitM(x => ({ ...x, type: e.target.value }))} style={{ display: "block", width: "100%", marginTop: 4 }}><option value="resigned">Resigned</option><option value="terminated">Terminated</option><option value="absconded">Absconded</option><option value="contract_ended">Contract ended</option><option value="other">Other</option></select></label>
+                  <div style={{ fontSize: 12 }}>Marked by<div className="muted" style={{ marginTop: 6 }}>{sess?.full_name || sess?.name || "you"} · {new Date().toLocaleString("en-IN")} (auto)</div></div>
+                </div>
+                <label style={{ fontSize: 12, display: "block", marginTop: 10 }}>Reason / remarks<textarea rows={2} value={exitM.reason} onChange={e => setExitM(x => ({ ...x, reason: e.target.value }))} placeholder="e.g. Left for a job in Surat; handed over tools" style={{ display: "block", width: "100%", marginTop: 4 }} /></label>
+                {exitM.check && exitM.check.ok !== false && (
+                  <div style={{ background: "#FFF4E5", border: "1px solid #FDE68A", borderRadius: 10, padding: "10px 12px", marginTop: 12, fontSize: 12.5, color: "#92400E" }}>
+                    <b>⚠ Settlement check before you confirm</b><br />
+                    • Advance outstanding: <b>₹{Number(exitM.check.advance_outstanding || 0).toLocaleString("en-IN")}</b> ({exitM.check.advance_count || 0} request{exitM.check.advance_count === 1 ? "" : "s"}) &nbsp;• Unpaid days this month: <b>{exitM.check.unpaid_days_this_month || 0}</b> (≈ ₹{Number(exitM.check.unpaid_estimate || 0).toLocaleString("en-IN")}) &nbsp;• Contractor balance: <b>{exitM.check.contractor_balance ? "₹" + Number(exitM.check.contractor_balance).toLocaleString("en-IN") : "—"}</b>
+                    <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>You can still proceed — these stay in Muster & Wages for final settlement.{exitM.check.note ? " " + exitM.check.note : ""}</div>
+                  </div>)}
+                <div style={{ fontSize: 12, color: "#444", lineHeight: 1.6, marginTop: 10 }}>On saving: login &amp; punch disabled · removed from Attendance, Not-punched, auto-absent, muster/wages after {exitM.last || "the last working day"}, all pickers and counts · history up to that day kept intact · profile-completeness checks skipped for exits.</div>
+              </div>
+              <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border,#e3e3de)", background: "#FAFAF9", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <button onClick={() => setExitM(null)}>Cancel</button>
+                <button style={{ color: "#B91C1C", borderColor: "#FECACA" }} onClick={confirmExit}>Confirm exit — {exitM.w.full_name} leaves on {exitM.last || "…"}</button>
+              </div>
+            </div>
+          </div>)}
 
         {modal && (
           <div onClick={() => setModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}>
@@ -475,10 +530,11 @@ export default function WorkersPage() {
 
                 {modal.id && (
                   <label className="wf-full" style={{ display: "inline-flex", gap: 7, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
-                    <input type="checkbox" checked={modal.is_active !== false} onChange={e => set("is_active", e.target.checked)} style={{ accentColor: "var(--copper)" }} />
+                    <input type="checkbox" checked={modal.is_active !== false} onChange={e => { if (!e.target.checked && window.confirm(`Is ${modal.full_name} leaving the company?\n\nOK = open the exit form (records last working day, designation, reason)\nCancel = just deactivate`)) { openExit(modal); return; } set("is_active", e.target.checked); }} style={{ accentColor: "var(--copper)" }} />
                     Active (untick to deactivate — they can no longer log in or punch)
                   </label>
                 )}
+                {modal.id && <button type="button" className="wf-full" style={{ marginTop: 6, color: "var(--red,#c0392b)", fontSize: 12.5 }} onClick={() => openExit(modal)}>🚪 Mark as exited (left company)</button>}
               </div>
               {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
               </div>{/* /wf-body */}
