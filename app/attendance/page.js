@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
-import { getPunchFailures, getAttendance, getSites, approveOt, verifyAttendanceRow, editAttendanceRow } from "@/lib/data";   // update277
+import { getPunchFailures, getAttendance, getSites, approveOt, verifyAttendanceRow, editAttendanceRow, getNotPunched, markNotPunched, overrideAbsentMark, getAbsentMarks, getSiteCutoffs, setSiteCutoff } from "@/lib/data";   // update277/438
 import { getSession, canAnySite } from "@/lib/auth";
 import { todayLocal } from "@/lib/today";
 import { isDemo } from "@/lib/supabase";
@@ -45,16 +45,25 @@ export default function AttendancePage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { getSites().then(setSites); }, []);
-  const load = () => getAttendance(date, site).then(res => { setRows(res.rows || []); setLoadErr(res.error || ""); });
+  const [np, setNp] = useState({ rows: [] }); const [marks, setMarks] = useState([]); const [cutoffs, setCutoffs] = useState([]);   // update438
+  const load = () => { getAttendance(date, site).then(res => { setRows(res.rows || []); setLoadErr(res.error || ""); }); getNotPunched(date, site).then(setNp); getAbsentMarks(date, site && site !== "all" ? [Number(site)] : null).then(setMarks); getSiteCutoffs().then(setCutoffs); };
+  async function actNp(r, status) {
+    const reason = window.prompt(`${status === "present" ? "Mark PRESENT" : status === "leave" ? "Mark LEAVE" : "Mark ABSENT"} — ${r.worker} · ${r.site} · ${date}\n\nReason (required, logged with your name):`); if (reason == null) return; if (!reason.trim()) { window.alert("A reason is required."); return; }
+    const x = await markNotPunched(r.id, date, status, reason.trim()); if (!x.ok) { window.alert(x.error); return; } load();
+  }
+  async function overrideMark(m, status) {
+    const reason = window.prompt(`Override ${m.workers?.full_name}'s ${m.auto ? "AUTO-absent" : "absent"} on ${date} → ${status.toUpperCase()}\n\nReason (required, logged):`); if (reason == null) return; if (!reason.trim()) { window.alert("A reason is required."); return; }
+    const x = await overrideAbsentMark(m.id, status, reason.trim()); if (!x.ok) { window.alert(x.error); return; } load();
+  }
   // update378: three category tabs, same split as Muster Roll & Wages
-  const [tab, setTab] = useState("labour");
+  const [tab, setTab] = useState(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "notpunched") ? "notpunched" : "labour");   // update438 deep link from reminders
   // update378b: if the current tab is empty and another has rows, land on the one that does
   useEffect(() => {
     if (!rows) return;
     const c = { office: rows.filter(r => r.isStaff && r.isOffice).length,
                 site_staff: rows.filter(r => r.isStaff && !r.isOffice).length,
                 labour: rows.filter(r => !r.isStaff).length };
-    if (c[tab] === 0) setTab(c.labour ? "labour" : c.site_staff ? "site_staff" : "office");
+    if (tab !== "notpunched" && c[tab] === 0) setTab(c.labour ? "labour" : c.site_staff ? "site_staff" : "office");
   }, [rows]);   // eslint-disable-line
   const tabRows = (rows || []).filter(r =>
     tab === "office" ? (r.isStaff && r.isOffice) :
@@ -171,6 +180,7 @@ export default function AttendancePage() {
                 ["office",     "🏢 Office Staff",     counts.office],
                 ["site_staff", "👷 Site Staff",       counts.site_staff],
                 ["labour",     "🧰 Workers / Labour", counts.labour],
+                ["notpunched", "🚫 Not punched",      (np.rows || []).length],   // update438
               ].map(([k, label, n]) => (
                 <button key={k} onClick={() => setTab(k)}
                   style={{ fontSize: 12.5, padding: "6px 12px", borderRadius: 999,
@@ -182,7 +192,42 @@ export default function AttendancePage() {
               ))}
             </div>
           )}
-          {!rows ? <div className="muted">Loading…</div> :
+          {tab === "notpunched" ? (
+            <div>{/* update438: expected roster with no punch-in for the date */}
+              {np.error && <div className="note amber" style={{ marginBottom: 8 }}>⚠ {np.error}</div>}
+              {(() => { const s0 = cutoffs.find(x => String(x.id) === String(site)) || null; const cut = s0 ? String(s0.auto_absent_time).slice(0, 5) : null; const today = new Date().toISOString().slice(0, 10);
+                const left = (() => { if (!cut || date !== today) return null; const [h, m] = cut.split(":").map(Number); const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })); const mins = h * 60 + m - (now.getHours() * 60 + now.getMinutes()); return mins > 0 ? `${Math.floor(mins / 60)}h ${mins % 60}m left` : "cutoff passed — auto-absent applied by the scheduler"; })();
+                return (
+                  <div style={{ background: "#FFF7E6", borderRadius: 10, padding: "9px 14px", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", fontSize: 12.5 }}>
+                    <span style={{ color: "#92400E" }}>⏰ Auto-absent at <b>{cut ? cut : "each site's cutoff (default 18:00)"}</b> IST if no punch-in{left ? ` · ${left}` : ""} · never on Sundays / festivals / approved leave</span>
+                    {(sess0?.role === "director" || sess0?.role === "it_executive" || sess0?.role === "hr") && (
+                      <button style={{ fontSize: 11.5 }} onClick={async () => { const sid = site && site !== "all" ? Number(site) : Number(window.prompt("Site id to configure (pick a site in the filter to skip this):", "")); if (!sid) return; const sc = cutoffs.find(x => x.id === sid); const cutoff = window.prompt("Auto-absent cutoff (HH:MM, IST):", sc ? String(sc.auto_absent_time).slice(0, 5) : "18:00"); if (!cutoff) return; const rem = window.prompt("First reminder time (HH:MM, IST):", sc ? String(sc.reminder_time).slice(0, 5) : "11:00"); if (!rem) return; const x = await setSiteCutoff(sid, cutoff, rem); if (!x.ok) window.alert(x.error); load(); }}>⚙ Cutoff &amp; reminder times</button>)}
+                  </div>); })()}
+              <DataTable columns={[
+                { key: "worker", label: "Worker", render: r => <span><b>{r.worker}</b>{r.isStaff ? <span className="badge gray" style={{ marginLeft: 6, fontSize: 10 }}>{r.role || "staff"}</span> : null}<div className="muted" style={{ fontSize: 11 }}>{r.category}</div></span> },
+                { key: "category", label: "Category", filter: "select" }, { key: "site", label: "Site", filter: "select" }, { key: "labour", label: "Labour", filter: "select" },
+                { key: "actions", label: "Action", render: r => <span style={{ whiteSpace: "nowrap", display: "inline-flex", gap: 5 }}>
+                  <button style={{ fontSize: 11, background: "#DCFCE7", color: "#15803D", border: "none", borderRadius: 7, padding: "5px 9px" }} onClick={() => actNp(r, "present")}>Present</button>
+                  <button style={{ fontSize: 11, padding: "5px 9px" }} onClick={() => actNp(r, "leave")}>Leave</button>
+                  <button style={{ fontSize: 11, padding: "5px 9px", color: "var(--red,#c0392b)" }} onClick={() => actNp(r, "absent")}>Absent</button>
+                  {r.mobile && <a href={`https://wa.me/91${String(r.mobile).replace(/\D/g, "").slice(-10)}?text=${encodeURIComponent(`${r.worker}, aapka aaj (${date}) ka punch-in nahi hua hai. Kripya punch karein ya supervisor ko batayein.`)}`} target="_blank" rel="noreferrer" title="WhatsApp" style={{ fontSize: 12, padding: "4px 7px", border: "1px solid var(--border)", borderRadius: 7, textDecoration: "none" }}>💬</a>}
+                  {r.mobile && <a href={`tel:${r.mobile}`} title="Call" style={{ fontSize: 12, padding: "4px 7px", border: "1px solid var(--border)", borderRadius: 7, textDecoration: "none" }}>📞</a>}
+                </span> },
+              ]} rows={np.rows || []} exportName={"not_punched_" + date} />
+              {marks.length > 0 && (
+                <div className="card" style={{ marginTop: 12, padding: 12 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Marked absent / leave on {date} · {marks.length}</div>
+                  {marks.map(m => (
+                    <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderTop: "1px solid var(--border,#e3e3de)", fontSize: 12.5, flexWrap: "wrap" }}>
+                      <span style={{ flex: 1, minWidth: 200 }}><b>{m.workers?.full_name}</b> · {m.workers?.category || ""} · {m.sites?.name || ""}{m.workers?.contractors?.name ? " · " + m.workers.contractors.name : ""}</span>
+                      <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 999, background: m.auto ? "#FEE2E2" : "#F3F4F6", color: m.auto ? "#B91C1C" : "#374151" }} title={m.reason || ""}>{m.auto ? "🤖 Absent (auto)" : (String(m.reason || "").startsWith("leave") ? "Leave" : "Absent")}{m.marker?.full_name ? " · " + m.marker.full_name : ""}</span>
+                      {m.overridden_at && <span className="muted" style={{ fontSize: 11 }}>overridden by {m.overrider?.full_name}: {m.override_reason}</span>}
+                      <button style={{ fontSize: 11 }} onClick={() => overrideMark(m, "present")}>Override → Present</button>
+                      {m.auto && <button style={{ fontSize: 11 }} onClick={() => overrideMark(m, "leave")}>→ Leave</button>}
+                    </div>))}
+                </div>)}
+            </div>
+          ) : !rows ? <div className="muted">Loading…</div> :
             <DataTable columns={columns} rows={tabRows} exportName={"attendance_" + date + "_" + tab} />}
         </div>
         <div className="muted">OT is the time worked after the site's shift end. Tap a photo to enlarge. ⚠ means approved OT differs from what the punch-out time shows.</div>
