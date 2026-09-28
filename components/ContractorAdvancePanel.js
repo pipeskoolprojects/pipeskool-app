@@ -133,8 +133,39 @@ export default function ContractorAdvancePanel() {
       {err && <div className="error" style={{ marginBottom: 10, whiteSpace: "pre-wrap" }}>{err}</div>}
       {msg && <div style={{ background: "#ecfdf5", border: "1px solid #6ee7b7", color: "#065f46", padding: "8px 12px", borderRadius: 6, marginBottom: 10, fontSize: 12.5 }}>{msg}</div>}
       {pending.length > 0 && (
-        <div className="note amber" style={{ marginBottom: 10, fontSize: 12.5 }}>
-          <b>{pending.length} advance request(s) awaiting approval.</b>
+        <div style={{ marginBottom: 12 }}>
+          <div className="note amber" style={{ marginBottom: 8, fontSize: 12.5 }}><b>{pending.length} advance request(s) awaiting approval.</b></div>
+          {/* update437: every pending request laid out readably — all fields visible, nothing to click into */}
+          {pending.map(r => {
+            const o = (net || []).find(n => n.contractor_id === r.contractor_id);
+            return (
+              <div key={r.id} style={{ border: "1px solid #FDE68A", borderRadius: 12, background: "#fff", marginBottom: 8, overflow: "hidden" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "11px 14px", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                    <div style={{ width: 30, height: 30, borderRadius: 8, background: "#EDE9FE", color: "#6D28D9", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{String(r.contractor_name || "?").split(" ").map(x => x[0]).join("").slice(0, 2).toUpperCase()}</div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600 }}>{r.req_no} <span className="muted" style={{ fontWeight: 400, fontSize: 11.5 }}>· {d(r.raised_at)}</span>{r.kind && r.kind !== "advance" ? <span className="badge gray" style={{ marginLeft: 6, fontSize: 10 }}>{r.kind}</span> : null}</div>
+                      <div style={{ fontSize: 12.5, color: "#444" }}>{r.contractor_name}{r.for_worker_name || r.for_workers ? <span className="muted"> — for {r.for_worker_name || r.for_workers}</span> : <span className="muted"> — contractor pool</span>}{r.requested_by_worker_id ? <span style={{ marginLeft: 6, fontSize: 10.5, background: "#DBEAFE", color: "#1D4ED8", padding: "1px 6px", borderRadius: 999 }}>raised by the worker</span> : null}</div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}><div style={{ fontSize: 15, fontWeight: 700 }}>{inr(r.amount)}</div><Badge s={r.status} /></div>
+                </div>
+                <div style={{ padding: "12px 14px", background: "#FAFAF9", borderTop: "1px solid var(--border,#e3e3de)" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 12, fontSize: 12.5 }}>
+                    <div><div className="muted" style={{ fontSize: 10.5 }}>Site</div><b style={{ fontWeight: 500 }}>{r.site}</b></div>
+                    <div><div className="muted" style={{ fontSize: 10.5 }}>Raised by</div><b style={{ fontWeight: 500 }}>{r.raised_by_name || "—"}</b></div>
+                    <div><div className="muted" style={{ fontSize: 10.5 }}>Reason</div><b style={{ fontWeight: 500 }}>{r.reason || "—"}</b></div>
+                    <div><div className="muted" style={{ fontSize: 10.5 }}>Contractor&apos;s current balance</div><b style={{ fontWeight: 500 }}>{o ? inr(o.outstanding) + " outstanding" : "—"}</b></div>
+                    <div><div className="muted" style={{ fontSize: 10.5 }}>Paid to</div><b style={{ fontWeight: 500, color: r.recipient_name ? undefined : "#B45309" }}>{r.recipient_name || "Not chosen yet — chosen at approval"}</b></div>
+                  </div>
+                  {isDirector && (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button className="primary" style={{ flex: 1, minWidth: 160, fontSize: 13 }} onClick={() => review(r, "approved")}>✓ Approve {inr(r.amount)} — choose Pay to</button>
+                      <button style={{ flex: 1, minWidth: 120, fontSize: 13, color: "var(--red)" }} onClick={() => review(r, "rejected")}>Reject</button>
+                    </div>)}
+                </div>
+              </div>);
+          })}
         </div>
       )}
 
@@ -147,15 +178,14 @@ export default function ContractorAdvancePanel() {
         {net === null ? <div className="muted">Loading…</div> : !net.length ? (
           <div className="muted">No contractor labour payroll generated for {month}, and no advances outstanding.</div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table>
+          <div style={{ overflowX: "auto", maxHeight: 420, overflowY: "auto", border: "1px solid var(--border,#e3e3de)", borderRadius: 10 }}>
+            <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: 900 }}>
               <thead><tr>
-                <th>Contractor</th><th className="num">Workers</th><th className="num">Days</th>
-                <th className="num">Wages earned</th><th className="num">Advanced</th><th className="num">Recovered</th>
-                <th className="num">Outstanding</th><th className="num">NET PAYABLE</th><th className="num">Carry fwd</th><th></th>
+                {[["Contractor", ""], ["Workers", "num"], ["Days", "num"], ["Wages earned", "num"], ["Advanced", "num"], ["Recovered", "num"], ["Outstanding", "num"], ["NET PAYABLE", "num"], ["Carry fwd", "num"], ["", ""]].map(([h, cls], i) => (
+                  <th key={i} className={cls} style={{ position: "sticky", top: 0, zIndex: 2, background: "#F7F7F5", fontSize: 11.5, color: "#555", fontWeight: 600, padding: "9px 12px", borderBottom: "1px solid var(--border,#e3e3de)", textAlign: cls === "num" ? "right" : "left", whiteSpace: "nowrap" }}>{h}</th>))}
               </tr></thead>
               <tbody>
-                {net.map(c => (
+                {net.filter(c => c.workers || c.wages || c.advanced || c.recovered || c.outstanding).map(c => (
                   <tr key={c.contractor_id}>
                     <td style={{ fontWeight: 600 }}>{c.contractor_name}</td>
                     <td className="num">{c.workers || "—"}</td>
@@ -171,7 +201,7 @@ export default function ContractorAdvancePanel() {
                 ))}
               </tbody>
               <tfoot><tr style={{ background: "#fff4e5", fontWeight: 800 }}>
-                <td colSpan={3}>TOTAL · {net.length} contractor(s)</td>
+                <td colSpan={3}>TOTAL · {net.filter(c => c.workers || c.wages || c.advanced || c.recovered || c.outstanding).length} contractor(s)</td>
                 <td className="num">{inr(totals.wages)}</td><td colSpan={2}></td>
                 <td className="num">{inr(totals.outstanding)}</td>
                 <td className="num">{inr(totals.netPayable)}</td>
@@ -188,27 +218,26 @@ export default function ContractorAdvancePanel() {
         {rows === null ? <div className="muted" style={{ marginTop: 8 }}>Loading…</div> : !rows.length ? (
           <div className="muted" style={{ marginTop: 8 }}>No contractor advances yet.</div>
         ) : (
-          <div style={{ overflowX: "auto", marginTop: 8 }}>
-            <table>
+          <div style={{ overflowX: "auto", maxHeight: 520, overflowY: "auto", marginTop: 8, border: "1px solid var(--border,#e3e3de)", borderRadius: 10 }}>
+            <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: 1180, fontSize: 12.5 }}>
               <thead><tr>
-                <th>Req No.</th><th>Raised</th><th>Contractor</th><th>Site</th><th>For worker</th>
-                <th className="num">Requested</th><th className="num">Approved</th><th>Status</th><th>Paid to</th>
-                <th>Raised by</th><th>Reviewed by</th><th></th>
+                {[["Req No.", "", true], ["Raised", ""], ["Contractor", ""], ["Site", ""], ["For worker", ""], ["Requested", "num"], ["Approved", "num"], ["Status", ""], ["Paid to", ""], ["Raised by", ""], ["Reviewed by", ""], ["", ""]].map(([h, cls, stick], i) => (
+                  <th key={i} className={cls} style={{ position: "sticky", top: 0, left: stick ? 0 : undefined, zIndex: stick ? 3 : 2, background: "#F7F7F5", fontSize: 11.5, color: "#555", fontWeight: 600, padding: "9px 12px", borderBottom: "1px solid var(--border,#e3e3de)", textAlign: cls === "num" ? "right" : "left", whiteSpace: "nowrap", boxShadow: stick ? "2px 0 0 var(--border,#e3e3de)" : undefined }}>{h}</th>))}
               </tr></thead>
               <tbody>
                 {rows.map(r => (
                   <tr key={r.id}>
-                    <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{r.req_no}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>{d(r.raised_at)}</td>
+                    <td style={{ fontWeight: 600, whiteSpace: "nowrap", position: "sticky", left: 0, background: "#fff", zIndex: 1, boxShadow: "2px 0 0 var(--border,#e3e3de)" }}>{r.req_no}</td>
+                    <td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{d(r.raised_at)}</td>
                     <td style={{ fontWeight: 600 }}>{r.contractor_name}</td>
-                    <td style={{ fontSize: 12 }}>{r.site}</td>
+                    <td style={{ fontSize: 12, whiteSpace: "nowrap" }}>{r.site}</td>
                     <td style={{ fontSize: 11.5, maxWidth: 220 }}>{r.for_worker_name ? <b>{r.for_worker_name}</b> : (r.for_workers || <span className="muted">contractor pool</span>)}{r.reason ? <div className="muted" style={{ fontSize: 11 }}>{r.reason}</div> : null}{r.kind && r.kind !== "advance" ? <span className="badge gray" style={{ marginLeft: 4, fontSize: 10 }}>{r.kind}</span> : null}</td>
-                    <td className="num">{inr(r.amount)}</td>
-                    <td className="num" style={{ fontWeight: 700 }}>{r.approved_amount != null ? inr(r.approved_amount) : "—"}</td>
-                    <td><Badge s={r.status} /></td>
+                    <td className="num" style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{inr(r.amount)}</td>
+                    <td className="num" style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{r.approved_amount != null ? inr(r.approved_amount) : "—"}</td>
+                    <td style={{ whiteSpace: "nowrap" }}><Badge s={r.status} /></td>
                     <td style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>{r.recipient_name ? <span style={{ background: r.pay_to === "worker" ? "#DBEAFE" : "#F3F4F6", color: r.pay_to === "worker" ? "#1D4ED8" : "#374151", padding: "2px 8px", borderRadius: 999 }} title={r.recipient_name}>{r.pay_to === "worker" ? "👤 Worker direct" : "🏢 Contractor"}</span> : <span className="muted">— not chosen</span>}</td>
-                    <td style={{ fontSize: 11.5 }}>{r.raised_by_name || "—"}</td>
-                    <td style={{ fontSize: 11.5 }}>{r.reviewed_by_name || "—"}</td>
+                    <td style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>{r.raised_by_name || "—"}</td>
+                    <td style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>{r.reviewed_by_name || "—"}{r.reviewed_at ? <div className="muted" style={{ fontSize: 10.5 }}>{d(r.reviewed_at)}</div> : null}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       {isDirector && r.status === "pending" && (<>
                         <button style={{ fontSize: 11.5, color: "var(--green)" }} onClick={() => review(r, "approved")}>✓</button>{" "}
