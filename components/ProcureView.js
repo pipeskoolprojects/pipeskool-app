@@ -219,7 +219,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     const res = await updatePODelivery(deliv.id, { expected_delivery: deliv.expected_delivery, delivery_status: deliv.delivery_status, delivery_note: deliv.delivery_note });
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
-    clearDraft(ind.id);   // update299
+    // update439: `ind` is not in scope here (delivery edit has no indent draft) — removed; it threw after a successful save
     setDeliv(null); setMsg("Delivery updated for " + deliv.po_no + " — site can see it now."); getPOs(scope).then(setPos);
   }
 

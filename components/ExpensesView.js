@@ -75,6 +75,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
   const advApproved = (adv || []).filter(a => a.status === "approved");
 
   const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");   // update439: submitWebClaim referenced setErr without a state — validation errors threw instead of showing
   const [session, setSession] = useState(null);
   const [bens, setBens] = useState([]);
   const [advForm, setAdvForm] = useState({ beneficiary: "", amount: "", reason: "" });
@@ -607,7 +608,8 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
                 <label className="muted">Bill(s) — photo or PDF{claimF.funding_source === "own_pocket" ? " *" : ""}</label>
                 <input type="file" accept="image/*,application/pdf" multiple onChange={ev => setClaimF(x => ({ ...x, files: ev.target.files }))} style={{ width: "100%", marginBottom: 12 }} />
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button className="primary" disabled={claimBusy} onClick={submitWebClaim}>{claimBusy ? "Submitting…" : "Submit claim"}</button>
+                  {err && <div style={{ color: "var(--red,#c0392b)", fontSize: 12.5, marginBottom: 6 }}>⚠ {err}</div>}
+                <button className="primary" disabled={claimBusy} onClick={submitWebClaim}>{claimBusy ? "Submitting…" : "Submit claim"}</button>
                   <button disabled={claimBusy} onClick={() => setClaimF(null)}>Cancel</button>
                 </div>
               </div>
