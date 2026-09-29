@@ -115,7 +115,7 @@ export default function PendingDeliveriesPage() {
       <main className="main">
         <div className="page-head"><h1>Pending deliveries</h1></div>
         <div className="muted" style={{ fontSize: 12.5, marginTop: -6, marginBottom: 12 }}>
-          Ordered vs received, derived automatically from every linked GRN / Delivery Challan — no manual entry.
+          Pending = PO qty − quantity received on Delivery Challans. GRN (stock entry) has no effect here — it is tracked on each challan separately.
         </div>
 
         {err && <div className="error" style={{ marginBottom: 10 }}>{err}</div>}
@@ -195,7 +195,7 @@ export default function PendingDeliveriesPage() {
                             <td><span className={"badge " + st[1]}>{st[0]}</span></td>
                             <td style={{ whiteSpace: "nowrap" }} onClick={e => e.stopPropagation()}>
                               {g.pending_lines > 0 && (<>
-                                <a href={"/stock/grn?po=" + g.po_id} target="_blank" rel="noreferrer">
+                                <a href={"/stock/challans?po=" + g.po_id} target="_blank" rel="noreferrer" title="Create the delivery challan for what arrived">
                                   <button className="primary" style={{ fontSize: 11.5, marginRight: 4 }}>Record delivery</button></a>
                                 <button style={{ fontSize: 11.5, marginRight: 4 }}
                                   onClick={() => { setLetterNote(""); setPanel({ row: g, mode: "letter" }); }}>Follow up</button>

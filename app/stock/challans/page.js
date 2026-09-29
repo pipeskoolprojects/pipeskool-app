@@ -46,7 +46,8 @@ export default function DeliveryChallans() {
   useEffect(() => {
     const s = getSession(); if (!s) { window.location.replace("/login"); return; }
     setSession(s);
-    load(); getChallanPOs().then(setPos); getTallySettings().then(setTally);
+    load(); getTallySettings().then(setTally);
+    getChallanPOs().then(list => { setPos(list); try { const want = new URLSearchParams(window.location.search).get("po"); const hit = want && (list || []).find(x => String(x.id) === String(want)); if (hit) { setShowNew(true); pickPO(hit); } } catch {} });   // update443: "Record delivery" from Pending Deliveries opens the DC form for that PO
     getClients({ activeOnly: true }).then(list => { setClients(list); const m = {}; list.forEach(c => (c.sites || []).forEach(s => { m[String(s.id)] = c.id; })); setSiteClient(m); }).catch(e => setErr(e.message));
   }, []);
 
