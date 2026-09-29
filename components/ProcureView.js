@@ -12,6 +12,7 @@ import { getVendors } from "@/lib/vendors";
 import VendorLink from "@/components/VendorLink";   // update410
 import { createIndent, editIndent, deleteIndent, quickAddItem, getIndentEditAudit } from "@/lib/stock";   // update337
 import { deleteIndentItem, closeEmptyIndent } from "@/lib/procure";   // update434
+import { getPoDcPending } from "@/lib/challan";   // update441
 import { getSiteAllowance, checkLine } from "@/lib/boqMaterials";   // update372
 import { searchIndentCatalog } from "@/lib/boq";
 import { getSites } from "@/lib/data";
@@ -26,6 +27,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   const showPo = only === "all" || only === "po";
   const scope = siteId ? String(siteId) : "all";
   const [session, setSession] = useState(null);
+  const [dcPend, setDcPend] = useState({});   // update441
   const [editLog, setEditLog] = useState(null);   // update337: null = closed
   const isDirector = session?.role === "director";
   // update238: PO approval right, from the shared helper. It resolves to director-only because
@@ -211,7 +213,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     getOpenIndents(scope).then(setIndents);
   }
 
-  const load = () => { getOpenIndents(scope).then(setIndents); getPOs(scope).then(setPos); };
+  const load = () => { getOpenIndents(scope).then(setIndents); getPOs(scope).then(list => { setPos(list); getPoDcPending((list || []).map(p => p.id)).then(setDcPend).catch(() => {}); }); };
   useEffect(() => { setSession(getSession()); load(); getVendors(false).then(setMasterVendors); }, []);
 
   async function saveDelivery() {
@@ -990,7 +992,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
             <>
               <div id="po-list" style={{ display: "grid", gap: 12 }}>{/* update410: every PO card shows detail + actions, no click */}
                   {poShown.slice((poPage - 1) * PAGE, poPage * PAGE).map(p => {
-                    const [dl, dc] = DELIVERY_STATUS[p.delivery_status] || DELIVERY_STATUS.pending;
+                    const [dl, dc] = DELIVERY_STATUS[p.delivery_status] || DELIVERY_STATUS.pending; const dcp = dcPend[p.id];   // update441
                     const void_ = p.status === "cancelled";
                     return (
                     <div key={p.id} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: 14, opacity: void_ ? .65 : 1 }}>
@@ -1006,7 +1008,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 10, fontSize: 12, padding: "10px 0", borderTop: "1px solid var(--border)", marginBottom: 10 }}>
                         <div><span className="muted" style={{ display: "block" }}>Indent</span><b style={{ fontWeight: 500 }}>{p.indent_no || "—"}</b></div>
                         <div><span className="muted" style={{ display: "block" }}>Raised by</span><b style={{ fontWeight: 500 }}>{p.raised_by || "—"}</b></div>
-                        <div><span className="muted" style={{ display: "block" }}>Delivery</span><b style={{ fontWeight: 500 }}>{dl}{p.expected_delivery ? " · by " + p.expected_delivery : ""}</b></div>
+                        <div><span className="muted" style={{ display: "block" }}>Delivery</span><b style={{ fontWeight: 500 }}>{dl}{p.expected_delivery ? " · by " + p.expected_delivery : ""}</b>{dcp && Number(dcp.pending_qty) > 0 && <div><span title={`${dcp.received_qty} of ${dcp.ordered_qty} received on challans · ${dcp.pending_qty} pending`} style={{ background: "#FEE2E2", color: "#B91C1C", fontSize: 10.5, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>🚚 Delivery challan pending · {Number(dcp.pending_qty)}</span></div>}{dcp && Number(dcp.pending_qty) <= 0 && dcp.grn_pending_on_dc && <div><span style={{ background: "#EDE9FE", color: "#6D28D9", fontSize: 10.5, padding: "2px 8px", borderRadius: 999 }}>GRN pending</span></div>}</div>
                         <div><span className="muted" style={{ display: "block" }}>Received</span>{p.received_pct == null ? <b style={{ fontWeight: 500 }}>—</b> : <div style={{ display: "flex", alignItems: "center", gap: 6 }}><div style={{ flex: 1, height: 5, background: "var(--gray-bg)", borderRadius: 99, overflow: "hidden" }}><div style={{ width: Math.min(100, p.received_pct) + "%", height: "100%", background: void_ ? "var(--muted)" : p.received_pct >= 100 ? "#15803D" : "#FF7A1A" }} /></div><b style={{ fontWeight: 500, fontSize: 11.5 }}>{p.items_complete}/{p.item_count} items</b></div>}</div>
                         <div><span className="muted" style={{ display: "block" }}>{p.approval === "approved" ? "Approved by" : p.approval === "rejected" ? "Rejected by" : "Approval"}</span><b style={{ fontWeight: 500 }}>{p.approval === "approved" ? (p.approved_by || "Director") + (p.approved_at ? " · " + p.approved_at : "") : p.approval === "rejected" ? (p.approved_by || "—") + (p.reject_reason ? " — " + p.reject_reason : "") : (canApprPO ? "Your decision needed" : "Sent to Director")}</b></div>
                         <div><span className="muted" style={{ display: "block" }}>PO status</span><b style={{ fontWeight: 500, textTransform: "capitalize" }}>{void_ ? "Cancelled" : p.status}</b></div>

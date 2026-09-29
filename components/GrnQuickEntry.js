@@ -1,4 +1,5 @@
 "use client";
+import { getDeliveryChallans, convertDcToGrn } from "@/lib/challan";   // update441: one-click GRN from a delivery challan
 // update405: NEW GRN quick entry — site + vendor with recent chips, open-PO suggestions, challan no.
 // with recent history; hands the choices to the existing GRN form on /stock (StockEntry) via sessionStorage.
 import { useEffect, useMemo, useState } from "react";
@@ -11,6 +12,9 @@ export default function GrnQuickEntry({ sites, rows, onClose }) {
   const rc = recent();
   const [site, setSite] = useState(rc.site || ""); const [vendor, setVendor] = useState(rc.vendor || ""); const [vq, setVq] = useState("");
   const [pos, setPos] = useState(null); const [po, setPo] = useState(""); const [challan, setChallan] = useState(""); const [cdate, setCdate] = useState("");
+  const [dcs, setDcs] = useState(null); const [dcBusy, setDcBusy] = useState(null); const [dcMsg, setDcMsg] = useState("");   // update441
+  useEffect(() => { getDeliveryChallans().then(list => setDcs((list || []).filter(d => !d.grn_no && d.status !== "cancelled" && d.po_no))).catch(() => setDcs([])); }, []);
+  async function grnFromDc(dc) { if (!window.confirm(`Confirm GRN for ${dc.dc_ref} — ${dc.vendor} · ${dc.po_no} · ${dc.qty_recd ?? ""} qty?\n\nAll challan items and quantities are added to Material Stock in one step.`)) return; setDcBusy(dc.id); const r = await convertDcToGrn(dc); setDcBusy(null); if (!r.ok) { setDcMsg("⚠ " + r.error); return; } setDcMsg(`✅ ${dc.dc_ref} → ${r.grn_no || "GRN"} — added to stock.`); setDcs(x => (x || []).filter(d => d.id !== dc.id)); }
   const [vendors, setVendors] = useState([]);
   useEffect(() => { getVendors().then(v => setVendors((v || []).map(x => x.name).filter(Boolean))).catch(() => {}); }, []);
   useEffect(() => { setPos(null); setPo(""); if (site) getOpenPOs(site).then(setPos).catch(() => setPos([])); }, [site]);
@@ -29,6 +33,18 @@ export default function GrnQuickEntry({ sites, rows, onClose }) {
   const Chip = ({ on, children, onClick }) => <button type="button" onClick={onClick} className={on ? "primary" : ""} style={{ fontSize: 12, padding: "5px 10px", borderRadius: 999 }}>{children}</button>;
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 12 }}>
+      {dcs && dcs.length > 0 && (   /* update441: GRN pre-filled from a delivery challan, one click to stock */
+        <div style={{ border: "1px solid #DDD6FE", background: "#F5F3FF", borderRadius: 10, padding: 10, marginBottom: 10 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>📦 From delivery challan — {dcs.length} awaiting GRN</div>
+          <div className="muted" style={{ fontSize: 11.5, marginBottom: 6 }}>Vendor, PO, items and quantities come from the challan. Check the physical count, then confirm — nothing to retype.</div>
+          {dcMsg && <div style={{ fontSize: 12, marginBottom: 6 }}>{dcMsg}</div>}
+          {dcs.slice(0, 6).map(dc => (
+            <div key={dc.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: "1px solid #E9E5FF", fontSize: 12.5, flexWrap: "wrap" }}>
+              <b>{dc.dc_ref}</b><span className="muted">{dc.date}</span><span>{dc.vendor} · {dc.po_no} · {dc.site}</span><span className="muted">{dc.lines_recd ?? ""}{dc.lines_recd != null ? " lines · " : ""}{dc.qty_recd != null ? dc.qty_recd + " qty" : ""}</span>
+              <span style={{ flex: 1 }} /><span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "#EDE9FE", color: "#6D28D9" }}>GRN pending</span>
+              <button type="button" className="primary" disabled={dcBusy === dc.id} style={{ fontSize: 12 }} onClick={() => grnFromDc(dc)}>{dcBusy === dc.id ? "Adding…" : "✓ Confirm GRN → add to stock"}</button>
+            </div>))}
+        </div>)}
       <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 12, width: "min(560px,100%)", padding: 20, border: "1px solid var(--border)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}><h2 style={{ margin: 0 }}>New GRN</h2><button type="button" onClick={onClose} style={{ border: "none", background: "transparent", fontSize: 18 }}>✕</button></div>
         {recentSites.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}><span className="muted" style={{ fontSize: 12 }}>Recent sites:</span>{recentSites.map(s => <Chip key={s.id} on={String(site) === String(s.id)} onClick={() => setSite(String(s.id))}>{s.name}</Chip>)}</div>}
