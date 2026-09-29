@@ -369,7 +369,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     setErr("");
     const cats = Array.from(new Set(chosen.map(it => it.category)));
     const title = "Enquiry — " + cats.join(" & ");
-    const url = `/purchase/enquiry?indent=${ind.id}&items=${chosen.map(it => it.id).join(",")}&title=${encodeURIComponent(title)}`;
+    const url = `/purchase/enquiry?indent=${ind.id}&items=${chosen.map(it => it.id).join(",")}&title=${encodeURIComponent(title)}&vendors=${enqVendors.map(encodeURIComponent).join("|")}`;   // update440: builder (pending-only, vendor groups, WhatsApp/Email)
     window.open(url, "_blank");
   }
 
