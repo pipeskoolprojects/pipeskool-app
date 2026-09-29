@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { useEffect, useState, Suspense } from "react";
 import { getCompanyGstin } from "@/lib/data";   // update300
 import { useSearchParams } from "next/navigation";
+import { getPoChallanHistory } from "@/lib/challan";   // update441
 import { getPODetail, getPOProofs, canEditPoRates, editPoRates, lastRateForVendor, getPoRateLog, getPoLineIds, duplicatePO } from "@/lib/procure";   // update408
 import { getPOItemStatus, LINE_STATUS } from "@/lib/pending";
 
@@ -20,6 +21,8 @@ function POView() {
   const [canEdit, setCanEdit] = useState(false); const [edit, setEdit] = useState(null);
   const [rateLog, setRateLog] = useState([]); const [busyE, setBusyE] = useState(false); const [emsg, setEmsg] = useState("");
   const reload = () => getPODetail(poId).then(d => setPo(d));
+  const [dcHist, setDcHist] = useState([]);   // update441
+  useEffect(() => { if (!poId) return; getPoChallanHistory(poId).then(setDcHist).catch(() => {}); }, [poId]);
   useEffect(() => { if (!poId) return; canEditPoRates().then(setCanEdit); getPoRateLog(poId).then(setRateLog); }, [poId]);
   async function startEdit() {
     setEmsg(""); const lines = await getPoLineIds(poId);
@@ -344,6 +347,15 @@ function POView() {
         </div>
       )}
 
+      {dcHist.length > 0 && (   /* update441: how this PO was fulfilled across shipments */
+        <div className="no-print" style={{ margin: "14px auto", maxWidth: 900, background: "#fff", border: "1px solid var(--border,#e3e3de)", borderRadius: 12, padding: 14 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>🚚 Delivery challans against this PO · {dcHist.length}</div>
+          {dcHist.map(d => (
+            <div key={d.id} style={{ borderLeft: "3px solid #FF7A1A", background: "#FAFAF9", borderRadius: 6, padding: "6px 10px", margin: "6px 0", fontSize: 12.5, opacity: d.status === "cancelled" ? .55 : 1 }}>
+              <b>{d.dc_ref}</b> · {d.dc_date} · {(d.items || []).length} items · {Number(d.qty)} qty {d.status === "cancelled" ? <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "#F3F4F6", color: "#6B7280" }}>Cancelled</span> : d.grn_no ? <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "#DBEAFE", color: "#1D4ED8" }}>GRN done — added to stock{d.grn_date ? " on " + String(d.grn_date).slice(0, 10) : ""} ({d.grn_no})</span> : <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "#EDE9FE", color: "#6D28D9" }}>GRN pending</span>}
+              <div className="muted" style={{ fontSize: 11.5 }}>{(d.items || []).map(i => `${i.item_name} ${Number(i.qty)} ${i.unit || ""}`).join(" · ")}</div>
+            </div>))}
+        </div>)}
       {rateLog.length > 0 && (
         <div className="no-print" style={{ marginTop: 18, fontSize: 12.5 }}>
           <div style={{ fontWeight: 800, fontSize: 12, color: "#6b7280", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>Rate corrections (audit)</div>

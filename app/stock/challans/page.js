@@ -54,9 +54,10 @@ export default function DeliveryChallans() {
     setHead(h => ({ ...h, po_id: p.id, vendor_name: p.vendor }));
     // update271: prefill only what a NEW challan may carry — pending minus what is already
     // on an unconverted challan. Fully covered lines don't appear at all.
-    setLines(p.items.filter(i => (i.remaining_qty ?? i.pending_qty) > 0).map(i => ({
-      po_item_id: i.po_item_id, item_id: i.item_id, item_name: i.item_name, unit: i.unit,
-      ordered_qty: i.remaining_qty ?? i.pending_qty, received_qty: i.remaining_qty ?? i.pending_qty })));
+    // update441: partial shipments — "Ordered" = pending after earlier challans; closed lines shown read-only; Received defaults to 0 so you enter only what arrived
+    setLines(p.items.map(i => ({
+      po_item_id: i.po_item_id, item_id: i.item_id, item_name: i.item_name, unit: i.unit, po_qty: Number(i.ordered_qty), so_far: Number(i.received_qty), closed: Number(i.pending_qty) <= 0,
+      ordered_qty: i.remaining_qty ?? i.pending_qty, received_qty: Number(i.pending_qty) > 0 ? "" : 0 })));
   }
 
   async function runExtract(f) {
@@ -107,7 +108,7 @@ export default function DeliveryChallans() {
     const res = await createDeliveryChallan({ ...head, site_id: po?.site_id || session?.site_id || null, proof_path }, lines);
     setSaving(false);
     if (!res.ok) { setErr(res.error); return; }
-    setMsg("Saved " + res.dc_ref + (res.status === "mismatch" ? " — quantity mismatch flagged for review." : "."));
+    setMsg("Saved " + res.dc_ref + (res.status === "partial" ? " — partial shipment; the balance stays in Pending Deliveries." : "."));
     setFile(null); setLines([]); setHead({ vendor_name: "", vendor_dc_no: "", dc_date: new Date().toISOString().slice(0, 10), po_id: null, source: "manual", confidence: null, dc_ref: "", client_id: "" });
     load();
   }
@@ -182,7 +183,7 @@ export default function DeliveryChallans() {
   }
 
   const canCreate = session && (session.role === "director" || session.role === "it_executive" || canSeeModuleAnySite(session, "stock"));
-  const stBadge = { matched: ["Matched", "p"], mismatch: ["Mismatch", "red"], pending: ["No PO", "warn"], cancelled: ["Cancelled", "a"] };   // update272
+  const stBadge = { matched: ["Matched", "p"], partial: ["Partial", "warn"], mismatch: ["Mismatch", "red"], pending: ["No PO", "warn"], cancelled: ["Cancelled", "a"] };   // update272/441
 
   return (
     <div className="layout">
@@ -281,16 +282,23 @@ export default function DeliveryChallans() {
                       <div><div className="muted" style={{ fontSize: 10.5 }}>Ship to</div><b>{c.name}</b>{addrLines(sb).map((l, i) => <div key={i}>{l}</div>)}{(c.contact_name || c.mobile) && <div>{[c.contact_name, c.mobile].filter(Boolean).join(" · ")}</div>}</div>
                     </div>); })()}
                   <table className="dt-compact" style={{ width: "100%" }}>
-                    <thead><tr><th>Item</th><th className="num">Ordered</th><th className="num">Received (editable)</th><th>Unit</th><th>Match</th></tr></thead>
+                    <thead><tr><th>Item</th><th className="num">PO qty</th><th className="num">Received so far</th><th className="num">Pending (Ordered)</th><th className="num">Received now</th><th>Unit</th><th>Status after save</th></tr></thead>
                     <tbody>
-                      {lines.map((l, i) => { const d = Number(l.received_qty) - Number(l.ordered_qty); return (
-                        <tr key={i}>
+                      {lines.map((l, i) => { const now = Number(l.received_qty) || 0; const pend = Number(l.ordered_qty) || 0; const after = pend - now; const d = now - pend; return (
+                        <tr key={i} style={{ background: l.closed ? "#FAFAF9" : now > 0 ? "#FFFBEB" : undefined, opacity: l.closed ? .65 : 1 }}>
                           <td>{l.item_name}{!l.po_item_id && <span className="badge warn" style={{ marginLeft: 6 }}>not on PO</span>}</td>
-                          <td className="num">{l.ordered_qty || "—"}</td>
-                          <td className="num"><input inputMode="decimal" style={{ width: 74, textAlign: "right" }} value={l.received_qty}
-                            onChange={e => setLines(ar => ar.map((x, j) => j === i ? { ...x, received_qty: e.target.value } : x))} /></td>
+                          <td className="num">{l.po_qty ?? "—"}</td>
+                          <td className="num">{l.so_far ?? "—"}</td>
+                          <td className="num" style={{ fontWeight: 700 }}>{l.closed ? 0 : (l.ordered_qty || "—")}</td>
+                          <td className="num">{l.closed ? <span className="badge p" style={{ fontSize: 10.5 }}>Closed</span> : <input inputMode="decimal" placeholder="0" style={{ width: 74, textAlign: "right" }} value={l.received_qty}
+                            onChange={e => setLines(ar => ar.map((x, j) => j === i ? { ...x, received_qty: e.target.value } : x))} />}</td>
                           <td>{l.unit}</td>
-                          <td>{!l.ordered_qty ? <span className="muted">—</span> : d === 0 ? <span style={{ color: "var(--green)", fontWeight: 700 }}>✓ OK</span> : d < 0 ? <span style={{ color: "var(--red)", fontWeight: 700 }}>⚠ Short by {-d}</span> : <span style={{ color: "var(--amber)", fontWeight: 700 }}>⚠ Excess by {d}</span>}</td>
+                          <td style={{ whiteSpace: "nowrap" }}>{l.closed ? <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "#DCFCE7", color: "#15803D" }}>Closed · {l.po_qty} of {l.po_qty}</span>
+                            : !l.po_item_id ? <span className="muted">—</span>
+                            : d > 0 ? <span style={{ color: "var(--red)", fontWeight: 700 }}>⚠ Exceeds pending by {d} — blocked</span>
+                            : now <= 0 ? <span className="muted">not in this shipment · {pend} stays pending</span>
+                            : after > 0 ? <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "#FEF3C7", color: "#B45309" }}>Partial · {(l.so_far || 0) + now} of {l.po_qty} · {after} pending</span>
+                            : <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "#DCFCE7", color: "#15803D" }}>Closed · {l.po_qty} of {l.po_qty}</span>}</td>
                         </tr>
                       ); })}
                     </tbody>
@@ -330,7 +338,7 @@ export default function DeliveryChallans() {
                 <colgroup>{canPost && <col style={{ width: "4%" }} />}<col style={{ width: "22%" }} /><col style={{ width: "22%" }} /><col className="hide-m" style={{ width: "17%" }} /><col style={{ width: "11%" }} /><col style={{ width: "12%" }} /><col style={{ width: "12%" }} /></colgroup>
                 <thead><tr>{canPost && <th><input type="checkbox" title="Select all on this page" checked={shown.length > 0 && shown.slice((pg - 1) * PAGE, pg * PAGE).every(r => sel[r.id])} onChange={e => { const on = e.target.checked; setSel(s => { const n = { ...s }; shown.slice((pg - 1) * PAGE, pg * PAGE).forEach(r => { if (on) n[r.id] = true; else delete n[r.id]; }); return n; }); }} /></th>}<th>DC ref</th><th>Vendor</th><th className="hide-m">Against PO</th><th style={{ textAlign: "right" }}>Qty</th><th>Match</th><th>Tally</th></tr></thead>
                 <tbody>
-                  {shown.slice((pg - 1) * PAGE, pg * PAGE).map(r => { const [sl] = stBadge[r.status] || ["?"]; const tone = r.status === "matched" ? ["#DCFCE7", "#15803D"] : r.status === "mismatch" ? ["#FEE2E2", "#B91C1C"] : r.status === "pending" ? ["#FEF3C7", "#92400E"] : ["#F3F4F6", "#6B7280"]; const o = !!xp[r.id]; return (
+                  {shown.slice((pg - 1) * PAGE, pg * PAGE).map(r => { const [sl] = stBadge[r.status] || ["?"]; const tone = r.status === "matched" ? ["#DCFCE7", "#15803D"] : r.status === "partial" ? ["#FEF3C7", "#B45309"] : r.status === "mismatch" ? ["#FEE2E2", "#B91C1C"] : r.status === "pending" ? ["#FEF3C7", "#92400E"] : ["#F3F4F6", "#6B7280"]; const o = !!xp[r.id]; return (
                     <Fragment key={r.id}>
                     <tr className="dc-row" onClick={() => setXp(x => ({ ...x, [r.id]: !x[r.id] }))} style={{ cursor: "pointer", opacity: r.status === "cancelled" ? 0.6 : 1, background: o ? "#FAFAFC" : undefined }} title={r.status === "cancelled" ? ("Cancelled" + (r.cancelled_by ? " by " + r.cancelled_by : "") + (r.cancel_reason ? " — " + r.cancel_reason : "")) : undefined}>
                       {canPost && <td onClick={e => e.stopPropagation()}><input type="checkbox" checked={!!sel[r.id]} onChange={e => setSel(s => { const n = { ...s }; if (e.target.checked) n[r.id] = true; else delete n[r.id]; return n; })} /></td>}
@@ -338,7 +346,7 @@ export default function DeliveryChallans() {
                       <td className="ell" onClick={e => e.stopPropagation()}><VendorLink name={r.vendor} />{r.vendor_dc_no && <div className="muted" style={{ fontSize: 10.5 }}>vendor DC {r.vendor_dc_no}</div>}</td>
                       <td className="ell hide-m muted">{r.po_no || "No PO"}</td>
                       <td style={{ textAlign: "right" }}><b>{r.recv}</b>/{r.ord || "—"}</td>
-                      <td><span style={{ background: tone[0], color: tone[1], fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>{sl}</span>{!r.grn_no && r.status !== "cancelled" && <span style={{ background: "#E8F0FE", color: "#1D4ED8", fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>→ GRN</span>}</td>
+                      <td><span style={{ background: tone[0], color: tone[1], fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>{sl}</span>{r.status !== "cancelled" && (r.grn_no ? <span title={"GRN " + r.grn_no} style={{ background: "#DBEAFE", color: "#1D4ED8", fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>GRN done</span> : <span style={{ background: "#EDE9FE", color: "#6D28D9", fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>GRN pending</span>)}</td>
                       <td onClick={e => e.stopPropagation()}>{r.posted ? <span title={`Posted by ${r.posted_by} · ${r.posted_at}`} style={{ background: "#DCFCE7", color: "#15803D", fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>✓ Posted</span> : <span style={{ background: "#F3F4F6", color: "#6B7280", fontSize: 11, padding: "2px 8px", borderRadius: 999, border: "1px solid var(--border)", whiteSpace: "nowrap" }}>Not posted</span>}
                         {canPost && r.status !== "cancelled" && <button type="button" title={r.posted ? "Mark as NOT posted (logged)" : "Mark as posted in Tally (logged)"} style={{ fontSize: 10.5, marginLeft: 4, padding: "0 5px" }} onClick={() => markPosted([r.id], !r.posted)}>{r.posted ? "↺" : "✓"}</button>}</td>
                     </tr>
