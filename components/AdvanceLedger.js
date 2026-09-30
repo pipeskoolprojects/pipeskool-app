@@ -16,7 +16,7 @@ export default function AdvanceLedger({ onTotals }) {
   const [person, setPerson] = useState(null);   // pkey of the person whose ledger is open
   useEffect(() => {
     if (!getSession()) { window.location.replace("/login"); return; }
-    getAdvanceLedger().then(setData);
+    getAdvanceLedger().then(setData).catch(e => setData({ rows: [], recovered: {}, error: e?.message || String(e) }));   // update446: fail loudly
   }, []);
 
   const rows = data?.rows || [];
@@ -71,6 +71,7 @@ export default function AdvanceLedger({ onTotals }) {
   return (
     <div>
       <div>
+          {data?.error && <div className="note red" style={{ marginBottom: 8 }}>⚠ {data.error}</div>}
           {!data ? <div className="muted">Loading…</div> :
             <DataTable columns={cols} rows={personRows} exportName="advance_salary_ledger" dateField="last" pageSize={10} />}
           <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>

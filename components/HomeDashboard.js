@@ -200,8 +200,8 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
     getProjects().then(r => setProjects(arr(r)));
     getAttendance(todayLocal(), "all").then(r => setAtt(arr(r))).catch(() => setAtt([]));
     getWorkers().then(r => setWorkers(arr(r))).catch(() => setWorkers([]));
-    getPettyRequestQueue().then(r => setPettyQ(arr(r))).catch(() => {});
-    getAdvanceQueue().then(r => setAdvQ(arr(r))).catch(() => {});
+    getPettyRequestQueue(undefined, { status: ["pending"] }).then(r => setPettyQ(arr(r))).catch(() => {});   // update446: pending only, all of them
+    getAdvanceQueue(undefined, { status: ["pending"] }).then(r => setAdvQ(arr(r))).catch(() => {});
     getExpenseClaimQueue().then(r => setClaims(arr(r))).catch(() => {});
     getPOs("all").then(r => setPos(arr(r))).catch(() => {});
     getOpenIndents("all").then(r => setIndents(arr(r))).catch(() => {});

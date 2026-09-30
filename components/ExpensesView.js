@@ -9,11 +9,11 @@ import CollapseCard from "@/components/CollapseCard";
 import { billUrl, isPdf } from "@/lib/bills";
 import { isDemo } from "@/lib/supabase";
 import {
-  getAdvanceQueue, reviewAdvance, getExpenseClaimQueue, reviewExpenseClaim, requestExpenseReversal, ackExpenseReversal, getExpenseReversals,
+  getAdvanceRequestsPage, reviewAdvance, getExpenseLedgerPage, reviewExpenseClaim, requestExpenseReversal, ackExpenseReversal, getExpenseReversals,
   getBeneficiaries, raiseAdvanceSalary,
   getPettyReturnQueue, confirmPettyReturn, getPettyLedger,
   getPettyReconciliation, catLabel, inr, markAdvancePosted, markExpensePosted,
-  getPettyRequestQueue, reviewPettyRequest, requestPettyCash , selfEditExpense, EXPENSE_CATEGORIES, getPersonMoneyProfile, claimExpense } from "@/lib/money";   // update300
+  getPettyRequestsPage, reviewPettyRequest, requestPettyCash , selfEditExpense, EXPENSE_CATEGORIES, getPersonMoneyProfile, claimExpense } from "@/lib/money";   // update300
 import { getSites } from "@/lib/data";
 import { getSession, canAnySite } from "@/lib/auth";
 import { canApprove } from "@/lib/perms";
@@ -25,7 +25,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
   const scope = siteId ? String(siteId) : null;
 
   // update196: shared 25-per-page pager for the hand-built lists (DataTables page themselves)
-  const [pgPetty, setPgPetty] = useState(1); const [pgRet, setPgRet] = useState(1);
+  const [pgRet, setPgRet] = useState(1);
   const LP = 10;   // update200: max 10 records per page for long lists
   const pageOf = (arr, pg) => (arr || []).slice((pg - 1) * LP, pg * LP);
   const Pager = ({ n, pg, set }) => { const pc = Math.max(Math.ceil(n / LP), 1); if (n <= LP) return null; const cur = Math.min(pg, pc); return (
@@ -38,8 +38,14 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
       <button style={{ fontSize: 12 }} disabled={cur >= pc} onClick={() => set(cur + 1)}>Next ›</button>
     </div>); };
 
-  const [adv, setAdv] = useState(null);
-  const [pettyReqs, setPettyReqs] = useState(null);
+  // update446: the three request/claim ledgers are read ONE PAGE AT A TIME from the database (DataTable
+  // server mode). What the page keeps is the last answer (count + totals of ALL matching rows) and a
+  // reload key — bumping it refetches the current page after an approve / edit / new request.
+  const [expRes, setExpRes] = useState(null); const [expKey, setExpKey] = useState(0);
+  const [advRes, setAdvRes] = useState(null); const [advKey, setAdvKey] = useState(0);
+  const [pettyRes, setPettyRes] = useState(null); const [pettyKey, setPettyKey] = useState(0);
+  const [loadErr, setLoadErr] = useState("");   // update446: a failed side list shows here, never as a silently short list
+  const failed = what => e => setLoadErr("Could not load " + what + ": " + (e?.message || e));
   const [reversals, setReversals] = useState(null); const [reverseExp, setReverseExp] = useState(null); const [revReason, setRevReason] = useState({ code: "duplicate", text: "" });   // update433
   const [pettyForm, setPettyForm] = useState({ amount: "", purpose: "", required_date: "", remarks: "" });
   const [pettyMsg, setPettyMsg] = useState("");
@@ -48,7 +54,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
     const note = status === "rejected" ? (window.prompt("Reason (sent to the requester):") || "") : "";
     const res = await reviewPettyRequest(id, status, note, amount);
     if (!res.ok) { window.alert("Could not review: " + res.error); return; }
-    getPettyRequestQueue(scope).then(setPettyReqs);
+    setPettyKey(k => k + 1);
   }
   async function sendWebPetty() {
     setPettyMsg("");
@@ -57,10 +63,9 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
       amount: pettyForm.amount, purpose: pettyForm.purpose, required_date: pettyForm.required_date || null, remarks: pettyForm.remarks || null });
     if (!res.ok) { setPettyMsg(res.error); return; }
     setPettyForm({ amount: "", purpose: "", required_date: "", remarks: "" });
-    setPettyMsg("Request sent."); getPettyRequestQueue(scope).then(setPettyReqs);
+    setPettyMsg("Request sent."); setPettyKey(k => k + 1);
   }
-  const [claims, setClaims] = useState(null);
-  const [sel, setSel] = useState({});   // update247: expense ids chosen for a Cash Voucher
+  const [sel, setSel] = useState({});   // update247: expense ids chosen for a Cash Voucher — update446: id -> row, so a tick survives paging
   const [petty, setPetty] = useState([]);
   const [advTotals, setAdvTotals] = useState({ taken: 0, rec: 0, out: 0 });   // update200: fed by AdvanceLedger
   // update200: compact overview — summary cards + collapsible module sections (nothing removed,
@@ -68,12 +73,11 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
   const [openSec, setOpenSec] = useState({});   // key -> bool
   const toggleSec = k => setOpenSec(o => ({ ...o, [k]: !o[k] }));
   const sumBy = (rows, f) => (rows || []).reduce((t, r) => t + (f(r) || 0), 0);
-  const approvedClaims = sumBy((claims || []).filter(c => c.status === "approved"), c => c.amount);
-  const pendingClaims = sumBy((claims || []).filter(c => c.status === "pending"), c => c.amount);
-  const rejectedClaims = sumBy((claims || []).filter(c => c.status === "rejected"), c => c.amount);
-  const pettyBal = sumBy(petty, h => h.balance), pettySpent = sumBy(petty, h => h.spent), pettyReturned = sumBy(petty, h => h.returned);
-  const advPending = (adv || []).filter(a => a.status === "pending");
-  const advApproved = (adv || []).filter(a => a.status === "approved");
+  // update446: card figures come from the DATABASE totals of every record in scope (were: sums of the
+  // newest 300 claims / 200 advances loaded in the browser)
+  const N = x => Number(x || 0);
+  const expScope = expRes?.scope, advScope = advRes?.scope, pettyScope = pettyRes?.scope;
+  const pettyBal = sumBy(petty, h => h.balance);
 
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");   // update439: submitWebClaim referenced setErr without a state — validation errors threw instead of showing
@@ -105,20 +109,21 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
     if (!res.ok) { setAdvErr(res.error); return; }
     setMsg(`Advance salary request sent for ${b.name}.`);
     setAdvForm({ beneficiary: "", amount: "", reason: "" });
-    getAdvanceQueue(scope).then(setAdv);
+    setAdvKey(k => k + 1);
   }
 
   const load = () => {
-    getAdvanceQueue(scope).then(setAdv);
-    getExpenseClaimQueue(scope).then(setClaims);
-    getPettyReconciliation().then(setPetty);
-    getExpenseReversals().then(setReversals);   // update433
+    setLoadErr("");
+    setAdvKey(k => k + 1); setExpKey(k => k + 1); setPettyKey(k => k + 1);   // update446: refetch the pages on screen
+    getPettyReconciliation().then(setPetty).catch(failed("petty cash balances"));
+    getExpenseReversals().then(setReversals).catch(failed("corrections"));   // update433
   };
   useEffect(() => {
-    const st = getSession(); setSession(st); load();
+    const st = getSession(); setSession(st);
+    getPettyReconciliation().then(setPetty).catch(failed("petty cash balances"));
+    getExpenseReversals().then(setReversals).catch(failed("corrections"));
     if (st?.id) getBeneficiaries(st.id).then(setBens);
-    getPettyRequestQueue(scope).then(setPettyReqs);
-  }, []);
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // update238: one gate for every approval action on this page — identical rule to the
   // Approvals inbox and to the RLS policies behind it.
@@ -201,16 +206,16 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
   ];
 
   // update247: pick claims -> print ONE Cash Voucher covering them all
-  const toggleSel = id => setSel(v => { const n = { ...v }; n[id] ? delete n[id] : (n[id] = true); return n; });
+  const toggleSel = r => setSel(v => { const n = { ...v }; n[r.id] ? delete n[r.id] : (n[r.id] = r); return n; });
   const selIds = Object.keys(sel);
-  const selRows = (claims || []).filter(r => sel[r.id]);
+  const selRows = Object.values(sel);
   const selTotal = selRows.reduce((t, r) => t + Number(r.amount || 0), 0);
   const selPayees = [...new Set(selRows.map(r => r.claimant_id))].length;
   const openVoucher = () => window.open("/expenses/voucher?ids=" + selIds.join(","), "_blank", "noopener");
 
   const claimCols = [
     { key: "_sel", label: "", sortable: false, exportValue: () => "",
-      render: r => <input type="checkbox" checked={!!sel[r.id]} onChange={() => toggleSel(r.id)}
+      render: r => <input type="checkbox" checked={!!sel[r.id]} onChange={() => toggleSel(r)}
         title="Add to Cash Voucher" style={{ width: 15, height: 15, accentColor: "var(--copper)" }} /> },
     { key: "date", label: "Date", filter: "search" },
     { key: "claimant", label: "Claimant", filter: "select",
@@ -303,16 +308,18 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
   const avColor = n => AV_COLORS[((n || "").split("").reduce((t, c) => t + c.charCodeAt(0), 0)) % AV_COLORS.length];
   const [profile, setProfile] = useState(null);     // { loading, name, ... }
   const [profTab, setProfTab] = useState("all");
+  const [profShow, setProfShow] = useState(50);   // update446: full history, shown 50 at a time
   function openProfile(staffId, name) {
     if (!staffId) return;
-    setProfTab("all"); setProfile({ loading: true, name });
-    getPersonMoneyProfile(staffId).then(pr => setProfile(pr ? { ...pr, loading: false } : null));
+    setProfTab("all"); setProfShow(50); setProfile({ loading: true, name });
+    getPersonMoneyProfile(staffId).then(pr => setProfile(pr ? { ...pr, loading: false } : null))
+      .catch(e => setProfile({ loading: false, name, error: e?.message || String(e) }));
   }   // update214: ⛶ full-page browsing (same DOM — filters/state preserved)
   const MT = [
     ["corrections", "↩", "Corrections (reversals)", () => (reversals || []).filter(r => r.status === "pending_ack").length],   // update433
-    ["pettyreq", "🪙", "Petty cash requests", () => (pettyReqs || []).filter(r => r.status === "pending").length],
-    ["advreq", "📄", "Advance salary requests", () => (adv || []).length],
-    ["claims", "💳", "Expenses ledger", () => (claims || []).length],
+    ["pettyreq", "🪙", "Petty cash requests", () => N(pettyScope?.pending?.n)],   // update446: database counts
+    ["advreq", "📄", "Advance salary requests", () => N(advScope?.total)],
+    ["claims", "💳", "Expenses ledger", () => N(expScope?.total)],
     ["vendor", "🛒", "Direct Vendor Payment", () => null],   // update356
     ["contradv", "🧱", "Contractor advances", () => null],   // update365
     ["pettyled", "📒", "Petty cash ledger", () => petty.length],
@@ -333,7 +340,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
       funding_source: editExp.funding_source, expense_date: editExp.expense_date, paid_to: editExp.paid_to });
     setEditBusy(false);
     if (!res.ok) { setEditErr(res.error); return; }
-    setEditExp(null); setMsg("Expense updated."); getExpenseClaimQueue(scope).then(setClaims);
+    setEditExp(null); setMsg("Expense updated."); setExpKey(k => k + 1);
   }
 
   // returns queue + person ledger (update167)
@@ -347,18 +354,19 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
   };
   const [ledgerRows, setLedgerRows] = useState(null);
   const [lf, setLf] = useState({ site: "all", from: "", to: "", category: "all", type: "all" });
-  useEffect(() => { getPettyReturnQueue(scope).then(setPettyReturns); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { getPettyReturnQueue(scope).then(setPettyReturns).catch(failed("cash returns")); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  const [ledgerShow, setLedgerShow] = useState(100);   // update446: complete ledger, shown 100 rows at a time
   useEffect(() => {
-    const id = ledgerFor.split("|")[0];
-    if (id) getPettyLedger(Number(id)).then(setLedgerRows); else setLedgerRows(null);
-  }, [ledgerFor]);
+    const id = ledgerFor.split("|")[0]; setLedgerShow(100);
+    if (id) getPettyLedger(Number(id)).then(setLedgerRows).catch(failed("the petty ledger")); else setLedgerRows(null);
+  }, [ledgerFor]);   // eslint-disable-line react-hooks/exhaustive-deps
   async function actReturn(id, action) {
     const note = action === "cancelled" ? window.prompt("Reason (sent to the holder):") : null;
     const res = await confirmPettyReturn(id, action, note);
     if (!res.ok) { window.alert("Could not save: " + res.error); return; }
     setMsg(action === "confirmed" ? "Cash return confirmed — balance updated." : "Return not accepted.");
-    getPettyReturnQueue(scope).then(setPettyReturns); load();
-    if (ledgerFor) { const id2 = ledgerFor.split("|")[0]; getPettyLedger(Number(id2)).then(setLedgerRows); }
+    getPettyReturnQueue(scope).then(setPettyReturns).catch(failed("cash returns")); load();
+    if (ledgerFor) { const id2 = ledgerFor.split("|")[0]; getPettyLedger(Number(id2)).then(setLedgerRows).catch(failed("the petty ledger")); }
   }
   const ledgerView = (ledgerRows || []).filter(l =>
     (lf.site === "all" || l.site === lf.site)
@@ -376,21 +384,66 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
         : <button style={{ fontSize: 11 }} onClick={() => setLedgerFor(r.user_id + "|" + r.holder)}>📒 Ledger</button> },
   ];
 
+  // update446: Petty cash requests as a DataTable (server mode) — same columns and actions as the old
+  // hand-built table, plus search / date / requester / site / status filters that work across ALL requests.
+  const pettyReqCols = [
+    { key: "date", label: "Date", render: r => <span className="muted">{r.date}</span> },
+    { key: "requester", label: "Requester", filter: "select", render: r => <span style={{ fontWeight: 600 }}>{r.requester}</span> },
+    { key: "site", label: "Site", filter: "select", render: r => <span className="muted">{r.site}</span> },
+    { key: "amount", label: "Amount", type: "num", exportValue: r => r.approved_amount ?? r.amount,
+      render: r => <span>₹{r.amount}
+        {r.status === "approved" && r.approved_amount != null && r.approved_amount !== r.amount
+          ? <div style={{ fontSize: 11, color: "var(--green)" }}>approved ₹{r.approved_amount}</div> : null}</span> },
+    { key: "purpose", label: "Purpose", filter: "search", exportValue: r => (r.purpose || "") + (r.remarks ? " — " + r.remarks : ""),
+      render: r => <span>{r.purpose}{r.remarks ? <span className="muted"> — {r.remarks}</span> : ""}</span> },
+    { key: "required_date", label: "Needed by", render: r => <span className="muted">{r.required_date || "—"}</span> },
+    { key: "status", label: "Status", filter: "select", optionLabel: o => o === "approved" ? "Approved" : o === "rejected" ? "Rejected" : o === "pending" ? "Pending" : o,
+      render: r => r.status === "approved" ? <span className="badge p">Approved</span>
+        : r.status === "rejected" ? <span className="badge a">Rejected{r.query ? " — " + r.query : ""}</span>
+        : <span className="badge gray">Pending</span> },
+    { key: "_act", label: "", sortable: false, exportValue: () => "", render: r => (
+      <span style={{ whiteSpace: "nowrap" }}>
+        {canApprMoney && r.status === "pending" && (
+          <>
+            <input inputMode="numeric" style={{ width: 70, fontSize: 11.5, marginRight: 4 }}
+                   value={pettyAmt[r.id] ?? String(r.amount)} title="Amount to approve (can differ from asked)"
+                   onChange={e => setPettyAmt(a => ({ ...a, [r.id]: e.target.value }))} />
+            <button className="primary" style={{ fontSize: 11.5, marginRight: 4 }}
+                    onClick={() => actPetty(r.id, "approved", pettyAmt[r.id] ?? r.amount)}>Approve</button>
+            <button style={{ fontSize: 11.5 }} onClick={() => actPetty(r.id, "rejected")}>Reject</button>
+          </>
+        )}
+        {canApprMoney && r.status === "approved" && (
+          <>
+            <button style={{ fontSize: 11.5, marginRight: 4 }} title="Approve a different amount"
+                    onClick={() => { const v = window.prompt("Revised approved amount \u20b9 (asked \u20b9" + r.amount + "):", String(r.approved_amount ?? r.amount)); if (v != null && v !== "") actPetty(r.id, "approved", v); }}>✎ Change amount</button>
+            <button style={{ fontSize: 11.5, color: "var(--red)" }} title="Remove the granted amount and mark rejected"
+                    onClick={() => { if (window.confirm("Withdraw this approval? \u20b9" + (r.approved_amount ?? r.amount) + " will be removed from " + r.requester + "'s petty balance.")) actPetty(r.id, "rejected"); }}>Undo approval</button>
+          </>
+        )}
+        {canApprMoney && r.status === "rejected" && (
+          <button style={{ fontSize: 11.5 }} title="Approve after all"
+                  onClick={() => { const v = window.prompt("Approve amount \u20b9 (asked \u20b9" + r.amount + "):", String(r.amount)); if (v != null && v !== "") actPetty(r.id, "approved", v); }}>Approve…</button>
+        )}
+      </span>) },
+  ];
+
   return (
     <div className={embedded ? "money-embed" : ""}
          style={embedded ? undefined : { overflow: "hidden", display: "flex", flexDirection: "column", height: "100%" }}>
       {!embedded && <div className="page-head"><h1>Money &amp; expenses</h1></div>}
         {isDemo && <div className="demo-banner">Demo mode — sample data.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
+        {loadErr && <div className="note red" style={{ marginBottom: 8 }}>⚠ {loadErr} <button style={{ fontSize: 12, marginLeft: 8 }} onClick={load}>Retry</button></div>}
 
         {/* update200: overview cards */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, marginBottom: 14 }}>
-          {[["💳 Total expenses", inr(approvedClaims), (claims || []).length + " transactions", null, "claims"],
+          {[["💳 Total expenses", expScope ? inr(expScope.approved?.amt) : "…", expScope ? N(expScope.total).toLocaleString("en-IN") + " transactions" : "loading", null, "claims"],
             ["🪙 Petty cash held", inr(pettyBal), petty.length + " holders", null, "pettyled"],
-            ["💸 Advances (approved)", inr(sumBy(advApproved, a => a.amount)), advApproved.length + " requests", null, "advled"],
+            ["💸 Advances (approved)", advScope ? inr(advScope.approved?.amt) : "…", N(advScope?.approved?.n) + " requests", null, "advled"],
             ["✅ Recovered / deducted", inr(advTotals.rec), "through pay", "var(--green)", "advled"],
             ["🔺 Outstanding advances", inr(advTotals.out), "to be recovered", advTotals.out > 0 ? "var(--red)" : "var(--green)", "advled"],
-            ["⏳ Advance requests pending", inr(sumBy(advPending, a => a.amount)), advPending.length + " waiting", advPending.length ? "var(--amber)" : null, "advreq"]].map(([l, v, sub2, c, sec]) => (
+            ["⏳ Advance requests pending", advScope ? inr(advScope.pending?.amt) : "…", N(advScope?.pending?.n) + " waiting", N(advScope?.pending?.n) ? "var(--amber)" : null, "advreq"]].map(([l, v, sub2, c, sec]) => (
             <div key={l} className="panel" role="button" tabIndex={0} style={{ padding: "10px 14px", margin: 0, cursor: "pointer" }}
               onClick={() => switchTab(sec)}>
               <div className="muted" style={{ fontSize: 11.5 }}>{l}</div>
@@ -490,53 +543,11 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
             </div>
           )}
           {pettyMsg && <div className="muted" style={{ marginBottom: 8 }}>{pettyMsg}</div>}
-          {!pettyReqs ? <div className="muted">Loading…</div> : pettyReqs.length === 0 ? <div className="muted">No petty cash requests yet.</div> : (<>
-            <table className="dt-compact">
-              <thead><tr><th>Date</th><th>Requester</th><th>Site</th><th className="num">Amount</th><th>Purpose</th><th>Needed by</th><th>Status</th><th></th></tr></thead>
-              <tbody>
-                {pageOf(pettyReqs, pgPetty).map(r => (
-                  <tr key={r.id}>
-                    <td className="muted">{r.date}</td>
-                    <td style={{ fontWeight: 600 }}>{r.requester}</td>
-                    <td className="muted">{r.site}</td>
-                    <td className="num">₹{r.amount}
-                      {r.status === "approved" && r.approved_amount != null && r.approved_amount !== r.amount
-                        ? <div style={{ fontSize: 11, color: "var(--green)" }}>approved ₹{r.approved_amount}</div> : null}</td>
-                    <td>{r.purpose}{r.remarks ? <span className="muted"> — {r.remarks}</span> : ""}</td>
-                    <td className="muted">{r.required_date || "—"}</td>
-                    <td>{r.status === "approved" ? <span className="badge p">Approved</span>
-                        : r.status === "rejected" ? <span className="badge a">Rejected{r.query ? " — " + r.query : ""}</span>
-                        : <span className="badge gray">Pending</span>}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>
-                      {canApprMoney && r.status === "pending" && (
-                        <>
-                          <input inputMode="numeric" style={{ width: 70, fontSize: 11.5, marginRight: 4 }}
-                                 value={pettyAmt[r.id] ?? String(r.amount)} title="Amount to approve (can differ from asked)"
-                                 onChange={e => setPettyAmt(a => ({ ...a, [r.id]: e.target.value }))} />
-                          <button className="primary" style={{ fontSize: 11.5, marginRight: 4 }}
-                                  onClick={() => actPetty(r.id, "approved", pettyAmt[r.id] ?? r.amount)}>Approve</button>
-                          <button style={{ fontSize: 11.5 }} onClick={() => actPetty(r.id, "rejected")}>Reject</button>
-                        </>
-                      )}
-                      {canApprMoney && r.status === "approved" && (
-                        <>
-                          <button style={{ fontSize: 11.5, marginRight: 4 }} title="Approve a different amount"
-                                  onClick={() => { const v = window.prompt("Revised approved amount \u20b9 (asked \u20b9" + r.amount + "):", String(r.approved_amount ?? r.amount)); if (v != null && v !== "") actPetty(r.id, "approved", v); }}>✎ Change amount</button>
-                          <button style={{ fontSize: 11.5, color: "var(--red)" }} title="Remove the granted amount and mark rejected"
-                                  onClick={() => { if (window.confirm("Withdraw this approval? \u20b9" + (r.approved_amount ?? r.amount) + " will be removed from " + r.requester + "'s petty balance.")) actPetty(r.id, "rejected"); }}>Undo approval</button>
-                        </>
-                      )}
-                      {canApprMoney && r.status === "rejected" && (
-                        <button style={{ fontSize: 11.5 }} title="Approve after all"
-                                onClick={() => { const v = window.prompt("Approve amount \u20b9 (asked \u20b9" + r.amount + "):", String(r.amount)); if (v != null && v !== "") actPetty(r.id, "approved", v); }}>Approve…</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {Pager({ n: pettyReqs.length, pg: pgPetty, set: setPgPetty })}
-          </>)}
+          {/* update446: every request, paged by the database (was: newest 300, 10 per page in the browser) */}
+          <SumStrip res={pettyRes} parts={[["approved", "Approved", "var(--green)"], ["pending", "Pending", "var(--amber)"], ["rejected", "Rejected", "var(--red)"]]} />
+          <DataTable columns={pettyReqCols} exportName="petty_cash_requests" dateField="date" pageSize={10} fill
+            server={{ load: q => getPettyRequestsPage(q, scope), reloadKey: pettyKey, onResult: setPettyRes, label: "requests",
+                      sortKeys: ["date", "requester", "site", "amount", "purpose", "required_date", "status"] }} />
         </div>
 
         <div className={mtab === "advreq" ? "money-sec" : undefined} style={{ display: mtab === "advreq" ? "flex" : "none", overflowY: "auto" }}>
@@ -573,8 +584,11 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
               </div>
             )}
           </div>}
-          {!adv ? <div className="muted">Loading…</div> :
-            <DataTable columns={advCols} rows={adv} exportName="advance_requests" dateField="date" pageSize={10} fill />}
+          {/* update446: every request, paged by the database (was: newest 200) */}
+          <SumStrip res={advRes} parts={[["approved", "Approved", "var(--green)"], ["pending", "Pending", "var(--amber)"], ["queried", "Queried", "var(--amber)"], ["rejected", "Rejected", "var(--red)"]]} />
+          <DataTable columns={advCols} exportName="advance_requests" dateField="date" pageSize={10} fill
+            server={{ load: q => getAdvanceRequestsPage(q, scope), reloadKey: advKey, onResult: setAdvRes, label: "requests",
+                      sortKeys: ["date", "beneficiary_name", "beneficiary_kind", "site", "reason", "amount", "bank_on_file", "status", "approved_on", "approved_by", "posted"] }} />
         </div>
 
         <div className={mtab === "claims" ? "money-sec" : undefined} style={{ display: mtab === "claims" ? "flex" : "none", overflowY: "auto" }}>
@@ -628,8 +642,11 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
               <button style={{ fontSize: 12.5 }} onClick={() => setSel({})}>Clear</button>
             </div>
           )}
-          {!claims ? <div className="muted">Loading…</div> :
-            <DataTable columns={claimCols} rows={claims} exportName="expense_claims" dateField="date" pageSize={10} fill />}
+          {/* update446: EVERY expense, paged by the database (was: newest 300 only) */}
+          <SumStrip res={expRes} parts={[["approved", "Approved", "var(--green)"], ["pending", "Pending", "var(--amber)"], ["queried", "Queried", "var(--amber)"], ["rejected", "Rejected", "var(--red)"], ["reversed", "Reversed", "var(--red)"]]} />
+          <DataTable columns={claimCols} exportName="expense_claims" dateField="date" pageSize={10} fill
+            server={{ load: q => getExpenseLedgerPage(q, scope), reloadKey: expKey, onResult: setExpRes, label: "expenses",
+                      sortKeys: ["date", "claimant", "site", "paid_to", "amount", "status", "approved_on", "approved_by", "posted"] }} />
         </div>
 
         {pettyReturns.length > 0 && (
@@ -690,7 +707,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
             {!ledgerRows ? <div className="muted">Loading…</div> : (
               <table className="dt-compact">
                 <thead><tr><th>Date</th><th>Type</th><th>Site</th><th>Category</th><th>Detail</th><th className="num">Amount</th><th>Bills</th></tr></thead>
-                <tbody>{ledgerView.map((l, i) => (
+                <tbody>{ledgerView.slice(0, ledgerShow).map((l, i) => (
                   <tr key={i}>
                     <td className="muted">{l.date}</td>
                     <td>{l.kind}{l.status === "pending" ? <span className="badge gray" style={{ marginLeft: 4 }}>pending</span> : null}</td>
@@ -707,6 +724,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
                 </tbody>
               </table>
             )}
+            {ledgerRows && <ShowMore n={ledgerView.length} shown={ledgerShow} step={100} set={setLedgerShow} what="entries" />}
           </div>
         )}
 
@@ -807,7 +825,8 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
                 </div>
                 <button type="button" onClick={() => setProfile(null)} style={{ background: "none", border: "none", color: "#fff", fontSize: 18, cursor: "pointer" }}>✕</button>
               </div>
-              {profile.loading ? <div className="muted" style={{ padding: 24 }}>Loading history…</div> : <>
+              {profile.error ? <div className="note red" style={{ margin: 16 }}>⚠ Could not load this history: {profile.error}</div>
+              : profile.loading ? <div className="muted" style={{ padding: 24 }}>Loading history…</div> : <>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(105px, 1fr))", gap: 0, borderBottom: "1px solid var(--border)", background: "#faf9f6" }}>
                   {[["Total used (all time)", inr(profile.totals.all), null],
                     ["This month", inr(profile.totals.month), null],
@@ -823,7 +842,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
                 </div>
                 <div style={{ display: "flex", gap: 2, padding: "0 14px", borderBottom: "1px solid var(--border)" }}>
                   {[["all", "All transactions", profile.txns.length], ["exp", "Expenses", profile.txns.filter(t => t.kind === "exp").length], ["adv", "Advances", profile.txns.filter(t => t.kind === "adv").length]].map(([k, l, n]) => (
-                    <button key={k} type="button" onClick={() => setProfTab(k)}
+                    <button key={k} type="button" onClick={() => { setProfTab(k); setProfShow(50); }}
                       style={{ border: "none", background: "none", padding: "9px 10px", fontSize: 12.5, cursor: "pointer", fontWeight: profTab === k ? 800 : 600, color: profTab === k ? "var(--copper)" : "var(--text)", borderBottom: profTab === k ? "3px solid var(--copper)" : "3px solid transparent", marginBottom: -1 }}>
                       {l} · {n}</button>
                   ))}
@@ -832,7 +851,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
                   <table className="dt-compact" style={{ width: "100%" }}>
                     <thead><tr><th>Date</th><th>Type</th><th>Purpose / paid to</th><th>Site</th><th className="num">Amount</th><th>Status</th></tr></thead>
                     <tbody>
-                      {profile.txns.filter(t => profTab === "all" || t.kind === profTab).map((t, i) => (
+                      {profile.txns.filter(t => profTab === "all" || t.kind === profTab).slice(0, profShow).map((t, i) => (
                         <tr key={i}>
                           <td className="muted">{t.date}</td>
                           <td>{t.type === "Advance recovered" ? <span style={{ color: "var(--green)" }}>{t.type}</span> : t.type}</td>
@@ -844,6 +863,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
                       ))}
                     </tbody>
                   </table>
+                  <ShowMore n={profile.txns.filter(t => profTab === "all" || t.kind === profTab).length} shown={profShow} step={50} set={setProfShow} what="transactions" />
                 </div>
               </>}
             </div>
@@ -900,4 +920,31 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
 
     </div>
   );
+}
+
+// update446: totals of EVERY record matching the table's current search / filters / dates, as counted by
+// the database — not a sum of the rows on screen.
+function SumStrip({ res, parts }) {
+  if (!res?.summary) return null;
+  const sm = res.summary;
+  const d = x => x ? new Date(x + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "";
+  return (
+    <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "baseline", fontSize: 12.5, margin: "0 0 8px", padding: "7px 12px",
+      background: "#faf9f6", border: "1px solid var(--border)", borderRadius: 10, flexShrink: 0 }}>
+      <span><b>{Number(res.total || 0).toLocaleString("en-IN")}</b> <span className="muted">matching records</span></span>
+      {parts.map(([k, l, c]) => sm[k] && Number(sm[k].n) > 0 ? (
+        <span key={k}><span className="muted">{l}</span> <b style={{ color: c }}>{inr(sm[k].amt)}</b> <span className="muted">({sm[k].n})</span></span>) : null)}
+      {sm.first_date && <span className="muted" style={{ marginLeft: "auto" }}>{d(sm.first_date)} → {d(sm.last_date)}</span>}
+    </div>);
+}
+
+// update446: "Show more" for complete lists rendered in a panel (person profile, petty ledger)
+function ShowMore({ n, shown, step, set, what }) {
+  if (n <= 0) return null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "center", padding: "10px 0 2px" }}>
+      <span className="muted" style={{ fontSize: 12 }}>Showing {Math.min(shown, n).toLocaleString("en-IN")} of {n.toLocaleString("en-IN")} {what}</span>
+      {shown < n && <button style={{ fontSize: 12 }} onClick={() => set(shown + step)}>Show {Math.min(step, n - shown)} more</button>}
+      {shown < n && <button style={{ fontSize: 12 }} onClick={() => set(n)}>Show all</button>}
+    </div>);
 }

@@ -80,16 +80,21 @@ export default function ApprovalsView({ mode = "mobile" }) {
   const load = async () => {
     // update238: do not even ASK for a queue the person cannot act on
     const none = () => Promise.resolve([]);
+    // update446: money queues ask the database for PENDING rows only, every one of them (the old
+    // newest-300/200 cap could hide an old pending item from this inbox). A failed read is shown.
+    const moneyErr = [];
+    const safe = (p, what) => p.catch(e => { moneyErr.push(what + ": " + (e?.message || e)); return []; });
     const [petty, expense, advance, leave, ret, items, pos] = await Promise.all([
-      rights.moneyView ? getPettyRequestQueue().then(rs => rs.filter(r => r.status === "pending")) : none(),
-      rights.moneyView ? getExpenseClaimQueue().then(rs => rs.filter(r => r.status === "pending")) : none(),
-      rights.moneyView ? getAdvanceQueue().then(rs => rs.filter(r => r.status === "pending")) : none(),
+      rights.moneyView ? safe(getPettyRequestQueue(undefined, { status: ["pending"] }).then(rs => rs.filter(r => r.status === "pending")), "petty cash requests") : none(),
+      rights.moneyView ? safe(getExpenseClaimQueue(undefined, { status: ["pending"] }).then(rs => rs.filter(r => r.status === "pending")), "expense claims") : none(),
+      rights.moneyView ? safe(getAdvanceQueue(undefined, { status: ["pending"] }).then(rs => rs.filter(r => r.status === "pending")), "advance requests") : none(),
       rights.leave ? getApprovalQueue().catch(() => []) : none(),
       rights.moneyView ? getPettyReturnQueue().catch(() => []) : none(),
       rights.stock ? listPendingItems().catch(() => []) : none(),
       rights.indent ? getPOs("all").then(ps => ps.filter(p => p.approval === "pending" && p.status !== "cancelled")).catch(() => []) : none(),
     ]);
     setData({ petty, expense, advance, leave, ret, items, pos });
+    if (moneyErr.length) setErr("Could not load " + moneyErr.join(" · "));
   };
   useEffect(() => { load(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
