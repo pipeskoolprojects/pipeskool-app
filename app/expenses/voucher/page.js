@@ -9,7 +9,8 @@
 //   overflow -> flows onto the next A4 page, nothing cut and nothing overlapping
 // Proofs are `object-fit: contain` inside a fixed box, so the whole bill is always visible;
 // they are never `cover`, which is what would crop them.
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
+import BillSheet from "@/components/BillSheet";   // update447: shared A4 bill layout
 import { useSearchParams } from "next/navigation";
 import Logo from "@/components/Logo";
 import { getSession } from "@/lib/auth";
@@ -23,6 +24,7 @@ function Voucher() {
   const ids = (params.get("ids") || "").split(",").map(x => x.trim()).filter(Boolean);
   const [v, setV] = useState(null);
   const [err, setErr] = useState("");
+  const voucherRef = useRef(null);   // update447
 
   useEffect(() => {
     if (!getSession()) { window.location.replace("/login"); return; }
@@ -34,10 +36,7 @@ function Voucher() {
   if (err) return <div style={{ margin: 40, fontFamily: "system-ui" }}>{err}</div>;
   if (!v) return <div style={{ margin: 40, fontFamily: "system-ui" }}>Loading voucher…</div>;
 
-  // proofs per page: 1 alone gets the full width, 2 side by side, 3+ in a 2-up grid.
-  const perPage = v.proofs.length <= 1 ? 1 : 4;
-  const pages = [];
-  for (let i = 0; i < v.proofs.length; i += perPage) pages.push(v.proofs.slice(i, i + perPage));
+  // update447: proof layout is the shared BillSheet (same as the Direct Vendor Payment voucher)
 
   const L = { fontSize: 11.5, fontWeight: 700, color: "#123a7a", whiteSpace: "nowrap" };
   const F = { borderBottom: "1px solid #123a7a", padding: "2px 6px 3px", fontSize: 12.5, minHeight: 18 };
@@ -49,13 +48,6 @@ function Voucher() {
         @media print { .no-print { display: none !important; } body { background: #fff; } }
         .sheet { max-width: 186mm; margin: 0 auto; }
         .pbreak { break-before: page; page-break-before: always; }
-        .proofgrid { display: grid; gap: 8mm; }
-        .proofgrid.one { grid-template-columns: 1fr; }
-        .proofgrid.many { grid-template-columns: 1fr 1fr; }
-        .proofbox { border: 1px solid #c9d4e6; border-radius: 6px; padding: 6px; break-inside: avoid; page-break-inside: avoid; }
-        /* contain, never cover — a cropped bill is the one thing this must never do */
-        .proofbox img { width: 100%; height: auto; max-height: 105mm; object-fit: contain; display: block; }
-        .proofgrid.one .proofbox img { max-height: 150mm; }
         table { border-collapse: collapse; width: 100%; }
         /* update268: diagonal NOT APPROVED watermark — prints on EVERY page (fixed), never covers data (low opacity) */
         .wm { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 5; }
@@ -67,7 +59,7 @@ function Voucher() {
       <div className="no-print" style={{ display: "flex", gap: 8, padding: "14px 20px", alignItems: "center", flexWrap: "wrap" }}>
         <button onClick={() => window.print()} style={{ fontWeight: 700 }}>🖨 Print / Save as PDF</button>
         <button onClick={() => window.close()}>Close</button>
-        <span className="muted" style={{ fontSize: 12 }}>{v.proofs.length} proof(s) · {pages.length || 0} proof page(s)</span>
+        <span className="muted" style={{ fontSize: 12 }}>{v.proofs.length} proof(s) · fitted to A4 automatically</span>
         {v.notApproved > 0 && <span style={{ fontSize: 12, color: "#b45309", fontWeight: 700 }}>
           ⚠ {v.notApproved} of these claims is not approved yet</span>}
         {v.mixedClaimants && <span style={{ fontSize: 12, color: "#b91c1c", fontWeight: 700 }}>
@@ -75,6 +67,7 @@ function Voucher() {
       </div>
 
       <div className="sheet">
+        <div ref={voucherRef}>{/* update447: measured so proofs fit under the voucher on page 1 */}
         {v.notApproved > 0 && (   /* update268: printed banner — the toolbar warning above never reached paper */
           <div style={{ border: "2px solid #b91c1c", color: "#b91c1c", background: "#fef2f2", borderRadius: 6, padding: "6px 10px", fontWeight: 800, fontSize: 12, textAlign: "center", marginBottom: 8 }}>
             NOT APPROVED — {v.notApproved} of {v.lines.length} claim(s) on this voucher {v.notApproved === 1 ? "is" : "are"} still pending / under query · not valid for payment
@@ -169,37 +162,13 @@ function Voucher() {
           </div>
         </div>
 
-        {/* ---------- proofs ---------- */}
+        </div>{/* end voucherRef */}
+
+        {/* ---------- proofs: update447 shared A4 layout ---------- */}
         {v.proofs.length > 0 && (
-          <div style={{ marginTop: 22, borderTop: "2px dotted #123a7a", paddingTop: 14 }}>
-            <div style={{ textAlign: "center", fontWeight: 800, color: "#123a7a", fontSize: 12.5, marginBottom: 10 }}>
-              BILLS / PROOFS ATTACHED ({v.proofs.length})
-            </div>
-            {pages.map((group, gi) => (
-              <div key={gi} className={gi === 0 ? "" : "pbreak"}>
-                {gi > 0 && <div style={{ textAlign: "center", fontWeight: 800, color: "#123a7a", fontSize: 12, marginBottom: 10 }}>
-                  {v.no} · proofs continued ({gi * perPage + 1}–{gi * perPage + group.length} of {v.proofs.length})
-                </div>}
-                <div className={"proofgrid " + (perPage === 1 ? "one" : "many")}>
-                  {group.map((p, i) => {
-                    const n = gi * perPage + i + 1;
-                    return (
-                      <div key={p.path + i} className="proofbox">
-                        <div style={{ fontSize: 10.5, fontWeight: 700, color: "#123a7a", marginBottom: 4 }}>
-                          {n}. {p.label}{p.paidTo ? ` (${p.paidTo})` : ""} · ₹{inr2(p.amount)}
-                        </div>
-                        {p.isPdf
-                          ? <div style={{ fontSize: 11, padding: "18px 10px", textAlign: "center", background: "#f7f9fc", borderRadius: 4 }}>
-                              PDF bill — printed separately.<br />
-                              <a href={p.url} target="_blank" rel="noreferrer" style={{ fontSize: 10.5 }}>{p.path.split("/").pop()}</a>
-                            </div>
-                          : <img src={p.url} alt={"Proof " + n} />}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+          <div style={{ marginTop: 14, borderTop: "2px dotted #123a7a", paddingTop: 6 }}>
+            <BillSheet bills={v.proofs.map((p, i) => ({ url: p.url, pdf: p.isPdf, label: `${i + 1}. ${p.label}${p.paidTo ? ` (${p.paidTo})` : ""} · ₹${inr2(p.amount)}` }))}
+              voucherRef={voucherRef} heading="Bills / proofs attached" accent="#123a7a" footer={"Cash Voucher " + v.no} />
           </div>
         )}
 

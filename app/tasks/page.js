@@ -55,7 +55,7 @@ export default function TasksPage() {
     // update446: only the rows these counters use, all of them (no newest-300 cap)
     getPettyRequestQueue(undefined, { status: ["pending"] }).then(setPettyQ).catch(() => {});
     getAdvanceQueue(undefined, { status: ["pending"] }).then(r => setAdvQ(r || [])).catch(() => {});
-    getExpenseClaimQueue(undefined, { status: ["pending", "queried"] }).then(r => setClaimsQ(r || [])).catch(() => {});
+    getExpenseClaimQueue(undefined, { status: ["pending", "queried"] }).then(r => setClaimsQ(r || [])).catch(() => {});   // update447: claims only (direct vendor payments have their own approval)
     getPOs("all").then(r => setPoList(r || [])).catch(() => {});
     getOpenIndents("all").then(r => setIndents(r || [])).catch(() => {});
     getMyNotifications(6).then(r => setNotifs(r?.rows || [])).catch(() => {});

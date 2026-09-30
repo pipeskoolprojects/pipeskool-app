@@ -2,7 +2,8 @@
 // update355: LOCAL PURCHASE VOUCHER — A4, Print -> Save as PDF, on the company letterhead,
 // in the same style as the expense and advance vouchers. Reads the stored row; computes
 // nothing.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import BillSheet from "@/components/BillSheet";   // update447: shared A4 bill layout
 import Logo from "@/components/Logo";
 import { getVendorVoucher, amountInWords } from "@/lib/vendorVoucher";
 import { supabase } from "@/lib/supabase";
@@ -17,6 +18,7 @@ const cap = s => s ? String(s).charAt(0).toUpperCase() + String(s).slice(1).repl
 export default function VoucherPrint() {
   const [v, setV] = useState(null); const [c, setC] = useState(null); const [err, setErr] = useState("");
   const [billUrls, setBillUrls] = useState([]);   // update356: the bill pages go on the voucher
+  const voucherRef = useRef(null);   // update447: measured so bills fit under the voucher on page 1
 
   useEffect(() => {
     (async () => {
@@ -53,13 +55,10 @@ export default function VoucherPrint() {
           .no-print { display:none !important; }
           body { background:#fff; }
           @page { size: A4; margin: 12mm; }
-          /* keep a bill whole on its own page rather than splitting it across two */
-          .bill-page { break-before: page; page-break-before: always; break-inside: avoid; page-break-inside: avoid; }
           .sign-row { break-inside: avoid; page-break-inside: avoid; }
           table { break-inside: auto; }
           tr { break-inside: avoid; page-break-inside: avoid; }
         }
-        .bill-page { margin-top: 18px; }
         .v-wm { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
                 font-size: 76px; font-weight: 800; color: rgba(180,83,9,0.10); transform: rotate(-30deg);
                 pointer-events: none; z-index: 5; letter-spacing: 0.05em; }
@@ -72,6 +71,7 @@ export default function VoucherPrint() {
         <button onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign("/vendor-voucher"); }}>← Back</button>
       </div>
 
+      <div ref={voucherRef}>{/* update447: everything measured for the bill layout */}
       <div style={{ display: "flex", gap: 18, alignItems: "flex-start", borderBottom: "3px solid " + ORANGE, paddingBottom: 10 }}>
         <Logo height={22} />
         <div style={{ flex: 1 }}>
@@ -162,19 +162,11 @@ export default function VoucherPrint() {
         ))}
       </div>
 
-      {/* update356: the bill pages print WITH the voucher. Each starts a new page and is
-          fitted inside the A4 area with object-fit: contain, so nothing is cropped, stretched
-          or split across a page break. */}
-      {billUrls.map((b, i) => (
-        <div key={i} className="bill-page">
-          <div style={{ fontSize: 10.5, fontWeight: 800, color: NAVY, marginBottom: 6 }}>
-            ATTACHED BILL / RECEIPT {i + 1} OF {billUrls.length} · {v.voucher_no}
-          </div>
-          {b.pdf
-            ? <iframe title={"bill" + i} src={b.url} style={{ width: "100%", height: "245mm", border: "1px solid #e5e7eb" }} />
-            : <img alt={"bill" + i} src={b.url} style={{ maxWidth: "100%", maxHeight: "245mm", objectFit: "contain", display: "block", margin: "0 auto", border: "1px solid #e5e7eb" }} />}
-        </div>
-      ))}
+      </div>{/* end voucherRef */}
+
+      {/* update447: bills auto-fitted to A4 (1 full / 2 side by side / 3 two-up + one across / 4 grid / 5+ overflow pages) */}
+      <BillSheet bills={billUrls.map((b, i) => ({ url: b.url, pdf: b.pdf, label: "Bill " + (i + 1) + " · " + v.voucher_no }))}
+        voucherRef={voucherRef} heading="Attached bill / receipt" accent={NAVY} footer={c.name + " · Direct Vendor Payment " + v.voucher_no} />
 
       <div style={{ marginTop: 28, paddingTop: 8, borderTop: "1px solid #e5e7eb", textAlign: "center", fontSize: 9.5, fontWeight: 700, color: "#4b5563", lineHeight: 1.7 }}>
         <div>CIN No: {c.cin} &nbsp; GSTIN: {c.gstin}</div>
