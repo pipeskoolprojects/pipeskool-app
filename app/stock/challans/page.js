@@ -56,7 +56,7 @@ export default function DeliveryChallans() {
     // update271: prefill only what a NEW challan may carry — pending minus what is already
     // on an unconverted challan. Fully covered lines don't appear at all.
     // update441: partial shipments — "Ordered" = pending after earlier challans; closed lines shown read-only; Received defaults to 0 so you enter only what arrived
-    setLines(p.items.map(i => ({
+    setLines(p.items.filter(i => Number(i.pending_qty) > 0).map(i => ({   // update444: only still-pending lines
       po_item_id: i.po_item_id, item_id: i.item_id, item_name: i.item_name, unit: i.unit, po_qty: Number(i.ordered_qty), so_far: Number(i.received_qty), closed: Number(i.pending_qty) <= 0,
       ordered_qty: i.remaining_qty ?? i.pending_qty, received_qty: Number(i.pending_qty) > 0 ? "" : 0 })));
   }
@@ -110,6 +110,7 @@ export default function DeliveryChallans() {
     setSaving(false);
     if (!res.ok) { setErr(res.error); return; }
     setMsg("Saved " + res.dc_ref + (res.status === "partial" ? " — partial shipment; the balance stays in Pending Deliveries." : "."));
+    getChallanPOs().then(setPos);   // update444: a PO fully covered by this challan leaves the picker at once
     setFile(null); setLines([]); setHead({ vendor_name: "", vendor_dc_no: "", dc_date: new Date().toISOString().slice(0, 10), po_id: null, source: "manual", confidence: null, dc_ref: "", client_id: "" });
     load();
   }
