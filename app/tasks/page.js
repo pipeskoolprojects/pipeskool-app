@@ -52,9 +52,10 @@ export default function TasksPage() {
     getWorkers().then(w => setWorkers(Array.isArray(w) ? w : w?.rows || [])).catch(() => setWorkers([]));
     getDigest(todayLocal()).then(setDigest).catch(() => setDigest([]));
     getChallanPOs().then(setCpos).catch(() => {});
-    getPettyRequestQueue().then(setPettyQ).catch(() => {});
-    getAdvanceQueue().then(r => setAdvQ(r || [])).catch(() => {});
-    getExpenseClaimQueue().then(r => setClaimsQ(r || [])).catch(() => {});
+    // update446: only the rows these counters use, all of them (no newest-300 cap)
+    getPettyRequestQueue(undefined, { status: ["pending"] }).then(setPettyQ).catch(() => {});
+    getAdvanceQueue(undefined, { status: ["pending"] }).then(r => setAdvQ(r || [])).catch(() => {});
+    getExpenseClaimQueue(undefined, { status: ["pending", "queried"] }).then(r => setClaimsQ(r || [])).catch(() => {});
     getPOs("all").then(r => setPoList(r || [])).catch(() => {});
     getOpenIndents("all").then(r => setIndents(r || [])).catch(() => {});
     getMyNotifications(6).then(r => setNotifs(r?.rows || [])).catch(() => {});

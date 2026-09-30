@@ -13,6 +13,7 @@ import {
 // update273: MODULE scope — the person's money history (same loader as the desktop profile, update214)
 function ProfileSheet({ staffId, name, onClose, onOpen }) {
   const [pr, setPr] = useState(null); const [err, setErr] = useState("");
+  const [show, setShow] = useState(50);   // update446: complete history, 50 at a time
   useEffect(() => { getPersonMoneyProfile(staffId).then(p => setPr(p || { empty: true })).catch(e => setErr(e.message)); }, [staffId]);
   const badge = s => s === "approved" ? "green" : s === "rejected" ? "red" : s === "queried" ? "amber" : "gray";
   return (
@@ -33,7 +34,7 @@ function ProfileSheet({ staffId, name, onClose, onOpen }) {
               ))}
             </div>
             <div style={{ fontWeight: 700, fontSize: 13, margin: "6px 0" }}>All transactions ({pr.txns.length})</div>
-            {pr.txns.map((t, i) => {
+            {pr.txns.slice(0, show).map((t, i) => {
               const actionable = !!onOpen && t.kind === "exp" && t.edit && (t.status === "queried" || t.status === "pending");   // update274
               return (
               <div key={i} onClick={actionable ? () => onOpen(t.edit) : undefined}
@@ -48,6 +49,9 @@ function ProfileSheet({ staffId, name, onClose, onOpen }) {
                 <span className={"badge " + badge(t.status)} style={{ alignSelf: "center", whiteSpace: "nowrap" }}>{t.status}</span>
               </div>
             ); })}
+            {pr.txns.length > show && (   /* update446 */
+              <button className="m-btn" style={{ marginTop: 8, background: "#fff", color: "var(--text)", border: "1px solid var(--border)" }}
+                onClick={() => setShow(n => n + 50)}>Show more ({pr.txns.length - show} older)</button>)}
           </>
         )}
         <button className="m-btn" style={{ marginTop: 10 }} onClick={onClose}>Close</button>
@@ -105,7 +109,7 @@ export default function MoneyScreen() {
   const [ledger, setLedger] = useState(null);      // null = closed
   const [ret, setRet] = useState(null);            // { amount, note } when the return form is open
   const [retErr, setRetErr] = useState("");
-  async function openLedger() { setLedger(await getPettyLedger(userId)); }
+  async function openLedger() { try { setLedger(await getPettyLedger(userId)); } catch (e) { setErr(e?.message || String(e)); } }   // update446: a failed read is shown
   async function sendReturn() {
     setRetErr("");
     if (!ret.amount || Number(ret.amount) <= 0) { setRetErr("Enter the amount you are returning."); return; }
