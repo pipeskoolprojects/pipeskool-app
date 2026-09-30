@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import VendorVoucherPanel from "@/components/VendorVoucherPanel";   // update356
 import ContractorAdvancePanel from "@/components/ContractorAdvancePanel";   // update365
+import OwnPocketPanel from "@/components/OwnPocketPanel";   // update445
 import DataTable from "@/components/DataTable";
 import AdvanceLedger from "@/components/AdvanceLedger";
 import CollapseCard from "@/components/CollapseCard";
@@ -315,6 +316,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
     ["vendor", "🛒", "Direct Vendor Payment", () => null],   // update356
     ["contradv", "🧱", "Contractor advances", () => null],   // update365
     ["pettyled", "📒", "Petty cash ledger", () => petty.length],
+    ["ownpocket", "💼", "Own-pocket reimbursements", () => null],   // update445
     ["advled", "🧾", "Advance salary ledger", () => null],
     ["reports", "📊", "Reports", () => null],
   ];
@@ -718,6 +720,10 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
             it is the same kind of money, just owed to a different party. */}
         <div className={mtab === "contradv" ? "money-sec" : undefined} style={{ display: mtab === "contradv" ? "flex" : "none", overflowY: "auto", flexDirection: "column" }}>
           {mtab === "contradv" && <ContractorAdvancePanel />}
+        </div>
+
+        <div className={mtab === "ownpocket" ? "money-sec" : undefined} style={{ display: mtab === "ownpocket" ? "flex" : "none", overflowY: "auto", flexDirection: "column" }}>
+          {mtab === "ownpocket" && <OwnPocketPanel />}
         </div>
 
         <div className={mtab === "pettyled" ? "money-sec" : undefined} style={{ display: mtab === "pettyled" ? "flex" : "none", overflowY: "auto" }}>
