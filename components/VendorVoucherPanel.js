@@ -9,6 +9,8 @@ import { useEffect, useState } from "react";
 import { getSession } from "@/lib/auth";
 import { inr } from "@/lib/data";
 import { createVendorVoucher, listVendorVouchers, setVoucherPayment } from "@/lib/vendorVoucher";
+import { markExpensePosted, reviewExpenseClaim } from "@/lib/money";   // update447: the SAME posted flow (and review call) the Expenses ledger uses
+import { canApprove } from "@/lib/perms";
 import { todayLocal } from "@/lib/today";
 
 const NAVY = "#1f2a4b";
@@ -89,6 +91,24 @@ export default function VendorVoucherPanel({ sites: sitesProp, staff = [], autoO
     load();
   }
 
+  // update447: approval happens HERE, not in the claims inbox — a direct vendor payment is a vendor bill the
+  // office pays, not anyone's expense claim. Same gate (money approver) and same review call as claims.
+  const canAppr = canApprove(sess, "money");
+  async function review(r, status) {
+    let note = null;
+    if (status === "rejected") { note = window.prompt(`Reject ${r.voucher_no}?\n\nReason (shown to ${r.raisedBy}):`); if (note === null) return; }
+    if (status === "approved" && !window.confirm(`Approve ${r.voucher_no} · ${r.vendor} · ${inr(r.amount)} for the office to pay?`)) return;
+    const res = await reviewExpenseClaim(r.id, status, note, sess?.id);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg(`${r.voucher_no} ${status}.`); load();
+  }
+  // update447: Approve → Posted, identical to the Expenses ledger's Tally column (same field, same function)
+  async function togglePosted(r) {
+    const res = await markExpensePosted(r.id, !r.posted, sess?.id);
+    if (!res.ok) { setErr(res.error); return; }
+    setMsg(`${r.voucher_no} ${r.posted ? "marked not posted" : "marked posted to Tally"}.`); load();
+  }
+
   async function markPaid(r) {
     const ref = prompt(`Mark ${r.voucher_no} as PAID.\n\nReference (cheque no / UTR / txn id) — optional:`);
     if (ref === null) return;
@@ -97,7 +117,7 @@ export default function VendorVoucherPanel({ sites: sitesProp, staff = [], autoO
     setMsg(`${r.voucher_no} marked paid.`); load();
   }
 
-  const unpaid = (rows || []).filter(r => r.payment_status !== "paid");
+  const unpaid = (rows || []).filter(r => r.payment_status !== "paid" && r.status !== "rejected");   // update447: a rejected voucher is not "unpaid"
   const unpaidTotal = +unpaid.reduce((n, r) => n + Number(r.amount || 0), 0).toFixed(2);
   const inp = { width: "100%", fontSize: 16, padding: "10px 12px", borderRadius: 10, boxSizing: "border-box" };
 
@@ -106,7 +126,7 @@ export default function VendorVoucherPanel({ sites: sitesProp, staff = [], autoO
         {!compact && (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
             <div className="muted" style={{ fontSize: 12.5, maxWidth: 640 }}>
-              Material bought straight from a local shop, with no PO. Saved as a company expense — it goes into the approvals queue, this site&apos;s cost total, and the Excel and Tally exports, marked <b>Direct Vendor Payment</b>.
+              A vendor bill received at site that the <b>office pays directly</b> (a sand truck, a tanker, a hire bill…). Nobody at site pays it — not from petty cash, not from their own pocket — so it is <b>not</b> an expense claim. Upload the bill here; the Director approves it on this tab and the office records the payment.
             </div>
             <button className="primary" onClick={() => { setOpen(true); setSaved(null); setErr(""); setMsg(""); }}>＋ New Direct Vendor Payment</button>
           </div>
@@ -145,7 +165,7 @@ export default function VendorVoucherPanel({ sites: sitesProp, staff = [], autoO
               <table>
                 <thead><tr>
                   <th>Voucher No.</th><th>Date</th><th>Vendor</th><th>Site</th><th>Particulars</th>
-                  <th className="num">Amount</th><th>Mode</th><th>Payment</th><th>Approval</th><th>Raised by</th><th></th>
+                  <th className="num">Amount</th><th>Mode</th><th>Approval</th><th>Tally</th><th>Payment</th><th>Raised by</th><th></th>
                 </tr></thead>
                 <tbody>
                   {rows.map(r => (
@@ -157,14 +177,25 @@ export default function VendorVoucherPanel({ sites: sitesProp, staff = [], autoO
                       <td style={{ fontSize: 11.5, maxWidth: 260 }}>{r.note || "—"}{r.bills.length > 0 && <span className="muted"> · 📎 {r.bills.length}</span>}</td>
                       <td className="num" style={{ fontWeight: 700 }}>{inr(r.amount)}</td>
                       <td style={{ fontSize: 11.5, textTransform: "capitalize" }}>{r.pay_mode}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>{r.status === "approved" ? <span className="badge p">Approved</span> : r.status === "rejected" ? <span className="badge a" title={r.query_note || ""}>Rejected</span> : r.status === "queried" ? <span className="badge h">Queried</span> : <span className="badge gray">Pending</span>}
+                        {r.reviewedBy && <div className="muted" style={{ fontSize: 10 }}>{r.reviewedBy}{r.reviewed_at ? " · " + String(r.reviewed_at).slice(0, 10).split("-").reverse().join("/") : ""}</div>}
+                        {canAppr && r.status === "pending" && (   /* update447: approval lives on this tab */
+                          <div style={{ marginTop: 3 }}>
+                            <button className="primary" style={{ fontSize: 11, marginRight: 4 }} onClick={() => review(r, "approved")}>✓ Approve</button>
+                            <button style={{ fontSize: 11 }} onClick={() => review(r, "rejected")}>✕ Reject</button>
+                          </div>)}</td>
+                      <td>{r.status === "approved" ? (   /* update447: same control as Expenses ledger → Tally */
+                        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 12 }}>
+                          <input type="checkbox" checked={!!r.posted} onChange={() => togglePosted(r)} style={{ width: 16, height: 16, accentColor: "var(--copper)" }} />
+                          {r.posted ? <span className="badge p">Posted</span> : <span className="badge gray">Mark posted</span>}
+                        </label>) : <span className="muted">—</span>}</td>
                       <td>{r.payment_status === "paid"
                         ? <span className="badge p">Paid{r.paid_on ? " " + String(r.paid_on).split("-").reverse().slice(0, 2).join("/") : ""}</span>
-                        : <span className="badge h">Pending</span>}</td>
-                      <td style={{ fontSize: 11.5, textTransform: "capitalize" }}>{r.status}</td>
+                        : r.status === "rejected" ? <span className="muted">—</span> : <span className="badge h">Pending</span>}</td>
                       <td style={{ fontSize: 11.5 }}>{r.raisedBy}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <button style={{ fontSize: 11.5 }} onClick={() => window.open("/vendor-voucher/print?id=" + r.id, "_blank")}>🖨 Voucher</button>{" "}
-                        {r.payment_status !== "paid" && <button style={{ fontSize: 11.5 }} onClick={() => markPaid(r)}>₹ Mark paid</button>}
+                        {r.payment_status !== "paid" && r.status !== "rejected" && <button style={{ fontSize: 11.5 }} onClick={() => markPaid(r)}>₹ Mark paid</button>}
                       </td>
                     </tr>
                   ))}
@@ -179,8 +210,8 @@ export default function VendorVoucherPanel({ sites: sitesProp, staff = [], autoO
           <div onClick={() => !busy && setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100 }}>
             <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 520, maxHeight: "94vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
               <div style={{ padding: "16px 18px 10px", borderBottom: "1px solid var(--border)" }}>
-                <h2 style={{ margin: 0, fontSize: 19 }}>Expense voucher</h2>
-                <div className="muted" style={{ fontSize: 12 }}>Direct vendor payment · goes to the Director for approval.</div>
+                <h2 style={{ margin: 0, fontSize: 19 }}>Direct Vendor Payment</h2>
+                <div className="muted" style={{ fontSize: 12 }}>A vendor bill for the <b>office to pay</b>. Cash you spent at site is a <b>Claim expense</b>, not this.</div>
               </div>
 
               <div style={{ padding: "14px 18px", overflowY: "auto", flex: 1 }}>

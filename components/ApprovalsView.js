@@ -86,7 +86,7 @@ export default function ApprovalsView({ mode = "mobile" }) {
     const safe = (p, what) => p.catch(e => { moneyErr.push(what + ": " + (e?.message || e)); return []; });
     const [petty, expense, advance, leave, ret, items, pos] = await Promise.all([
       rights.moneyView ? safe(getPettyRequestQueue(undefined, { status: ["pending"] }).then(rs => rs.filter(r => r.status === "pending")), "petty cash requests") : none(),
-      rights.moneyView ? safe(getExpenseClaimQueue(undefined, { status: ["pending"] }).then(rs => rs.filter(r => r.status === "pending")), "expense claims") : none(),
+      rights.moneyView ? safe(getExpenseClaimQueue(undefined, { status: ["pending"] }).then(rs => rs.filter(r => r.status === "pending")), "expense claims") : none(),   // update447: direct vendor payments are approved on their own tab, not here
       rights.moneyView ? safe(getAdvanceQueue(undefined, { status: ["pending"] }).then(rs => rs.filter(r => r.status === "pending")), "advance requests") : none(),
       rights.leave ? getApprovalQueue().catch(() => []) : none(),
       rights.moneyView ? getPettyReturnQueue().catch(() => []) : none(),

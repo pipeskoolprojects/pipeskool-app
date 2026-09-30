@@ -202,7 +202,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
     getWorkers().then(r => setWorkers(arr(r))).catch(() => setWorkers([]));
     getPettyRequestQueue(undefined, { status: ["pending"] }).then(r => setPettyQ(arr(r))).catch(() => {});   // update446: pending only, all of them
     getAdvanceQueue(undefined, { status: ["pending"] }).then(r => setAdvQ(arr(r))).catch(() => {});
-    getExpenseClaimQueue().then(r => setClaims(arr(r))).catch(() => {});
+    getExpenseClaimQueue().then(r => setClaims(arr(r))).catch(() => {});   // update447: claims only — direct vendor payments are separate
     getPOs("all").then(r => setPos(arr(r))).catch(() => {});
     getOpenIndents("all").then(r => setIndents(arr(r))).catch(() => {});
     getDigest(todayLocal()).then(r => setDigest(arr(r))).catch(() => setDigest([]));
