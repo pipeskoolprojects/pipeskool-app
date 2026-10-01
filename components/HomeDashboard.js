@@ -6,7 +6,7 @@
 // Same live loaders, routes and permissions as 229/230 — nothing invented, nothing removed.
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { getSession } from "@/lib/auth";
+import { getSession, setCurrentSite } from "@/lib/auth";
 import { supabase, isDemo, authReady } from "@/lib/supabase";   // update391
 import { approvalRights } from "@/lib/perms";
 import { getPendingCount } from "@/lib/pending";
@@ -157,6 +157,11 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   const [expId, setExpId] = useState(null);
   const [tasks, setTasks] = useState(null);
   const [pendCount, setPendCount] = useState(0);   // update256: PO lines still awaiting delivery
+  // update449: the Home tab's own site picker — every role. "all" = every site the person is allotted
+  // (Directors: the company portfolio). A real site also becomes the session's current site, so
+  // Muster / DPR / Stock / Indent open on it — ONE selection drives all mobile pages (same as before).
+  const [staffSite, setStaffSite] = useState(() => { try { return window.sessionStorage.getItem("psk_home_site") || ""; } catch { return ""; } });
+  const [pickOpen, setPickOpen] = useState(false);
 
   // on desktop the Projects TAB owns projects; on the phone the inline explorer does
   // update284: the explorer is an OVERLAY. Opening it now pushes a history entry, so the phone's
@@ -207,7 +212,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
     getOpenIndents("all").then(r => setIndents(arr(r))).catch(() => {});
     getDigest(todayLocal()).then(r => setDigest(arr(r))).catch(() => setDigest([]));
     getTasks().then(r => setTasks(arr(r))).catch(() => setTasks([]));
-    getPendingCount().then(setPendCount).catch(() => setPendCount(0));   // update256
+    getPendingCount(staffSite && staffSite !== "all" && s.role !== "director" ? staffSite : "all").then(setPendCount).catch(() => setPendCount(0));   // update256 · update449: site-wise when a site is picked
     const days = [];
     for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push(d); }
     const key = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
@@ -243,8 +248,18 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   const isDirector = sess?.role === "director";
   // update238: same rights object the Approvals inbox uses — no second opinion on this page
   const rights = approvalRights(sess);
-  const viewSiteId = isDirector ? asSite : (sess?.currentSite || sess?.sites?.[0]?.id || null);
-  const companyView = isDirector && !asSite;
+  const viewSiteId = isDirector ? asSite
+    : staffSite === "all" ? null
+    : (staffSite || sess?.currentSite || sess?.sites?.[0]?.id || null);
+  const companyView = isDirector && !asSite;     // Director's portfolio layout (tiles, sections)
+  const allView = !viewSiteId;                   // update449: data scope = every allotted site (any role)
+  function pickHomeSite(v) {   // update449
+    setPickOpen(false);
+    if (isDirector) { setAsSite(v === "all" ? null : Number(v)); }
+    else { setStaffSite(v === "all" ? "all" : String(v)); if (v !== "all") setCurrentSite(v); }
+    try { window.sessionStorage.setItem("psk_home_site", v === "all" ? "all" : String(v)); } catch {}
+    getPendingCount(v === "all" ? "all" : v).then(setPendCount).catch(() => setPendCount(0));
+  }
 
   const pj = useMemo(() => {
     const all = projects || [];
@@ -262,26 +277,26 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
       site: all.find(p => String(p.id) === String(viewSiteId)) || null };
   }, [projects, viewSiteId]);
 
-  const inSite = rows => companyView ? rows : rows.filter(r => String(r.site_id) === String(viewSiteId));
+  const inSite = rows => allView ? rows : rows.filter(r => String(r.site_id) === String(viewSiteId));   // update449: allView
   const presentCount = rows => rows.filter(r => (r.in && r.in !== "—") || r.status === "present" || r.status === "half_day").length;
 
   const man = useMemo(() => {
-    const rows = companyView ? (att || []) : (att || []).filter(r => String(r.site_id) === String(viewSiteId));
-    const roll = companyView ? (workers || []).length : (workers || []).filter(w => String(w.site_id) === String(viewSiteId)).length;
+    const rows = allView ? (att || []) : (att || []).filter(r => String(r.site_id) === String(viewSiteId));
+    const roll = allView ? (workers || []).length : (workers || []).filter(w => String(w.site_id) === String(viewSiteId)).length;
     const inNow = presentCount(rows);
     return { roll, inNow, absent: Math.max(rows.length - inNow, 0), pct: roll ? Math.round(inNow / roll * 1000) / 10 : 0 };
-  }, [att, workers, viewSiteId, companyView]);
+  }, [att, workers, viewSiteId, allView]);
 
   const weekData = useMemo(() => week.map(d => ({ day: d.day, date: d.date,
-    n: presentCount(companyView ? d.rows : d.rows.filter(r => String(r.site_id) === String(viewSiteId))) })), [week, viewSiteId, companyView]);
+    n: presentCount(allView ? d.rows : d.rows.filter(r => String(r.site_id) === String(viewSiteId))) })), [week, viewSiteId, allView]);
 
   const appr = useMemo(() => ({
     po: pos.filter(p => p.approval === "pending" && p.status !== "cancelled").length,
     adv: advQ.filter(r => r.status === "pending").length,
     claims: inSite(claims).filter(r => r.status === "pending" || r.status === "queried").length,
     petty: pettyQ.filter(r => r.status === "pending").length,
-    ind: companyView ? indents.length : indents.filter(i => String(i.site_id) === String(viewSiteId)).length,
-  }), [pos, advQ, claims, pettyQ, indents, viewSiteId, companyView]);   // eslint-disable-line react-hooks/exhaustive-deps
+    ind: allView ? indents.length : indents.filter(i => String(i.site_id) === String(viewSiteId)).length,
+  }), [pos, advQ, claims, pettyQ, indents, viewSiteId, allView]);   // eslint-disable-line react-hooks/exhaustive-deps
   const apprTotal = appr.po + appr.adv + appr.claims + appr.petty + appr.ind;
 
   const expApproved = inSite(claims).filter(c => c.status === "approved").reduce((t, c) => t + Number(c.amount || 0), 0);
@@ -346,28 +361,49 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
         <div style={{ background: "linear-gradient(140deg, " + NAVY + " 0%, " + NAVY2 + " 100%)", color: "#fff", borderRadius: 18, padding: 17, boxShadow: "0 10px 26px rgba(15,26,46,0.28)", position: "relative", overflow: "hidden" }}>{/* update265b: hard containment */}
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 9.5, letterSpacing: 1.1, color: COPPER, fontWeight: 800, textTransform: "uppercase" }}>{companyView ? "Company portfolio" : "Active site"}</div>
-              <div style={{ fontSize: 22, fontWeight: 800, marginTop: 3, lineHeight: 1.15 }}>
-                {projects === null ? "…" : companyView ? (pj.active + pj.hold + pj.delayed) + " Active Sites" : (siteName || "Your site")}</div>
-              <div style={{ fontSize: 12, opacity: 0.65, marginTop: 2 }}>↗ {companyView ? pj.total + " projects on record" : (pj.site?.client_name || "Pipeskool project")}</div>
+              <div style={{ fontSize: 9.5, letterSpacing: 1.1, color: COPPER, fontWeight: 800, textTransform: "uppercase" }}>{companyView ? "Company portfolio" : allView ? "All my sites" : "Active site"}</div>
+              {/* update449: the site picker — tap to switch the whole Home tab */}
+              <button type="button" onClick={() => setPickOpen(true)} title="Switch site"
+                style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", marginTop: 5, background: "rgba(255,255,255,0.08)", border: "1.5px solid " + COPPER, borderRadius: 10, padding: "7px 10px", color: "#fff", cursor: "pointer" }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 19, fontWeight: 800, lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {projects === null ? "…" : companyView ? (pj.active + pj.hold + pj.delayed) + " Active Sites" : allView ? sites.length + " sites" : (siteName || "Your site")}</span>
+                <span style={{ color: COPPER, fontWeight: 800, fontSize: 12.5, whiteSpace: "nowrap" }}>Change ▾</span>
+              </button>
+              <div style={{ fontSize: 12, opacity: 0.65, marginTop: 4 }}>↗ {allView ? pj.total + " projects on record" : (pj.site?.client_name || "Pipeskool project")}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 9 }}>
-                {companyView ? (<>
+                {allView ? (<>
                   <Pill tone="green">{pj.active} on schedule</Pill>
                   {pj.hold > 0 && <Pill tone="amber">{pj.hold} on hold</Pill>}
                   {pj.delayed > 0 && <Pill tone="red">{pj.delayed} delayed</Pill>}
                 </>) : <Pill tone={pj.site?.status === "delayed" ? "red" : pj.site?.status === "on_hold" ? "amber" : "green"}>{(ST_META[pj.site?.status] || ["Active"])[0]}</Pill>}
               </div>
             </div>
-            <Ring pct={companyView ? pj.avg : (pj.site?.progress || 0)} label={companyView ? "AVG" : "COMPLETE"} />
+            <Ring pct={allView ? pj.avg : (pj.site?.progress || 0)} label={allView ? "AVG" : "COMPLETE"} />
           </div>
           <div style={{ height: 1, background: "rgba(255,255,255,0.14)", margin: "14px 0 12px" }} />
           <div style={{ display: "grid", gridTemplateColumns: desk ? "repeat(4, 1fr)" : "1fr 1fr", gap: 13 }}>
-            <HeroStat ico="₹" label={companyView ? "Total contract value" : "Contract value"} value={crore(companyView ? pj.contract : (pj.site?.contract_value || 0))} />
-            <HeroStat ico="↗" label="Billed to date" value={crore(companyView ? pj.invoiced : (pj.site?.invoiced || 0))} />
-            <HeroStat ico="🗓" label={companyView ? "Nearest deadline" : "Target finish"} value={(companyView ? pj.deadline : pj.site?.end_date) || "—"} />
-            <HeroStat ico="👥" label={companyView ? "Total workforce" : "Workforce"} value={workers === null ? "…" : man.roll + " on roll"} />
+            <HeroStat ico="₹" label={allView ? "Total contract value" : "Contract value"} value={crore(allView ? pj.contract : (pj.site?.contract_value || 0))} />
+            <HeroStat ico="↗" label="Billed to date" value={crore(allView ? pj.invoiced : (pj.site?.invoiced || 0))} />
+            <HeroStat ico="🗓" label={allView ? "Nearest deadline" : "Target finish"} value={(allView ? pj.deadline : pj.site?.end_date) || "—"} />
+            <HeroStat ico="👥" label={allView ? "Total workforce" : "Workforce"} value={workers === null ? "…" : man.roll + " on roll"} />
           </div>
         </div>
+
+        {/* update449: site sheet — same list the Muster / DPR screens use (the person's allotted sites) */}
+        {pickOpen && (
+          <div onClick={() => setPickOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", zIndex: 120, display: "flex", alignItems: desk ? "center" : "flex-end", justifyContent: "center" }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: desk ? 14 : "16px 16px 0 0", width: "100%", maxWidth: 480, maxHeight: "70vh", overflowY: "auto", padding: "12px 12px calc(16px + env(safe-area-inset-bottom))", boxShadow: "0 -10px 30px rgba(0,0,0,0.2)" }}>
+              <div className="muted" style={{ fontSize: 11.5, padding: "2px 8px 8px" }}>Switch site — {isDirector ? "every site" : "your allotted sites"}</div>
+              {[["all", isDirector ? "🏢 Company portfolio (all sites)" : "🏢 All my sites"], ...sites.map(x => [String(x.id), "📍 " + x.name])].map(([v, l]) => {
+                const on = v === "all" ? allView : String(viewSiteId) === v;
+                return (
+                  <div key={v} onClick={() => pickHomeSite(v)} style={{ padding: "11px 10px", borderRadius: 8, cursor: "pointer", fontSize: 14.5, fontWeight: on ? 800 : 600, color: on ? COPPER : "var(--text)", background: on ? "#fff4e5" : "transparent", display: "flex", justifyContent: "space-between" }}>
+                    <span>{l}</span>{on && <span>✓</span>}
+                  </div>);
+              })}
+            </div>
+          </div>
+        )}
 
         {companyView && (
           <Section title="Sites overview" action={<a onClick={openProjects} style={{ fontSize: 12.5, color: COPPER, fontWeight: 700, cursor: "pointer" }}>View all {pj.total} →</a>}>

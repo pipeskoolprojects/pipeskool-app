@@ -4,7 +4,7 @@
 // logic — data loaders, permissions and behaviour are byte-for-byte what shipped in 235.
 import { useEffect, useState } from "react";
 import { todayLocal } from "@/lib/today";
-import { getTodaySummary, getDirectorPulse, inr } from "@/lib/data";
+import { getTodaySummary, getDirectorPulse, getSites, inr } from "@/lib/data";
 import { isDemo } from "@/lib/supabase";
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
@@ -12,6 +12,12 @@ import { getTodayQuote, getNotices, getMyReadsAcks } from "@/lib/notices";
 
 export default function DashboardView() {
   const [date, setDate] = useState(() => todayLocal());
+  // update449: this page's OWN site filter (independent of the sidebar switcher), remembered for the session
+  const [siteId, setSiteId] = useState(() => { try { return window.sessionStorage.getItem("psk_dash_site") || "all"; } catch { return "all"; } });
+  const [siteList, setSiteList] = useState([]);
+  useEffect(() => { getSites().then(r => setSiteList(r || [])).catch(() => setSiteList([])); }, []);
+  const pickSite = v => { setSiteId(v); try { window.sessionStorage.setItem("psk_dash_site", v); } catch {} };
+  const siteLabel = siteId === "all" ? "all sites" : (siteList.find(x => String(x.id) === String(siteId))?.name || "this site");
   const [s, setS] = useState(null);
   const [quote, setQuote] = useState(null);
   const [topNotices, setTopNotices] = useState([]);
@@ -24,15 +30,21 @@ export default function DashboardView() {
     });
   }, []);
 
-  useEffect(() => { getTodaySummary(date).then(setS); }, [date]);
+  useEffect(() => { setS(null); getTodaySummary(date, siteId).then(setS); }, [date, siteId]);
   const [pulse, setPulse] = useState(null);
-  useEffect(() => { getDirectorPulse().then(setPulse); }, []);
+  useEffect(() => { getDirectorPulse(siteId).then(setPulse); }, [siteId]);
 
   return (
     <>
         <div className="page-head">
           <h1>Attendance dashboard</h1>
-          <div className="filters">
+          <div className="filters" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {siteId !== "all" && <span className="badge gray" style={{ fontSize: 11 }}>Showing: {siteLabel}</span>}
+            <select value={siteId} onChange={e => pickSite(e.target.value)} title="Filter every card and the table to one site"
+              style={{ border: "2px solid var(--copper)", fontWeight: 700, minWidth: 200 }}>
+              <option value="all">Site: All sites</option>
+              {siteList.map(x => <option key={x.id} value={String(x.id)}>{x.name}</option>)}
+            </select>
             <input type="date" value={date} onChange={e => setDate(e.target.value)} />
           </div>
         </div>
@@ -44,17 +56,17 @@ export default function DashboardView() {
             <Link href="/expenses" style={{ textDecoration: "none" }}><div className="card" style={pulse.moneyPending ? { borderLeft: "3px solid var(--copper)" } : {}}>
               <div className="label">Money approvals waiting</div>
               <div className="value" style={{ color: pulse.moneyPending ? "var(--copper)" : "var(--green)" }}>{pulse.moneyPending}</div>
-              <div className="muted" style={{ fontSize: 11 }}>advances · claims · petty{pulse.retPend ? " · " + pulse.retPend + " cash return(s)" : ""}</div>
+              <div className="muted" style={{ fontSize: 11 }}>advances · claims · petty{pulse.retPend ? " · " + pulse.retPend + " cash return(s)" : ""} · {siteLabel}</div>
             </div></Link>
             <Link href="/procure" style={{ textDecoration: "none" }}><div className="card">
               <div className="label">Procurement</div>
               <div className="value">{pulse.openInd}<span style={{ fontSize: 13, fontWeight: 400 }}> open</span></div>
-              <div className="muted" style={{ fontSize: 11 }}>{pulse.pos} PO(s) awaiting delivery</div>
+              <div className="muted" style={{ fontSize: 11 }}>{pulse.pos} PO(s) awaiting delivery · {siteLabel}</div>
             </div></Link>
             <Link href="/expenses" style={{ textDecoration: "none" }}><div className="card">
               <div className="label">Approved spend today</div>
               <div className="value">{inr(pulse.expToday)}</div>
-              <div className="muted" style={{ fontSize: 11 }}>site expenses, all sites</div>
+              <div className="muted" style={{ fontSize: 11 }}>site expenses, {siteLabel}</div>
             </div></Link>
             {pulse.pfToday > 0 && (
               <Link href="/attendance" style={{ textDecoration: "none" }}><div className="card" style={{ borderLeft: "3px solid var(--red)" }}>
@@ -66,7 +78,7 @@ export default function DashboardView() {
             <Link href="/expenses" style={{ textDecoration: "none" }}><div className="card">
               <div className="label">Petty cash in the field</div>
               <div className="value">{inr(pulse.pettyOut)}</div>
-              <div className="muted" style={{ fontSize: 11 }}>held across all people</div>
+              <div className="muted" style={{ fontSize: 11 }}>{siteId === "all" ? "held across all people" : "held by " + siteLabel + " people"}</div>
             </div></Link>
           </div>
         )}
@@ -113,7 +125,7 @@ export default function DashboardView() {
             </div>
 
             <div className="panel">
-              <h2>Site-wise strength today</h2>
+              <h2>Site-wise strength today{siteId !== "all" ? " — " + siteLabel : ""}</h2>
               <table>
                 <thead>
                   <tr>
@@ -124,6 +136,7 @@ export default function DashboardView() {
                   </tr>
                 </thead>
                 <tbody>
+                  {s.sites.length === 0 && <tr><td colSpan={7} className="muted">No attendance recorded for {siteLabel} on this date.</td></tr>}
                   {s.sites.map(site => {
                     const tot = site.p + site.h + site.a;
                     const pct = tot ? Math.round((site.p / tot) * 100) : 0;
