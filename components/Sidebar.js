@@ -6,6 +6,7 @@ import Logo from "@/components/Logo";
 import NotifyBell from "@/components/NotifyBell";
 import { getUnreadNoticeCount } from "@/lib/notices";
 import Assistant from "@/components/Assistant";
+import AuthLostBanner from "@/components/AuthLostBanner";   // update451
 import { getSession, clearSession, logoutAuth, refreshSessionRights, canSeeModuleAnySite, setCurrentSite } from "@/lib/auth";
 
 const GROUPS = [
@@ -127,11 +128,11 @@ export default function Sidebar() {
   if (embedded) return null;
 
   if (hidden) return (
-    <><button className="sidebar-show" title="Show menu" onClick={() => toggleHidden(false)}>☰</button><Assistant /></>
+    <><AuthLostBanner /><button className="sidebar-show" title="Show menu" onClick={() => toggleHidden(false)}>☰</button><Assistant /></>
   );
 
   return (
-    <><aside className="sidebar">
+    <><AuthLostBanner /><aside className="sidebar">
       <button className="sidebar-hide" title="Hide menu (more screen space)" onClick={() => toggleHidden(true)}>⟨</button>
       <div className="brand">
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>

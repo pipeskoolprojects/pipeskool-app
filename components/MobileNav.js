@@ -1,5 +1,6 @@
 "use client";
 import Assistant from "@/components/Assistant";
+import AuthLostBanner from "@/components/AuthLostBanner";   // update451
 import NotifyBell from "@/components/NotifyBell";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -76,6 +77,7 @@ export default function MobileNav() {
 
   return (
     <>
+      <AuthLostBanner loginHref="/m/login" />
       {open && (
         <div onClick={() => setOpen(false)}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", zIndex: 40 }}>
