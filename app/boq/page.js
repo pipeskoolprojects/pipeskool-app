@@ -3,17 +3,18 @@
 // mandatory reason + full history, tender BASIC RATE per line (CP/sanitary), and an
 // optional link to the Item Master so the RA bill can auto-suggest purchase rates.
 // Amendments never rewrite submitted bills — every bill freezes its own rates.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
-import { getBoqItems, saveBoqItem, bulkImportBoq, autoShortenBoq, amendBoqItem, getBoqAmendments, BOQ_TEMPLATE_HEADERS, inr } from "@/lib/boq";
+import { getBoqItems, saveBoqItem, autoShortenBoq, amendBoqItem, getBoqAmendments, inr } from "@/lib/boq";
 import { searchItems } from "@/lib/stock";
 import { can } from "@/lib/auth";
 import { getBoqKits, copyBoqKits } from "@/lib/boqMaterials";   // update369
 import BoqKitModal from "@/components/BoqKitModal";
-import * as XLSX from "xlsx";
+import BoqImportWizard from "@/components/BoqImportWizard";     // update455: smart import, template per site
+import ContractTermsCard from "@/components/ContractTermsCard";   // update455: payment terms live here, not in the grid
 
 const blank = { item_code: "", description: "", unit: "Rmt", boq_qty: "", rate: "", section: "", basic_rate: "", is_extra: false, extra_status: "pending", item_id: null, item_name: "" };
 
@@ -110,10 +111,8 @@ export default function BoqPage() {
   const [amend, setAmend] = useState(null);            // update260: row being amended
   const [hist, setHist] = useState(null);              // update260: { row } or { row: null } = whole site
   const [itemQ, setItemQ] = useState(""); const [itemHits, setItemHits] = useState([]);   // update260: item-master link search
-  const [bulkRows, setBulkRows] = useState([]); const [bulkResult, setBulkResult] = useState(null);
+  const [importOpen, setImportOpen] = useState(false); const [termsOpen, setTermsOpen] = useState(false);   // update455
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
-  const fileRef = useRef(null);
-
   useEffect(() => {
     const s = getSession(); setSession(s);
     if (s?.sites?.length) { setSites(s.sites); setSite(s.sites[0].id); }
@@ -143,34 +142,6 @@ export default function BoqPage() {
     setBusy(true); const res = await saveBoqItem({ ...form, site_id: site }); setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
     setMsg(form.id ? "BOQ line updated." : (form.is_extra ? "Extra (non-tender) item added." : "BOQ line added.")); setForm(null); setItemQ("");
-  }
-
-  function downloadTemplate() {
-    const csv = BOQ_TEMPLATE_HEADERS.join(",") + "\n" +
-      "WS-01,MS 350NB header piping,Rmt,850,1850,Water Supply,\n" +
-      "1.08,\"EWC wall hung with seat cover\",Nos,208,9240,Sanitary Fixtures,6706";
-    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = "pipeskool_boq_template.csv"; a.click();
-  }
-  function onFile(e) {
-    const f = e.target.files?.[0]; if (!f) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const wb = XLSX.read(reader.result, { type: "array" });          // handles CSV, XLSX, XLS
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });        // proper quoted-comma handling
-        setBulkRows(rows.map(r => { const o = {}; Object.keys(r).forEach(k => o[String(k).trim()] = String(r[k]).trim()); return o; }));
-        setBulkResult(null);
-      } catch (err) {
-        setBulkResult({ ok: false, error: "Could not read the file: " + err.message + ". Use the downloaded template (CSV or Excel) with the same columns." });
-      }
-    };
-    reader.readAsArrayBuffer(f);
-  }
-  async function runBulk() {
-    setBusy(true); const res = await bulkImportBoq(bulkRows, site); setBusy(false);
-    setBulkResult(res); if (res.created) { setMsg(res.created + " BOQ lines imported."); setBulkRows([]); }
   }
 
   const shown = (rows || []).filter(r => tab === "extra" ? r.is_extra : !r.is_extra);   // update260
@@ -227,25 +198,17 @@ export default function BoqPage() {
             <button onClick={() => { setForm({ ...blank, is_extra: tab === "extra" }); setItemQ(""); setMsg(""); }}>＋ Add {tab === "extra" ? "extra item" : "line"}</button>
             <button onClick={() => setHist({ row: null })}>🕘 Amendments</button>
             <button onClick={async () => { setErr(""); const r = await autoShortenBoq(site); if (!r.ok) { setErr(r.error); return; } setMsg(r.count + " line(s) given short names — edit any line to refine."); }}>✂ Auto-shorten names</button>
-            <button onClick={() => fileRef.current?.click()}>⬆ Import BOQ (CSV / Excel)</button>
-            <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={onFile} />
+            <button onClick={() => setImportOpen(true)}>⬆ Import BOQ (any client&apos;s Excel)</button>{/* update455 */}
+            <button onClick={() => setTermsOpen(true)}>📜 Contract terms</button>
           </div>
         </div>
         {isDemo && <div className="demo-banner">Demo mode — sample BOQ.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
         {err && !form && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
 
-        {bulkRows.length > 0 && (
-          <div className="panel">
-            <h2>Import preview — {bulkRows.length} lines</h2>
-            <div className="muted" style={{ marginBottom: 8 }}>Importing into <b>{sites.find(s => s.id === site)?.name}</b>. Need a template? <a onClick={downloadTemplate} style={{ color: "var(--copper)", cursor: "pointer", textDecoration: "underline" }}>Download CSV template</a>.</div>
-            <button className="primary" disabled={busy} onClick={runBulk}>{busy ? "Importing…" : `Import ${bulkRows.length} lines`}</button>
-            {bulkResult && bulkResult.errors?.length > 0 && <div className="error" style={{ marginTop: 8 }}>{bulkResult.errors.slice(0, 5).join("; ")}</div>}
-          </div>
-        )}
-        {bulkRows.length === 0 && (
-          <div className="muted" style={{ margin: "0 0 12px" }}>Upload your BOQ as CSV (<a onClick={downloadTemplate} style={{ color: "var(--copper)", cursor: "pointer", textDecoration: "underline" }}>download template</a>) or add lines manually. These feed the DPR work dropdown. Progress % is driven by RA-bill measured quantities (RA Billing module). To change qty/rate on a live line use <b>✎ Amend</b> — it logs the reason and never disturbs submitted bills.</div>
-        )}
+        <div className="muted" style={{ margin: "0 0 12px" }}>Upload the client&apos;s BOQ Excel as it came (KEI, SOUL, Brigade — any layout): the importer finds the header row, reads each column by its content, checks the file&apos;s own totals and remembers the mapping as this site&apos;s template. Payment terms go under <b>📜 Contract terms</b>, not into the grid. These lines feed the DPR work dropdown; progress % is driven by RA-bill measured quantities. To change qty/rate on a live line use <b>✎ Amend</b> — it logs the reason and never disturbs submitted bills.</div>
+        {importOpen && <BoqImportWizard site={site} siteName={sites.find(s => s.id === site)?.name || ""} existingCount={(rows || []).length} onClose={() => setImportOpen(false)} onDone={m => { setImportOpen(false); setMsg(m); }} />}
+        {termsOpen && <ContractTermsCard site={site} siteName={sites.find(s => s.id === site)?.name || ""} canEdit={!!session && (session.role === "director" || can(session, "billing", "manage"))} onClose={() => setTermsOpen(false)} />}
 
         {form && (
           <div className="panel">
