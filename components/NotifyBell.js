@@ -48,6 +48,7 @@ export default function NotifyBell({ mobile }) {
     setOpen(false); refresh();
     // update353: rows sent before today still hold "/expenses" or "/approvals". Route them
     // through /go so an old notification opens the right shell for THIS device.
+    if (/^https?:\/\//.test(n.link || "")) { window.open(n.link, "_blank", "noopener"); return; }   // update454: a document link (challan PDF) opens in its own tab
     if (n.link) router.push(LEGACY[n.link] || n.link);
   }
 
