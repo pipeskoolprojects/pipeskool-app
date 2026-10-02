@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
-import { getWorkerCategories, addWorkerCategory, workerExitCheck, workerExit, workerRejoin, applyExits, getExitedWorkers } from "@/lib/data";   // update439
+import { getWorkerCategories, addWorkerCategory, workerExitCheck, workerExit, workerRejoin, applyExits, getExitedWorkers, getExitedStaff, staffRejoin } from "@/lib/data";   // update439 · update452
 import { getWorkers, saveWorker, uploadAadhaarDoc, uploadBankDoc, uploadAadhaarFiles, inr, deleteWorker, deleteStaff, getWorkerAllotments, setWorkerAllotments } from "@/lib/data";   // update374/377
 import { getContractors, getSitesList } from "@/lib/mobile";
 import { getStaff, addStaff, updateStaff, getRoles, addRole, renameRole, deleteRole, resetStaffPassword, getUserSites, assignSite, removeSite } from "@/lib/access";
@@ -49,6 +49,7 @@ export default function WorkersPage() {
   const [tab, setTab] = useState("workers");    // workers | staff | exited
   const [exitM, setExitM] = useState(null);     // update439: { w, last, designation, type, reason, check }
   const [exited, setExited] = useState(null); const [exq, setExq] = useState("");
+  const [exStaff, setExStaff] = useState(null);   // update452: staff who have left
   async function openExit(w) { const check = await workerExitCheck(w.id); setExitM({ w, last: new Date().toISOString().slice(0, 10), designation: w.category || "", type: "resigned", reason: "", check }); }
   async function confirmExit() {
     const { w, last, designation, type, reason } = exitM; if (!last) { window.alert("Last working day is required."); return; }
@@ -235,6 +236,8 @@ export default function WorkersPage() {
           monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible,
           annual_paid_leaves: u.annual_paid_leaves || "", joining_date: u.joining_date || "",
           requires_punch: u.requires_punch !== false, bank_account_no: u.bank_account_no || "",
+          pf_no: u.pf_no || "", pf_uan: u.pf_uan || "", esi_no: u.esi_no || "", department: u.department || "",   // update450
+          preferred_lang: u.preferred_lang || "",   // update453
           bank_ifsc: u.bank_ifsc || "", bank_name: u.bank_name || "", pan_no: u.pan_no || "", aadhaar_doc_url: u.aadhaar_doc_url || null, aadhaar_docs: Array.isArray(u.aadhaar_docs) ? u.aadhaar_docs : [], bank_doc_url: u.bank_doc_url || null,   // update374/377
           last_working_day: u.last_working_day || "", exit_reason: u.exit_reason || "",
           emergency_name: u.emergency_name || "", emergency_relation: u.emergency_relation || "",   // update384
@@ -281,7 +284,7 @@ export default function WorkersPage() {
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           <button className={tab === "workers" ? "primary" : ""} onClick={() => setTab("workers")}>Workers (labour)</button>
           <button className={tab === "staff" ? "primary" : ""} onClick={() => setTab("staff")}>Staff (login users)</button>
-          <button className={tab === "exited" ? "primary" : ""} onClick={() => { setTab("exited"); getExitedWorkers().then(setExited); }}>Exited{exited ? " · " + exited.length : ""}</button>
+          <button className={tab === "exited" ? "primary" : ""} onClick={() => { setTab("exited"); getExitedWorkers().then(setExited); getExitedStaff().then(setExStaff); }}>Exited{exited ? " · " + (exited.length + (exStaff || []).length) : ""}</button>
         </div>
         {isDemo && <div className="demo-banner">Demo mode — sample worker master shown.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
@@ -324,6 +327,17 @@ export default function WorkersPage() {
                 { key: "exit_reason", label: "Reason" }, { key: "marked_by", label: "Marked by", render: r => <span>{r.marked_by}<div className="muted" style={{ fontSize: 11 }}>{r.exited_at}</div></span> },
                 { key: "act", label: "", render: r => <button style={{ fontSize: 11.5 }} onClick={() => rejoin(r)}>↩ Rejoin</button> },
               ]} rows={(exited || []).filter(r => !exq || `${r.full_name} ${r.site_name} ${r.exit_designation}`.toLowerCase().includes(exq.toLowerCase()))} exportName="exited_employees" />)}
+            {/* update452: staff (login users) who have left — login off, punch profile closed, off every live list */}
+            <div style={{ fontWeight: 700, margin: "16px 0 6px" }}>Staff (login users) who have left{exStaff ? " · " + exStaff.length : ""}</div>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Their login is blocked and their punch profile is closed from the day after the last working day. History up to that day is untouched.</div>
+            {!exStaff ? <div className="muted">Loading…</div> : exStaff.length === 0 ? <div className="muted">None.</div> : (
+              <DataTable columns={[
+                { key: "full_name", label: "Name", render: r => <span><b>{r.full_name}</b><div className="muted" style={{ fontSize: 11 }}>{r.mobile}</div></span> },
+                { key: "role", label: "Role", filter: "select", render: r => String(r.role || "").replace(/_/g, " ") },
+                { key: "joining_date", label: "Joining date" }, { key: "last_working_day", label: "Last working day" },
+                { key: "exit_reason", label: "Reason" }, { key: "exited_at", label: "Applied on" },
+                { key: "act", label: "", render: r => ["director", "hr", "it_executive"].includes(sess?.role) ? <button style={{ fontSize: 11.5 }} onClick={async () => { if (!window.confirm(`Rejoin ${r.full_name}? Login and punch profile are re-activated; set a new joining date in Edit staff afterwards.`)) return; const x = await staffRejoin(r.id); if (!x.ok) { window.alert(x.error); return; } setMsg(`${r.full_name} rejoined.`); load(); getExitedStaff().then(setExStaff); }}>↩ Rejoin</button> : null },
+              ]} rows={(exStaff || []).filter(r => !exq || `${r.full_name} ${r.role}`.toLowerCase().includes(exq.toLowerCase()))} exportName="exited_staff" pageSize={10} />)}
           </div>)}
         {exitM && (
           <div onClick={() => setExitM(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -620,6 +634,19 @@ export default function WorkersPage() {
                              onChange={e => sset("bank_name", e.target.value)} /></div>
                     <div style={{ flex: 1, minWidth: 110 }}><label className="muted">PAN</label>
                       <input style={{ width: "100%" }} value={smodal.pan_no || ""} onChange={e => sset("pan_no", e.target.value.toUpperCase())} placeholder="ABCDE1234F" /></div>
+                    {/* update450: statutory details — printed on salary slips (Format A) */}
+                    <div style={{ flex: "1 1 100%", fontWeight: 700, fontSize: 12.5, marginTop: 6 }}>Statutory details <span className="muted" style={{ fontWeight: 400 }}>(printed on salary slips)</span></div>
+                    <div style={{ flex: 1, minWidth: 110 }}><label className="muted">PF No</label>
+                      <input style={{ width: "100%" }} value={smodal.pf_no || ""} onChange={e => sset("pf_no", e.target.value)} /></div>
+                    <div style={{ flex: 1, minWidth: 130 }}><label className="muted">PF UAN</label>
+                      <input style={{ width: "100%" }} inputMode="numeric" value={smodal.pf_uan || ""} onChange={e => sset("pf_uan", e.target.value)} /></div>
+                    <div style={{ flex: 1, minWidth: 110 }}><label className="muted">ESI No</label>
+                      <input style={{ width: "100%" }} value={smodal.esi_no || ""} onChange={e => sset("esi_no", e.target.value)} /></div>
+                    <div style={{ flex: 1, minWidth: 130 }}><label className="muted">Department</label>
+                      <input style={{ width: "100%" }} value={smodal.department || ""} onChange={e => sset("department", e.target.value)} placeholder="e.g. Projects" /></div>
+                    <div style={{ flex: 1, minWidth: 150 }}><label className="muted">Preferred language <span title="Used for WhatsApp / push messages sent to this person, e.g. delivery challan count-before-GRN">ⓘ</span></label>
+                      <select style={{ width: "100%" }} value={smodal.preferred_lang || ""} onChange={e => sset("preferred_lang", e.target.value)}>
+                        <option value="">— not set (Hindi used) —</option><option value="en">English</option><option value="hi">हिन्दी</option><option value="gu">ગુજરાતી</option></select></div>
                     {/* update374 */}
                     {/* update377: ONE field, "Aadhaar Documents", multi-file — matches the worker form */}
                     <div style={{ flex: "1 1 100%" }}>

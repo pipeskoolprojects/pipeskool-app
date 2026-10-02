@@ -7,7 +7,8 @@
 // It never re-renders from the template or the current company rules — an issued
 // letter reproduces exactly what was signed, however the rules have changed since.
 import { useEffect, useState } from "react";
-import Logo from "@/components/Logo";
+import { Letterhead, LetterFoot, letterheadCss } from "@/components/Letterhead";   // update450: one letterhead everywhere
+import { parseSlip, SlipA, SlipB } from "@/components/SalarySlipPrint";          // update450: salary slip formats
 import { getLetter, getCompany, fmtDate } from "@/lib/letters";
 
 export default function LetterPrint() {
@@ -32,15 +33,12 @@ export default function LetterPrint() {
 
   const cancelled = l.status === "cancelled";
   const byEmployee = /DECLARATION|WHOMSOEVER/i.test(l.heading) && /^I, /m.test(l.rendered_body);
+  const slip = parseSlip(l.rendered_body);   // update450: a salary slip / certificate carries frozen JSON, not prose
 
   return (
     <div className="lt-doc" style={{ maxWidth: 820, margin: "0 auto", padding: 28, background: "#fff", color: "#111", fontFamily: "Inter, Arial, sans-serif", position: "relative", minHeight: "100vh" }}>
       <style>{`
-        @media print {
-          .no-print { display: none !important; }
-          body { background: #fff; }
-          @page { size: A4; margin: 14mm; }
-        }
+        ${letterheadCss}
         @media screen and (max-width: 640px) { .lt-doc { padding: 12px !important; } }
         .lt-wm { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
                  font-size: 78px; font-weight: 800; color: rgba(220,38,38,0.10);
@@ -60,15 +58,13 @@ export default function LetterPrint() {
         </div>
       )}
 
-      {/* -------- letterhead -------- */}
-      <div style={{ display: "flex", gap: 18, alignItems: "flex-start", borderBottom: "3px solid #FF7A1A", paddingBottom: 10 }}>
-        <Logo height={26} />
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: 19, color: "#1f2a4b", letterSpacing: "-0.01em" }}>{c.name}</div>
-          <div style={{ fontSize: 11.5, color: "#6b7280", fontStyle: "italic", lineHeight: 1.5, marginTop: 2 }}>{c.address}</div>
-        </div>
-      </div>
+      {/* -------- letterhead (update450: shared component) -------- */}
+      <Letterhead company={c} />
 
+      {slip ? (<>
+        {slip.fmt === "A" ? <SlipA d={slip.data} docNo={l.letter_no} issued={fmtDate(l.issue_date)} /> : <SlipB d={slip.data} docNo={l.letter_no} issued={fmtDate(l.issue_date)} company={c} />}
+        <LetterFoot company={c} right={l.letter_no} />
+      </>) : (<>
       {/* -------- heading -------- */}
       <div style={{ textAlign: "center", margin: "22px 0 6px" }}>
         <div style={{ fontWeight: 800, fontSize: 17, color: "#1f2a4b", letterSpacing: "0.02em" }}>{l.heading}</div>
@@ -99,14 +95,12 @@ export default function LetterPrint() {
         </div>
       )}
 
-      {/* -------- footer -------- */}
-      <div style={{ marginTop: 46, paddingTop: 8, borderTop: "1px solid #e5e7eb", textAlign: "center", fontSize: 9.5, fontWeight: 700, color: "#4b5563", lineHeight: 1.7 }}>
-        <div>CIN No: {c.cin} &nbsp; GSTIN: {c.gstin}</div>
-        <div>Email ID: {c.email}</div>
-        <div style={{ fontWeight: 400, color: "#9ca3af", marginTop: 4 }}>
-          {l.letter_no} · issued {fmtDate(l.issue_date)}{l.created_by_name ? ` by ${l.created_by_name}` : ""}
-        </div>
+      {/* -------- footer (update450: shared) -------- */}
+      <div style={{ marginTop: 30, fontSize: 9.5, color: "#9ca3af" }}>
+        {l.letter_no} · issued {fmtDate(l.issue_date)}{l.created_by_name ? ` by ${l.created_by_name}` : ""}
       </div>
+      <LetterFoot company={c} right={l.letter_no} />
+      </>)}
     </div>
   );
 }

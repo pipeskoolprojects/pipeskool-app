@@ -12,6 +12,7 @@
 // disagree with what was actually paid.
 import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
+import { Letterhead } from "@/components/Letterhead";   // update450
 import { loadPayrollSummary } from "@/lib/payrollSummary";
 import { getStaffPayouts } from "@/lib/staffpay";
 import { getCompany } from "@/lib/letters";
@@ -139,13 +140,9 @@ export default function SalarySlip() {
         {draft && <span className="note amber" style={{ padding: "4px 10px", fontSize: 12 }}>This payroll is still a DRAFT — the slip is marked accordingly.</span>}
       </div>
 
-      {/* letterhead */}
-      <div style={{ display: "flex", gap: 18, alignItems: "flex-start", borderBottom: "3px solid " + ORANGE, paddingBottom: 10 }}>
-        <Logo height={22} />
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: 17, color: NAVY }}>{c.name}</div>
-          <div style={{ fontSize: 11, color: "#6b7280", fontStyle: "italic" }}>{c.address}</div>
-        </div>
+      {/* letterhead — update450: the shared company letterhead */}
+      <Letterhead company={c} />
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 10, letterSpacing: "0.08em", color: "#6b7280", fontWeight: 700 }}>SALARY SLIP</div>
           <div style={{ fontSize: 14, fontWeight: 800, color: NAVY }}>{monthName(s.month)}</div>

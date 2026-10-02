@@ -16,9 +16,11 @@ import { useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import SalarySlipForm from "@/components/SalarySlipForm";   // update412
 import Logo from "@/components/Logo";   // update331c: preview shows the same letterhead that prints
+import { billUrl } from "@/lib/bills";   // update450: uploaded logo preview
+import { Letterhead } from "@/components/Letterhead";   // update450
 import { getSession, canAnySite } from "@/lib/auth";
 import {
-  getCompany, saveCompany, getClauses, saveClause, getClauseHistory,
+  getCompany, saveCompany, uploadCompanyLogo, getClauses, saveClause, getClauseHistory,   // update450
   getTemplates, saveTemplate, getTemplateHistory, addTemplate,
   getStaffPeople, getLabourPeople, getRoleLabels,
   buildTokens, renderTemplate, clauseKeysUsed, tokenLabel, fixHint, splitTokens,
@@ -61,6 +63,20 @@ function DocCard({ tpl, onCreate }) {
       <div style={{ fontWeight: 700, fontSize: 14, color: NAVY, marginBottom: 4 }}>{tpl.label}</div>
       <div className="muted" style={{ fontSize: 12, lineHeight: 1.55, flex: 1 }}>{tpl.description || ""}</div>
       <button className="primary lt-card-btn" onClick={() => onCreate(tpl.code)}>Create →</button>
+    </div>
+  );
+}
+
+// update450: blank company letterhead — header + footer on every page, body empty, 1 / 2 / 5 pages
+function BlankCard() {
+  return (
+    <div className="lt-card">
+      <div className="lt-card-ic" style={{ background: "#fff4e5", color: "#c9531f" }}>📄</div>
+      <div style={{ fontWeight: 700, fontSize: 14, color: NAVY, marginBottom: 4 }}>Blank Letterhead</div>
+      <div className="muted" style={{ fontSize: 12, lineHeight: 1.55, flex: 1 }}>Company letterhead with an empty body — print and write by hand. Header and footer on every page.</div>
+      <div style={{ display: "flex", gap: 6 }}>
+        {[1, 2, 5].map(n => <button key={n} className="primary lt-card-btn" style={{ flex: 1 }} onClick={() => window.open("/letters/blank?pages=" + n, "_blank")}>{n} page{n > 1 ? "s" : ""}</button>)}
+      </div>
     </div>
   );
 }
@@ -116,11 +132,7 @@ function Paper({ heading, text, company, issuedBy, subjectName }) {
   const byEmployee = issuedBy === "employee";
   return (
     <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 10, padding: "24px 28px" }}>
-      <div style={{ borderBottom: "3px solid " + ORANGE, paddingBottom: 8, marginBottom: 16 }}>
-        <Logo height={17} />
-        <div style={{ fontWeight: 800, fontSize: 15, color: NAVY, marginTop: 6 }}>{company?.name || "PIPESKOOL PROJECTS PVT LTD."}</div>
-        <div className="muted" style={{ fontSize: 10.5, fontStyle: "italic" }}>{company?.address}</div>
-      </div>
+      <div style={{ marginBottom: 16 }}><Letterhead company={company} /></div>{/* update450: the preview shows the SAME letterhead that prints */}
       <div style={{ textAlign: "center", fontWeight: 800, fontSize: 15, color: NAVY, letterSpacing: "0.02em", marginBottom: 16 }}>{heading}</div>
       <div style={{ whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.8 }}>{text}</div>
 
@@ -384,7 +396,8 @@ export default function LettersPage() {
               <TopOption icon="🗂" title="Document Register" sub="View all issued documents" onClick={() => { setView("register"); setErr(""); setMsg(""); }} />
             </div>
             <div className="lt-grid">
-              {docTypes.map(t => <DocCard key={t.code} tpl={t} onCreate={openDoc} />)}
+              {docTypes.filter(t => t.code !== "salary_cert").map(t => <DocCard key={t.code} tpl={t} onCreate={openDoc} />)}{/* update450: Format B lives inside the Salary Slip card */}
+              <BlankCard />
               <AddTypeCard canManage={canManage} onClick={() => setNewTpl({ code: "", family: "staff", name: "", heading: "", series_prefix: "", body: "", icon: "\uD83D\uDCC4", accent: "slate", description: "" })} />
             </div>
           </>
@@ -393,15 +406,13 @@ export default function LettersPage() {
         {/* ============================================================ DOCUMENT */}
         {!loading && view === "doc" && code === "salary_slip" && (
           <div style={{ maxWidth: 760 }}>{/* update412 */}
-            <SalarySlipForm person={person} people={people} onPerson={id => { setPersonId(id); setOverrides({}); setDraft(null); }} issuing={issuing}
-              onIssue={async slip => {
+            <SalarySlipForm person={person} people={people} onPerson={id => { setPersonId(id); setOverrides({}); setDraft(null); }} issuing={issuing} roleLabels={roleLabels} company={company}
+              onIssue={async slip => {   // update450: slip = { code: "salary_slip" | "salary_cert", body: "@@SLIP_A@@{json}" }
                 setErr(""); setMsg(""); setIssuing(true);
                 try {
-                  const tk = { ...tokens, ...slip, "letter.no": "{{letter.no}}" };
-                  const body = renderTemplate(template.body, tk, {}).text;
-                  const r = await issueLetter({ code: template.code, family, person, issueDate, body, tokens: { ...tokens, ...slip }, clauses: [], wasEdited: false });
+                  if (slip.code === "salary_cert" && !templates.some(t => t.code === "salary_cert")) { setErr("Run pipeskool_letterhead_v2.sql (update 450) in Supabase first — the Salary Certificate type is not installed."); return; }
+                  const r = await issueLetter({ code: slip.code, family, person, issueDate, body: slip.body, tokens: { ...tokens, "slip.format": slip.code }, clauses: [], wasEdited: false });
                   if (!r.ok) { setErr(r.error); return; }
-                  try { localStorage.removeItem("psk_slip_draft_" + person.id); } catch {}
                   setMsg(`Issued ${r.letter_no}. Opening the print view…`); setReg(null);
                   window.open(`/letters/print?id=${r.id}`, "_blank");
                 } finally { setIssuing(false); }
@@ -428,7 +439,7 @@ export default function LettersPage() {
                   <option value="">— select —</option>
                   {people.map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.full_name}{p.is_active === false ? " (inactive)" : ""}
+                      {p.full_name}{p.is_active === false ? (p.last_working_day ? ` (left ${p.last_working_day})` : " (inactive)") : ""}
                       {family === "labour" && p.site_name ? " · " + p.site_name : ""}
                     </option>
                   ))}
@@ -577,7 +588,8 @@ export default function LettersPage() {
               <div style={{ fontSize: 12, lineHeight: 1.9 }}>
                 <div><b>{company?.name}</b></div>
                 <div className="muted">{company?.address}</div>
-                <div className="muted">CIN {company?.cin || "—"} · GSTIN {company?.gstin || "—"} · {company?.email}</div>
+                <div className="muted">GSTIN {company?.gstin || "—"} · State {company?.state || "—"}{company?.state_code ? ", Code " + company.state_code : ""} · CIN {company?.cin || "—"}</div>
+                <div className="muted">{company?.email || "—"} · {company?.mobile || "—"} · Logo: {company?.logo_url ? "uploaded" : "official (built-in)"}</div>
                 <div className="muted">Signed by: {company?.signatory_name || "—"} ({company?.signatory_title})</div>
               </div>
             </div>
@@ -698,11 +710,20 @@ export default function LettersPage() {
           <div onClick={() => setCompanyEdit(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}>
             <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 560, padding: 22, maxHeight: "88vh", overflowY: "auto" }}>
               <h2 style={{ marginBottom: 10 }}>Company details</h2>
-              {[["name", "Company name"], ["address", "Address"], ["cin", "CIN"], ["gstin", "GSTIN"], ["email", "Email"], ["place", "Place (for declarations)"], ["signatory_name", "Signatory name"], ["signatory_title", "Signatory title"]].map(([k, l]) => (
+              <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>These details print on the letterhead of EVERY document — letters, salary slips, blank sheets, wage slips. Change once, applies to all future documents.</div>
+              {[["name", "Company name"], ["address", "Address"], ["gstin", "GSTIN / UIN"], ["state", "State"], ["state_code", "State code"], ["cin", "CIN"], ["email", "Email"], ["mobile", "Mobile"], ["footer_line", "Footer line (optional — default: company name · city)"], ["place", "Place (for declarations)"], ["signatory_name", "Signatory name"], ["signatory_title", "Signatory title"]].map(([k, l]) => (
                 <Field key={k} label={l}>
                   <input style={{ width: "100%" }} value={companyEdit[k] || ""} onChange={e => setCompanyEdit(x => ({ ...x, [k]: e.target.value }))} />
                 </Field>
               ))}
+              {/* update450: logo — the official artwork is the default; an upload replaces it on every future document */}
+              <Field label="Company logo" hint="Default is the official Pipeskool artwork built into the app. Upload only an official file (PNG / JPG / SVG) — it is never stretched or recoloured.">
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  {companyEdit.logo_url ? <img src={billUrl(companyEdit.logo_url)} alt="logo" style={{ height: 36, width: "auto" }} /> : <Logo height={22} />}
+                  <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={async e => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; const r = await uploadCompanyLogo(f); if (!r.ok) { setErr(r.error); return; } setCompanyEdit(x => ({ ...x, logo_url: r.path })); setCompany(c => ({ ...c, logo_url: r.path })); setMsg("Logo uploaded — it prints on every new document."); }} />
+                  {companyEdit.logo_url && <button type="button" style={{ fontSize: 12 }} onClick={() => setCompanyEdit(x => ({ ...x, logo_url: "" }))}>Use official logo</button>}
+                </div>
+              </Field>
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                 <button onClick={() => setCompanyEdit(null)}>Cancel</button>
                 <button className="primary" onClick={doSaveCompany}>Save</button>

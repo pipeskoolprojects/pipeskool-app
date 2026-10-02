@@ -7,6 +7,7 @@ import { setChallanPosted, createDeliveryChallan, getDeliveryChallans, convertDc
 import { getClients, shipBlock, addrLines } from "@/lib/clients";   // update393
 import InternalDispatchTab from "@/components/InternalDispatchTab";   // update403
 import VendorLink from "@/components/VendorLink";   // update410
+import DcSendBox from "@/components/DcSendBox";   // update453
 import { getTallySettings } from "@/lib/tally";
 import { getSession, canSeeModuleAnySite } from "@/lib/auth";
 
@@ -33,6 +34,7 @@ export default function DeliveryChallans() {
   // update393: Client Master + site→client default; DC number typed by hand (blank = series); ✎ edit
   const [clients, setClients] = useState([]); const [siteClient, setSiteClient] = useState({});
   const [edit, setEdit] = useState(null); const [editBusy, setEditBusy] = useState(false);
+  const [sendDc, setSendDc] = useState(null);   // update453: challan being sent to its site supervisor
   const clientOf = id => clients.find(c => String(c.id) === String(id)) || null;
   const [lines, setLines] = useState([]);                // { po_item_id,item_id,item_name,unit,ordered_qty,received_qty }
   const [poQ, setPoQ] = useState("");
@@ -348,7 +350,8 @@ export default function DeliveryChallans() {
                       <td className="ell" onClick={e => e.stopPropagation()}><VendorLink name={r.vendor} />{r.vendor_dc_no && <div className="muted" style={{ fontSize: 10.5 }}>vendor DC {r.vendor_dc_no}</div>}</td>
                       <td className="ell hide-m muted">{r.po_no || "No PO"}</td>
                       <td style={{ textAlign: "right" }}><b>{r.recv}</b>/{r.ord || "—"}</td>
-                      <td><span style={{ background: tone[0], color: tone[1], fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>{sl}</span>{r.status !== "cancelled" && (r.grn_no ? <span title={"GRN " + r.grn_no} style={{ background: "#DBEAFE", color: "#1D4ED8", fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>GRN done</span> : <span style={{ background: "#EDE9FE", color: "#6D28D9", fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>GRN pending</span>)}</td>
+                      <td><span style={{ background: tone[0], color: tone[1], fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>{sl}</span>{r.status !== "cancelled" && (r.grn_no ? <span title={"GRN " + r.grn_no} style={{ background: "#DBEAFE", color: "#1D4ED8", fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>GRN done</span> : <span style={{ background: "#EDE9FE", color: "#6D28D9", fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>GRN pending</span>)}
+                        {r.sent && <div title={`${r.sent.channel} · by ${r.sent.by}`} style={{ background: "#fff4e5", color: "#c9531f", fontSize: 10.5, padding: "1px 8px", borderRadius: 999, marginTop: 4, display: "inline-block", whiteSpace: "nowrap", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}>📨 Sent to {r.sent.to} · {r.sent.at.slice(5).replace("-", "/")} · {String(r.sent.lang).toUpperCase()}</div>}</td>
                       <td onClick={e => e.stopPropagation()}>{r.posted ? <span title={`Posted by ${r.posted_by} · ${r.posted_at}`} style={{ background: "#DCFCE7", color: "#15803D", fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>✓ Posted</span> : <span style={{ background: "#F3F4F6", color: "#6B7280", fontSize: 11, padding: "2px 8px", borderRadius: 999, border: "1px solid var(--border)", whiteSpace: "nowrap" }}>Not posted</span>}
                         {canPost && r.status !== "cancelled" && <button type="button" title={r.posted ? "Mark as NOT posted (logged)" : "Mark as posted in Tally (logged)"} style={{ fontSize: 10.5, marginLeft: 4, padding: "0 5px" }} onClick={() => markPosted([r.id], !r.posted)}>{r.posted ? "↺" : "✓"}</button>}</td>
                     </tr>
@@ -371,6 +374,7 @@ export default function DeliveryChallans() {
                             : <button type="button" className="primary" style={{ fontSize: 11.5 }} onClick={() => markPosted([r.id], true)}>☑ Mark as posted</button>)}
                           {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5 }} onClick={() => setEdit({ id: r.id, dc_ref: r.dc_ref, dc_date: r.date, client_id: r.client_id || "", vendor_dc_no: r.vendor_dc_no || "" })}>✎ Edit</button>}
                           {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" className="primary" style={{ fontSize: 11.5 }} disabled={conv === r.id} onClick={() => convert(r)}>{conv === r.id ? "…" : "Convert → GRN"}</button>}
+                          {r.status !== "cancelled" && <button type="button" style={{ fontSize: 11.5, background: "#25D366", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700 }} title="Send the item list to the site supervisor to count before GRN" onClick={() => setSendDc(r)}>📨 {r.sent ? "Send again" : "Send to supervisor"}</button>}{/* update453 */}
                           {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5, color: "var(--red)", borderColor: "var(--red)" }} onClick={() => cancelDc(r)}>✕ Cancel</button>}
                         </div>
                       </td></tr>
@@ -395,6 +399,7 @@ export default function DeliveryChallans() {
           )}
           <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Value uses each item's PO rate. 🖨 opens the letterhead document — use Print → Save as PDF for a file (works the same on Android, via the share sheet). Converting creates a real GRN through the same engine as the GRN Register.</div>
         </div>
+              {sendDc && <DcSendBox dc={sendDc} onClose={() => setSendDc(null)} onSent={() => load()} />}{/* update453 */}
               {edit && (   /* update393: edit header of an unconverted challan */
           <div onClick={() => !editBusy && setEdit(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 12 }}>
             <div onClick={e => e.stopPropagation()} className="panel" style={{ width: "min(460px,100%)", margin: 0 }}>
