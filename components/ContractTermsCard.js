@@ -4,7 +4,7 @@
 // like Brigade, only have them in the LOI. Either way they live here: contract value, GST, billing cycle, ad-hoc /
 // balance / final-bill days, payment stages (% per stage), retention and its release, PBG, DLP, special notes, LOI PDF.
 import { useEffect, useState } from "react";
-import { getSiteTerms, saveSiteTerms, uploadLoi, inr } from "@/lib/boq";
+import { getSiteTerms, saveSiteTerms, uploadLoi, loiInfo, inr } from "@/lib/boq";
 import { billUrl } from "@/lib/bills";
 
 const F = [
@@ -36,12 +36,17 @@ export default function ContractTermsCard({ site, siteName, canEdit, onClose }) 
     setMsg("Contract terms saved."); setEdit(false);
   }
   async function onLoi(e) {
-    const f = e.target.files?.[0]; if (!f) return; setBusy(true); setErr("");
+    const f = e.target.files?.[0]; if (!f) return; setBusy(true); setErr(""); setMsg("");
     const r = await uploadLoi(site, f); setBusy(false);
-    if (!r.ok) { setErr(r.error); return; }
-    set("loi_path", r.path);
-    const s = await saveSiteTerms(site, { ...t, loi_path: r.path, payment_stages: stages }); if (!s.ok) setErr(s.error); else setMsg("LOI attached.");
+    if (!r.ok) { setErr("Could not upload the file: " + r.error); return; }
+    // update456: save the path at once (even outside Edit mode) and re-read so the card shows exactly what is stored
+    const s = await saveSiteTerms(site, { ...t, loi_path: r.path, payment_stages: stages });
+    if (!s.ok) { setErr("Uploaded, but could not save it on the site: " + s.error); return; }
+    const fresh = await getSiteTerms(site); setT(fresh || { ...t, loi_path: r.path });
+    setMsg(`LOI saved — ${f.name}`);
+    e.target.value = "";
   }
+  const loi = loiInfo(t?.loi_path);
 
   const num = v => v == null || v === "" ? "—" : Number(v).toLocaleString("en-IN");
   return (
@@ -54,7 +59,7 @@ export default function ContractTermsCard({ site, siteName, canEdit, onClose }) 
             <button type="button" onClick={onClose}>✕</button>
           </div>
         </div>
-        <div className="muted" style={{ fontSize: 12, margin: "4px 0 10px" }}>Payment terms are kept here, not in the BOQ grid. Source: the LOI / work order{t?.loi_path ? <> — <a href={billUrl(t.loi_path)} target="_blank" rel="noreferrer">📎 open LOI</a></> : ""}. {t?.updated_by_name && <span>Last saved by {t.updated_by_name}{t.updated_at ? ` · ${String(t.updated_at).slice(0, 10)}` : ""}.</span>}</div>
+        <div className="muted" style={{ fontSize: 12, margin: "4px 0 10px" }}>Payment terms are kept here, not in the BOQ grid. Source: the LOI / work order (attached below). {t?.updated_by_name && <span>Last saved by {t.updated_by_name}{t.updated_at ? ` · ${String(t.updated_at).slice(0, 10)}` : ""}.</span>}</div>
         {!t ? <div className="muted">Loading…</div> : (
           <>
             {!edit && !t.client_name && !t.contract_value && <div className="note amber" style={{ fontSize: 12.5 }}>No contract terms recorded for this site yet.{canEdit ? " Press Edit to fill them from the LOI." : ""}</div>}
@@ -95,7 +100,20 @@ export default function ContractTermsCard({ site, siteName, canEdit, onClose }) 
               {edit ? <textarea style={{ width: "100%", minHeight: 90 }} value={t.special_notes || ""} onChange={e => set("special_notes", e.target.value)} />
                 : <div style={{ fontSize: 12.5, whiteSpace: "pre-wrap" }}>{t.special_notes || "—"}</div>}
             </div>
-            {canEdit && <div style={{ marginTop: 10, fontSize: 12.5 }}><label>📎 {t.loi_path ? "Replace" : "Attach"} LOI / work order (PDF): <input type="file" accept=".pdf,image/*" onChange={onLoi} disabled={busy} /></label></div>}
+            {/* update456: the attached document is always visible — name, date, view / download, replace */}
+            <div style={{ marginTop: 12, border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px", background: loi ? "#f8fafc" : "#fff8f0", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 20 }}>📎</span>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div className="muted" style={{ fontSize: 11 }}>LOI / work order document</div>
+                {loi ? <div style={{ fontWeight: 700, fontSize: 13, wordBreak: "break-all" }}>{loi.name}{loi.date && <span className="muted" style={{ fontWeight: 400 }}> · uploaded {loi.date}</span>}</div>
+                     : <div style={{ fontSize: 13 }}>No document attached yet.{canEdit ? " Attach the signed LOI / work order PDF so it is on record with these terms." : ""}</div>}
+              </div>
+              {loi && <>
+                <a href={billUrl(t.loi_path)} target="_blank" rel="noreferrer"><button type="button" style={{ fontSize: 12 }}>👁 View</button></a>
+                <a href={billUrl(t.loi_path, true)} download={loi.name}><button type="button" style={{ fontSize: 12 }}>⬇ Download</button></a>
+              </>}
+              {canEdit && <label style={{ fontSize: 12 }}><span style={{ display: "inline-block", padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer", background: "#fff" }}>{busy ? "Uploading…" : loi ? "↻ Replace" : "⬆ Attach PDF"}</span><input type="file" accept=".pdf,image/*" onChange={onLoi} disabled={busy} style={{ display: "none" }} /></label>}
+            </div>
             {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
             {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)", marginTop: 10 }}>{msg}</div>}
             {edit && <div style={{ display: "flex", gap: 8, marginTop: 12 }}><button type="button" className="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save contract terms"}</button><button type="button" onClick={() => { setEdit(false); getSiteTerms(site).then(x => setT(x || { payment_stages: [] })); }}>Cancel</button></div>}

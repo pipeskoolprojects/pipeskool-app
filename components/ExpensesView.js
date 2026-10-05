@@ -613,7 +613,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
                 </select>
                 <label className="muted">Category</label>
                 <select value={claimF.category} onChange={ev => setClaimF(x => ({ ...x, category: ev.target.value }))} style={{ width: "100%", marginBottom: 8 }}>
-                  {Object.entries(EXPENSE_CATEGORIES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  {EXPENSE_CATEGORIES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}{/* update456: was Object.entries on an array → value "1", label "transportTransport / tempo" → enum error on web only */}
                 </select>
                 <label className="muted">Amount ₹ *</label>
                 <input type="number" min="1" value={claimF.amount} onChange={ev => setClaimF(x => ({ ...x, amount: ev.target.value }))} style={{ width: "100%", marginBottom: 8 }} />
