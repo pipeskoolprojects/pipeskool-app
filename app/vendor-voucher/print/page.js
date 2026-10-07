@@ -3,7 +3,7 @@
 // in the same style as the expense and advance vouchers. Reads the stored row; computes
 // nothing.
 import { useEffect, useRef, useState } from "react";
-import BillSheet from "@/components/BillSheet";   // update447: shared A4 bill layout
+import BillPages from "@/components/BillPages";   // update458: bills on their own A4 pages (1 full / 2 stacked / 3–4 grid / 4 per page)
 import Logo from "@/components/Logo";
 import { getVendorVoucher, amountInWords } from "@/lib/vendorVoucher";
 import { supabase } from "@/lib/supabase";
@@ -18,7 +18,8 @@ const cap = s => s ? String(s).charAt(0).toUpperCase() + String(s).slice(1).repl
 export default function VoucherPrint() {
   const [v, setV] = useState(null); const [c, setC] = useState(null); const [err, setErr] = useState("");
   const [billUrls, setBillUrls] = useState([]);   // update356: the bill pages go on the voucher
-  const voucherRef = useRef(null);   // update447: measured so bills fit under the voucher on page 1
+  const voucherRef = useRef(null);
+  const [dl, setDl] = useState("");   // update458: Download PDF status
 
   useEffect(() => {
     (async () => {
@@ -41,6 +42,42 @@ export default function VoucherPrint() {
     })();
   }, []);
 
+  // update458: the same document (voucher page + bill pages) as a PDF file — A4, 10 mm margins. Each bill page is
+  // rendered separately at 2× and placed on its own PDF page, so the layout is exactly what the print shows.
+  async function downloadPdf() {
+    try {
+      setDl("Preparing PDF…");
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
+      document.body.classList.add("pdf-rendering");
+      const W = 190, H = 277;   // printable mm inside 10 mm margins
+      const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+      const shoot = el => html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff", ignoreElements: n => n.classList && n.classList.contains("no-print") });
+      // page 1..n: the voucher itself (split across pages only if it is longer than one)
+      const vc = await shoot(document.getElementById("voucher-page"));
+      const vh = vc.height * W / vc.width;
+      let y = 0, first = true;
+      while (y < vh) {
+        if (!first) pdf.addPage(); first = false;
+        const sliceH = Math.min(H, vh - y);
+        const c2 = document.createElement("canvas"); c2.width = vc.width; c2.height = Math.round(sliceH * vc.width / W);
+        c2.getContext("2d").drawImage(vc, 0, Math.round(y * vc.width / W), vc.width, c2.height, 0, 0, vc.width, c2.height);
+        pdf.addImage(c2.toDataURL("image/jpeg", 0.95), "JPEG", 10, 10, W, sliceH);
+        y += sliceH;
+      }
+      // then one PDF page per bill page
+      for (const bp of Array.from(document.querySelectorAll(".bill-pages .bp"))) {
+        const c = await shoot(bp);
+        pdf.addPage();
+        const h = Math.min(H, c.height * W / c.width);
+        pdf.addImage(c.toDataURL("image/jpeg", 0.95), "JPEG", 10, 10, W, h);
+      }
+      pdf.save(`DVP_${String(v.voucher_no || v.id).replace(/[^A-Za-z0-9]+/g, "-")}.pdf`);
+      setDl("");
+    } catch (e) { setDl(""); alert("Could not create the PDF: " + (e?.message || e)); }
+    finally { document.body.classList.remove("pdf-rendering"); }
+  }
+
   if (err) return <div style={{ padding: 24 }}><div className="error" style={{ whiteSpace: "pre-wrap" }}>{err}</div></div>;
   if (!v || !c) return <div style={{ padding: 24 }} className="muted">Loading…</div>;
 
@@ -49,12 +86,16 @@ export default function VoucherPrint() {
   const unpaid = v.payment_status !== "paid";
 
   return (
-    <div style={{ maxWidth: 820, margin: "0 auto", padding: 28, background: "#fff", color: "#111", fontFamily: "Inter, Arial, sans-serif", minHeight: "100vh", position: "relative" }}>
+    <div id="voucher-doc" style={{ maxWidth: 820, margin: "0 auto", padding: 28, background: "#fff", color: "#111", fontFamily: "Inter, Arial, sans-serif", minHeight: "100vh", position: "relative" }}>
       <style>{`
         @media print {
           .no-print { display:none !important; }
           body { background:#fff; }
-          @page { size: A4; margin: 12mm; }
+          @page { size: A4; margin: 10mm; }
+          #voucher-doc { padding: 0 !important; min-height: 0 !important; }
+        }
+        body.pdf-rendering #voucher-doc { padding: 0 !important; min-height: 0 !important; }
+        @media print {
           .sign-row { break-inside: avoid; page-break-inside: avoid; }
           table { break-inside: auto; }
           tr { break-inside: avoid; page-break-inside: avoid; }
@@ -67,11 +108,13 @@ export default function VoucherPrint() {
       {unpaid && <div className="v-wm">PAYMENT PENDING</div>}
 
       <div className="no-print" style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-        <button className="primary" onClick={() => window.print()}>🖨 Print / Save as PDF</button>
+        <button className="primary" onClick={() => window.print()}>🖨 Print</button>
+        <button onClick={downloadPdf} disabled={!!dl}>{dl || "⬇ Download PDF"}</button>{/* update458 */}
         <button onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign("/vendor-voucher"); }}>← Back</button>
       </div>
 
-      <div ref={voucherRef}>{/* update447: everything measured for the bill layout */}
+      <div id="voucher-page">{/* update458: page 1 for the PDF download */}
+      <div ref={voucherRef}>
       <div style={{ display: "flex", gap: 18, alignItems: "flex-start", borderBottom: "3px solid " + ORANGE, paddingBottom: 10 }}>
         <Logo height={22} />
         <div style={{ flex: 1 }}>
@@ -164,10 +207,11 @@ export default function VoucherPrint() {
 
       </div>{/* end voucherRef */}
 
-      {/* update447: bills auto-fitted to A4 (1 full / 2 side by side / 3 two-up + one across / 4 grid / 5+ overflow pages) */}
-      <BillSheet bills={billUrls.map((b, i) => ({ url: b.url, pdf: b.pdf, label: "Bill " + (i + 1) + " · " + v.voucher_no }))}
-        voucherRef={voucherRef} heading="Attached bill / receipt" accent={NAVY} footer={c.name + " · Direct Vendor Payment " + v.voucher_no} />
-
+      {/* update458: attachments listed on the voucher page; the bills themselves follow on their own A4 pages */}
+      {v.bills?.length > 0 && (
+        <div style={{ marginTop: 14, fontSize: 11.5, color: "#374151" }}>
+          <b style={{ color: NAVY }}>Attached bills:</b> {v.bills.length} file(s) — {billUrls.map((b, i) => `Bill ${i + 1} (${b.pdf ? "PDF" : "image"})`).join(", ")}. See the pages that follow.
+        </div>)}
       <div style={{ marginTop: 28, paddingTop: 8, borderTop: "1px solid #e5e7eb", textAlign: "center", fontSize: 9.5, fontWeight: 700, color: "#4b5563", lineHeight: 1.7 }}>
         <div>CIN No: {c.cin} &nbsp; GSTIN: {c.gstin}</div>
         <div>Email ID: {c.email}</div>
@@ -175,6 +219,10 @@ export default function VoucherPrint() {
           Direct purchase — no purchase order was raised. Recorded as a company expense against {v.site}. Printed {new Date().toLocaleDateString("en-IN")}.
         </div>
       </div>
+
+      </div>{/* end voucher-page */}
+
+      <BillPages bills={billUrls} heading={"Attached bills · Direct Vendor Payment " + v.voucher_no} accent={NAVY} footer={c.name + " · " + v.voucher_no + " · " + v.vendor} />
     </div>
   );
 }
