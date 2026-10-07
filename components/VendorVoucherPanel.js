@@ -8,7 +8,8 @@
 import { useEffect, useState } from "react";
 import { getSession } from "@/lib/auth";
 import { inr } from "@/lib/data";
-import { createVendorVoucher, listVendorVouchers, setVoucherPayment } from "@/lib/vendorVoucher";
+import { createVendorVoucher, listVendorVouchers, setVoucherPayment, queryVoucher, canEditVoucher } from "@/lib/vendorVoucher";
+import { BillViewer, QueryDialog, EditVoucherSheet, ReplyDialog, TimelineDialog } from "@/components/DvpDialogs";   // update458
 import { markExpensePosted, reviewExpenseClaim } from "@/lib/money";   // update447: the SAME posted flow (and review call) the Expenses ledger uses
 import { canApprove } from "@/lib/perms";
 import { todayLocal } from "@/lib/today";
@@ -67,6 +68,7 @@ export default function VendorVoucherPanel({ sites: sitesProp, staff = [], autoO
   const [open, setOpen] = useState(!!autoOpen);
   const [files, setFiles] = useState([]);
   const [saved, setSaved] = useState(null);   // { id, voucher_no } — shows the PDF button after submit
+  const [dlg, setDlg] = useState(null);       // update458: { kind: "bills"|"query"|"edit"|"reply"|"history", row }
   // site defaults to the only site, else the session's site — usually one less tap
   const defaultSite = () => sites.length === 1 ? String(sites[0].id)
     : (sess?.site_id && sites.some(s => String(s.id) === String(sess.site_id)) ? String(sess.site_id) : "");
@@ -94,6 +96,11 @@ export default function VendorVoucherPanel({ sites: sitesProp, staff = [], autoO
   // update447: approval happens HERE, not in the claims inbox — a direct vendor payment is a vendor bill the
   // office pays, not anyone's expense claim. Same gate (money approver) and same review call as claims.
   const canAppr = canApprove(sess, "money");
+  async function sendQuery(r, note) {   // update458: Query → status "Query Raised"; raiser notified; approve / pay blocked until they resubmit
+    setBusy(true); const res = await queryVoucher(r.id, note); setBusy(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setDlg(null); setMsg(`Query sent to ${r.raisedBy} on ${r.voucher_no}.`); load();
+  }
   async function review(r, status) {
     let note = null;
     if (status === "rejected") { note = window.prompt(`Reject ${r.voucher_no}?\n\nReason (shown to ${r.raisedBy}):`); if (note === null) return; }
@@ -174,16 +181,22 @@ export default function VendorVoucherPanel({ sites: sitesProp, staff = [], autoO
                       <td style={{ whiteSpace: "nowrap" }}>{String(r.expense_date).split("-").reverse().join("/")}</td>
                       <td style={{ fontWeight: 600 }}>{r.vendor}</td>
                       <td style={{ fontSize: 12 }}>{r.site}</td>
-                      <td style={{ fontSize: 11.5, maxWidth: 260 }}>{r.note || "—"}{r.bills.length > 0 && <span className="muted"> · 📎 {r.bills.length}</span>}</td>
+                      <td style={{ fontSize: 11.5, maxWidth: 260 }}>{r.note || "—"}{" "}
+                        <button type="button" title={r.bills.length ? `View ${r.bills.length} attached bill(s)` : "No bill attached"} onClick={() => setDlg({ kind: "bills", row: r })}
+                          style={{ fontSize: 11, padding: "1px 7px", borderRadius: 999, border: "1px solid var(--border)", background: r.bills.length ? "#fff4e5" : "#fee2e2", color: r.bills.length ? "#c9531f" : "#991b1b", cursor: "pointer" }}>📎 {r.bills.length}</button>{/* update458: opens the bill viewer */}</td>
                       <td className="num" style={{ fontWeight: 700 }}>{inr(r.amount)}</td>
                       <td style={{ fontSize: 11.5, textTransform: "capitalize" }}>{r.pay_mode}</td>
-                      <td style={{ whiteSpace: "nowrap" }}>{r.status === "approved" ? <span className="badge p">Approved</span> : r.status === "rejected" ? <span className="badge a" title={r.query_note || ""}>Rejected</span> : r.status === "queried" ? <span className="badge h">Queried</span> : <span className="badge gray">Pending</span>}
+                      <td style={{ whiteSpace: "nowrap" }}>{r.status === "approved" ? <span className="badge p">Approved</span> : r.status === "rejected" ? <span className="badge a" title={r.query_note || ""}>Rejected</span> : r.status === "queried" ? <span className="badge h" title={r.query_note || ""}>❓ Query Raised</span> : <span className="badge gray">Pending{r.resubmitted_at ? " · resubmitted" : ""}</span>}
                         {r.reviewedBy && <div className="muted" style={{ fontSize: 10 }}>{r.reviewedBy}{r.reviewed_at ? " · " + String(r.reviewed_at).slice(0, 10).split("-").reverse().join("/") : ""}</div>}
-                        {canAppr && r.status === "pending" && (   /* update447: approval lives on this tab */
-                          <div style={{ marginTop: 3 }}>
-                            <button className="primary" style={{ fontSize: 11, marginRight: 4 }} onClick={() => review(r, "approved")}>✓ Approve</button>
+                        {r.status === "queried" && <div className="muted clamp2" style={{ fontSize: 10.5, maxWidth: 220, whiteSpace: "normal", color: "#b45309" }} title={r.query_note}>{r.query_note}</div>}
+                        {r.status === "pending" && r.response_note && <div className="muted clamp2" style={{ fontSize: 10.5, maxWidth: 220, whiteSpace: "normal" }} title={r.response_note}>↩ {r.response_note}</div>}
+                        {canAppr && r.status === "pending" && (   /* update447: approval lives on this tab · update458: + Query */
+                          <div style={{ marginTop: 3, display: "flex", gap: 4 }}>
+                            <button className="primary" style={{ fontSize: 11 }} onClick={() => review(r, "approved")}>✓ Approve</button>
+                            <button style={{ fontSize: 11 }} onClick={() => setDlg({ kind: "query", row: r })}>❓ Query</button>
                             <button style={{ fontSize: 11 }} onClick={() => review(r, "rejected")}>✕ Reject</button>
-                          </div>)}</td>
+                          </div>)}
+                        {canAppr && r.status === "queried" && <div className="muted" style={{ fontSize: 10.5, marginTop: 3 }}>Waiting for {r.raisedBy}'s reply — approve / pay locked.</div>}</td>
                       <td>{r.status === "approved" ? (   /* update447: same control as Expenses ledger → Tally */
                         <label style={{ display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 12 }}>
                           <input type="checkbox" checked={!!r.posted} onChange={() => togglePosted(r)} style={{ width: 16, height: 16, accentColor: "var(--copper)" }} />
@@ -195,7 +208,13 @@ export default function VendorVoucherPanel({ sites: sitesProp, staff = [], autoO
                       <td style={{ fontSize: 11.5 }}>{r.raisedBy}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <button style={{ fontSize: 11.5 }} onClick={() => window.open("/vendor-voucher/print?id=" + r.id, "_blank")}>🖨 Voucher</button>{" "}
-                        {r.payment_status !== "paid" && r.status !== "rejected" && <button style={{ fontSize: 11.5 }} onClick={() => markPaid(r)}>₹ Mark paid</button>}
+                        {canEditVoucher(sess, r) && <><button style={{ fontSize: 11.5 }} onClick={() => setDlg({ kind: "edit", row: r })}>✎ Edit</button>{" "}</>}{/* update458: raiser / admin, pending or queried only */}
+                        {r.status === "queried" && Number(r.claimant_user_id) === Number(sess?.id) && <><button className="primary" style={{ fontSize: 11.5 }} onClick={() => setDlg({ kind: "reply", row: r })}>↩ Reply</button>{" "}</>}
+                        {r.payment_status !== "paid" && r.status !== "rejected" && (
+                          <button style={{ fontSize: 11.5, opacity: r.status === "approved" ? 1 : .5 }} disabled={r.status !== "approved"}
+                            title={r.status === "approved" ? "Record the payment" : r.status === "queried" ? "Query open — the raiser must reply, then the Director approves, before payment" : "Approve the voucher first — payment is possible only after approval"}
+                            onClick={() => markPaid(r)}>₹ Mark paid</button>)}{/* update458: gated until approved (the database refuses too) */}{" "}
+                        <button style={{ fontSize: 11.5 }} title="Queries, replies, edits, approval and payment history" onClick={() => setDlg({ kind: "history", row: r })}>🕘</button>
                       </td>
                     </tr>
                   ))}
@@ -205,6 +224,13 @@ export default function VendorVoucherPanel({ sites: sitesProp, staff = [], autoO
           )}
         </div>
         )}
+
+        {/* update458 dialogs */}
+        {dlg?.kind === "bills" && <BillViewer voucher={dlg.row} onClose={() => setDlg(null)} />}
+        {dlg?.kind === "query" && <QueryDialog voucher={dlg.row} busy={busy} onClose={() => setDlg(null)} onSubmit={note => sendQuery(dlg.row, note)} />}
+        {dlg?.kind === "edit" && <EditVoucherSheet voucher={dlg.row} sites={sites} onClose={() => setDlg(null)} onSaved={m => { setDlg(null); setMsg(m); load(); }} />}
+        {dlg?.kind === "reply" && <ReplyDialog voucher={dlg.row} onClose={() => setDlg(null)} onDone={m => { setDlg(null); setMsg(m); load(); }} />}
+        {dlg?.kind === "history" && <TimelineDialog voucher={dlg.row} onClose={() => setDlg(null)} />}
 
         {open && (
           <div onClick={() => !busy && setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100 }}>
