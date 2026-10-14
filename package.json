@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "2.45.4",
+    "aws4fetch": "^1.0.20",
     "exceljs": "^4.4.0",
     "html2pdf.js": "^0.10.2",
     "jsdom": "^29.1.1",

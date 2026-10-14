@@ -42,6 +42,7 @@ export default function MobileNav() {
     const st = getSession(); setSess(st || null); setWorkerOnly(!st && !!getLocalWorker()); setLangState(getLang());
     // live rights: re-pull from DB so Access Rights changes apply without re-login
     if (st?.id) refreshSessionRights().then(ns => { if (ns) setSess(ns); else window.location.href = "/m/login"; });
+    if (st?.id) import("@/lib/files").then(m => m.ensureFileSession()).catch(() => {});   // update460: file-view cookie
   }, []);
   const pickLang = l => { setLang(l); window.location.reload(); };
   const role = sess?.role || null;
