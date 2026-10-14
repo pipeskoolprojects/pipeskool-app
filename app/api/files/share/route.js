@@ -12,7 +12,7 @@ export async function POST(req) {
     const staff = u ? await staffByAuthId(u.authId) : null;
     if (!staff) return Response.json({ ok: false, error: "Sign in first." }, { status: 401 });
     const base = new URL(req.url).origin;
-    return Response.json({ ok: true, url: `${base}/api/files/s/${key.split("/").map(encodeURIComponent).join("/")}?sig=${shareSig(key)}` });
+    return Response.json({ ok: true, url: `${base}/api/files/s?k=${encodeURIComponent(key)}&sig=${shareSig(key)}` });   // update461: query-string link
   } catch (e) {
     console.error("FILES_SHARE_FAILED", (e?.message || String(e)).slice(0, 160));
     return Response.json({ ok: false, error: "Could not create the link." }, { status: 500 });
