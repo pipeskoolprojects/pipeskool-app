@@ -6,6 +6,7 @@ import { createIndent, editIndent, getIndents } from "@/lib/stock";
 import { searchItems } from "@/lib/stock";
 import { getSitesList } from "@/lib/mobile";
 import { getSession, setCurrentSite } from "@/lib/auth";
+import { getSiteDeliveries } from "@/lib/receiving";   // update462: quantities + office challans per indent
 
 const STATUS = {
   open: ["Open", "gray"], quoting: ["Getting quotes", "h"], pending: ["Pending", "gray"],
@@ -35,6 +36,8 @@ export default function IndentScreen() {
 
   useEffect(() => { getSitesList().then(setSites); }, []);
   useEffect(() => { getIndents(siteId).then(setIndents); }, [siteId, msg]);
+  const [deliv, setDeliv] = useState({});   // update462: indent id → { items (5 quantities), challans }
+  useEffect(() => { getSiteDeliveries(siteId).then(r => { const m = {}; (r.indents || []).forEach(i => { m[i.id] = i; }); setDeliv(m); }).catch(() => setDeliv({})); }, [siteId, msg]);
   useEffect(() => { if (q) searchItems(q).then(setItems); else setItems([]); }, [q]);
 
   function startEdit(d) {
@@ -94,9 +97,29 @@ export default function IndentScreen() {
                 <span className={"badge " + color}>{label}</span>
               </div>
               <div className="dt" style={{ margin: "4px 0 8px" }}>{d.site} · by {d.raised_by || "—"}{d.required_by ? " · need by " + d.required_by : ""}{d.urgency === "urgent" ? " · URGENT" : ""}</div>
-              {d.items.map((it, i) => (
-                <div key={i} style={{ fontSize: 12.5, padding: "3px 0" }}>• {it.qty} {it.unit} — {it.item_name}</div>
-              ))}
+              {d.items.map((it, i) => {
+                const p = (deliv[d.id]?.items || []).find(x => x.indent_item_id === it.id);   // update462
+                return (
+                  <div key={i} style={{ fontSize: 12.5, padding: "4px 0", borderTop: i ? "1px dashed var(--border)" : "none" }}>
+                    <div>• {it.qty} {it.unit} — {it.item_name}</div>
+                    {p && (p.dispatched > 0 || p.received > 0) && (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 4, fontSize: 10.5, color: "var(--mid)", marginTop: 3, textAlign: "center" }}>
+                        <div>Ordered<b style={{ display: "block", fontSize: 13, color: "var(--ink)" }}>{p.ordered}</b></div>
+                        <div>Dispatched<b style={{ display: "block", fontSize: 13, color: "var(--ink)" }}>{p.dispatched}</b></div>
+                        <div>Received<b style={{ display: "block", fontSize: 13, color: "var(--ink)" }}>{p.received}</b></div>
+                        <div>Pend. deliv.<b style={{ display: "block", fontSize: 13, color: "var(--ink)" }}>{p.pending_delivery}</b></div>
+                        <div>Pend. receipt<b style={{ display: "block", fontSize: 13, color: p.pending_receipt > 0 ? "var(--copper-deep)" : "var(--ink)" }}>{p.pending_receipt}</b></div>
+                      </div>)}
+                  </div>);
+              })}
+              {(deliv[d.id]?.challans || []).length > 0 && (   /* update462: the office challans for THIS indent */
+                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                  {deliv[d.id].challans.map(c => (
+                    <a key={c.id} href={"/m/deliveries?indent=" + d.id + (c.open > 0 ? "&dc=" + c.id : "")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, border: "1px solid var(--border)", borderRadius: 8, padding: "7px 9px", fontSize: 12, color: "inherit", textDecoration: "none" }}>
+                      <span>🚚 <b>{c.dc_ref}</b> · {c.date}<span className="muted"> · {c.received}/{c.dispatched} received</span></span>
+                      <span className={"badge " + (c.open > 0 ? "h" : "p")}>{c.open > 0 ? "Receive " + c.open : "Received"}</span>
+                    </a>))}
+                </div>)}
               {d.pos && d.pos.map((p, i) => {
                 const [dl, dc] = DELIV[p.delivery_status] || DELIV.pending;
                 // update258: a cancelled PO must not read as live on the phone either
