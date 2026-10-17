@@ -106,7 +106,50 @@ async function peopleDir(sb) {
   const labour = (workers || []).filter(w => !staffMob.has(String(w.mobile))).map(w => ({ id: w.id, name: w.full_name, kind: "worker", designation: w.category, site: sname(w.site_id), mobile: w.mobile, labour: w.labour_type === "contractor" ? "contractor" : "own", worker_id: w.id }));
   return { sites: sites || [], staff, labour, sname };
 }
+// update463: material prices only for price viewers — the DB enforces it; this keeps the answers clean
+const NO_PRICE = { found: false, no_price_access: true, message: "Prices are visible only to office staff with Price access (Admin & Access). Quantities and status can still be asked." };
+async function pxAttach(sb, canPx, table, rows, cols) {
+  const list = (rows || []).filter(Boolean); if (!canPx || !list.length) return rows;
+  const ids = [...new Set(list.map(r => r.id).filter(x => x != null))]; const map = {};
+  for (let i = 0; i < ids.length; i += 200) {
+    const part = ids.slice(i, i + 200);
+    let { data, error } = await sb.from(table + "_px").select("id, " + cols).in("id", part);
+    if (error) ({ data } = await sb.from(table).select("id, " + cols).in("id", part));   // before update 463 SQL
+    (data || []).forEach(x => { map[x.id] = x; });
+  }
+  list.forEach(r => { const x = map[r.id]; if (x) Object.assign(r, x); });
+  return rows;
+}
+const kids = (rows, k) => (rows || []).flatMap(r => r?.[k] || []);
+const pxCache = new WeakMap();
+async function canPxOf(sb) {   // null from the RPC = update 463 SQL not run yet → nothing is restricted
+  if (!pxCache.has(sb)) pxCache.set(sb, sb.rpc("fn_can_view_prices").then(r => r.error ? true : !!r.data).catch(() => true));
+  return pxCache.get(sb);
+}
+const MATERIAL_TOOLS = new Set(["indents", "purchase_orders", "grn_receipts", "vendor_report", "stock_position", "purchase_summary"]);
+const PRICE_KEY = /^(amount|amount_incl_gst|rate|list_rate|discount_pct|gst_pct|value|total_value|total_amount|po_value|grn_value|po_by_vendor|po_by_site)$/;
+const PRICE_COL = /^(amount|value|rate|list|disc %|gst %|po value)$/i;
+function scrubPrices(o, name) {
+  if (Array.isArray(o)) return o.map(x => scrubPrices(x, name));
+  if (!o || typeof o !== "object") return o;
+  const out = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (PRICE_KEY.test(k) || (name === "vendor_report" && k === "by_site")) continue;
+    if (k === "dataset" && v && Array.isArray(v.columns)) {
+      const keep = v.columns.map((c, i) => PRICE_COL.test(String(c).trim()) ? -1 : i).filter(i => i >= 0);
+      out[k] = { ...v, columns: keep.map(i => v.columns[i]), rows: (v.rows || []).map(r => Array.isArray(r) ? keep.map(i => r[i]) : r) };
+      continue;
+    }
+    out[k] = scrubPrices(v, name);
+  }
+  return out;
+}
 async function runTool(sb, name, a = {}) {
+  const out = await runToolCore(sb, name, a);
+  return (await canPxOf(sb)) === false && MATERIAL_TOOLS.has(name) ? { ...scrubPrices(out, name), prices_hidden: true } : out;
+}
+async function runToolCore(sb, name, a = {}) {
+  const canPx = await canPxOf(sb);
   if (a.vendor) a.vendor = await resolveVendor(sb, a.vendor);
   const siteLike = a.site ? String(a.site).trim() : "";
   const sites = (await sb.from("sites").select("id, name")).data || [];
@@ -154,30 +197,33 @@ async function runTool(sb, name, a = {}) {
     return { days, since: from, count: rows.length, note: `Window ${from}–${today} includes ${sundays} Sunday(s) and ${holDays} company holiday(s); 'No punch' = no attendance record — the app cannot tell leave from absence for labour.`, workers: rows.slice(0, 80), dataset: { title: `No attendance for ${days} days`, columns: ["Employee", "Last attendance", "Days absent", "Site", "Category", "Kind"], rows: rows.map(r => [r.name, r.last_attendance, r.days_absent, r.site, r.category, r.kind]) } };
   }
   if (name === "indents") {
-    let q = sb.from("material_indents").select("id, indent_no, status, urgency, required_by, created_at, site_id, raiser:raised_by(full_name), material_indent_items(id), purchase_orders(po_no, delivery_status, status, total_amount)").order("created_at", { ascending: false }).limit(300);
+    let q = sb.from("material_indents").select("id, indent_no, status, urgency, required_by, created_at, site_id, raiser:raised_by(full_name), material_indent_items(id), purchase_orders(id, po_no, delivery_status, status)").order("created_at", { ascending: false }).limit(300);
     if (a.indent_no) q = q.ilike("indent_no", `%${String(a.indent_no).replace(/\s+/g, "")}%`);
     if (a.date_from) q = q.gte("created_at", a.date_from); if (a.date_to) q = q.lte("created_at", a.date_to + "T23:59:59"); if (a.status && a.status !== "all") q = q.eq("status", a.status); if (siteIds) q = q.in("site_id", siteIds);
     const d = (await q).data || [];
+    await pxAttach(sb, canPx, "purchase_orders", kids(d, "purchase_orders"), "total_amount");
     const rows = d.map(x => { const pos = (x.purchase_orders || []).filter(p => p.status !== "cancelled"); return { indent_no: x.indent_no, date: String(x.created_at).slice(0, 10), site: sname(x.site_id), status: x.status, urgent: x.urgency === "urgent", items: (x.material_indent_items || []).length, need_by: x.required_by, raised_by: x.raiser?.full_name || "", pos: pos.map(p => p.po_no).join(", "), po_value: pos.reduce((s2, p) => s2 + Number(p.total_amount || 0), 0), delivery: pos.map(p => p.delivery_status).filter(Boolean).join(", ") }; });
     return { count: rows.length, by_status: rows.reduce((m, r) => (m[r.status] = (m[r.status] || 0) + 1, m), {}), indents: rows.slice(0, 50), dataset: { title: "Indents", columns: ["Indent", "Date", "Site", "Status", "Urgent", "Items", "Need by", "Raised by", "POs", "PO value", "Delivery"], rows: rows.map(r => [r.indent_no, r.date, r.site, r.status, r.urgent ? "Yes" : "", r.items, r.need_by || "", r.raised_by, r.pos, Math.round(r.po_value), r.delivery]) } };
   }
   if (name === "purchase_orders" && a.po_no) {
     const key = String(a.po_no).replace(/\s+/g, "").toUpperCase(); const tail = key.split("/").pop();
-    const { data: hits } = await sb.from("purchase_orders").select("id, po_no, vendor_name, total_amount, status, approval_status, approved_at, reject_reason, created_at, site_id, delivery_status, expected_delivery, approver:approved_by(full_name), material_indents(indent_no), po_items(item_name, qty, unit, rate, discount_pct, gst_pct, returned_qty, line_kind)").or(`po_no.ilike.%${key}%,po_no.ilike.%/${tail}`).limit(5);
+    const { data: hits } = await sb.from("purchase_orders").select("id, po_no, vendor_name, status, approval_status, approved_at, reject_reason, created_at, site_id, delivery_status, expected_delivery, approver:approved_by(full_name), material_indents(indent_no), po_items(id, item_name, qty, unit, returned_qty, line_kind)").or(`po_no.ilike.%${key}%,po_no.ilike.%/${tail}`).limit(5);
     const exact = (hits || []).find(h => h.po_no.toUpperCase() === key) || ((hits || []).length === 1 ? hits[0] : null);
     if (!exact) {
       const { data: sim } = await sb.from("purchase_orders").select("po_no, vendor_name, created_at").ilike("po_no", `%${tail.slice(-3)}%`).order("created_at", { ascending: false }).limit(5);
       return { found: false, message: `PO ${a.po_no} not found (or not visible to you)`, similar: (sim || []).map(x => ({ po_no: x.po_no, vendor: x.vendor_name, date: String(x.created_at).slice(0, 10) })) };
     }
+    await pxAttach(sb, canPx, "purchase_orders", [exact], "total_amount"); await pxAttach(sb, canPx, "po_items", exact.po_items, "rate, discount_pct, gst_pct");
     const lines = (exact.po_items || []).map(l => ({ item: l.item_name, qty: Number(l.qty) - Number(l.returned_qty || 0), unit: l.unit, rate: Number(l.rate || 0), amount: (Number(l.qty) - Number(l.returned_qty || 0)) * Number(l.rate || 0), gst_pct: l.gst_pct, kind: l.line_kind || "" }));
     return { found: true, po: { po_no: exact.po_no, date: String(exact.created_at).slice(0, 10), vendor: exact.vendor_name, site: sname(exact.site_id), indent: exact.material_indents?.indent_no || "", amount_incl_gst: Number(exact.total_amount || 0), status: exact.status, approval: exact.approval_status, approved_by: exact.approver?.full_name || "", approved_at: exact.approved_at ? String(exact.approved_at).slice(0, 10) : "", reject_reason: exact.reject_reason || "", delivery: exact.delivery_status, expected_delivery: exact.expected_delivery || "", print_url: `/purchase/po?po=${exact.id}` }, lines,
       dataset: { title: `PO ${exact.po_no}`, columns: ["Item", "Qty", "Unit", "Rate", "Amount", "GST %", "Type"], rows: lines.map(l => [l.item, l.qty, l.unit, l.rate, Math.round(l.amount * 100) / 100, l.gst_pct, l.kind]) } };
   }
   if (name === "purchase_orders") {
-    let q = sb.from("purchase_orders").select("id, po_no, vendor_name, total_amount, status, approval_status, created_at, site_id, delivery_status").order("created_at", { ascending: false }).limit(400);
+    let q = sb.from("purchase_orders").select("id, po_no, vendor_name, status, approval_status, created_at, site_id, delivery_status").order("created_at", { ascending: false }).limit(400);
     let vend = null; if (a.vendor) { vend = await resolveVendor(sb, a.vendor); }
     if (a.date_from) q = q.gte("created_at", a.date_from); if (a.date_to) q = q.lte("created_at", a.date_to + "T23:59:59"); if (a.approval && a.approval !== "all") q = q.eq("approval_status", a.approval); if (vend) q = q.ilike("vendor_name", `%${vend}%`); if (siteIds) q = q.in("site_id", siteIds);
     const d = ((await q).data || []).filter(x => x.status !== "cancelled");
+    await pxAttach(sb, canPx, "purchase_orders", d, "total_amount");
     const rows = d.map(x => ({ po_no: x.po_no, date: String(x.created_at).slice(0, 10), vendor: x.vendor_name, site: sname(x.site_id), amount: Number(x.total_amount || 0), approval: x.approval_status, delivery: x.delivery_status }));
     return { vendor_matched: vend || undefined, count: rows.length, total_amount: rows.reduce((s, r) => s + r.amount, 0), by_approval: rows.reduce((m, r) => (m[r.approval] = (m[r.approval] || 0) + 1, m), {}), pos: rows.slice(0, 50), dataset: { title: "Purchase orders", columns: ["PO", "Date", "Vendor", "Site", "Amount", "Approval", "Delivery"], rows: rows.map(r => [r.po_no, r.date, r.vendor, r.site, r.amount, r.approval, r.delivery || ""]) } };
   }
@@ -195,9 +241,10 @@ async function runTool(sb, name, a = {}) {
   }
   if (name === "grn_receipts") {
     const from = a.date_from || daysAgo(7), to = a.date_to || daysAgo(0);
-    let q = sb.from("stock_txns").select("grn_no, created_at, site_id, supplier, vendor, item_id, qty, rate, item_master(display_name, unit)").eq("txn_type", "grn").gte("created_at", from).lte("created_at", to + "T23:59:59").order("created_at", { ascending: false }).limit(1500);
+    let q = sb.from("stock_txns").select("id, grn_no, created_at, site_id, supplier, vendor, item_id, qty, item_master(display_name, unit)").eq("txn_type", "grn").gte("created_at", from).lte("created_at", to + "T23:59:59").order("created_at", { ascending: false }).limit(1500);
     if (siteIds) q = q.in("site_id", siteIds); if (a.vendor) q = q.or(`supplier.ilike.%${a.vendor}%,vendor.ilike.%${a.vendor}%`); if (a.grn_no) q = q.ilike("grn_no", `%${a.grn_no}%`);
     const d = (await q).data || [];
+    await pxAttach(sb, canPx, "stock_txns", d, "rate");
     const g = {}; d.forEach(t => { const k = t.grn_no || "—"; g[k] = g[k] || { grn_no: k, date: String(t.created_at).slice(0, 10), site: sname(t.site_id), vendor: t.supplier || t.vendor || "", lines: 0, value: 0, items: [] }; g[k].lines++; g[k].value += Number(t.qty || 0) * Number(t.rate || 0); g[k].items.push(`${t.item_master?.display_name || t.item_id} × ${t.qty} ${t.item_master?.unit || ""}`); });
     const rows = Object.values(g);
     return { from, to, count: rows.length, total_value: rows.reduce((s, r) => s + r.value, 0), grns: rows.slice(0, 40).map(r => ({ ...r, items: r.items.slice(0, 8) })), dataset: { title: `GRN ${from} to ${to}`, columns: ["GRN", "Date", "Site", "Vendor", "Lines", "Value", "Items"], rows: rows.map(r => [r.grn_no, r.date, r.site, r.vendor, r.lines, Math.round(r.value), r.items.join("; ")]) } };
@@ -231,11 +278,13 @@ async function runTool(sb, name, a = {}) {
     return { person: who, from, to, days_present: present, days_absent: absent_dates.length, absent_dates, sundays: cal.filter(r => r.status === "sunday").length, holidays: cal.filter(r => r.status === "holiday").length, view, days_recorded: rows.length, total_hours: rows.reduce((s2, r) => s2 + r.hours, 0), total_ot: rows.reduce((s2, r) => s2 + r.ot, 0), rows: shownRows.slice(0, 62), dataset: { title: `Attendance ${who.name} ${from} to ${to}`, columns: ["Date", "Site", "In", "Out", "Hours", "OT", "Status", "Via"], rows: shownRows.map(r => Object.values(r)) } };
   }
   if (name === "item_rate_history") {
+    if (canPx === false) return NO_PRICE;
     const lim = Math.min(Number(a.limit) || 10, 50);
-    let q = sb.from("po_items").select("item_name, qty, unit, rate, list_rate, discount_pct, gst_pct, purchase_orders!inner(po_no, vendor_name, created_at, site_id, status, approval_status)").ilike("item_name", `%${String(a.item).trim()}%`).neq("purchase_orders.status", "cancelled").order("id", { ascending: false }).limit(200);
+    let q = sb.from("po_items").select("id, item_name, qty, unit, purchase_orders!inner(po_no, vendor_name, created_at, site_id, status, approval_status)").ilike("item_name", `%${String(a.item).trim()}%`).neq("purchase_orders.status", "cancelled").order("id", { ascending: false }).limit(200);
     if (a.vendor) q = q.ilike("purchase_orders.vendor_name", `%${a.vendor}%`);
     let d = (await q).data || [];
-    if (!d.length) { const { data: items } = await sb.from("item_master").select("display_name").ilike("display_name", `%${String(a.item).split(/\s+/)[0]}%`).limit(200); const nm = bestName(a.item, (items || []).map(i => i.display_name)); if (nm) { let q2 = sb.from("po_items").select("item_name, qty, unit, rate, list_rate, discount_pct, gst_pct, purchase_orders!inner(po_no, vendor_name, created_at, site_id, status, approval_status)").eq("item_name", nm).neq("purchase_orders.status", "cancelled").order("id", { ascending: false }).limit(200); if (a.vendor) q2 = q2.ilike("purchase_orders.vendor_name", `%${a.vendor}%`); d = (await q2).data || []; } }
+    if (!d.length) { const { data: items } = await sb.from("item_master").select("display_name").ilike("display_name", `%${String(a.item).split(/\s+/)[0]}%`).limit(200); const nm = bestName(a.item, (items || []).map(i => i.display_name)); if (nm) { let q2 = sb.from("po_items").select("id, item_name, qty, unit, purchase_orders!inner(po_no, vendor_name, created_at, site_id, status, approval_status)").eq("item_name", nm).neq("purchase_orders.status", "cancelled").order("id", { ascending: false }).limit(200); if (a.vendor) q2 = q2.ilike("purchase_orders.vendor_name", `%${a.vendor}%`); d = (await q2).data || []; } }
+    await pxAttach(sb, canPx, "po_items", d, "rate, list_rate, discount_pct, gst_pct");
     const rows = d.map(x => ({ item: x.item_name, vendor: x.purchase_orders.vendor_name, rate: Number(x.rate || 0), list_rate: x.list_rate == null ? "" : Number(x.list_rate), discount_pct: x.discount_pct == null ? "" : Number(x.discount_pct), qty: Number(x.qty), unit: x.unit, po_no: x.purchase_orders.po_no, date: String(x.purchase_orders.created_at).slice(0, 10), site: sname(x.purchase_orders.site_id), gst_pct: x.gst_pct == null ? "" : Number(x.gst_pct) })).sort((x, y) => y.date.localeCompare(x.date));
     if (!rows.length) return { found: false, message: `No PO found for an item like "${a.item}"` };
     const latest = rows[0], lowest = [...rows].sort((x, y) => x.rate - y.rate)[0];
@@ -243,8 +292,9 @@ async function runTool(sb, name, a = {}) {
   }
   if (name === "vendor_report") {
     const from = a.date_from || daysAgo(29), to = a.date_to || daysAgo(0);
-    const { data: pos } = await sb.from("purchase_orders").select("id, po_no, created_at, site_id, total_amount, status, approval_status, delivery_status, po_items(item_name, qty, unit, rate)").ilike("vendor_name", `%${a.vendor}%`).neq("status", "cancelled").gte("created_at", from).lte("created_at", to + "T23:59:59").order("created_at", { ascending: false });
+    const { data: pos } = await sb.from("purchase_orders").select("id, po_no, created_at, site_id, status, approval_status, delivery_status, po_items(id, item_name, qty, unit)").ilike("vendor_name", `%${a.vendor}%`).neq("status", "cancelled").gte("created_at", from).lte("created_at", to + "T23:59:59").order("created_at", { ascending: false });
     const list = pos || []; if (!list.length) return { vendor: a.vendor, from, to, count: 0, message: "No PO for this vendor in the period" };
+    await pxAttach(sb, canPx, "purchase_orders", list, "total_amount");
     const { data: rv } = await sb.from("v_po_receipt").select("po_id, ordered_qty, received_qty, pending_qty, item_count, items_complete").in("po_id", list.map(p => p.id));
     const rc = {}; (rv || []).forEach(r => { rc[r.po_id] = r; });
     const rows = list.map(p => ({ po_no: p.po_no, date: String(p.created_at).slice(0, 10), site: sname(p.site_id), amount: Number(p.total_amount || 0), items: (p.po_items || []).length, item_list: (p.po_items || []).slice(0, 6).map(i => `${i.item_name} × ${i.qty} ${i.unit || ""}`).join("; "), approval: p.approval_status, delivery: p.delivery_status || "", received: rc[p.id] ? `${rc[p.id].items_complete}/${rc[p.id].item_count} items` : "—" }));
@@ -293,8 +343,10 @@ async function runTool(sb, name, a = {}) {
     return { count: rows.length, pos: rows.slice(0, 50), dataset: { title: "Pending deliveries", columns: ["PO", "Date", "Vendor", "Site", "Ordered", "Received", "Pending", "Items done", "Delivery", "Expected", "Approval"], rows: rows.map(r => Object.values(r)) } };
   }
   if (name === "vendor_outstanding") {
-    let q = sb.from("purchase_orders").select("vendor_name, total_amount, status, approval_status").neq("status", "cancelled").eq("approval_status", "approved"); if (a.vendor) q = q.ilike("vendor_name", `%${a.vendor}%`);
+    if (canPx === false) return NO_PRICE;
+    let q = sb.from("purchase_orders").select("id, vendor_name, status, approval_status").neq("status", "cancelled").eq("approval_status", "approved"); if (a.vendor) q = q.ilike("vendor_name", `%${a.vendor}%`);
     const pos = (await q).data || [];
+    await pxAttach(sb, canPx, "purchase_orders", pos, "total_amount");
     let pq = sb.from("expenses").select("paid_to, amount, payment_status, status").eq("is_vendor_direct", true).eq("payment_status", "paid").neq("status", "rejected"); if (a.vendor) pq = pq.ilike("paid_to", `%${a.vendor}%`);
     const pays = (await pq).data || [];
     const v = {}; pos.forEach(p => { const k = (p.vendor_name || "").trim(); v[k] = v[k] || { vendor: k, pos: 0, po_value: 0, paid: 0 }; v[k].pos++; v[k].po_value += Number(p.total_amount || 0); });
@@ -304,7 +356,7 @@ async function runTool(sb, name, a = {}) {
   }
   if (name === "stock_position") {
     const { data } = await sb.from("v_stock_balance").select("display_name, unit, site_name, min_stock, balance, rate, value, received, issued");
-    let rows = (data || []).map(r => ({ item: r.display_name, unit: r.unit, site: r.site_name, balance: Number(r.balance || 0), min: Number(r.min_stock || 0), rate: Number(r.rate || 0), value: Number(r.value || 0) })).filter(r => r.balance !== 0 || r.min > 0);
+    let rows = (data || []).map(r => ({ item: r.display_name, unit: r.unit, site: r.site_name, balance: Number(r.balance || 0), min: Number(r.min_stock || 0), rate: canPx === false ? null : Number(r.rate || 0), value: canPx === false ? null : Number(r.value || 0) })).filter(r => r.balance !== 0 || r.min > 0);
     if (siteLike) rows = rows.filter(r => (r.site || "").toLowerCase().includes(siteLike.toLowerCase())); if (a.item) rows = rows.filter(r => r.item.toLowerCase().includes(String(a.item).toLowerCase())); if (a.only_low) rows = rows.filter(r => r.min > 0 && r.balance < r.min);
     rows.sort((x, y) => y.value - x.value);
     if (a.item) { const byItem = {}; rows.forEach(r => { const k = `${r.item} (${r.unit || ""})`; byItem[k] = byItem[k] || { item: r.item, unit: r.unit, balance: 0, sites: [] }; byItem[k].balance += r.balance; byItem[k].sites.push(`${r.site} ${r.balance}`); }); const items = Object.values(byItem).sort((x, y) => y.balance - x.balance); if (!items.length) return { found: false, message: `no stock rows for '${a.item}'` }; return { found: true, item_query: a.item, matched_items: items.length, total_qty: items.reduce((s2, r) => s2 + r.balance, 0), items: items.slice(0, 30), dataset: { title: `Stock · ${a.item}`, columns: ["Item", "Unit", "Total balance", "Site-wise"], rows: items.map(r => [r.item, r.unit || "", r.balance, r.sites.join("; ")]) } }; }
@@ -312,10 +364,12 @@ async function runTool(sb, name, a = {}) {
   }
   if (name === "purchase_summary") {
     const from = a.date_from || daysAgo(6), to = a.date_to || daysAgo(0);
-    let q = sb.from("purchase_orders").select("po_no, vendor_name, total_amount, site_id, approval_status, created_at").neq("status", "cancelled").gte("created_at", from).lte("created_at", to + "T23:59:59"); if (siteIds) q = q.in("site_id", siteIds);
+    let q = sb.from("purchase_orders").select("id, po_no, vendor_name, site_id, approval_status, created_at").neq("status", "cancelled").gte("created_at", from).lte("created_at", to + "T23:59:59"); if (siteIds) q = q.in("site_id", siteIds);
     const pos = (await q).data || [];
-    let g = sb.from("stock_txns").select("qty, rate, site_id, supplier, vendor").eq("txn_type", "grn").gte("created_at", from).lte("created_at", to + "T23:59:59"); if (siteIds) g = g.in("site_id", siteIds);
+    let g = sb.from("stock_txns").select("id, qty, site_id, supplier, vendor").eq("txn_type", "grn").gte("created_at", from).lte("created_at", to + "T23:59:59"); if (siteIds) g = g.in("site_id", siteIds);
     const grn = (await g).data || [];
+    await pxAttach(sb, canPx, "purchase_orders", pos, "total_amount"); await pxAttach(sb, canPx, "stock_txns", grn, "rate");
+    if (canPx === false) return { from, to, po_count: pos.length, pending_approval: pos.filter(p => p.approval_status === "pending").length, grn_lines: grn.length, note: NO_PRICE.message };
     const by = (arr, key, val) => arr.reduce((m, r) => (m[key(r)] = (m[key(r)] || 0) + val(r), m), {});
     return { from, to, po_count: pos.length, po_value: pos.reduce((s2, p) => s2 + Number(p.total_amount || 0), 0), pending_approval: pos.filter(p => p.approval_status === "pending").length, grn_value: grn.reduce((s2, t) => s2 + Number(t.qty || 0) * Number(t.rate || 0), 0), po_by_vendor: by(pos, p => p.vendor_name, p => Number(p.total_amount || 0)), po_by_site: by(pos, p => sname(p.site_id), p => Number(p.total_amount || 0)), dataset: { title: `Purchases ${from} to ${to}`, columns: ["PO", "Date", "Vendor", "Site", "Amount", "Approval"], rows: pos.map(p => [p.po_no, String(p.created_at).slice(0, 10), p.vendor_name, sname(p.site_id), Number(p.total_amount || 0), p.approval_status]) } };
   }
@@ -388,8 +442,11 @@ async function helpContext(sb, query) {
 
 // update422: model-free formatting of a tool result (used when every model is busy) — numbers straight from the tool
 const inr = n => "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN");
+const inrFmt = inr;
 function summarize(tool, o, lang) {
   const H = lang === "hi", L = [];
+  if (o?.no_price_access) return o.message;   // update463
+  const inr = o?.prices_hidden ? (() => "—") : inrFmt;   // update463: no ₹ figures for users without Price access
   const kv = obj => Object.entries(obj || {}).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `- ${k}: ${typeof v === "number" && v > 999 ? inr(v) : v}`).join("\n");
   if (o.error) return (H ? "यह जानकारी नहीं मिली: " : "Could not fetch: ") + o.error;
   if (o.found === false || o.count === 0 || o.total_workers === 0) return (H ? "ERP me is information ka verified record nahi mila." : "No verified record found in the ERP for this.") + (o.similar?.length ? (H ? " मिलते-जुलते: " : " Similar: ") + o.similar.map(x => x.po_no).join(", ") : "");
