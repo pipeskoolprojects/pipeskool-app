@@ -1,6 +1,7 @@
 "use client";
 // update215: DELIVERY CHALLAN module — vendor challan in (photo/AI or manual vs PO),
 // listed + filtered, then Convert -> GRN. Print / PDF / Tally per row and in bulk.
+import { useCanViewPrices } from "@/lib/prices";   // update463
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { setChallanPosted, createDeliveryChallan, getDeliveryChallans, cancelDeliveryChallan, uploadDcProof, dcProofUrl, priceDcLines, dcTallyXml, getChallanPOs, editDeliveryChallan } from "@/lib/challan";
@@ -23,6 +24,7 @@ export default function DeliveryChallans() {
   const [rows, setRows] = useState(null);
   const [pos, setPos] = useState([]);
   const [rates, setRates] = useState({});
+  const canPx = useCanViewPrices();   // update463: value only for price viewers
   const [tally, setTally] = useState(null);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
   const [ctab, setCtab] = useState("manual");            // update272c: Upload/AI tab removed on Director instruction — manual only
@@ -237,7 +239,7 @@ export default function DeliveryChallans() {
           </div>)}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 18 }}>
-          {[["🧾", "Total challans", stat.total, null], ["⚡", "Auto-matched", stat.auto, null], ["✍", "Manual entries", stat.manual, null], ["⚠", "Qty mismatch", stat.mism, "amber"], ["⏳", "Pending → GRN", stat.pend, "blue"], ["₹", "Received value", inr(recvValue), null]].map(([ic, l, v, tone]) => (
+          {[["🧾", "Total challans", stat.total, null], ["⚡", "Auto-matched", stat.auto, null], ["✍", "Manual entries", stat.manual, null], ["⚠", "Qty mismatch", stat.mism, "amber"], ["⏳", "Pending → GRN", stat.pend, "blue"], ...(canPx ? [["₹", "Received value", inr(recvValue), null]] : [])].map(([ic, l, v, tone]) => (
             <div key={l} style={{ background: tone === "amber" ? "#FEF3C7" : tone === "blue" ? "#E8F0FE" : "#fff", border: "1px solid " + (tone === "amber" ? "#FDE68A" : tone === "blue" ? "#C7D7FE" : "var(--border)"), borderRadius: 12, padding: "12px 14px", color: tone === "amber" ? "#92400E" : tone === "blue" ? "#1D4ED8" : "inherit" }}>
               <div style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6, opacity: tone ? 1 : .7 }}><span>{ic}</span>{l}</div>
               <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={String(v)}>{v}</div>
@@ -423,7 +425,7 @@ export default function DeliveryChallans() {
               </div>
             </div>
           )}
-          <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Value uses each item's PO rate. 🖨 opens the letterhead document — use Print → Save as PDF for a file (works the same on Android, via the share sheet). A site receipt creates the GRN through the same engine as the GRN Register.</div>
+          <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>{canPx ? "Value uses each item's PO rate. " : ""}🖨 opens the letterhead document — use Print → Save as PDF for a file (works the same on Android, via the share sheet). A site receipt creates the GRN through the same engine as the GRN Register.</div>
         </div>
               {sendDc && <DcSendBox dc={sendDc} onClose={() => setSendDc(null)} onSent={() => load()} />}{/* update453 */}
               {edit && (   /* update393: edit header of an unconverted challan */
