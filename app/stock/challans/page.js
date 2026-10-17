@@ -3,13 +3,16 @@
 // listed + filtered, then Convert -> GRN. Print / PDF / Tally per row and in bulk.
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
-import { setChallanPosted, createDeliveryChallan, getDeliveryChallans, convertDcToGrn, cancelDeliveryChallan, uploadDcProof, dcProofUrl, priceDcLines, dcTallyXml, getChallanPOs, editDeliveryChallan } from "@/lib/challan";
+import { setChallanPosted, createDeliveryChallan, getDeliveryChallans, cancelDeliveryChallan, uploadDcProof, dcProofUrl, priceDcLines, dcTallyXml, getChallanPOs, editDeliveryChallan } from "@/lib/challan";
 import { getClients, shipBlock, addrLines } from "@/lib/clients";   // update393
 import InternalDispatchTab from "@/components/InternalDispatchTab";   // update403
 import VendorLink from "@/components/VendorLink";   // update410
 import DcSendBox from "@/components/DcSendBox";   // update453
 import { getTallySettings } from "@/lib/tally";
 import { getSession, canSeeModuleAnySite } from "@/lib/auth";
+import { fileHref } from "@/lib/files";   // update460: legacy + new file links
+import { getReceiptStates, getPendingExceptions, decideException } from "@/lib/receiving";   // update462: site receiving
+import { hasDirectorAccess } from "@/lib/directorAccess";
 
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 const norm = t => (t || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -42,13 +45,17 @@ export default function DeliveryChallans() {
   const [poVendor, setPoVendor] = useState("all");
   const [saving, setSaving] = useState(false);
   const [aiNote, setAiNote] = useState("");
+  const [rstate, setRstate] = useState({});   // update462: receipt state per challan (awaiting / partial / received)
+  const [excs, setExcs] = useState([]); const [canDecide, setCanDecide] = useState(false);
 
-  const load = () => getDeliveryChallans().then(async r => { setRows(r); setRates(await priceDcLines(r)); })
+  const load = () => getDeliveryChallans().then(async r => { setRows(r); setRates(await priceDcLines(r)); setRstate(await getReceiptStates(r.map(x => x.id)));   // update462
+      try { const want = Number(new URLSearchParams(window.location.search).get("dc")); const hit = want && r.find(x => x.id === want); if (hit) { setQ(hit.dc_ref); setXp(x => ({ ...x, [hit.id]: true })); } } catch {} })
     .catch(e => { setRows([]); setErr(e.message); });   // update272b: loader errors land in the red banner, not an empty page
   useEffect(() => {
     const s = getSession(); if (!s) { window.location.replace("/login"); return; }
     setSession(s);
     load(); getTallySettings().then(setTally);
+    hasDirectorAccess().then(ok => { setCanDecide(!!ok); if (ok) getPendingExceptions().then(setExcs); }).catch(() => {});   // update462: over-receipt approvals
     getChallanPOs().then(list => { setPos(list); try { const want = new URLSearchParams(window.location.search).get("po"); const hit = want && (list || []).find(x => String(x.id) === String(want)); if (hit) { setShowNew(true); pickPO(hit); } } catch {} });   // update443: "Record delivery" from Pending Deliveries opens the DC form for that PO
     getClients({ activeOnly: true }).then(list => { setClients(list); const m = {}; list.forEach(c => (c.sites || []).forEach(s => { m[String(s.id)] = c.id; })); setSiteClient(m); }).catch(e => setErr(e.message));
   }, []);
@@ -157,7 +164,7 @@ export default function DeliveryChallans() {
     auto: shown.filter(r => r.source === "auto").length,
     manual: shown.filter(r => r.source === "manual").length,
     mism: shown.filter(r => r.status === "mismatch").length,
-    pend: shown.filter(r => !r.grn_no).length,
+    pend: shown.filter(r => r.status !== "cancelled" && (rstate[r.id] ? rstate[r.id].open > 0 : !r.grn_no)).length,   // update462: awaiting SITE receipt
   };
 
   function dlTally(list, name) {
@@ -168,7 +175,6 @@ export default function DeliveryChallans() {
     a.href = URL.createObjectURL(new Blob([xml], { type: "text/xml" })); a.download = name; a.click();
     setMsg("Tally file downloaded — import in Tally via Gateway → Import Data.");
   }
-  const [conv, setConv] = useState(0);
   // update272: cancel a wrong challan — reason required; converted ones are refused (cancel the GRN instead)
   async function cancelDc(r) {
     const reason = prompt(`Cancel ${r.dc_ref}? The challan stays on record, struck out, and its material becomes deliverable again.\n\nReason (required):`);
@@ -178,13 +184,22 @@ export default function DeliveryChallans() {
     setMsg(res.dc_ref + " cancelled."); load();
   }
 
-  async function convert(r) {
-    if (!confirm("Convert " + r.dc_ref + " into a GRN? Stock will be received with these quantities.")) return;
-    setConv(r.id);
-    const res = await convertDcToGrn(r); setConv(0);
-    if (!res.ok) { setErr(res.error); return; }
-    setMsg(r.dc_ref + " converted → " + res.grn_no + " (visible in GRN Register)."); load();
+  // update462: no more one-click "Convert → GRN" — the site records what actually arrived (Site Deliveries) and that
+  // receipt creates the GRN. The office can record it on the site's behalf from the same screen.
+  async function decide(e, ok) {
+    const note = ok ? prompt(`Approve +${e.extra} ${e.unit} extra for ${e.item_name} on ${e.dc_ref}? Note (optional):`) : prompt("Reason for rejecting (required):");
+    if (note === null) return;
+    const r = await decideException(e.id, ok, note); if (!r.ok) { setErr(r.error); return; }
+    setMsg(ok ? "Over-receipt approved — the site can now submit it." : "Over-receipt rejected."); getPendingExceptions().then(setExcs);
   }
+  const rcvBadge = r => {
+    if (r.status === "cancelled") return null;
+    const st = rstate[r.id];
+    if (!st) return r.grn_no ? ["GRN done", "#DBEAFE", "#1D4ED8"] : ["Awaiting site receipt", "#EDE9FE", "#6D28D9"];
+    if (st.legacy && !st.receipts) return ["GRN done", "#DBEAFE", "#1D4ED8"];
+    return st.state === "received" ? ["Received at site", "#DCFCE7", "#15803D"] : st.state === "partial" ? [`Partly received · ${st.open} open`, "#FEF3C7", "#B45309"] : ["Awaiting site receipt", "#EDE9FE", "#6D28D9"];
+  };
+  const openOnSite = r => r.status !== "cancelled" && (rstate[r.id] ? rstate[r.id].open > 0 : !r.grn_no);
 
   const canCreate = session && (session.role === "director" || session.role === "it_executive" || canSeeModuleAnySite(session, "stock"));
   const stBadge = { matched: ["Matched", "p"], partial: ["Partial", "warn"], mismatch: ["Mismatch", "red"], pending: ["No PO", "warn"], cancelled: ["Cancelled", "a"] };   // update272/441
@@ -207,9 +222,19 @@ export default function DeliveryChallans() {
         {mainTab === "internal" && <InternalDispatchTab session={session} onCount={setIdcCount} />}
         <div style={{ display: mainTab === "vendor" ? "block" : "none" }}>
         <h1 style={{ margin: "0 0 2px" }}>Delivery challans</h1>
-        <div className="muted" style={{ fontSize: 13, marginBottom: 16 }}>Match vendor challans against POs, then convert to GRN. Chain: PO → DC → GRN.</div>
+        <div className="muted" style={{ fontSize: 13, marginBottom: 16 }}>Office challans against POs. The site receives each challan (count, damage, photos) and that receipt creates the GRN. Chain: PO → DC → site receipt → GRN.</div>
         {msg && <div className="note green">{msg}</div>}
         {err && <div className="note red">{err}</div>}
+        {canDecide && excs.length > 0 && (   /* update462: over-receipt requests from sites */
+          <div style={{ background: "#FFF7ED", border: "1px solid #FED7AA", borderRadius: 12, padding: "10px 14px", marginBottom: 14 }}>
+            <b>Over-receipt approvals ({excs.length})</b>
+            {excs.map(e => (
+              <div key={e.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", borderTop: "1px solid #FED7AA", paddingTop: 8, marginTop: 8, fontSize: 13 }}>
+                <span style={{ flex: "1 1 260px" }}><b>{e.dc_ref}</b> · {e.site} · {e.item_name}: on challan {e.on_challan}, asks <b>+{e.extra} {e.unit}</b> — “{e.reason}” <span className="muted">({e.by}, {e.at})</span></span>
+                <button type="button" className="primary" style={{ fontSize: 12 }} onClick={() => decide(e, true)}>Approve</button>
+                <button type="button" style={{ fontSize: 12 }} onClick={() => decide(e, false)}>Reject</button>
+              </div>))}
+          </div>)}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 18 }}>
           {[["🧾", "Total challans", stat.total, null], ["⚡", "Auto-matched", stat.auto, null], ["✍", "Manual entries", stat.manual, null], ["⚠", "Qty mismatch", stat.mism, "amber"], ["⏳", "Pending → GRN", stat.pend, "blue"], ["₹", "Received value", inr(recvValue), null]].map(([ic, l, v, tone]) => (
@@ -350,8 +375,8 @@ export default function DeliveryChallans() {
                       <td className="ell" onClick={e => e.stopPropagation()}><VendorLink name={r.vendor} />{r.vendor_dc_no && <div className="muted" style={{ fontSize: 10.5 }}>vendor DC {r.vendor_dc_no}</div>}</td>
                       <td className="ell hide-m muted">{r.po_no || "No PO"}</td>
                       <td style={{ textAlign: "right" }}><b>{r.recv}</b>/{r.ord || "—"}</td>
-                      <td><span style={{ background: tone[0], color: tone[1], fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>{sl}</span>{r.status !== "cancelled" && (r.grn_no ? <span title={"GRN " + r.grn_no} style={{ background: "#DBEAFE", color: "#1D4ED8", fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>GRN done</span> : <span style={{ background: "#EDE9FE", color: "#6D28D9", fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>GRN pending</span>)}
-                        {r.sent && <div title={`${r.sent.channel} · by ${r.sent.by}`} style={{ background: "#fff4e5", color: "#c9531f", fontSize: 10.5, padding: "1px 8px", borderRadius: 999, marginTop: 4, display: "inline-block", whiteSpace: "nowrap", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}>📨 Sent to {r.sent.to} · {r.sent.at.slice(5).replace("-", "/")} · {String(r.sent.lang).toUpperCase()}{r.sent.pdf_url && <> · <a href={r.sent.pdf_url} target="_blank" rel="noreferrer" title="The challan PDF that went with the message" style={{ color: "inherit" }}>📎 PDF</a></>}</div>}{/* update454: the document link */}</td>
+                      <td><span style={{ background: tone[0], color: tone[1], fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>{sl}</span>{(() => { const b = rcvBadge(r); return b ? <span title={r.grn_no ? "GRN " + r.grn_no : undefined} style={{ background: b[1], color: b[2], fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>{b[0]}</span> : null; })()}{/* update462 */}
+                        {r.sent && <div title={`${r.sent.channel} · by ${r.sent.by}`} style={{ background: "#fff4e5", color: "#c9531f", fontSize: 10.5, padding: "1px 8px", borderRadius: 999, marginTop: 4, display: "inline-block", whiteSpace: "nowrap", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}>📨 Sent to {r.sent.to} · {r.sent.at.slice(5).replace("-", "/")} · {String(r.sent.lang).toUpperCase()}{r.sent.pdf_url && <> · <a href={fileHref(r.sent.pdf_url)} target="_blank" rel="noreferrer" title="The challan PDF that went with the message" style={{ color: "inherit" }}>📎 PDF</a></>}</div>}{/* update454: the document link */}</td>
                       <td onClick={e => e.stopPropagation()}>{r.posted ? <span title={`Posted by ${r.posted_by} · ${r.posted_at}`} style={{ background: "#DCFCE7", color: "#15803D", fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>✓ Posted</span> : <span style={{ background: "#F3F4F6", color: "#6B7280", fontSize: 11, padding: "2px 8px", borderRadius: 999, border: "1px solid var(--border)", whiteSpace: "nowrap" }}>Not posted</span>}
                         {canPost && r.status !== "cancelled" && <button type="button" title={r.posted ? "Mark as NOT posted (logged)" : "Mark as posted in Tally (logged)"} style={{ fontSize: 10.5, marginLeft: 4, padding: "0 5px" }} onClick={() => markPosted([r.id], !r.posted)}>{r.posted ? "↺" : "✓"}</button>}</td>
                     </tr>
@@ -362,7 +387,8 @@ export default function DeliveryChallans() {
                           <div><div className="muted" style={{ fontSize: 11 }}>Client</div>{r.client || "—"}</div>
                           <div><div className="muted" style={{ fontSize: 11 }}>Source</div><span className={"badge " + (r.source === "auto" ? "info" : "gray")}>{r.source === "auto" ? "Auto" : "Manual"}</span></div>
                           <div><div className="muted" style={{ fontSize: 11 }}>Proof</div>{r.proof ? <a href={dcProofUrl(r.proof)} target="_blank" rel="noreferrer">🖼 open</a> : <span className="muted">none</span>}</div>
-                          <div><div className="muted" style={{ fontSize: 11 }}>GRN</div>{r.grn_no ? <a href="/stock/grn" title="Open GRN Register"><span className="badge p">{r.grn_no}</span></a> : <span className="muted">not yet converted</span>}</div>
+                          <div><div className="muted" style={{ fontSize: 11 }}>GRN</div>{r.grn_no ? <a href="/stock/grn" title="Open GRN Register"><span className="badge p">{r.grn_no}</span></a> : <span className="muted">none yet</span>}</div>
+                          <div><div className="muted" style={{ fontSize: 11 }}>Site receipts</div>{rstate[r.id] ? <a href={"/stock/deliveries?dc=" + r.id}>{rstate[r.id].receipts} receipt(s) · {rstate[r.id].received}/{rstate[r.id].dispatched} received</a> : <span className="muted">—</span>}</div>
                           <div><div className="muted" style={{ fontSize: 11 }}>Lines</div>{r.lines.length} item(s) · {r.recv} recd / {r.ord || "—"} ordered</div>
                         </div>
                         {r.status === "cancelled" && <div className="note red" style={{ marginBottom: 8 }}>Cancelled{r.cancelled_by ? " by " + r.cancelled_by : ""}{r.cancel_reason ? " — " + r.cancel_reason : ""}</div>}
@@ -373,7 +399,7 @@ export default function DeliveryChallans() {
                             ? <button type="button" style={{ fontSize: 11.5 }} title={`Posted by ${r.posted_by} · ${r.posted_at}`} onClick={() => markPosted([r.id], false)}>↺ Mark as not posted</button>
                             : <button type="button" className="primary" style={{ fontSize: 11.5 }} onClick={() => markPosted([r.id], true)}>☑ Mark as posted</button>)}
                           {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5 }} onClick={() => setEdit({ id: r.id, dc_ref: r.dc_ref, dc_date: r.date, client_id: r.client_id || "", vendor_dc_no: r.vendor_dc_no || "" })}>✎ Edit</button>}
-                          {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" className="primary" style={{ fontSize: 11.5 }} disabled={conv === r.id} onClick={() => convert(r)}>{conv === r.id ? "…" : "Convert → GRN"}</button>}
+                          {openOnSite(r) && canCreate && <a href={"/stock/deliveries?dc=" + r.id}><button type="button" className="primary" style={{ fontSize: 11.5 }}>📥 Record site receipt</button></a>}{/* update462: replaces Convert → GRN */}
                           {r.status !== "cancelled" && <button type="button" style={{ fontSize: 11.5, background: "#25D366", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700 }} title="Send the item list to the site supervisor to count before GRN" onClick={() => setSendDc(r)}>📨 {r.sent ? "Send again" : "Send to supervisor"}</button>}{/* update453 */}
                           {!r.grn_no && r.status !== "cancelled" && canCreate && <button type="button" style={{ fontSize: 11.5, color: "var(--red)", borderColor: "var(--red)" }} onClick={() => cancelDc(r)}>✕ Cancel</button>}
                         </div>
@@ -397,7 +423,7 @@ export default function DeliveryChallans() {
               </div>
             </div>
           )}
-          <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Value uses each item's PO rate. 🖨 opens the letterhead document — use Print → Save as PDF for a file (works the same on Android, via the share sheet). Converting creates a real GRN through the same engine as the GRN Register.</div>
+          <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Value uses each item's PO rate. 🖨 opens the letterhead document — use Print → Save as PDF for a file (works the same on Android, via the share sheet). A site receipt creates the GRN through the same engine as the GRN Register.</div>
         </div>
               {sendDc && <DcSendBox dc={sendDc} onClose={() => setSendDc(null)} onSent={() => load()} />}{/* update453 */}
               {edit && (   /* update393: edit header of an unconverted challan */
