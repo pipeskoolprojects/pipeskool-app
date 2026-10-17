@@ -7,6 +7,7 @@ import Sidebar from "@/components/Sidebar";
 import { getSession } from "@/lib/auth";
 import { getSites } from "@/lib/data";
 import { inr } from "@/lib/procure";
+import { useCanViewPrices } from "@/lib/prices";   // update463
 import {
   getPendingDeliveries, getPendingSummary, getFollowups, addFollowup, shortClose,
   ageBand, LINE_STATUS, AGE_AMBER, AGE_RED, groupByPO,
@@ -40,6 +41,7 @@ export default function PendingDeliveriesPage() {
   const [session, setSession] = useState(null);
   const [rows, setRows] = useState(null);
   const [sum, setSum] = useState(null);
+  const canPx = useCanViewPrices() === true;   // update463: pending VALUE only for price viewers
   const [sites, setSites] = useState([]);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
@@ -124,7 +126,7 @@ export default function PendingDeliveriesPage() {
         {sum && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
             <Stat label="📋 PO lines pending" value={sum.lines} sub={sum.pos + " PO(s) · " + sum.vendors + " vendor(s)"} />
-            <Stat label="💰 Pending value" value={inr(sum.value)} sub="at PO rate" />
+            {canPx && <Stat label="💰 Pending value" value={inr(sum.value)} sub="at PO rate" />}
             <Stat label={"🟢 Recent (<" + AGE_AMBER + " days)"} value={sum.green} sub="on track" color="var(--green)" />
             <Stat label={"🟡 Aging (" + AGE_AMBER + "–" + AGE_RED + " days)"} value={sum.amber} sub="needs follow-up" color="var(--amber)" />
             <Stat label={"🔴 Overdue (" + AGE_RED + "+ days)"} value={sum.red} sub="escalate" color="var(--red)" />
@@ -167,7 +169,7 @@ export default function PendingDeliveriesPage() {
                   <thead><tr>
                     <th style={{ width: 26 }}></th>
                     <th>PO</th><th>Vendor</th><th>Site</th>
-                    <th className="num">Items pending</th><th className="num">Pending value</th>
+                    <th className="num">Items pending</th><th className="num">{canPx ? "Pending value" : "Pending"}</th>
                     <th>Progress</th><th>Oldest</th><th>Status</th><th>Actions</th>
                   </tr></thead>
                   <tbody>
@@ -186,7 +188,7 @@ export default function PendingDeliveriesPage() {
                             <td style={{ fontSize: 12 }}>{g.site_name || "—"}</td>
                             <td className="num" style={{ fontWeight: 700, color: g.pending_lines ? "var(--red)" : "var(--green)" }}>
                               {g.pending_lines || 0}<span className="muted" style={{ fontWeight: 400 }}> / {g.item_count}</span></td>
-                            <td className="num">{inr(g.pending_value)}</td>
+                            <td className="num">{canPx ? inr(g.pending_value) : <span className="muted">—</span>}</td>
                             <td><Bar pct={g.pct_received} tone={band.color} /></td>
                             <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>
                               {g.pending_lines > 0
