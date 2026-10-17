@@ -18,6 +18,8 @@ export const ROUTES = {
   tasks:     ["/tasks",     "/m/tasks"],
   indent:    ["/procure",   "/m/indent"],
   stock:     ["/stock",     "/m/stock"],
+  deliveries: ["/stock/deliveries", "/m/deliveries"],        // update462: site receiving
+  challans:  ["/stock/challans", "/stock/challans"],          // update462: office challan list (no phone shell)
   dpr:       ["/dpr",       "/m/dpr"],
   // update364: these two have NO /m/ shell, so both entries point at the same route rather
   // than sending a phone to a URL that does not exist.
