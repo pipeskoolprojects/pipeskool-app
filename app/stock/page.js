@@ -1,4 +1,5 @@
 "use client";
+import { useCanViewPrices } from "@/lib/prices";   // update463
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import DataTable from "@/components/DataTable";
@@ -23,6 +24,7 @@ export default function StockPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [holdings, setHoldings] = useState([]);
   const [siteList, setSiteList] = useState([]);   // update184: real site master (was 3 hard-coded)
+  const canPx = useCanViewPrices();   // update463: stock value / rate only for price viewers
 
   useEffect(() => { setSession(getSession()); getSites().then(setSiteList); }, []);
   useEffect(() => { getBalances(site).then(setBalances); }, [site, reloadKey]);
@@ -60,7 +62,7 @@ export default function StockPage() {
         {isDemo && <div className="demo-banner">Demo mode — sample inventory.</div>}
 
         <div className="cards">
-          <div className="card"><div className="label">Stock value on hand</div><div className="value">{inr(totalValue)}</div></div>
+          {canPx === true && <div className="card"><div className="label">Stock value on hand</div><div className="value">{inr(totalValue)}</div></div>}
           <div className="card"><div className="label">Items below min stock</div><div className="value" style={{ color: low.length ? "var(--red)" : "var(--green)" }}>{low.length}</div></div>
           <div className="card"><div className="label">Dead / slow-moving</div><div className="value" style={{ color: dead.length ? "var(--amber)" : "var(--green)" }}>{dead.length}</div></div>
           <div className="card"><div className="label">Open material requests</div><div className="value">{requests.length}</div></div>
@@ -81,8 +83,8 @@ export default function StockPage() {
                 { key: "consumed", label: "Consumed", type: "num" },
                 { key: "with_site", label: "With site", type: "num", render: b => b.with_site > 0 ? <span style={{ color: "var(--amber)", fontWeight: 600 }}>{b.with_site}</span> : "0", exportValue: b => b.with_site },
                 { key: "balance", label: "Balance", type: "num", render: b => <span style={{ fontWeight: 700, color: b.balance <= b.min_stock ? "var(--red)" : "inherit" }}>{b.balance} {b.unit}</span>, exportValue: b => b.balance },
-                { key: "rate", label: "Rate", type: "num", render: b => b.rate > 0 ? <span title="Weighted average of received batches (Σ qty × PO net rate ÷ Σ qty)">{inr(b.rate)}</span> : <span style={{ whiteSpace: "nowrap" }}><span style={{ fontSize: 10.5, padding: "2px 7px", borderRadius: 999, background: "#F3F4F6", color: "#6B7280" }} title="No PO rate on any received batch (opening stock / manual entry)">Rate not set</span>{canSetRate && <button type="button" style={{ fontSize: 10.5, marginLeft: 4, padding: "0 6px" }} onClick={async () => { const v = window.prompt(`Rate for ${b.display_name} at ${b.site_name} (₹ per ${b.unit}) — applies to its unpriced received lines, logged:`); if (!v) return; const r = await setStockRate(b.item_id, b.site_id, v); if (!r.ok) { window.alert(r.error); return; } load(); }}>Set rate</button>}</span>, exportValue: b => b.rate },   // update442
-                { key: "value", label: "Value", type: "num", render: b => inr(b.value), exportValue: b => b.value },
+                ...(canPx === true ? [{ key: "rate", label: "Rate", type: "num", render: b => b.rate > 0 ? <span title="Weighted average of received batches (Σ qty × PO net rate ÷ Σ qty)">{inr(b.rate)}</span> : <span style={{ whiteSpace: "nowrap" }}><span style={{ fontSize: 10.5, padding: "2px 7px", borderRadius: 999, background: "#F3F4F6", color: "#6B7280" }} title="No PO rate on any received batch (opening stock / manual entry)">Rate not set</span>{canSetRate && <button type="button" style={{ fontSize: 10.5, marginLeft: 4, padding: "0 6px" }} onClick={async () => { const v = window.prompt(`Rate for ${b.display_name} at ${b.site_name} (₹ per ${b.unit}) — applies to its unpriced received lines, logged:`); if (!v) return; const r = await setStockRate(b.item_id, b.site_id, v); if (!r.ok) { window.alert(r.error); return; } load(); }}>Set rate</button>}</span>, exportValue: b => b.rate },   // update442
+                { key: "value", label: "Value", type: "num", render: b => inr(b.value), exportValue: b => b.value }] : []),
               ]} />}
           <div className="muted" style={{ marginTop: 8 }}>Reconciliation: Received − Issued − Consumed + Returned = Balance.</div>
         </div>
@@ -190,14 +192,14 @@ export default function StockPage() {
           <div className="panel">
             <h2>Dead / slow-moving stock (no movement 21+ days)</h2>
             <table>
-              <thead><tr><th>Item</th><th>Site</th><th className="num">Balance</th><th className="num">Value</th><th>Last movement</th></tr></thead>
+              <thead><tr><th>Item</th><th>Site</th><th className="num">Balance</th>{canPx === true && <th className="num">Value</th>}<th>Last movement</th></tr></thead>
               <tbody>
                 {dead.map(b => (
                   <tr key={b.item_id + b.site_code}>
                     <td style={{ fontWeight: 600 }}>{b.display_name}</td>
                     <td><span className="badge gray">{b.site_code}</span></td>
                     <td className="num">{b.balance} {b.unit}</td>
-                    <td className="num">{inr(b.value)}</td>
+                    {canPx === true && <td className="num">{inr(b.value)}</td>}
                     <td className="muted">{b.last}</td>
                   </tr>
                 ))}
