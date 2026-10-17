@@ -41,6 +41,8 @@ export async function POST(req) {
     const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false } });
     const { data: ud } = await sb.auth.getUser(token); const user = ud?.user; if (!user) return Response.json({ ok: false, error: "Login required." }, { status: 401 });
     const { data: me } = await sb.from("app_users").select("id, full_name").eq("auth_id", user.id).maybeSingle();
+    // update463: a vendor bill is matched against PO rates — only staff with Price access (the DB enforces it too)
+    { const { data: px, error: pxErr } = await sb.rpc("fn_can_view_prices"); if (!pxErr && !px) return Response.json({ ok: false, error: "Vendor bills carry purchase prices — upload them from an office login with Price access." }, { status: 403 }); }
     const { file_name, mime, data_base64, po_hint, file_path, text = "", lang = "en" } = await req.json();
     if (!data_base64) return Response.json({ ok: false, error: "No file received." });
     console.log("BILL_UPLOAD_STARTED", JSON.stringify({ mime, kb: Math.round(data_base64.length * 0.75 / 1024) }));
@@ -49,8 +51,13 @@ export async function POST(req) {
     // ---- find the PO: OCR po_no → hint → vendor + nearest date
     const sites = (await sb.from("sites").select("id, name")).data || []; const sname = id => sites.find(s2 => s2.id === id)?.name || "";
     let po = null; const key = String(x.po_no || po_hint || "").replace(/\s+/g, "").toUpperCase();
-    if (key) { const tail = key.split("/").pop(); const { data: h } = await sb.from("purchase_orders").select("id, po_no, vendor_name, site_id, created_at, total_amount, approval_status, po_items(id, item_id, item_name, qty, unit, rate, gst_pct, returned_qty)").or(`po_no.ilike.%${key}%,po_no.ilike.%/${tail}`).neq("status", "cancelled").limit(5); po = (h || []).find(p => p.po_no.toUpperCase() === key) || ((h || []).length === 1 ? h[0] : null); }
-    if (!po && x.vendor) { const { data: h } = await sb.from("purchase_orders").select("id, po_no, vendor_name, site_id, created_at, total_amount, approval_status, po_items(id, item_id, item_name, qty, unit, rate, gst_pct, returned_qty)").neq("status", "cancelled").order("created_at", { ascending: false }).limit(300); const cand = (h || []).filter(p => sim(x.vendor, p.vendor_name) >= 0.5); if (cand.length) { const inv = x.invoice_date ? new Date(x.invoice_date) : null; cand.sort((p, q) => inv ? Math.abs(new Date(p.created_at) - inv) - Math.abs(new Date(q.created_at) - inv) : 0); po = cand[0]; } }
+    if (key) { const tail = key.split("/").pop(); const { data: h } = await sb.from("purchase_orders").select("id, po_no, vendor_name, site_id, created_at, approval_status, po_items(id, item_id, item_name, qty, unit, returned_qty)").or(`po_no.ilike.%${key}%,po_no.ilike.%/${tail}`).neq("status", "cancelled").limit(5); po = (h || []).find(p => p.po_no.toUpperCase() === key) || ((h || []).length === 1 ? h[0] : null); }
+    if (!po && x.vendor) { const { data: h } = await sb.from("purchase_orders").select("id, po_no, vendor_name, site_id, created_at, approval_status, po_items(id, item_id, item_name, qty, unit, returned_qty)").neq("status", "cancelled").order("created_at", { ascending: false }).limit(300); const cand = (h || []).filter(p => sim(x.vendor, p.vendor_name) >= 0.5); if (cand.length) { const inv = x.invoice_date ? new Date(x.invoice_date) : null; cand.sort((p, q) => inv ? Math.abs(new Date(p.created_at) - inv) - Math.abs(new Date(q.created_at) - inv) : 0); po = cand[0]; } }
+    if (po) {   // update463: prices come from the *_px views (this login has Price access — checked above)
+      const px = async (t, ids, cols) => { let r = await sb.from(t + "_px").select("id, " + cols).in("id", ids); if (r.error) r = await sb.from(t).select("id, " + cols).in("id", ids); return r.data || []; };
+      const [h] = await px("purchase_orders", [po.id], "total_amount"); if (h) po.total_amount = h.total_amount;
+      const li = (po.po_items || []).map(i => i.id); if (li.length) { const m = {}; (await px("po_items", li, "rate, gst_pct")).forEach(r => { m[r.id] = r; }); (po.po_items || []).forEach(i => Object.assign(i, m[i.id] || {})); }
+    }
     // update424: match the bill to Petty Cash / Expense entries too (amount ±2 %, date ±10 days, paid-to / category similarity)
     let expenseMatch = null; try {
       const total = Number(x.total || 0); const inv = x.invoice_date && /^\d{4}-\d{2}-\d{2}$/.test(x.invoice_date) ? new Date(x.invoice_date) : null;
