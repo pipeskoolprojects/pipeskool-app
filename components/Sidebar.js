@@ -23,6 +23,7 @@ const GROUPS = [
       { href: "/procure", label: "Indent & Purchase", module: "indent" },
       { href: "/stock", label: "Material Stock & Inventory", module: "stock" },
       { href: "/stock/grn", label: "GRN Register", module: "stock" }, { href: "/stock/challans", label: "Delivery Challans", module: "stock" },
+      { href: "/stock/deliveries", label: "Site Deliveries & Receiving", module: "stock" },   // update462
       { href: "/procure/pending", label: "Pending Deliveries", module: "indent" },   // update256
       { href: "/items", label: "Item / Material Master", module: "stock" },
       { href: "/vendors", label: "Vendor Master", module: "indent" },
