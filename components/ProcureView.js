@@ -10,6 +10,7 @@ import {
 } from "@/lib/procure";
 import { getVendors } from "@/lib/vendors";
 import VendorLink from "@/components/VendorLink";   // update410
+import { useCanViewPrices } from "@/lib/prices";   // update463
 import { createIndent, editIndent, deleteIndent, quickAddItem, getIndentEditAudit } from "@/lib/stock";   // update337
 import { deleteIndentItem, closeEmptyIndent } from "@/lib/procure";   // update434
 import { getPoDcPending } from "@/lib/challan";   // update441
@@ -79,17 +80,18 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   const [proofs, setProofs] = useState([]);        // update254: rate-comparison proofs for the open indent
   const [rateSug, setRateSug] = useState({});      // update299: item_key -> last remembered price+vendor
   const [priceMap, setPriceMap] = useState({});    // update303: item_id -> Price Master resolution
+  const canPx = useCanViewPrices();   // update463: quotes, rates, PO values — price viewers only (the database enforces it too)
   // unit-aware view of a Price-Master row: Rmt lines price per metre, others per piece
   const priceFor = it => {
     const p = priceMap[Number(it.item_id)];
-    if (!p || !p.ok) return null;
+    if (!p || !p.ok || canPx !== true) return null;
     const perM = (it.unit || "").toLowerCase() === "rmt" && p.priced_length_m > 0;
     return { list: perM ? +(p.list_pcs / p.priced_length_m).toFixed(2) : +p.list_pcs,
              disc: +p.discount_pct, net: perM ? p.per_mtr : p.net_pcs, per: perM ? "mtr" : "pc", from: p.list_date };
   };
   const sugLine = name => {
     const s = rateSug[(name || "").trim().toLowerCase()];
-    if (!s) return null;
+    if (!s || canPx !== true || s.rate == null) return null;
     return `Last: ${inr(s.rate)}${s.discount_pct ? ` (−${s.discount_pct}%)` : ""}${s.vendor_name ? " · " + s.vendor_name : ""} · ${(s.noted_at || "").slice(0, 10)}${s.source === "po" ? " (PO)" : ""}`;
   };
   const [proofErr, setProofErr] = useState("");    // update266: inline upload error shown under the Attach button
@@ -678,6 +680,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                       </table>
                     </div>
 
+                    {canPx !== true ? <div className="note" style={{ fontSize: 12.5 }}>🔒 Quotations, rates and purchase orders for this indent are handled by the office. You will see each delivery under <b>Site Deliveries</b> once material is dispatched.</div> : (<>{/* update463 */}
                     {/* enquiry download — by category (#6) */}
                     {(() => {
                       const enqItems = ind.items.filter(it => !it.ordered);   // update172: PO'd items excluded
@@ -960,6 +963,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                         )}
                       </div>
                     )}
+                    </>)}{/* update463 */}
                     {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
                   </div>
                 )}
@@ -971,7 +975,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
         </div>}
 
         {showPo && <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: 16 }}>{/* update407 */}
-          <div style={{ fontSize: 14.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}><span className="muted">🧾</span>Purchase orders issued<span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>{poShown.length} · {inr(poShown.reduce((s2, p) => s2 + (p.status === "cancelled" ? 0 : Number(p.total || 0)), 0))}</span></div>
+          <div style={{ fontSize: 14.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}><span className="muted">🧾</span>Purchase orders issued<span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>{poShown.length}{canPx === true ? " · " + inr(poShown.reduce((s2, p) => s2 + (p.status === "cancelled" ? 0 : Number(p.total || 0)), 0)) : ""}</span></div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "0 0 12px", alignItems: "center" }}>
             <select value={poFsite} onChange={e => setPoFsite(e.target.value)} style={{ height: 34 }}><option value="all">Site: all</option>{[...new Set(pos.map(p => p.site).filter(Boolean))].sort().map(x => <option key={x} value={x}>{x}</option>)}</select>
             <select value={poFvendorSel} onChange={e => setPoFvendorSel(e.target.value)} style={{ height: 34 }}><option value="all">Vendor: all</option>{[...new Set(pos.map(p => p.vendor).filter(Boolean))].sort().map(x => <option key={x} value={x}>{x}</option>)}</select>
@@ -998,7 +1002,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
                     <div key={p.id} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: 14, opacity: void_ ? .65 : 1 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
                         <div><div style={{ fontSize: 13.5, fontWeight: 600, textDecoration: void_ ? "line-through" : "none" }}>{p.po_no}</div><div className="muted" style={{ fontSize: 11.5 }}>{p.date} · {p.site || "—"}</div></div>
-                        <div style={{ textAlign: "right" }}><div style={{ fontSize: 13 }}>{inr(p.total)}</div>
+                        <div style={{ textAlign: "right" }}><div style={{ fontSize: 13 }}>{canPx === true && p.total != null ? inr(p.total) : ""}</div>
                           {void_ ? <span style={{ background: "#F3F4F6", color: "#6B7280", fontSize: 11, padding: "2px 8px", borderRadius: 999 }}>Cancelled</span>
                           : p.approval === "approved" ? <span style={{ background: "#DCFCE7", color: "#15803D", fontSize: 11, padding: "2px 8px", borderRadius: 999 }}>Approved</span>
                           : p.approval === "rejected" ? <span style={{ background: "#FEE2E2", color: "#B91C1C", fontSize: 11, padding: "2px 8px", borderRadius: 999 }}>Rejected</span>

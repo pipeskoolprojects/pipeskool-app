@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { searchItems } from "@/lib/stock";
 import { inr } from "@/lib/data";
 import { getExchangeablePOs, confirmExchange } from "@/lib/exchange";
+import { useCanViewPrices } from "@/lib/prices";   // update463
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
@@ -12,7 +13,8 @@ export default function ExchangePanel({ siteId, onDone }) {
   const [date, setDate] = useState(today()); const [ret, setRet] = useState({});   // po_item_id -> qty string
   const [rep, setRep] = useState({ item: null, qty: "", rate: "", received_now: true }); const [iq, setIq] = useState(""); const [hits, setHits] = useState([]);
   const [reason, setReason] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false); const [done, setDone] = useState(null);
-  useEffect(() => { setPos(null); setPoId(""); setRet({}); getExchangeablePOs("all").then(setPos).catch(e => { setErr(e.message); setPos([]); }); }, []);   // 404c: all sites; the PO decides the site
+  const canPx = useCanViewPrices();   // update463: an exchange changes the PO value → office (price access) only
+  useEffect(() => { if (canPx !== true) return; setPos(null); setPoId(""); setRet({}); getExchangeablePOs("all").then(setPos).catch(e => { setErr(e.message); setPos([]); }); }, [canPx]);   // 404c: all sites; the PO decides the site
   useEffect(() => { if (!iq.trim()) { setHits([]); return; } const t = setTimeout(() => searchItems(iq, 12).then(setHits).catch(() => setHits([])), 200); return () => clearTimeout(t); }, [iq]);
   const po = useMemo(() => (pos || []).find(p => String(p.po_id) === String(poId)) || null, [pos, poId]);
   const lines = useMemo(() => po ? po.items.filter(i => Number(ret[i.po_item_id]) > 0).map(i => ({ ...i, return_qty: Number(ret[i.po_item_id]) })) : [], [po, ret]);
@@ -31,6 +33,8 @@ export default function ExchangePanel({ siteId, onDone }) {
     setDone(r); onDone && onDone(`Exchange ${r.exc_no} recorded on ${po.po_no} — net ${r.net_difference >= 0 ? inr(r.net_difference) + " extra payable to vendor" : inr(-r.net_difference) + " credit from vendor"}.`);
   }
   const inp = { width: "100%", boxSizing: "border-box" };
+  if (canPx === false) return <div className="note amber" style={{ marginTop: 12 }}>⇄ A material exchange changes the PO value, so the office records it (staff with Price access). Tell the office what is going back and what replaces it.</div>;
+  if (canPx === null) return <div className="muted" style={{ marginTop: 12 }}>Checking access…</div>;
   if (done) return <div style={{ marginTop: 12 }}><div className="note green"><b>✓ {done.exc_no}</b> recorded. PO updated (Exchanged / Replacement badges), stock adjusted, entry in the GRN register. <button style={{ marginLeft: 8, fontSize: 11.5 }} onClick={() => window.open("/stock/exchange-print?ids=" + done.id, "_blank")}>🖨 Exchange note</button></div></div>;
   return (
     <div style={{ marginTop: 12, border: "1px solid var(--border)", borderRadius: 10, padding: 14 }}>

@@ -247,7 +247,7 @@ export default function ApprovalsView({ mode = "mobile" }) {
                 <div key={r.id} style={cardS}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                     <div><b>{r.po_no}</b> · {r.site}<div className="muted" style={{ fontSize: 12 }}>{r.vendor} · indent {r.indent_no || "—"} · by {r.raised_by || "—"} · {r.date}</div></div>
-                    <div style={{ fontWeight: 800, fontSize: 16, whiteSpace: "nowrap" }}>{inr(r.total)}</div>
+                    <div style={{ fontWeight: 800, fontSize: 16, whiteSpace: "nowrap" }}>{r.total != null ? inr(r.total) : ""}</div>
                   </div>
                   <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                     {/* update262: never approve a PO blind — same watermarked review document as web (221) */}

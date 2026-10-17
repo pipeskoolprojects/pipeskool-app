@@ -24,9 +24,9 @@ export function VendorProfile({ name, onClose }) {
         {err && <div className="note red">{err}</div>}
         {!p && !err ? <div className="muted">Loading…</div> : p && (<>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 12 }}>
-            {[["Total POs", p.totalPos], ["Total value", inr(p.totalValue)], ["Outstanding", inr(p.outstanding)]].map(([l, v]) => <div key={l} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 10px" }}><span className="muted" style={{ fontSize: 11, display: "block" }}>{l}</span><b>{v}</b></div>)}
+            {(p.canViewPrices === false ? [["Total POs", p.totalPos], ["GRNs", p.grnCount], ["Challans", p.dcCount]] : [["Total POs", p.totalPos], ["Total value", inr(p.totalValue)], ["Outstanding", inr(p.outstanding)]]).map(([l, v]) => <div key={l} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 10px" }}><span className="muted" style={{ fontSize: 11, display: "block" }}>{l}</span><b>{v}</b></div>)}
           </div>
-          <div className="muted" style={{ fontSize: 11, marginBottom: 10 }}>Outstanding = live PO value − direct vendor payments marked paid ({inr(p.paid)}). {p.grnCount} GRN(s) · {p.dcCount} challan(s).</div>
+          {p.canViewPrices !== false && <div className="muted" style={{ fontSize: 11, marginBottom: 10 }}>Outstanding = live PO value − direct vendor payments marked paid ({inr(p.paid)}). {p.grnCount} GRN(s) · {p.dcCount} challan(s).</div>}
           <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>Recent activity — click any entry to open it</div>
           <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 8 }}>
             {p.activity.length === 0 ? <div className="muted" style={{ padding: 10 }}>No transactions yet.</div> : p.activity.slice(0, 60).map((a, i) => { const [kl, bg, fg] = KIND[a.kind]; return (

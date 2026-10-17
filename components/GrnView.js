@@ -2,6 +2,7 @@
 // update184: GRN REGISTER — every goods receipt, who entered it, both challan numbers,
 // downloadable challan pages, expandable item list. Quantities are the stored GRN
 // transaction rows (historical) — never recomputed from current stock.
+import { useCanViewPrices } from "@/lib/prices";   // update463
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { getGrnRegister, getGrnDocUrl, grnDocName, cancelGrn, getGrnHistory, migrateGrnDocsToPrivate, GRN_BUCKET, getVendorReturnHistory, editGrnHeader, addGrnDocs, setRtvStatus } from "@/lib/stock";
 import { getSites } from "@/lib/data";
@@ -81,6 +82,7 @@ export default function GrnView({ siteId = null, embedded = false }) {
   const [retSt, setRetSt] = useState("all");     // update205: status filter
   const [stMenu, setStMenu] = useState(null);    // ref whose status dropdown is open
   const [inr2] = useState(() => n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 }));
+  const canPx = useCanViewPrices() === true;   // update463: GRN rates / values only for price viewers
   useEffect(() => { if (view === "returns") { setRetRows(null); getVendorReturnHistory({ siteId: site, from, to }).then(r => setRetRows(r.rows || [])); } }, [view, site, from, to]);   // eslint-disable-line react-hooks/exhaustive-deps
   // resolve the viewer's current page URL (signed if private)
   useEffect(() => {
@@ -165,9 +167,9 @@ export default function GrnView({ siteId = null, embedded = false }) {
 
   const exportCsv = () => {
     const esc = v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    const head = ["GRN no", "Status", "PO no", "Entered on", "Entered by", "Site", "Vendor", "Supplier challan no", "Our challan no", "Challan date", "Item", "Unit", "Challan qty", "Received qty", "Short/Excess", "Rate", "Value", "Supplier pages", "Our pages", "Tally exported"];
+    const head = ["GRN no", "Status", "PO no", "Entered on", "Entered by", "Site", "Vendor", "Supplier challan no", "Our challan no", "Challan date", "Item", "Unit", "Challan qty", "Received qty", "Short/Excess", ...(canPx ? ["Rate", "Value"] : []), "Supplier pages", "Our pages", "Tally exported"];
     const body = [];
-    shown.forEach(g => g.lines.forEach(l => body.push([g.grn_no, g.status, g.po_no, fmtDT(g.entered_at), g.entered_by, g.site, g.vendor, g.challan_no, g.our_challan_no, g.challan_date, l.item_name, l.unit, l.challan_qty, l.received_qty, -l.short_qty, l.rate, l.value, g.sup_docs, g.our_docs, g.exported ? "Yes" : ""].map(esc).join(","))));
+    shown.forEach(g => g.lines.forEach(l => body.push([g.grn_no, g.status, g.po_no, fmtDT(g.entered_at), g.entered_by, g.site, g.vendor, g.challan_no, g.our_challan_no, g.challan_date, l.item_name, l.unit, l.challan_qty, l.received_qty, -l.short_qty, ...(canPx ? [l.rate, l.value] : []), g.sup_docs, g.our_docs, g.exported ? "Yes" : ""].map(esc).join(","))));
     const blob = new Blob([head.join(",") + "\n" + body.join("\n")], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `grn_register_${from || "all"}_${to || today}.csv`; a.click();
   };
@@ -202,7 +204,7 @@ export default function GrnView({ siteId = null, embedded = false }) {
             {[["📋", "#E8F0FE", "#1D4ED8", summary.total, `GRNs in filter · ${summary.cancelled} cancelled`],
               ["🔗", "#EDE9FE", "#6D28D9", summary.po, `Against PO · ${summary.total - summary.po} direct`],
               ["📅", "#DCFCE7", "#15803D", summary.today, `Entered today · ${summary.month} this month`],
-              ["₹", "#FFF3E8", "#C2410C", inr(summary.value), `Received · ${summary.sites} site${summary.sites === 1 ? "" : "s"}${summary.short ? ` · ${summary.short} short/excess` : ""}`]].map(([ic, bg, fg, n, l], k) => (
+              canPx ? ["₹", "#FFF3E8", "#C2410C", inr(summary.value), `Received · ${summary.sites} site${summary.sites === 1 ? "" : "s"}${summary.short ? ` · ${summary.short} short/excess` : ""}`] : ["🏗", "#FFF3E8", "#C2410C", summary.sites, `Site${summary.sites === 1 ? "" : "s"}${summary.short ? ` · ${summary.short} short/excess` : ""}`]].map(([ic, bg, fg, n, l], k) => (
               <div key={k} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: 16 }}>
                 <div style={{ width: 30, height: 30, borderRadius: 8, background: bg, color: fg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, marginBottom: 10 }}>{ic}</div>
                 <div style={{ fontSize: k === 3 ? 20 : 24, fontWeight: 700, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={String(n)}>{n}</div>
@@ -235,7 +237,7 @@ export default function GrnView({ siteId = null, embedded = false }) {
             {!retRows ? <div className="muted">Loading returns…</div> : shownR.length === 0 ? <div className="muted">No vendor returns match this filter.</div> : (
               <div style={{ overflowX: "auto" }}>
                 <table className="dt-compact">
-                  <thead><tr><th>Ref</th><th>Date</th><th>Site</th><th>Vendor</th><th>Against GRN</th><th>Items</th><th className="num">Qty</th><th className="num">Value ₹</th><th>Status</th><th>Reason</th><th>By</th><th>Receipt</th></tr></thead>
+                  <thead><tr><th>Ref</th><th>Date</th><th>Site</th><th>Vendor</th><th>Against GRN</th><th>Items</th><th className="num">Qty</th>{canPx && <th className="num">Value ₹</th>}<th>Status</th><th>Reason</th><th>By</th><th>Receipt</th></tr></thead>
                   <tbody>
                     {shownR.map((r, i) => { const [dot, sl, sc] = stBadge[r.status] || stBadge.awaiting; return (
                       <tr key={i}>
@@ -246,7 +248,7 @@ export default function GrnView({ siteId = null, embedded = false }) {
                         <td>{r.src_grn || <span className="badge gray">No GRN</span>}</td>
                         <td>{r.lines.map((l, j) => <div key={j} style={{ fontSize: 12 }}>{l.item} — {l.qty} {l.unit}</div>)}</td>
                         <td className="num">{qty(r.total_qty)}</td>
-                        <td className="num">{r.total_value ? inr2(r.total_value) : <span className="muted" title="No rate found on the source GRN">—</span>}</td>
+                        {canPx && <td className="num">{r.total_value ? inr2(r.total_value) : <span className="muted" title="No rate found on the source GRN">—</span>}</td>}
                         <td style={{ position: "relative", whiteSpace: "nowrap" }}>
                           <button type="button" onClick={() => setStMenu(stMenu === r.ref ? null : r.ref)}
                             style={{ borderRadius: 999, fontSize: 11.5, fontWeight: 700, color: sc, background: sc + "18", border: "1px solid " + sc }}>
@@ -278,7 +280,7 @@ export default function GrnView({ siteId = null, embedded = false }) {
               </div>
             )}
               </>); })()}
-            <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>Every return-to-vendor transaction, newest first. Value uses each item's rate from the SOURCE GRN. Click a status pill to change it (Directors / IT / stock managers); the receipt opens print-ready — use the browser's Print → Save as PDF.</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>Every return-to-vendor transaction, newest first. {canPx ? "Value uses each item's rate from the SOURCE GRN. " : ""}Click a status pill to change it (Directors / IT / stock managers); the receipt opens print-ready — use the browser's Print → Save as PDF.</div>
           </div>
         )}
         {view === "grns" && <div>
@@ -333,7 +335,7 @@ export default function GrnView({ siteId = null, embedded = false }) {
                               <div><div className="muted" style={{ fontSize: 11 }}>Supplier challan</div>{g.challan_no || "—"}{g.challan_date ? <span className="muted"> · {g.challan_date}</span> : null}</div>
                               <div><div className="muted" style={{ fontSize: 11 }}>Our challan</div>{g.our_challan_no || "—"}</div>
                               <div><div className="muted" style={{ fontSize: 11 }}>Entered by</div>{g.entered_by || "—"}<span className="muted"> · {fmtDT(g.entered_at)}</span></div>
-                              <div><div className="muted" style={{ fontSize: 11 }}>Items · qty · value</div>{g.items} · {qty(g.total_qty)} · <b>{inr(g.value)}</b></div>
+                              <div><div className="muted" style={{ fontSize: 11 }}>Items · qty{canPx ? " · value" : ""}</div>{g.items} · {qty(g.total_qty)}{canPx && <> · <b>{inr(g.value)}</b></>}</div>
                               <div><div className="muted" style={{ fontSize: 11 }}>Short / excess</div>{g.short_lines ? <span style={{ color: "var(--amber)" }}>⚠ {g.short_lines} line(s)</span> : <span style={{ color: "var(--green)" }}>OK</span>}{g.returned_qty > 0 && <span className="badge a" style={{ marginLeft: 6 }}>↩ {qty(g.returned_qty)} returned</span>}{(g.changes || []).length > 0 && <span className="badge h" style={{ marginLeft: 6 }}>≠ {g.changes.length} changed</span>}{g.exported && <span className="badge gray" style={{ marginLeft: 6 }}>Tally</span>}</div>
                             </div>
                             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }} onClick={e => e.stopPropagation()}>
@@ -345,7 +347,7 @@ export default function GrnView({ siteId = null, embedded = false }) {
                               {canCancel && g.status !== "cancelled" && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => { setCancelFor(g); setCancelReason(""); }}>Cancel</button>}
                             </div>
                             <table className="dt-compact" style={{ width: "auto", minWidth: 620, background: "#fff", border: "1px solid var(--border)", borderRadius: 8 }}>
-                              <thead><tr><th>#</th><th>Material</th><th>Unit</th><th className="num">Challan qty</th><th className="num">Received</th><th className="num">↩ Returned</th><th className="num">Short / Excess</th><th className="num">Rate</th><th className="num">Value</th></tr></thead>
+                              <thead><tr><th>#</th><th>Material</th><th>Unit</th><th className="num">Challan qty</th><th className="num">Received</th><th className="num">↩ Returned</th><th className="num">Short / Excess</th>{canPx && <><th className="num">Rate</th><th className="num">Value</th></>}</tr></thead>
                               <tbody>
                                 {g.lines.map((l, i) => (
                                   <tr key={i}>
@@ -356,15 +358,15 @@ export default function GrnView({ siteId = null, embedded = false }) {
                                     <td className="num" style={{ fontWeight: 600 }}>{qty(l.received_qty)}</td>
                                     <td className="num" style={{ color: l.returned ? "var(--red)" : "var(--muted)" }}>{l.returned ? "−" + qty(l.returned) : "—"}</td>
                                     <td className="num" style={{ color: l.short_qty > 0 ? "var(--red)" : l.short_qty < 0 ? "var(--amber)" : "var(--muted)" }}>{l.short_qty ? (l.short_qty > 0 ? "−" + qty(l.short_qty) + " short" : "+" + qty(-l.short_qty) + " excess") : "—"}</td>
-                                    <td className="num muted">{l.rate ? inr(l.rate) : "—"}</td>
-                                    <td className="num">{l.value ? inr(l.value) : "—"}</td>
+                                    {canPx && <><td className="num muted">{l.rate ? inr(l.rate) : "—"}</td>
+                                    <td className="num">{l.value ? inr(l.value) : "—"}</td></>}
                                   </tr>
                                 ))}
-                                <tr style={{ fontWeight: 600 }}><td colSpan={4} style={{ textAlign: "right" }}>Total</td><td className="num">{qty(g.total_qty)}</td><td className="num" style={{ color: g.returned_qty ? "var(--red)" : undefined }}>{g.returned_qty ? "−" + qty(g.returned_qty) : ""}</td><td></td><td></td><td className="num">{inr(g.value)}</td></tr>
+                                <tr style={{ fontWeight: 600 }}><td colSpan={4} style={{ textAlign: "right" }}>Total</td><td className="num">{qty(g.total_qty)}</td><td className="num" style={{ color: g.returned_qty ? "var(--red)" : undefined }}>{g.returned_qty ? "−" + qty(g.returned_qty) : ""}</td><td></td>{canPx && <><td></td><td className="num">{inr(g.value)}</td></>}</tr>
                               </tbody>
                             </table>
                             <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                              Entered by <b>{g.entered_by || "Not available"}</b> on {fmtDT(g.entered_at)}{g.po_no ? <> · against <b>{g.po_no}</b> (rate = PO net rate)</> : " · Rate = item's last known rate at receipt (valuation only, not vendor billing)"}.
+                              Entered by <b>{g.entered_by || "Not available"}</b> on {fmtDT(g.entered_at)}{g.po_no ? <> · against <b>{g.po_no}</b>{canPx ? " (rate = PO net rate)" : ""}</> : canPx ? " · Rate = item's last known rate at receipt (valuation only, not vendor billing)" : ""}.
                               {g.docs.length === 0 && <span style={{ color: "var(--amber)" }}> · No challan pages uploaded for this GRN.</span>}
                               {g.last_edit && <span> · Last edited by <b>{g.last_edit.by || "—"}</b> on {fmtDT(g.last_edit.at)}</span>}
                               {g.note && <div>Note: {g.note}</div>}
