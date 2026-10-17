@@ -6,6 +6,7 @@ import {
   getIndentQueue, reviewIndent, getVendors, getQuotesDemo, getThreeWayMatch,
   getPendingDeliveries, getVendorPerformance, getPriceTrend, inr,
 } from "@/lib/purchase";
+import { useCanViewPrices } from "@/lib/prices";   // update463
 
 export default function PurchasePage() {
   const [queue, setQueue] = useState(null);
@@ -16,6 +17,7 @@ export default function PurchasePage() {
   const [perf, setPerf] = useState([]);
   const [trend, setTrend] = useState([]);
   const [msg, setMsg] = useState("");
+  const canPx = useCanViewPrices();   // update463: this page is quotes, rates and price trends — price viewers only
 
   const load = () => {
     getIndentQueue().then(setQueue);
@@ -26,7 +28,7 @@ export default function PurchasePage() {
     getVendorPerformance().then(setPerf);
     getPriceTrend(3).then(setTrend);
   };
-  useEffect(load, []);
+  useEffect(() => { if (canPx === true) load(); }, [canPx]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   async function act(id, status) {
     let note = null;
@@ -46,6 +48,10 @@ export default function PurchasePage() {
     f === "overbilled" ? <span className="badge a">⚠ Overbilled</span> :
     <span className="badge h">In progress</span>;
 
+  if (canPx !== true) return (
+    <div className="layout"><Sidebar /><main className="main">
+      {canPx === null ? <div className="muted">Loading…</div> : <div className="note amber">🔒 Purchase rates and price trends are visible to the office procurement team only.</div>}
+    </main></div>);
   return (
     <div className="layout">
       <Sidebar />
