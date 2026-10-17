@@ -106,6 +106,7 @@ function POView() {
   // update241: was a require() swallowed by try/catch — a throw silently hid the control
   const isApprover = (typeof window !== "undefined" && getSession()?.role === "director");
   const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN");
+  const px = po?.priced !== false;   // update463: false for users without Price access (the server sent no prices)
 
   if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading PO…</div>;
 
@@ -240,11 +241,11 @@ function POView() {
             <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "left" }}>Description</th>
             <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Qty</th>
             <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>Unit</th>
-            <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Rate</th>
+            {px && <><th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Rate</th>
             <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Disc %</th>
             <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Net Rate</th>
             <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>GST %</th>
-            <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Amount</th>
+            <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Amount</th></>}{/* update463: prices for price viewers only */}
           </tr>
         </thead>
         <tbody>
@@ -257,18 +258,18 @@ function POView() {
               </td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{it.qty}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.unit}</td>
-              <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{it.list_rate != null ? inr(it.list_rate) : inr(it.rate)}</td>
+              {px && <><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{it.list_rate != null ? inr(it.list_rate) : inr(it.rate)}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{it.discount_pct ? it.discount_pct + "%" : "—"}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(it.rate)}</td>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{Number(it.gst_pct ?? 18)}%</td>
-              <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(it.qty * it.rate)}</td>
+              <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(it.qty * it.rate)}</td></>}
             </tr>
           ))}
-          <tr><td colSpan="8" style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Subtotal (net)</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(subtotal)}</td></tr>
+          {px && <><tr><td colSpan="8" style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Subtotal (net)</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(subtotal)}</td></tr>
           {Object.entries(byGst).sort((a, b) => Number(a[0]) - Number(b[0])).map(([g, base]) => (
             <tr key={g}><td colSpan="8" style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>GST @ {g}% (on {inr(base)})</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(Math.round(base * Number(g) / 100))}</td></tr>
           ))}
-          <tr style={{ background: "#FEF2EC", fontWeight: 700 }}><td colSpan="8" style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Total</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(total)}</td></tr>
+          <tr style={{ background: "#FEF2EC", fontWeight: 700 }}><td colSpan="8" style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Total</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(total)}</td></tr></>}
         </tbody>
       </table>
       </div>{/* /po-scroll (update265) */}
