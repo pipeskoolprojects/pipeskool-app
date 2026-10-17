@@ -82,7 +82,7 @@ function ChallanView() {
         <tfoot>
           <tr style={{ borderTop: "2px solid #111", fontWeight: 700 }}>
             <td colSpan={7} style={{ padding: "8px 6px", textAlign: "right" }}>Total received value</td>
-            <td style={{ padding: "8px 6px", textAlign: "right" }}>{inr(total)}</td>
+            <td style={{ padding: "8px 6px", textAlign: "right" }}>{total ? inr(total) : "—"}</td>{/* update463: "—" when prices are not shown to this login */}
           </tr>
         </tfoot>
       </table>
