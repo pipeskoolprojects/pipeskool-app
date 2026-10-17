@@ -27,7 +27,7 @@ export default function ExchangesPage() {
             <tr key={r.id}><td style={{ color: "#FF7A1A", fontWeight: 700, whiteSpace: "nowrap" }}>{r.exc_no}</td><td>{dmy(r.exchange_date)}</td><td>{r.po_no}</td><td>{r.vendor_name}</td>
               <td>{r.lines.map(l => <div key={l.id}>{l.item_name}</div>)}</td><td className="num">{r.lines.map(l => <div key={l.id}>{Number(l.return_qty)} {l.unit || ""}</div>)}</td>
               <td>{r.replacement_item_name}{!r.replacement_received && <span className="badge warn" style={{ marginLeft: 6 }}>to receive</span>}</td><td className="num">{Number(r.replacement_qty)} {r.replacement_unit || ""}</td>
-              <td className="num" style={{ fontWeight: 700, color: Number(r.net_difference) >= 0 ? "#BA7517" : "var(--green)" }}>{Number(r.net_difference) >= 0 ? inr(r.net_difference) + " payable" : inr(-r.net_difference) + " credit"}</td>
+              <td className="num" style={{ fontWeight: 700, color: Number(r.net_difference) >= 0 ? "#BA7517" : "var(--green)" }}>{r.net_difference == null ? <span className="muted">—</span> : Number(r.net_difference) >= 0 ? inr(r.net_difference) + " payable" : inr(-r.net_difference) + " credit"}</td>
               <td>{r.done_by_name}<div className="muted" style={{ fontSize: 10.5 }} title={r.reason}>{r.reason?.slice(0, 40)}{r.reason?.length > 40 ? "…" : ""}</div></td>
               <td><button style={{ fontSize: 11.5 }} onClick={() => window.open("/stock/exchange-print?ids=" + r.id, "_blank")}>🖨</button></td></tr>))}</tbody>
         </table></div>
