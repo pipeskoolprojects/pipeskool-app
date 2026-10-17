@@ -1,4 +1,5 @@
 "use client";
+import { useCanViewPrices } from "@/lib/prices";   // update463
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { isDemo } from "@/lib/supabase";
@@ -38,6 +39,7 @@ export default function TallyPage() {
   const [loading, setLoading] = useState(false);
   const [masters, setMasters] = useState(null);
   const [grns, setGrns] = useState(null);
+  const canPx = useCanViewPrices();   // update463: Tally vouchers carry prices — price viewers only
 
   useEffect(() => { getTallySettings().then(setS); }, []);
   const set = (k, v) => setS(x => ({ ...x, [k]: v }));
@@ -105,7 +107,8 @@ export default function TallyPage() {
     if (r.ok) { setMsg("Marked " + rows.length + " record(s) as exported."); load(); } else setErr(r.error);
   }
 
-  if (!s) return <div className="layout"><Sidebar /><main className="main"><div className="muted">Loading…</div></main></div>;
+  if (canPx === false) return <div className="layout"><Sidebar /><main className="main"><h1>Tally export</h1><div className="note amber">🔒 Tally vouchers carry purchase prices, so this page is for staff with Price access (Admin &amp; Access).</div></main></div>;
+  if (!s || canPx === null) return <div className="layout"><Sidebar /><main className="main"><div className="muted">Loading…</div></main></div>;
 
   const TabBtn = ({ id, label }) => <button className={tab === id ? "primary" : ""} onClick={() => switchTab(id)}>{label}</button>;
   const showGst = tab === "bills";
