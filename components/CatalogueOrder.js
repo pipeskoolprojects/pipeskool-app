@@ -2,6 +2,8 @@
 // update464: ORDER MATERIALS (Astral catalogue, grouped by size) — one screen for phone and desktop.
 // update465: shop-style layout — 4:3 picture boxes, cart count in the header, search clear button, brand / size
 // filters, collapsible size chips, "Added" toast, phone cards with the picture on the left and a cart bar above the nav.
+// update466: layout re-proportioned — catalogue ~74% / cart clamp(280px,26%,340px), cards 220–310 px (3–4 per row),
+// pictures fill a full-width 4:3 box; phone cards ~185 px high with a 112–120 px picture on the left; no sideways page scroll.
 // Each product is one card; picking a size picks its own Material Master item (its own stock, its own PO line).
 // The cart raises an ordinary site indent through createIndent (same numbering, duplicate guard, BOQ-kit check,
 // notifications). Only the ORDERED quantity is saved — dispatched / received stay with challans and receipts.
@@ -31,16 +33,13 @@ const CartIcon = () => (
   </svg>
 );
 
-// Picture box: fixed 4:3, white, product centred and never stretched. The Astral pictures are small (median ~80 px
-// wide), so they are shown at most ~1.6× their real size instead of being blown up into blur.
+// Picture box: fixed 4:3, white, product centred and filling the box (object-fit: contain — never stretched or cut).
+// Blank studio background is already trimmed off in lib/catalogueImages.js, so the product uses the whole box.
 function Img({ p, imgs }) {
   const [bad, setBad] = useState(false);
   if (p.image && imgs === null) return <span className="co-skel" aria-hidden="true" />;   // pictures still loading
   const im = catalogueImage(p.image, imgs);
-  if (im && !bad) {
-    const st = im.w ? { "--mw": Math.round(im.w * 1.6) + "px", "--mh": Math.round(im.h * 1.6) + "px" } : undefined;
-    return <img src={im.src} width={im.w || undefined} height={im.h || undefined} style={st} alt={p.name} loading="lazy" decoding="async" onError={() => setBad(true)} />;
-  }
+  if (im && !bad) return <img src={im.src} width={im.w || undefined} height={im.h || undefined} alt={p.name} loading="lazy" decoding="async" onError={() => setBad(true)} />;
   return <span className="co-noimg">No picture</span>;   // only when there is genuinely no picture
 }
 
@@ -56,25 +55,49 @@ function Qty({ value, onChange, min = 1, label }) {
   );
 }
 
-function SizeChips({ sizes, size, onPick, limit }) {
+// Size selector. Desktop: chips wrap, at most ~2 rows, then "+N more". Phone: one row that scrolls sideways
+// (the chosen size is scrolled into view) plus an "All N" button that opens every size as a wrapped grid.
+function SizeChips({ sizes, size, onPick, limit, narrow, onMulti }) {
   const [open, setOpen] = useState(false);
+  const row = useRef(null);
+  const [over, setOver] = useState(false);   // phone: the sizes do not fit on one line → offer "All N"
+  useEffect(() => {
+    if (!narrow || !row.current) return;
+    const el = row.current; const chk = () => setOver(el.scrollWidth > el.clientWidth + 2);
+    chk(); if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(chk); ro.observe(el); return () => ro.disconnect();
+  }, [narrow, sizes]);
+  useEffect(() => {
+    if (!narrow || open || !row.current) return;
+    const el = row.current.querySelector(".co-sz.on");
+    if (el) row.current.scrollLeft = Math.max(0, el.offsetLeft - row.current.offsetLeft - 8);
+  }, [size, narrow, open]);
+  const chip = s => <button key={s} type="button" className={"co-sz" + (s === size ? " on" : "")} aria-pressed={s === size} onClick={() => onPick(s)}>{s}</button>;
+  const multi = onMulti && <button type="button" className="co-multi" onClick={onMulti}>＋ Order several sizes</button>;
+  if (narrow) {
+    return (
+      <div className={"co-szrow" + (open ? " open" : "")}>
+        <div className="co-chips" ref={row}>{sizes.map(chip)}{open && multi}</div>
+        {(over || open || (multi && sizes.length > 2)) && <button type="button" className="co-szmore" aria-expanded={open} onClick={() => setOpen(o => !o)}>{open ? "Less" : `All ${sizes.length}`}</button>}
+      </div>);
+  }
   if (sizes.length <= limit || open) {
     return (
       <div className="co-chips">
-        {sizes.map(s => <button key={s} type="button" className={"co-sz" + (s === size ? " on" : "")} aria-pressed={s === size} onClick={() => onPick(s)}>{s}</button>)}
-        {open && <button type="button" className="co-szmore" onClick={() => setOpen(false)}>Show less</button>}
+        {sizes.map(chip)}
+        {open && <button type="button" className="co-szmore" aria-expanded="true" onClick={() => setOpen(false)}>Show less</button>}
       </div>);
   }
   let vis = sizes.slice(0, limit - 1);
   if (!vis.includes(size)) vis = [...vis.slice(0, limit - 2), size];   // the chosen size always stays visible
   return (
     <div className="co-chips">
-      {vis.map(s => <button key={s} type="button" className={"co-sz" + (s === size ? " on" : "")} aria-pressed={s === size} onClick={() => onPick(s)}>{s}</button>)}
+      {vis.map(chip)}
       <button type="button" className="co-szmore" aria-expanded="false" onClick={() => setOpen(true)}>+{sizes.length - vis.length} more</button>
     </div>);
 }
 
-function ProductCard({ p, imgs, prices, showPx, firstHit, onAdd, onMulti, chipLimit }) {
+function ProductCard({ p, imgs, prices, showPx, firstHit, onAdd, onMulti, chipLimit, narrow }) {
   const sizes = useMemo(() => [...new Set(p.opts.map(o => o.size))], [p]);
   const [size, setSize] = useState(firstHit?.size || sizes[0]);
   const variants = p.opts.filter(o => o.size === size);
@@ -84,41 +107,39 @@ function ProductCard({ p, imgs, prices, showPx, firstHit, onAdd, onMulti, chipLi
   const [qty, setQty] = useState("1");
   const px = showPx && cur ? prices[cur.item_id] : null;
   const pick = s => { setSize(s); const v = p.opts.find(o => o.size === s); setOptId(v?.id); };
-  const spec = p.master
-    ? [p.family, cur?.material].filter(Boolean).join(" · ")
-    : p.name + (p.family ? " · " + p.family : "");
+  const spec = p.master ? [p.family, cur?.material].filter(Boolean).join(" · ") : p.name + (p.family ? " · " + p.family : "");
+  const hasSizes = sizes.length > 1 || (sizes[0] && sizes[0] !== "—");
+  const multi = sizes.length > 1 ? () => onMulti(p) : null;
   return (
     <article className="co-card">
-      <div className="co-ph"><Img p={p} imgs={imgs} />{sizes.length > 1 && <span className="co-nsz">{sizes.length} sizes</span>}</div>
+      <div className="co-ph"><Img p={p} imgs={imgs} /></div>
       <div className="co-bd">
-        <span className="co-tag">{p.category}</span>
+        <div className="co-top"><span className="co-tag">{p.category}</span>{sizes.length > 1 && <span className="co-nsz">{sizes.length} sizes</span>}</div>
         {cur && <h3 className="co-nm" title={cur.name}>{cur.name}</h3>}
         <div className="co-grpnm" title={spec}>{spec}</div>
-        {(sizes.length > 1 || (sizes[0] && sizes[0] !== "—")) && (
+        {hasSizes && (
           <div className="co-szbox">
-            <div className="co-lbl">Size{sizes.length > 1 ? ` · ${sizes.length} options` : ""}</div>
-            <SizeChips sizes={sizes} size={size} onPick={pick} limit={chipLimit} />
+            <div className="co-lbl"><span>Size{sizes.length > 1 ? ` · ${sizes.length} options` : ""}</span>{!narrow && multi && <button type="button" className="co-multi" onClick={multi}>Several sizes ›</button>}</div>
+            <SizeChips sizes={sizes} size={size} onPick={pick} limit={chipLimit} narrow={narrow} onMulti={narrow ? multi : null} />
           </div>)}
-        {(variants.length > 1 || variants[0]?.variant) && (
-          <div>
-            <div className="co-lbl">Type / length</div>
-            <div className="co-chips">{variants.map(o => <button key={o.id} type="button" className={"co-sz" + (o.id === cur?.id ? " on" : "")} aria-pressed={o.id === cur?.id} onClick={() => setOptId(o.id)}>{o.variant || o.code || "Standard"}</button>)}</div>
-          </div>)}
+        {variants.length > 1 && (
+          <div className="co-chips co-var" aria-label="Type / length">{variants.map(o => <button key={o.id} type="button" className={"co-sz" + (o.id === cur?.id ? " on" : "")} aria-pressed={o.id === cur?.id} onClick={() => setOptId(o.id)}>{o.variant || o.code || "Standard"}</button>)}</div>)}
         {cur && (
           <div className="co-spec">
+            {narrow && p.family && <span className="co-fam">{p.family}</span>}
             {cur.code && <span><b>Code</b> {cur.code}</span>}
             <span><b>Unit</b> {cur.unit}</span>
             {cur.make && <span><b>Brand</b> {cur.make}</span>}
+            {variants.length === 1 && cur.variant && <span><b>Type</b> {cur.variant}</span>}
           </div>)}
-        {px?.rate != null && <div className="co-price">{inr(px.rate)} <span>/ {px.per}</span><small>{px.src === "last" ? "Last purchase rate" : `Net of list${px.disc ? ` − ${px.disc}%` : ""}`}</small></div>}
-      </div>
-      <div className="co-ft">
-        <div className="co-row">
-          <Qty value={qty} onChange={setQty} />
-          <button type="button" className="primary co-add" disabled={!cur} onClick={() => { const n = Number(qty); if (n > 0) { onAdd(p, cur, n); setQty("1"); } }}>Add</button>
+        <div className="co-buy">
+          {px?.rate != null && <div className="co-price">{inr(px.rate)} <span>/ {px.per}</span><small>{px.src === "last" ? "Last purchase rate" : `Net of list${px.disc ? ` − ${px.disc}%` : ""}`}</small></div>}
+          <div className="co-row">
+            <Qty value={qty} onChange={setQty} />
+            <button type="button" className="primary co-add" disabled={!cur} onClick={() => { const n = Number(qty); if (n > 0) { onAdd(p, cur, n); setQty("1"); } }}>Add</button>
+          </div>
+          {p.pending > 0 && <div className="co-pend">+{p.pending} catalogue size{p.pending > 1 ? "s" : ""} not yet in the Material Master — ask the office.</div>}
         </div>
-        {sizes.length > 1 && <button type="button" className="co-multi" onClick={() => onMulti(p)}>＋ Order several sizes</button>}
-        {p.pending > 0 && <div className="co-pend">{p.pending} more catalogue size{p.pending > 1 ? "s" : ""} can be ordered once added to the Material Master — ask the office.</div>}
       </div>
     </article>
   );
@@ -268,8 +289,8 @@ export default function CatalogueOrder({ mobile = false }) {
 
   const cartBody = (
     <>
-      <h2>Indent cart <span className={"co-badge" + (nItems ? "" : " z")}>{nItems}</span></h2>
-      <div className="co-sub">Each size is its own line, linked to its own Material Master item.{siteName ? <> Site: <b>{siteName}</b>.</> : null}</div>
+      <div className="co-chead"><h2>Indent cart <span className={"co-badge" + (nItems ? "" : " z")}>{nItems}</span></h2>
+      <div className="co-sub">Each size is its own line, linked to its own Material Master item.{siteName ? <> Site: <b>{siteName}</b>.</> : null}</div></div>
       <div className="co-lines">
         {!cart.length && <div className="co-empty">No items yet. Pick a size and tap Add.</div>}
         {Object.entries(cart.reduce((g, x) => { (g[x.product] = g[x.product] || []).push(x); return g; }, {})).map(([prod, xs]) => (
@@ -282,6 +303,7 @@ export default function CatalogueOrder({ mobile = false }) {
               </div>))}
           </div>))}
       </div>
+      <div className="co-cfoot">
       {showPx && cart.length > 0 && <div className="co-tot"><span>Est. value (net list price)</span><b>{inr(est)}</b></div>}
       <div className="co-tot"><span>Lines</span><b>{cart.length}</b></div>
       <div className="co-meta">
@@ -293,6 +315,7 @@ export default function CatalogueOrder({ mobile = false }) {
       <button type="button" className="primary co-send" disabled={busy || !cart.length || !mayRaise} onClick={send}>{busy ? "Sending…" : "Send indent"}</button>
       {!mayRaise && sess && <div className="co-sub" style={{ marginTop: 6 }}>Raising indents for this site needs the Indent “create” right.</div>}
       <div className="co-note">Only the ordered quantity is saved on the indent. Dispatched and received quantities are recorded separately on the challan and the site receipt.</div>
+      </div>
     </>
   );
 
@@ -330,7 +353,7 @@ export default function CatalogueOrder({ mobile = false }) {
           </div>
           <div className="co-cards">
             {!data && !err && Array.from({ length: 8 }, (_, i) => <SkeletonCard key={i} />)}
-            {list.slice(0, shown).map(p => <ProductCard key={p.id} p={p} imgs={imgs} prices={prices} showPx={showPx} firstHit={hitOf(p)} onAdd={addLine} onMulti={setMulti} chipLimit={narrow ? 6 : 8} />)}
+            {list.slice(0, shown).map(p => <ProductCard key={p.id} p={p} imgs={imgs} prices={prices} showPx={showPx} firstHit={hitOf(p)} onAdd={addLine} onMulti={setMulti} chipLimit={6} narrow={narrow} />)}
           </div>
           {data && !list.length && <div className="co-empty">Nothing matches. Try fewer words{filtered ? <>, or <button type="button" className="co-reset" onClick={clearFilters}>clear the filters</button></> : null}.</div>}
           {list.length > shown && <button type="button" ref={more} className="co-more" onClick={() => setShown(s => s + PAGE)}>Show more ({list.length - shown} left)</button>}
@@ -349,81 +372,88 @@ export default function CatalogueOrder({ mobile = false }) {
 
 // NB: no greater-than, ampersand or double-quote characters in this CSS — they break hydration of the inline style tag.
 const CSS = `
-.co-wrap{max-width:1500px;margin:0 auto;min-width:0;--co-line:#E6E8EB;--co-soft:#F6F7F9;--co-mut:var(--muted,#6E7780)}
+.co-wrap{max-width:1560px;margin:0 auto;min-width:0;--co-line:#E3E6EA;--co-soft:#F5F6F8;--co-mut:var(--muted,#6E7780);--co-ink:var(--text,#1F2933)}
 .co-mob{padding:12px 12px calc(72px + env(safe-area-inset-bottom,0px))}
 .co-mob.co-hascart{padding-bottom:calc(140px + env(safe-area-inset-bottom,0px))}
-.co-head{display:flex;gap:10px 16px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}
+.co-head{display:flex;gap:10px 16px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px;min-width:0}
 .co-ttl{min-width:0}
-.co-head h1{font-size:21px;margin:0;letter-spacing:-.01em}
+.co-head h1{font-size:22px;margin:0;letter-spacing:-.01em;line-height:1.2}
 .co-mob .co-ttl{padding-right:38px}
-.co-hr{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.co-hr select{width:auto;max-width:220px;min-height:38px}
-.co-link{font-size:13px;font-weight:600;color:var(--copper-deep);padding:8px 4px;white-space:nowrap}
-.co-cartbtn{display:inline-flex;align-items:center;gap:6px;min-height:38px;border-radius:10px;font-weight:600;position:relative}
+.co-hr{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}.co-hr select{width:auto;max-width:240px;min-height:40px;min-width:0}
+.co-link{font-size:13.5px;font-weight:600;color:var(--copper-deep);padding:10px 4px;white-space:nowrap}
+.co-cartbtn{display:inline-flex;align-items:center;gap:6px;min-height:40px;border-radius:10px;font-weight:600;white-space:nowrap}
 .co-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--copper);color:#fff;font-size:11.5px;font-weight:700;line-height:1;box-sizing:border-box}
 .co-badge.z{background:#E6E8EB;color:var(--co-mut)}
-.co-sub{color:var(--co-mut);font-size:12.5px}
-.co-grid2{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.co-sub{color:var(--co-mut);font-size:13px}
+.co-grid2{display:grid;grid-template-columns:minmax(0,1fr) clamp(280px,26%,340px);gap:20px;align-items:start}
 .co-main{min-width:0}
-.co-sbox{position:relative;display:flex;align-items:center}
-.co-sbox svg{position:absolute;left:13px;color:var(--co-mut);pointer-events:none}
-.co-search{width:100%;padding:11px 40px 11px 38px;border-radius:10px;font-size:15px;box-sizing:border-box;min-height:44px;-webkit-appearance:none;appearance:none}
+.co-sbox{position:relative;display:flex;align-items:center;min-width:0}
+.co-sbox svg{position:absolute;left:14px;color:var(--co-mut);pointer-events:none}
+.co-search{width:100%;padding:11px 44px 11px 40px;border-radius:10px;font-size:15px;box-sizing:border-box;min-height:46px;-webkit-appearance:none;appearance:none;min-width:0}
 .co-search::-webkit-search-cancel-button{display:none}
-.co-clr{position:absolute;right:5px;width:34px;height:34px;border:0;border-radius:999px;background:var(--co-soft);font-size:20px;line-height:1;padding:0;color:var(--co-mut)}
-.co-fchips{display:flex;gap:6px;overflow-x:auto;padding:10px 0 2px;-webkit-overflow-scrolling:touch;scrollbar-width:thin;min-width:0}
-.co-cats{padding-top:6px}
-.co-chip{white-space:nowrap;border-radius:999px;padding:6px 13px;font-size:13px;flex:0 0 auto;min-height:34px}
-.co-chip.sm{padding:4px 11px;font-size:12px;min-height:30px}
-.co-chip.on{background:var(--deep,#0F1419);color:#fff;border-color:var(--deep,#0F1419)}
-.co-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:10px 0}
-.co-count{color:var(--co-mut);font-size:12.5px}
+.co-clr{position:absolute;right:6px;width:34px;height:34px;border:0;border-radius:999px;background:var(--co-soft);font-size:20px;line-height:1;padding:0;color:var(--co-mut)}
+.co-fchips{display:flex;gap:8px;overflow-x:auto;padding:12px 0 2px;-webkit-overflow-scrolling:touch;scrollbar-width:none;min-width:0}
+.co-fchips::-webkit-scrollbar{display:none}
+.co-cats{padding-top:8px}
+.co-chip{white-space:nowrap;border-radius:999px;padding:7px 14px;font-size:13px;flex:0 0 auto;min-height:36px}
+.co-chip.sm{padding:5px 12px;font-size:12.5px;min-height:32px}
+.co-chip.on{background:var(--deep,#0F1419);color:#fff;border-color:var(--deep,#0F1419);font-weight:600}
+.co-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:12px 0}
+.co-count{color:var(--co-mut);font-size:13px}
 .co-sel{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
-.co-sel select{width:auto;max-width:180px;min-height:34px;font-size:13px;padding:5px 8px}
-.co-reset{border:0;background:none;color:var(--copper-deep);font-weight:600;font-size:12.5px;padding:4px 2px}
-.co-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;align-items:stretch}
-.co-card{background:#fff;border:1px solid var(--co-line);border-radius:12px;display:flex;flex-direction:column;min-width:0;transition:box-shadow .15s,border-color .15s}
-.co-card:hover{border-color:#D5D9DE;box-shadow:0 4px 14px rgba(15,20,25,.07)}
-.co-ph{aspect-ratio:4/3;background:#fff;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--co-line);border-radius:12px 12px 0 0;position:relative;overflow:hidden;padding:10px;box-sizing:border-box}
-.co-ph img{display:block;width:auto;height:auto;max-width:min(100%,var(--mw,100%));max-height:min(100%,var(--mh,100%));object-fit:contain}
-.co-noimg{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:3px;width:100%;height:100%;border-radius:8px;background:var(--co-soft);color:var(--co-mut);font-size:11.5px}
-.co-noimg b{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
-.co-skel{display:block;width:100%;height:100%;border-radius:8px;background:linear-gradient(90deg,#F1F3F5 25%,#E8EBEE 50%,#F1F3F5 75%);background-size:200% 100%;animation:co-sh 1.3s linear infinite}
+.co-sel select{width:auto;max-width:180px;min-height:36px;font-size:13px;padding:5px 8px}
+.co-reset{border:0;background:none;color:var(--copper-deep);font-weight:600;font-size:13px;padding:6px 2px}
+.co-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(max(220px,calc((100% - 48px) / 4)),1fr));gap:16px;align-items:stretch}
+.co-card{background:#fff;border:1px solid var(--co-line);border-radius:12px;display:flex;flex-direction:column;min-width:0;overflow:hidden;transition:box-shadow .15s,border-color .15s}
+.co-card:hover{border-color:#D0D5DB;box-shadow:0 6px 18px rgba(15,20,25,.08)}
+.co-ph{width:100%;aspect-ratio:4/3;background:#fff;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--co-line);position:relative;padding:10px;box-sizing:border-box;flex:0 0 auto}
+.co-ph{min-height:0;overflow:hidden}
+.co-ph img{position:absolute;inset:0;display:block;width:100%;height:100%;padding:inherit;box-sizing:border-box;object-fit:contain;object-position:center}
+.co-noimg{display:flex;align-items:center;justify-content:center;text-align:center;width:100%;height:100%;border-radius:8px;background:var(--co-soft);color:var(--co-mut);font-size:12px}
+.co-skel{display:block;width:100%;height:100%;border-radius:8px;background:linear-gradient(90deg,#F1F3F5 25%,#E7EAED 50%,#F1F3F5 75%);background-size:200% 100%;animation:co-sh 1.3s linear infinite}
 @keyframes co-sh{from{background-position:200% 0}to{background-position:-200% 0}}
-.co-sk .co-bd i{display:block;height:11px;border-radius:6px;background:#EEF0F3}.co-sk .co-bd i.s{width:60%}
-.co-nsz{position:absolute;top:8px;left:8px;background:rgba(255,255,255,.94);border:1px solid var(--co-line);border-radius:999px;font-size:11px;padding:2px 8px;color:var(--co-mut)}
-.co-bd{padding:10px 12px 4px;display:flex;flex-direction:column;gap:7px;flex:1;min-width:0}
-.co-tag{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--copper-deep);background:var(--copper-soft,#FEF2EC);border-radius:6px;padding:2px 7px;align-self:flex-start;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;box-sizing:border-box}
-.co-nm{font-weight:650;font-size:14px;line-height:1.32;margin:0;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.co-grpnm{font-size:12px;color:var(--co-mut);line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.co-lbl{font-size:10.5px;color:var(--co-mut);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;font-weight:600}
+.co-sk .co-bd i{display:block;height:12px;border-radius:6px;background:#EEF0F3}.co-sk .co-bd i.s{width:60%}
+.co-bd{padding:12px 14px 14px;display:flex;flex-direction:column;gap:8px;flex:1 1 auto;min-width:0}
+.co-top{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
+.co-tag{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--copper-deep);background:var(--copper-soft,#FEF2EC);border-radius:6px;padding:2px 8px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.co-nsz{font-size:11.5px;color:var(--co-mut);white-space:nowrap;flex:0 0 auto}
+.co-nm{font-weight:650;font-size:15px;line-height:1.35;margin:0;color:var(--co-ink);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.7em}
+.co-grpnm{font-size:12.5px;color:var(--co-mut);line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.co-szbox{min-width:0}
+.co-lbl{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--co-mut);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;font-weight:600}
 .co-chips{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
-.co-sz{border-radius:8px;padding:4px 9px;font-size:12.5px;min-height:32px;min-width:44px;max-width:100%;overflow-wrap:anywhere;background:#fff}
+.co-sz{border-radius:8px;padding:5px 10px;font-size:13px;min-height:34px;min-width:46px;max-width:100%;overflow-wrap:anywhere;background:#fff;flex:0 0 auto;line-height:1.2}
 .co-sz.on{border-color:var(--copper);background:var(--copper-soft,#FEF2EC);color:var(--copper-deep);font-weight:700;box-shadow:inset 0 0 0 1px var(--copper)}
-.co-szmore{border:1px dashed #C9CED4;border-radius:8px;padding:4px 9px;font-size:12px;min-height:32px;background:#fff;color:var(--copper-deep);font-weight:600}
-.co-spec{display:flex;flex-wrap:wrap;gap:3px 12px;font-size:12px;color:var(--text,#1F2933);min-width:0;padding-top:2px}
-.co-spec span{overflow-wrap:anywhere;min-width:0}.co-spec b{font-weight:600;color:var(--co-mut);font-size:11px}
-.co-price{font-weight:750;font-size:17px;line-height:1.2;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 4px}.co-price span{font-weight:500;font-size:12.5px;color:var(--co-mut)}
-.co-price small{flex-basis:100%;font-size:11px;font-weight:400;color:var(--co-mut)}
-.co-ft{padding:6px 12px 12px;display:flex;flex-direction:column;gap:8px;margin-top:auto}
-.co-row{display:flex;gap:8px;align-items:center;min-width:0}
-.co-qty{display:flex;border:1px solid var(--co-line);border-radius:8px;overflow:hidden;flex:0 0 auto;background:#fff}
-.co-qty button{width:32px;border:0;border-radius:0;background:var(--co-soft);font-size:17px;padding:0;min-height:38px}
-.co-qty input{width:42px;border:0;border-radius:0;text-align:center;padding:6px 2px;min-width:0}
-.co-add{flex:1;font-weight:700;min-height:40px;min-width:56px;border-radius:9px}
-.co-multi{border:0;background:none;color:var(--copper-deep);font-weight:600;font-size:12.5px;padding:0;text-align:left;align-self:flex-start}
-.co-pend{font-size:11.5px;color:var(--co-mut);border-top:1px dashed var(--co-line);padding-top:6px}
-.co-more{width:100%;margin-top:12px;min-height:42px}
+.co-szmore{border:1px dashed #C4CAD1;border-radius:8px;padding:5px 10px;font-size:12.5px;min-height:34px;background:#fff;color:var(--copper-deep);font-weight:600;white-space:nowrap;flex:0 0 auto}
+.co-multi{border:0;background:none;color:var(--copper-deep);font-weight:600;font-size:12.5px;padding:0;text-transform:none;letter-spacing:0;white-space:nowrap}
+.co-spec{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:12.5px;color:var(--co-ink);min-width:0;line-height:1.45}
+.co-spec span{overflow-wrap:anywhere;min-width:0}.co-spec b{font-weight:500;color:var(--co-mut)}
+.co-buy{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding-top:2px;min-width:0}
+.co-price{font-weight:750;font-size:18px;line-height:1.2;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 4px;color:var(--co-ink)}.co-price span{font-weight:500;font-size:13px;color:var(--co-mut)}
+.co-price small{flex-basis:100%;font-size:12px;font-weight:400;color:var(--co-mut);margin-top:2px}
+.co-row{display:flex;gap:8px;align-items:stretch;min-width:0}
+.co-qty{display:flex;border:1px solid var(--co-line);border-radius:9px;overflow:hidden;flex:0 0 auto;background:#fff}
+.co-qty button{width:36px;border:0;border-radius:0;background:var(--co-soft);font-size:18px;padding:0;min-height:42px}
+.co-qty input{width:44px;border:0;border-radius:0;text-align:center;padding:6px 2px;min-width:0;font-size:14px}
+.co-add{flex:1 1 auto;font-weight:700;min-height:44px;min-width:56px;border-radius:9px;font-size:14px}
+.co-pend{font-size:11.5px;color:var(--co-mut);line-height:1.35}
+.co-more{width:100%;margin-top:14px;min-height:44px}
 .co-empty{color:var(--co-mut);font-size:13px;padding:14px 4px}
-.co-cart{background:#fff;border:1px solid var(--co-line);border-radius:12px;padding:14px;position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto;outline:none}
+.co-cart{background:#fff;border:1px solid var(--co-line);border-radius:12px;position:sticky;top:0;max-height:calc(100vh - 48px);display:flex;flex-direction:column;overflow:hidden;outline:none;min-width:0}
+.co-chead{padding:14px 16px 8px;flex:0 0 auto}
 .co-cart h2{font-size:16px;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+.co-cart .co-lines{flex:1 1 auto;overflow:auto;min-height:72px;padding:0 16px;margin:0}
+.co-cart .co-cfoot{flex:0 0 auto;border-top:1px solid var(--co-line);padding:10px 16px 14px}
 .co-lines{margin:10px 0}
 .co-grp h4{font-size:12.5px;margin:10px 0 4px}
 .co-ln{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 8px;align-items:center;padding:6px 0;border-bottom:1px dashed var(--co-line)}
-.co-ls{font-weight:600;font-size:13px;overflow-wrap:anywhere}.co-lc{font-size:11.5px;color:var(--co-mut);overflow-wrap:anywhere}
-.co-rm{grid-column:1/-1;justify-self:start;border:0;background:none;color:var(--red,#b91c1c);font-size:12px;padding:0}
-.co-tot{display:flex;justify-content:space-between;font-size:13px;padding:4px 0}
+.co-ln .co-qty button{width:32px;min-height:36px}.co-ln .co-qty input{width:44px}
+.co-ls{font-weight:600;font-size:13px;overflow-wrap:anywhere}.co-lc{font-size:12px;color:var(--co-mut);overflow-wrap:anywhere}
+.co-rm{grid-column:1/-1;justify-self:start;border:0;background:none;color:var(--red,#b91c1c);font-size:12.5px;padding:0}
+.co-tot{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}
 .co-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
 .co-meta label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--co-mut);min-width:0}
-.co-meta input,.co-meta select{width:100%;box-sizing:border-box}
+.co-meta input,.co-meta select{width:100%;box-sizing:border-box;min-height:38px}
 .co-wide{grid-column:1/-1}
 .co-send{width:100%;margin-top:10px;min-height:44px;font-weight:700}
 .co-note{font-size:11.5px;color:var(--co-mut);margin-top:8px}
@@ -437,20 +467,20 @@ const CSS = `
 .co-sheet{background:#fff;width:100%;max-width:640px;max-height:88vh;border-radius:14px 14px 0 0;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px)}
 .co-sheet header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--co-line);gap:8px}
 .co-sheet h3{margin:0;font-size:15px}
-.co-x{border:0;background:none;font-size:24px;line-height:1;padding:2px 8px}
+.co-x{border:0;background:none;font-size:24px;line-height:1;padding:2px 8px;min-width:40px;min-height:40px}
 .co-st{overflow:auto;padding:8px 14px}
 .co-st table{width:100%;font-size:13px}.co-st td,.co-st th{padding:6px 4px}
 .co-sheet footer{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-top:1px solid var(--co-line);gap:8px}
 @media (min-width:700px){.co-modal{align-items:center}.co-sheet{border-radius:14px}}
-@media (min-width:1024px){.co-cbl{display:inline}}
 @media (max-width:1023px){
+  .co-wrap{overflow-x:hidden;overflow-x:clip}
   .co-grid2{grid-template-columns:minmax(0,1fr)}
   .co-cart{display:none}
   .co-hascart{padding-bottom:84px}
   .co-mob.co-hascart{padding-bottom:calc(140px + env(safe-area-inset-bottom,0px))}
   .co-mbar{display:flex;position:fixed;left:12px;right:78px;bottom:calc(14px + env(safe-area-inset-bottom,0px));justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid var(--co-line);border-radius:14px;padding:8px 8px 8px 14px;box-shadow:0 6px 22px rgba(15,20,25,.14);z-index:120;max-width:560px;margin:0 auto;box-sizing:border-box}
   .co-mbar b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-  .co-mbar button{min-height:40px;padding:8px 16px;font-weight:700;white-space:nowrap;border-radius:10px}
+  .co-mbar button{min-height:42px;padding:8px 16px;font-weight:700;white-space:nowrap;border-radius:10px;flex:0 0 auto}
   .co-toast{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
   .co-cartsheet .co-st h2{display:none}
 }
@@ -463,25 +493,51 @@ body.has-global-mnav .co-toast,.co-mob .co-toast{bottom:calc(132px + env(safe-ar
   .co-toast{width:calc(100vw - 24px)}
 }
 @media (max-width:560px){
-  .co-head{align-items:flex-start}
-  .co-head h1{font-size:19px}
+  .co-head{align-items:flex-start;margin-bottom:10px}
+  .co-head h1{font-size:20px}
   .co-ttl .co-sub{display:none}
-  .co-hr{width:100%;flex-wrap:nowrap}.co-hr select{flex:1;max-width:none;min-width:0}
+  .co-hr{width:100%;flex-wrap:nowrap}.co-hr select{flex:1 1 auto;max-width:none}
   .co-cbl{display:none}
-  .co-cards{grid-template-columns:minmax(0,1fr);gap:10px}
-  .co-card{display:grid;grid-template-columns:108px minmax(0,1fr)}
-  .co-ph{grid-column:1;grid-row:1;aspect-ratio:4/3;width:108px;align-self:start;margin:12px 0 0 10px;border:1px solid var(--co-line);border-radius:10px;padding:6px}
-  .co-nsz{display:none}
-  .co-bd{grid-column:2;grid-row:1;padding:12px 12px 4px 12px;gap:6px}
-  .co-ft{grid-column:1/-1;grid-row:2;padding:6px 10px 12px}
-  .co-nm{font-size:13.5px}
-  .co-sz{min-height:34px}
+  .co-fchips{gap:6px;padding-top:10px}
+  .co-bar{margin:10px 0 8px}
   .co-sel select{max-width:150px}
+  .co-cards{grid-template-columns:minmax(0,1fr);gap:10px}
+  .co-card{display:grid;grid-template-columns:112px minmax(0,1fr);column-gap:12px;padding:10px;align-items:start}
+  .co-ph{width:112px;border:1px solid var(--co-line);border-radius:8px;padding:4px}
+  .co-bd{padding:0;gap:4px;min-height:100%}
+  .co-top,.co-lbl{display:none}
+  .co-nm{font-size:14px;min-height:0;line-height:1.28}
+  .co-grpnm{display:none}
+  .co-fam{font-weight:600;color:var(--co-ink)}
+  .co-szrow{display:flex;align-items:center;gap:6px;min-width:0}
+  .co-szrow .co-chips{flex:1 1 auto;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:1px}
+  .co-szrow .co-chips::-webkit-scrollbar{display:none}
+  .co-szrow.open{align-items:flex-start}
+  .co-szrow.open .co-chips{flex-wrap:wrap;overflow:visible}
+  .co-szrow .co-multi{border:1px dashed #C4CAD1;border-radius:8px;padding:4px 9px;min-height:32px;flex:0 0 auto}
+  .co-szrow .co-sz{max-width:none;white-space:nowrap}
+  .co-szrow.open .co-sz{white-space:normal;max-width:100%}
+  .co-sz,.co-szmore{min-height:32px;padding:3px 9px;font-size:12.5px;min-width:40px}
+  .co-szrow.open .co-multi{border:0;padding:6px 2px;min-height:0}
+  .co-var{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .co-spec{font-size:12px;line-height:1.35;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .co-spec span{margin-right:10px}
+  .co-buy{gap:5px;padding-top:2px}
+  .co-price{font-size:16px;flex-wrap:nowrap;white-space:nowrap;min-width:0}.co-price span{font-size:12px}
+  .co-price small{flex:0 1 auto;margin:0 0 0 4px;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .co-row{gap:6px}
+  .co-qty button{width:32px;min-height:38px;font-size:17px}
+  .co-qty input{width:38px}
+  .co-add{min-height:40px;min-width:48px}
   .co-c2{display:none}
 }
-@media (max-width:374px){
-  .co-card{grid-template-columns:88px minmax(0,1fr)}
-  .co-ph{width:88px;margin-left:8px}
-  .co-bd{padding:10px 10px 4px}
+@media (min-width:390px) and (max-width:560px){
+  .co-card{grid-template-columns:120px minmax(0,1fr)}
+  .co-ph{width:120px}
+}
+@media (max-width:359px){
+  .co-card{grid-template-columns:92px minmax(0,1fr);column-gap:10px}
+  .co-ph{width:92px}
+  .co-qty button{width:30px}.co-qty input{width:34px}
 }
 `;
