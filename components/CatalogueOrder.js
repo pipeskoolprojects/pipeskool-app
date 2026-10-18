@@ -13,7 +13,6 @@ import { getCatalogue, getCataloguePrices, catalogueImage, loadCatalogueImages, 
 
 const PAGE = 24;
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
-const ICON = { Pipes: "🧪", Fittings: "🔩", Valves: "🚰", Accessories: "🧰" };
 const CART_KEY = "psk_catalogue_cart_v1";
 const lab = o => o.size + (o.variant ? " · " + o.variant : "");
 const loadCart = () => { try { const v = JSON.parse(sessionStorage.getItem(CART_KEY) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
@@ -24,7 +23,7 @@ function Img({ p, imgs }) {
   const src = catalogueImage(p.image, imgs);
   return src && !bad
     ? <img src={src} alt="" loading="lazy" onError={() => setBad(true)} />
-    : <span className="co-ico" aria-hidden="true">{ICON[p.category] || "📦"}</span>;
+    : <span className="co-noimg"><b>{p.category}</b>{p.name}</span>;   // neutral placeholder: the product's own name, no icon
 }
 
 function Qty({ value, onChange, min = 1, label }) {
@@ -54,7 +53,8 @@ function ProductCard({ p, imgs, prices, showPx, firstHit, onAdd, onMulti }) {
       <div className="co-ph"><Img p={p} imgs={imgs} /><span className="co-nsz">{sizes.length} size{sizes.length > 1 ? "s" : ""}</span></div>
       <div className="co-bd">
         <span className="co-tag">{p.family} · {p.category}</span>
-        <div className="co-nm">{p.name}</div>
+        <div className="co-grpnm">{p.name}</div>
+        {cur && <div className="co-nm" title="Material Master name">{cur.name}</div>}
         <div>
           <div className="co-lbl">Size</div>
           {sizes.length <= 8
@@ -69,10 +69,11 @@ function ProductCard({ p, imgs, prices, showPx, firstHit, onAdd, onMulti }) {
         {cur && (
           <div className="co-spec">
             {cur.code && <><b>Code</b><span>{cur.code}</span></>}
-            <b>Unit</b><span>{cur.unit}{cur.basis === "per_metre" ? " (per metre)" : ""}</span>
-            <span className="co-full">{cur.name}</span>
+            {cur.size && cur.size !== "—" && <><b>Size</b><span>{cur.size}</span></>}
+            <b>Unit</b><span>{cur.unit}</span>
+            {cur.make && <><b>Brand</b><span>{cur.make}</span></>}
           </div>)}
-        {px?.net != null && <div className="co-price">{inr(px.net)} <span>/ {cur.unit === "Rmt" || cur.basis === "per_metre" ? "pc (list)" : cur.unit} · list {inr(px.list)}{px.disc ? ` − ${px.disc}%` : ""}</span></div>}
+        {px?.rate != null && <div className="co-price">{inr(px.rate)} <span>/ {px.per}{px.src === "last" ? " · last purchase rate" : ` · net of list${px.disc ? ` − ${px.disc}%` : ""}`}</span></div>}
         <div className="co-row">
           <Qty value={qty} onChange={setQty} />
           <button type="button" className="primary co-add" disabled={!cur} onClick={() => { const n = Number(qty); if (n > 0) { onAdd(p, cur, n); setQty("1"); } }}>Add</button>
@@ -93,9 +94,9 @@ function MultiSheet({ p, prices, showPx, onClose, onAdd }) {
         <header><h3>{p.name}</h3><button type="button" className="co-x" aria-label="Close" onClick={onClose}>×</button></header>
         <div className="co-st">
           <table>
-            <thead><tr><th>Size</th><th className="co-c2">Code</th><th>Unit</th>{showPx && <th>Net ₹</th>}<th>Qty</th></tr></thead>
+            <thead><tr><th>Size</th><th className="co-c2">Material Master item</th><th>Unit</th>{showPx && <th>Net ₹</th>}<th>Qty</th></tr></thead>
             <tbody>{p.opts.map(o => (
-              <tr key={o.id}><td><b>{lab(o)}</b></td><td className="co-c2">{o.code}</td><td>{o.unit}</td>{showPx && <td>{prices[o.item_id]?.net != null ? inr(prices[o.item_id].net) : "—"}</td>}
+              <tr key={o.id}><td><b>{lab(o)}</b></td><td className="co-c2">{o.name}</td><td>{o.unit}</td>{showPx && <td>{prices[o.item_id]?.rate != null ? inr(prices[o.item_id].rate) : "—"}</td>}
                 <td><Qty value={q[o.id] ?? "0"} min={0} label={"Quantity for " + lab(o)} onChange={v => setQ(x => ({ ...x, [o.id]: v }))} /></td></tr>
             ))}</tbody>
           </table>
@@ -136,7 +137,7 @@ export default function CatalogueOrder({ mobile = false }) {
   useEffect(() => { if (loaded.current) saveCart(cart); }, [cart]);
   useEffect(() => {
     if (canPx !== true || !data?.products?.length) return;
-    getCataloguePrices(data.products.flatMap(p => p.opts.map(o => o.item_id))).then(setPrices).catch(() => setPrices({}));
+    getCataloguePrices(data.products.flatMap(p => p.opts)).then(setPrices).catch(() => setPrices({}));
   }, [canPx, data]);
 
   const showPx = canPx === true;
@@ -157,12 +158,12 @@ export default function CatalogueOrder({ mobile = false }) {
     setCart(c => {
       const ex = c.find(x => x.item_id === o.item_id);
       if (ex) return c.map(x => x === ex ? { ...x, qty: String(Math.round((Number(x.qty) + n) * 1000) / 1000) } : x);
-      return [...c, { item_id: o.item_id, product: p.name, label: lab(o), code: o.code, unit: o.unit, name: o.name, item_type: o.item_type, qty: String(n) }];
+      return [...c, { item_id: o.item_id, link_id: o.id, product: p.name, label: lab(o), code: o.code, unit: o.unit, name: o.name, item_type: o.item_type, qty: String(n) }];
     });
   }
   const setLineQty = (id, v) => setCart(c => c.map(x => x.item_id === id ? { ...x, qty: v } : x));
   const removeLine = id => setCart(c => c.filter(x => x.item_id !== id));
-  const est = cart.reduce((s, x) => s + (prices[x.item_id]?.net || 0) * (Number(x.qty) || 0), 0);
+  const est = cart.reduce((s, x) => s + (prices[x.item_id]?.rate || 0) * (Number(x.qty) || 0), 0);
 
   async function send() {
     setSendErr(""); setDone(null);
@@ -192,7 +193,7 @@ export default function CatalogueOrder({ mobile = false }) {
           <div key={prod} className="co-grp"><h4>{prod}</h4>
             {xs.map(x => (
               <div key={x.item_id} className="co-ln">
-                <div className="co-lt"><div className="co-ls">{x.label}</div><div className="co-lc">{x.code ? x.code + " · " : ""}{x.unit}{showPx && prices[x.item_id]?.net != null ? " · " + inr(prices[x.item_id].net * (Number(x.qty) || 0)) : ""}</div></div>
+                <div className="co-lt"><div className="co-ls">{x.name}</div><div className="co-lc">{x.code ? x.code + " · " : ""}{x.unit}{showPx && prices[x.item_id]?.rate != null ? " · " + inr(prices[x.item_id].rate * (Number(x.qty) || 0)) : ""}</div></div>
                 <Qty value={x.qty} min={0.001} onChange={v => setLineQty(x.item_id, v)} />
                 <button type="button" className="co-rm" aria-label={"Remove " + x.label} onClick={() => removeLine(x.item_id)}>Remove</button>
               </div>))}
@@ -270,11 +271,13 @@ const CSS = `
 .co-card{background:#fff;border:1px solid var(--border);border-radius:12px;display:flex;flex-direction:column;min-width:0}
 .co-ph{aspect-ratio:16/10;background:#fafbfc;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--border);border-radius:12px 12px 0 0;position:relative;overflow:hidden}
 .co-ph img{max-width:80%;max-height:86%;object-fit:contain}
-.co-ico{font-size:40px;opacity:.55}
+.co-noimg{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:4px;padding:10px 14px;color:var(--muted,#6E7780);font-size:12px;line-height:1.35;overflow:hidden;max-height:100%}
+.co-noimg b{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;opacity:.8}
 .co-nsz{position:absolute;top:8px;left:8px;background:#fff;border:1px solid var(--border);border-radius:999px;font-size:11px;padding:2px 8px;color:var(--muted,#6E7780)}
 .co-bd{padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;flex:1;min-width:0}
 .co-tag{font-size:11px;color:var(--copper-deep);background:var(--copper-soft,#FEF2EC);border-radius:6px;padding:2px 7px;align-self:flex-start}
-.co-nm{font-weight:650;font-size:14.5px;line-height:1.3;overflow-wrap:anywhere}
+.co-grpnm{font-size:12px;color:var(--muted,#6E7780);line-height:1.3;overflow-wrap:anywhere}
+.co-nm{font-weight:650;font-size:14px;line-height:1.3;overflow-wrap:anywhere}
 .co-lbl{font-size:11px;color:var(--muted,#6E7780);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
 .co-chips{display:flex;flex-wrap:wrap;gap:6px}
 .co-sz{border-radius:8px;padding:5px 9px;font-size:12.5px;min-height:32px}
