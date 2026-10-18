@@ -373,7 +373,7 @@ export default function CatalogueOrder({ mobile = false }) {
 // NB: no greater-than, ampersand or double-quote characters in this CSS — they break hydration of the inline style tag.
 const CSS = `
 .co-wrap{max-width:1560px;margin:0 auto;min-width:0;--co-line:#E3E6EA;--co-soft:#F5F6F8;--co-mut:var(--muted,#6E7780);--co-ink:var(--text,#1F2933)}
-.co-mob{padding:12px 12px calc(72px + env(safe-area-inset-bottom,0px))}
+.co-mob{padding:12px 12px calc(72px + env(safe-area-inset-bottom,0px));width:100%;max-width:100vw;box-sizing:border-box}
 .co-mob.co-hascart{padding-bottom:calc(140px + env(safe-area-inset-bottom,0px))}
 .co-head{display:flex;gap:10px 16px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px;min-width:0}
 .co-ttl{min-width:0}
@@ -496,7 +496,7 @@ body.has-global-mnav .co-toast,.co-mob .co-toast{bottom:calc(132px + env(safe-ar
   .co-head{align-items:flex-start;margin-bottom:10px}
   .co-head h1{font-size:20px}
   .co-ttl .co-sub{display:none}
-  .co-hr{width:100%;flex-wrap:nowrap}.co-hr select{flex:1 1 auto;max-width:none}
+  .co-hr{width:100%;flex-wrap:nowrap}.co-hr select{flex:1 1 0;width:0;min-width:0;max-width:none;text-overflow:ellipsis}
   .co-cbl{display:none}
   .co-fchips{gap:6px;padding-top:10px}
   .co-bar{margin:10px 0 8px}
