@@ -9,7 +9,7 @@ import { getSession, setCurrentSite, can } from "@/lib/auth";
 import { getSitesList } from "@/lib/mobile";
 import { createIndent } from "@/lib/stock";
 import { useCanViewPrices } from "@/lib/prices";
-import { getCatalogue, getCataloguePrices, catalogueImage, matchProduct, searchWords } from "@/lib/catalogue";
+import { getCatalogue, getCataloguePrices, catalogueImage, loadCatalogueImages, matchProduct, searchWords } from "@/lib/catalogue";
 
 const PAGE = 24;
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -19,9 +19,9 @@ const lab = o => o.size + (o.variant ? " · " + o.variant : "");
 const loadCart = () => { try { const v = JSON.parse(sessionStorage.getItem(CART_KEY) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
 const saveCart = c => { try { sessionStorage.setItem(CART_KEY, JSON.stringify(c)); } catch { /* private mode */ } };
 
-function Img({ p }) {
+function Img({ p, imgs }) {
   const [bad, setBad] = useState(false);
-  const src = catalogueImage(p.image);
+  const src = catalogueImage(p.image, imgs);
   return src && !bad
     ? <img src={src} alt="" loading="lazy" onError={() => setBad(true)} />
     : <span className="co-ico" aria-hidden="true">{ICON[p.category] || "📦"}</span>;
@@ -39,7 +39,7 @@ function Qty({ value, onChange, min = 1, label }) {
   );
 }
 
-function ProductCard({ p, prices, showPx, firstHit, onAdd, onMulti }) {
+function ProductCard({ p, imgs, prices, showPx, firstHit, onAdd, onMulti }) {
   const sizes = useMemo(() => [...new Set(p.opts.map(o => o.size))], [p]);
   const [size, setSize] = useState(firstHit?.size || sizes[0]);
   const variants = p.opts.filter(o => o.size === size);
@@ -51,7 +51,7 @@ function ProductCard({ p, prices, showPx, firstHit, onAdd, onMulti }) {
   const pick = s => { setSize(s); const v = p.opts.find(o => o.size === s); setOptId(v?.id); };
   return (
     <div className="co-card">
-      <div className="co-ph"><Img p={p} /><span className="co-nsz">{sizes.length} size{sizes.length > 1 ? "s" : ""}</span></div>
+      <div className="co-ph"><Img p={p} imgs={imgs} /><span className="co-nsz">{sizes.length} size{sizes.length > 1 ? "s" : ""}</span></div>
       <div className="co-bd">
         <span className="co-tag">{p.family} · {p.category}</span>
         <div className="co-nm">{p.name}</div>
@@ -121,6 +121,7 @@ export default function CatalogueOrder({ mobile = false }) {
   const [cartOpen, setCartOpen] = useState(false);
   const [busy, setBusy] = useState(false); const [done, setDone] = useState(null); const [sendErr, setSendErr] = useState("");
   const [prices, setPrices] = useState({});
+  const [imgs, setImgs] = useState(null);   // product pictures: one file, loaded once (public/catalogue-images.json)
   const canPx = useCanViewPrices();
   const loaded = useRef(false);
 
@@ -130,6 +131,7 @@ export default function CatalogueOrder({ mobile = false }) {
     setCart(loadCart()); loaded.current = true;
     getSitesList().then(setSites).catch(() => setSites([]));
     getCatalogue().then(setData).catch(e => setErr(e.message || "Could not load the catalogue."));
+    loadCatalogueImages().then(setImgs);
   }, []);
   useEffect(() => { if (loaded.current) saveCart(cart); }, [cart]);
   useEffect(() => {
@@ -231,7 +233,7 @@ export default function CatalogueOrder({ mobile = false }) {
           <div className="co-fchips co-cats">{cats.map(c => <button key={c} type="button" className={"co-chip sm" + (c === cat ? " on" : "")} onClick={() => setCat(c)}>{c}</button>)}</div>
           <div className="co-count">{data ? `${list.length} product${list.length === 1 ? "" : "s"} · ${list.reduce((s, p) => s + p.opts.length, 0)} orderable sizes` : "Loading the catalogue…"}</div>
           <div className="co-cards">
-            {list.slice(0, shown).map(p => <ProductCard key={p.id} p={p} prices={prices} showPx={showPx} firstHit={hitOf(p)} onAdd={addLine} onMulti={setMulti} />)}
+            {list.slice(0, shown).map(p => <ProductCard key={p.id} p={p} imgs={imgs} prices={prices} showPx={showPx} firstHit={hitOf(p)} onAdd={addLine} onMulti={setMulti} />)}
           </div>
           {data && !list.length && <div className="co-empty">Nothing matches. Try fewer words, or search the full Material Master on the indent screen.</div>}
           {list.length > shown && <button type="button" className="co-more" onClick={() => setShown(s => s + PAGE)}>Show more ({list.length - shown} left)</button>}
