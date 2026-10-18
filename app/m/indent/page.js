@@ -85,6 +85,7 @@ export default function IndentScreen() {
           <button className={tab === "track" ? "primary" : ""} onClick={() => setTab("track")} style={{ flex: 1 }}>Track status</button>
           <button className={tab === "new" ? "primary" : ""} onClick={() => setTab("new")} style={{ flex: 1 }}>New indent</button>
         </div>
+        {!editId && <a href="/m/order" style={{ display: "block", textAlign: "center", border: "1px dashed var(--border)", borderRadius: 8, padding: "8px 10px", marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--copper-deep)" }}>🛒 Order from the Astral catalogue (pick product → size)</a>}{/* update464 */}
         {msg && <div className="note green">{msg}</div>}
         {err && <div className="note red">{err}</div>}
 

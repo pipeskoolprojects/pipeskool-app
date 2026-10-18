@@ -19,6 +19,7 @@ export const ROUTES = {
   indent:    ["/procure",   "/m/indent"],
   stock:     ["/stock",     "/m/stock"],
   deliveries: ["/stock/deliveries", "/m/deliveries"],        // update462: site receiving
+  order:     ["/order",     "/m/order"],                     // update464: catalogue ordering
   challans:  ["/stock/challans", "/stock/challans"],          // update462: office challan list (no phone shell)
   dpr:       ["/dpr",       "/m/dpr"],
   // update364: these two have NO /m/ shell, so both entries point at the same route rather
