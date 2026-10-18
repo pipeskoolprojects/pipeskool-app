@@ -25,6 +25,7 @@ const more = [
   { href: "/m/report", ico: "📊", key: "nav_report", show: s => s?.role === "director" },   // update227: moved off director tab bar
   { href: "/m/stock", ico: "📦", key: "nav_stock", show: s => s?.role === "director" },     // update227: moved off director tab bar
   { href: "/m/indent", ico: "🧾", key: "m_indent", show: s => canSeeModuleAnySite(s, "indent") },
+  { href: "/m/order", ico: "🛒", key: "m_order", show: s => canSeeModuleAnySite(s, "indent") },   // update464
   { href: "/m/deliveries", ico: "📥", key: "m_deliveries", show: s => canSeeModuleAnySite(s, "stock") || canSeeModuleAnySite(s, "indent") },   // update462
   { href: "/m/assets", ico: "🔧", key: "m_assets", show: s => canSeeModuleAnySite(s, "assets") },
   { href: "/m/rentals", ico: "🚜", key: "m_rentals", show: s => canSeeModuleAnySite(s, "rentals") },

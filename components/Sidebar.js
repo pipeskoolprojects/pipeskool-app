@@ -21,6 +21,7 @@ const GROUPS = [
     ] },
     { label: "Material & Procurement", items: [
       { href: "/procure", label: "Indent & Purchase", module: "indent" },
+      { href: "/order", label: "Order Materials (Catalogue)", module: "indent" },   // update464
       { href: "/stock", label: "Material Stock & Inventory", module: "stock" },
       { href: "/stock/grn", label: "GRN Register", module: "stock" }, { href: "/stock/challans", label: "Delivery Challans", module: "stock" },
       { href: "/stock/deliveries", label: "Site Deliveries & Receiving", module: "stock" },   // update462
