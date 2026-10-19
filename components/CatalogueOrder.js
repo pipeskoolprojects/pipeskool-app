@@ -1,173 +1,165 @@
 "use client";
 // update464: ORDER MATERIALS (Astral catalogue, grouped by size) — one screen for phone and desktop.
-// update465: shop-style layout — 4:3 picture boxes, cart count in the header, search clear button, brand / size
-// filters, collapsible size chips, "Added" toast, phone cards with the picture on the left and a cart bar above the nav.
-// update466: layout re-proportioned — catalogue ~74% / cart clamp(280px,26%,340px), cards 220–310 px (3–4 per row),
-// pictures fill a full-width 4:3 box; phone cards ~185 px high with a 112–120 px picture on the left; no sideways page scroll.
-// Each product is one card; picking a size picks its own Material Master item (its own stock, its own PO line).
-// The cart raises an ordinary site indent through createIndent (same numbering, duplicate guard, BOQ-kit check,
-// notifications). Only the ORDERED quantity is saved — dispatched / received stay with challans and receipts.
-// Prices: shown only when the database says this login has Price access (update 463).
+// update468: quick-commerce layout (reference: pipeskool-catalog-reference.html). Phone: compact header (back · category · search · filter), a fixed left category
+// rail and a two-column product grid that scroll independently, ADD pill on the picture, sizes in a bottom sheet.
+// Desktop: same cards in a 4–6 column grid with a horizontal category bar; the cart opens as a side drawer.
+// Material Master is the source of truth: every size is its own item_master row (own stock, own PO line); names, sizes,
+// units, brands and types come from it. The cart raises an ordinary site indent through createIndent (same numbering,
+// duplicate guard, BOQ-kit check, notifications). Only the ORDERED quantity is saved.
+// Prices: requested only when the database says this login has Price access (update 463); site roles never get them.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { getSession, setCurrentSite, can } from "@/lib/auth";
 import { getSitesList } from "@/lib/mobile";
 import { createIndent } from "@/lib/stock";
 import { useCanViewPrices } from "@/lib/prices";
 import { getCatalogue, getCataloguePrices, catalogueImage, loadCatalogueImages, matchProduct, searchWords } from "@/lib/catalogue";
 
-const PAGE = 24;
+const PAGE = 30;
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 const CART_KEY = "psk_catalogue_cart_v1";
 const lab = o => o.size + (o.variant ? " · " + o.variant : "");
 const loadCart = () => { try { const v = JSON.parse(sessionStorage.getItem(CART_KEY) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
 const saveCart = c => { try { sessionStorage.setItem(CART_KEY, JSON.stringify(c)); } catch { /* private mode */ } };
 const plural = (n, w) => n + " " + w + (n === 1 ? "" : "s");
-// natural size order: 15mm, 20mm, 1/2", 110mm …
 const sizeNum = s => { const m = String(s).match(/(\d+(?:\.\d+)?)(?:\s*\/\s*(\d+))?/); return m ? (m[2] ? Number(m[1]) / Number(m[2]) : Number(m[1])) : 1e9; };
 const bySize = (a, b) => sizeNum(a) - sizeNum(b) || String(a).localeCompare(String(b));
 const brandKey = s => String(s || "").trim().toUpperCase();
+const esc = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// Card title: one size → its Material Master name; several sizes → the Master name of the first size with that size taken out
+// (e.g. "Pipe - CPVC 20mm (SDR-09) [ASTRAL]" → "Pipe - CPVC (SDR-09) [ASTRAL]"); nothing is invented.
+const titleOf = p => {
+  const o = p.opts[0]; if (!o) return p.name;
+  if (p.opts.length === 1 || !o.size || o.size === "—") return o.name;
+  const t = o.name.replace(new RegExp("\\s*" + esc(o.size) + "\\b", "i"), "").replace(/\s{2,}/g, " ").trim();
+  return t && t !== o.name ? t : p.name;
+};
+const initials = s => String(s).replace(/[^A-Za-z0-9 ]/g, " ").trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "•";
 
-const CartIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="9" cy="20" r="1.4" /><circle cx="18" cy="20" r="1.4" /><path d="M2.5 3h2.6l2.4 11.2a1.6 1.6 0 0 0 1.6 1.3h8.6a1.6 1.6 0 0 0 1.6-1.2L21 7H6" />
-  </svg>
-);
+const Ico = {
+  back: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>,
+  search: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" /></svg>,
+  filter: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" /></svg>,
+  cart: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.4" /><circle cx="18" cy="20" r="1.4" /><path d="M2.5 3h2.6l2.4 11.2a1.6 1.6 0 0 0 1.6 1.3h8.6a1.6 1.6 0 0 0 1.6-1.2L21 7H6" /></svg>,
+  all: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" /></svg>,
+};
 
-// Picture box: fixed 4:3, white, product centred and filling the box (object-fit: contain — never stretched or cut).
-// Blank studio background is already trimmed off in lib/catalogueImages.js, so the product uses the whole box.
-function Img({ p, imgs }) {
+// sheets and the toast are drawn on document.body so they sit above the ERP bottom menu and the assistant button
+function Portal({ children }) {
+  const [on, setOn] = useState(false);
+  useEffect(() => setOn(true), []);
+  return on ? createPortal(<div className="co-portal">{children}</div>, document.body) : null;
+}
+
+function Img({ p, imgs, alt }) {
   const [bad, setBad] = useState(false);
   if (p.image && imgs === null) return <span className="co-skel" aria-hidden="true" />;   // pictures still loading
   const im = catalogueImage(p.image, imgs);
-  if (im && !bad) return <img src={im.src} width={im.w || undefined} height={im.h || undefined} alt={p.name} loading="lazy" decoding="async" onError={() => setBad(true)} />;
-  return <span className="co-noimg">No picture</span>;   // only when there is genuinely no picture
+  if (im && !bad) return <img src={im.src} width={im.w || undefined} height={im.h || undefined} alt={alt || p.name} loading="lazy" decoding="async" onError={() => setBad(true)} />;
+  return <span className="co-noimg" aria-label="No picture"><b>{initials(p.category || p.name)}</b></span>;   // neutral placeholder only when there is no picture
 }
 
-function Qty({ value, onChange, min = 1, label }) {
+function Step({ value, onChange, min = 0, label, big, readOnly }) {
   const v = Number(value) || 0;
   return (
-    <div className="co-qty">
-      <button type="button" aria-label="Less" onClick={() => onChange(String(Math.max(min, Math.round((v - 1) * 1000) / 1000)))}>−</button>
-      <input inputMode="decimal" value={value} aria-label={label || "Quantity"} onChange={e => onChange(e.target.value.replace(/[^0-9.]/g, ""))}
-             onBlur={() => { const n = Number(value); if (!(n >= min)) onChange(String(min)); }} />
-      <button type="button" aria-label="More" onClick={() => onChange(String(Math.round((v + 1) * 1000) / 1000))}>+</button>
+    <div className={"co-step" + (big ? " big" : "")}>
+      <button type="button" aria-label="Less" onClick={() => onChange(Math.max(min, Math.round((v - 1) * 1000) / 1000))}>−</button>
+      <input inputMode="decimal" value={value} readOnly={readOnly} aria-label={label || "Quantity"} onChange={e => onChange(e.target.value.replace(/[^0-9.]/g, ""))}
+             onBlur={() => { const n = Number(value); if (!(n >= min)) onChange(min); }} />
+      <button type="button" aria-label="More" onClick={() => onChange(Math.round((v + 1) * 1000) / 1000)}>+</button>
     </div>
   );
 }
 
-// Size selector. Desktop: chips wrap, at most ~2 rows, then "+N more". Phone: one row that scrolls sideways
-// (the chosen size is scrolled into view) plus an "All N" button that opens every size as a wrapped grid.
-function SizeChips({ sizes, size, onPick, limit, narrow, onMulti }) {
-  const [open, setOpen] = useState(false);
-  const row = useRef(null);
-  const [over, setOver] = useState(false);   // phone: the sizes do not fit on one line → offer "All N"
-  useEffect(() => {
-    if (!narrow || !row.current) return;
-    const el = row.current; const chk = () => setOver(el.scrollWidth > el.clientWidth + 2);
-    chk(); if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(chk); ro.observe(el); return () => ro.disconnect();
-  }, [narrow, sizes]);
-  useEffect(() => {
-    if (!narrow || open || !row.current) return;
-    const el = row.current.querySelector(".co-sz.on");
-    if (el) row.current.scrollLeft = Math.max(0, el.offsetLeft - row.current.offsetLeft - 8);
-  }, [size, narrow, open]);
-  const chip = s => <button key={s} type="button" className={"co-sz" + (s === size ? " on" : "")} aria-pressed={s === size} onClick={() => onPick(s)}>{s}</button>;
-  const multi = onMulti && <button type="button" className="co-multi" onClick={onMulti}>＋ Order several sizes</button>;
-  if (narrow) {
-    return (
-      <div className={"co-szrow" + (open ? " open" : "")}>
-        <div className="co-chips" ref={row}>{sizes.map(chip)}{open && multi}</div>
-        {(over || open || (multi && sizes.length > 2)) && <button type="button" className="co-szmore" aria-expanded={open} onClick={() => setOpen(o => !o)}>{open ? "Less" : `All ${sizes.length}`}</button>}
-      </div>);
-  }
-  if (sizes.length <= limit || open) {
-    return (
-      <div className="co-chips">
-        {sizes.map(chip)}
-        {open && <button type="button" className="co-szmore" aria-expanded="true" onClick={() => setOpen(false)}>Show less</button>}
-      </div>);
-  }
-  let vis = sizes.slice(0, limit - 1);
-  if (!vis.includes(size)) vis = [...vis.slice(0, limit - 2), size];   // the chosen size always stays visible
-  return (
-    <div className="co-chips">
-      {vis.map(chip)}
-      <button type="button" className="co-szmore" aria-expanded="false" onClick={() => setOpen(true)}>+{sizes.length - vis.length} more</button>
-    </div>);
+// rate shown on a card: the matched size if the search / size filter picked one, else the lowest rate ("From" when sizes differ)
+function cardPrice(p, prices, hit) {
+  if (hit && prices[hit.item_id]?.rate != null) return { ...prices[hit.item_id], from: false };
+  const xs = p.opts.map(o => prices[o.item_id]).filter(x => x?.rate != null);
+  if (!xs.length) return null;
+  const lo = xs.reduce((a, b) => (b.rate < a.rate ? b : a));
+  return { ...lo, from: new Set(xs.map(x => x.rate)).size > 1 };
 }
 
-function ProductCard({ p, imgs, prices, showPx, firstHit, onAdd, onMulti, chipLimit, narrow }) {
-  const sizes = useMemo(() => [...new Set(p.opts.map(o => o.size))], [p]);
-  const [size, setSize] = useState(firstHit?.size || sizes[0]);
-  const variants = p.opts.filter(o => o.size === size);
-  const [optId, setOptId] = useState(firstHit?.id || variants[0]?.id);
-  useEffect(() => { if (firstHit) { setSize(firstHit.size); setOptId(firstHit.id); } }, [firstHit]);
-  const cur = variants.find(o => o.id === optId) || variants[0];
-  const [qty, setQty] = useState("1");
-  const px = showPx && cur ? prices[cur.item_id] : null;
-  const pick = s => { setSize(s); const v = p.opts.find(o => o.size === s); setOptId(v?.id); };
-  const spec = p.master ? [p.family, cur?.material].filter(Boolean).join(" · ") : p.name + (p.family ? " · " + p.family : "");
-  const hasSizes = sizes.length > 1 || (sizes[0] && sizes[0] !== "—");
-  const multi = sizes.length > 1 ? () => onMulti(p) : null;
+function ProductCard({ p, imgs, prices, showPx, hit, inCart, onAddOne, onSetQty, onOpen }) {
+  const n = p.opts.length;
+  const px = showPx ? cardPrice(p, prices, hit) : null;
+  const off = px && px.mrp && px.mrp > px.rate && px.disc > 0 ? Math.round(px.disc) : 0;
+  const one = n === 1 ? p.opts[0] : null;
+  const q1 = one ? inCart[one.item_id] : 0;
+  const added = p.opts.filter(o => inCart[o.item_id]).length;
+  const brand = p.opts[0]?.make || "";
+  const spec = [p.master ? (p.opts[0]?.material || "") : p.name, brand, one ? (one.size !== "—" ? one.size : "") : "", p.opts[0]?.unit].filter(Boolean).join(" · ");
   return (
     <article className="co-card">
-      <div className="co-ph"><Img p={p} imgs={imgs} /></div>
-      <div className="co-bd">
-        <div className="co-top"><span className="co-tag">{p.category}</span>{sizes.length > 1 && <span className="co-nsz">{sizes.length} sizes</span>}</div>
-        {cur && <h3 className="co-nm" title={cur.name}>{cur.name}</h3>}
-        <div className="co-grpnm" title={spec}>{spec}</div>
-        {hasSizes && (
-          <div className="co-szbox">
-            <div className="co-lbl"><span>Size{sizes.length > 1 ? ` · ${sizes.length} options` : ""}</span>{!narrow && multi && <button type="button" className="co-multi" onClick={multi}>Several sizes ›</button>}</div>
-            <SizeChips sizes={sizes} size={size} onPick={pick} limit={chipLimit} narrow={narrow} onMulti={narrow ? multi : null} />
-          </div>)}
-        {variants.length > 1 && (
-          <div className="co-chips co-var" aria-label="Type / length">{variants.map(o => <button key={o.id} type="button" className={"co-sz" + (o.id === cur?.id ? " on" : "")} aria-pressed={o.id === cur?.id} onClick={() => setOptId(o.id)}>{o.variant || o.code || "Standard"}</button>)}</div>)}
-        {cur && (
-          <div className="co-spec">
-            {narrow && p.family && <span className="co-fam">{p.family}</span>}
-            {cur.code && <span><b>Code</b> {cur.code}</span>}
-            <span><b>Unit</b> {cur.unit}</span>
-            {cur.make && <span><b>Brand</b> {cur.make}</span>}
-            {variants.length === 1 && cur.variant && <span><b>Type</b> {cur.variant}</span>}
-          </div>)}
-        <div className="co-buy">
-          {px?.rate != null && <div className="co-price">{inr(px.rate)} <span>/ {px.per}</span><small>{px.src === "last" ? "Last purchase rate" : `Net of list${px.disc ? ` − ${px.disc}%` : ""}`}</small></div>}
-          <div className="co-row">
-            <Qty value={qty} onChange={setQty} />
-            <button type="button" className="primary co-add" disabled={!cur} onClick={() => { const n = Number(qty); if (n > 0) { onAdd(p, cur, n); setQty("1"); } }}>Add</button>
-          </div>
-          {p.pending > 0 && <div className="co-pend">+{p.pending} catalogue size{p.pending > 1 ? "s" : ""} not yet in the Material Master — ask the office.</div>}
-        </div>
+      <div className="co-tile">
+        <button type="button" className="co-tilebtn" aria-label={"Open " + titleOf(p)} onClick={() => onOpen(p, hit)}><Img p={p} imgs={imgs} alt={titleOf(p)} /></button>
+        {one && q1 > 0
+          ? <div className="co-pill on"><Step value={q1} readOnly onChange={v => onSetQty(p, one, Number(v) || 0)} label={"Quantity of " + one.name} /></div>
+          : <button type="button" className="co-pill" onClick={() => (one ? onAddOne(p, one) : onOpen(p, hit))}>
+              ADD{n > 1 && <small>{n} options</small>}{added > 0 && <i className="co-dot" aria-label={added + " in indent"}>{added}</i>}
+            </button>}
       </div>
+      {px?.rate != null && (
+        <div className="co-pr"><b>{px.from ? <span className="co-from">From </span> : null}{inr(px.rate)}</b><span className="co-per">/{px.per}</span>{off > 0 && <s>{inr(px.mrp)}</s>}</div>)}
+      {off > 0 && <div className="co-off">{off}% OFF</div>}
+      <div className="co-nm" title={titleOf(p) + " — " + spec}><b>{titleOf(p)}</b> <span>{spec}</span></div>
+      {p.pending > 0 && <div className="co-pend">+{p.pending} size{p.pending > 1 ? "s" : ""} not yet in Material Master</div>}
     </article>
   );
 }
 
 function SkeletonCard() {
-  return <div className="co-card co-sk" aria-hidden="true"><div className="co-ph"><span className="co-skel" /></div><div className="co-bd"><i /><i /><i className="s" /><i className="s" /></div></div>;
+  return <div className="co-card co-sk" aria-hidden="true"><div className="co-tile"><span className="co-skel" /></div><i /><i className="s" /></div>;
 }
 
-function MultiSheet({ p, prices, showPx, onClose, onAdd }) {
-  const [q, setQ] = useState({});
-  const n = Object.values(q).filter(v => Number(v) > 0).length;
+// Size picker: every option is its own Material Master item; chips show size and code (and rate for price viewers).
+function OptionSheet({ p, start, imgs, prices, showPx, inCart, onAdd, onClose }) {
+  const [id, setId] = useState((start && p.opts.find(o => o.id === start.id)?.id) || p.opts[0]?.id);
+  const [qty, setQty] = useState(1);
+  const cur = p.opts.find(o => o.id === id) || p.opts[0];
+  const px = showPx && cur ? prices[cur.item_id] : null;
+  const many = p.opts.length > 1;
   return (
-    <div className="co-modal" role="dialog" aria-modal="true" aria-label={p.name} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="co-sheet">
-        <header><h3>{p.name}</h3><button type="button" className="co-x" aria-label="Close" onClick={onClose}>×</button></header>
+    <div className="co-modal" role="dialog" aria-modal="true" aria-label={many ? "Select size" : "Add to indent"} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="co-sheet co-optsheet">
+        <header><h3>{many ? "Select size" : "Add to indent"}</h3><button type="button" className="co-x" aria-label="Close" onClick={onClose}>×</button></header>
         <div className="co-st">
-          <table>
-            <thead><tr><th>Size</th><th className="co-c2">Material Master item</th><th>Unit</th>{showPx && <th>Net ₹</th>}<th>Qty</th></tr></thead>
-            <tbody>{p.opts.map(o => (
-              <tr key={o.id}><td><b>{lab(o)}</b></td><td className="co-c2">{o.name}</td><td>{o.unit}</td>{showPx && <td>{prices[o.item_id]?.rate != null ? inr(prices[o.item_id].rate) : "—"}</td>}
-                <td><Qty value={q[o.id] ?? "0"} min={0} label={"Quantity for " + lab(o)} onChange={v => setQ(x => ({ ...x, [o.id]: v }))} /></td></tr>
-            ))}</tbody>
-          </table>
+          <div className="co-shp">
+            <span className="co-shimg"><Img p={p} imgs={imgs} alt={titleOf(p)} /></span>
+            <div className="co-shi"><b>{titleOf(p)}</b><div>{[cur?.make, cur?.unit && "Unit " + cur.unit, many && plural(p.opts.length, "size")].filter(Boolean).join(" · ")}</div></div>
+          </div>
+          {many && <div className="co-lbl">Size</div>}
+          {many && (
+            <div className="co-ochips">
+              {p.opts.map(o => (
+                <button key={o.id} type="button" className={"co-ochip" + (o.id === cur?.id ? " on" : "")} aria-pressed={o.id === cur?.id} onClick={() => { setId(o.id); setQty(1); }}>
+                  <b>{lab(o)}</b>{o.code && <small>{o.code}</small>}
+                  {showPx && prices[o.item_id]?.rate != null && <small className="co-orate">{inr(prices[o.item_id].rate)}/{prices[o.item_id].per}</small>}
+                  {inCart[o.item_id] > 0 && <i className="co-dot">{inCart[o.item_id]}</i>}
+                </button>))}
+            </div>)}
+          {cur && (
+            <div className="co-sel1">
+              <div className="co-sel1n">{cur.name}</div>
+              <div className="co-sel1m">{[cur.code && "Code " + cur.code, cur.size !== "—" && "Size " + cur.size, "Unit " + cur.unit, cur.make && "Brand " + cur.make].filter(Boolean).join(" · ")}</div>
+              {inCart[cur.item_id] > 0 && <div className="co-sel1c">✓ {inCart[cur.item_id]} {cur.unit} already in this indent</div>}
+            </div>)}
         </div>
-        <footer><span>{plural(n, "size")} selected</span>
-          <button type="button" className="primary" disabled={!n} onClick={() => { const add = p.opts.filter(o => Number(q[o.id]) > 0); add.forEach(o => onAdd(p, o, Number(q[o.id]), true)); onClose(); }}>Add to cart</button></footer>
+        <footer>
+          <div className="co-shpx">{px?.rate != null ? <><b>{inr(px.rate)}</b><span>/{px.per}</span>{px.mrp > px.rate && px.disc > 0 && <s>{inr(px.mrp)}</s>}</> : null}</div>
+          <Step value={qty} min={1} onChange={setQty} label="Quantity" big />
+          <button type="button" className="primary co-cta" disabled={!cur || !(Number(qty) > 0)} onClick={() => { onAdd(p, cur, Number(qty)); setQty(1); if (!many) onClose(); }}>Add to Indent</button>
+        </footer>
       </div>
+    </div>
+  );
+}
+
+function Chips({ items, value, onPick, all = "All" }) {
+  return (
+    <div className="co-fchips">
+      <button type="button" className={"co-fchip" + (!value ? " on" : "")} aria-pressed={!value} onClick={() => onPick("")}>{all}</button>
+      {items.map(([k, v]) => <button key={k} type="button" className={"co-fchip" + (value === k ? " on" : "")} aria-pressed={value === k} onClick={() => onPick(value === k ? "" : k)}>{v}</button>)}
     </div>
   );
 }
@@ -178,24 +170,25 @@ export default function CatalogueOrder({ mobile = false }) {
   const [sess, setSess] = useState(null);
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
-  const [q, setQ] = useState(""); const [fam, setFam] = useState("All"); const [cat, setCat] = useState("All");
-  const [brand, setBrand] = useState(""); const [sizeF, setSizeF] = useState("");
+  const [q, setQ] = useState(""); const [searchOpen, setSearchOpen] = useState(false);
+  const [cat, setCat] = useState(""); const [fam, setFam] = useState(""); const [brand, setBrand] = useState(""); const [sizeF, setSizeF] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
   const [shown, setShown] = useState(PAGE);
   const [cart, setCart] = useState([]);
   const [meta, setMeta] = useState({ required_by: "", urgency: "normal", purpose: "" });
-  const [multi, setMulti] = useState(null);
+  const [sheet, setSheet] = useState(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [busy, setBusy] = useState(false); const [done, setDone] = useState(null); const [sendErr, setSendErr] = useState("");
   const [prices, setPrices] = useState({});
-  const [imgs, setImgs] = useState(null);   // product pictures: one module, loaded once in its own chunk
+  const [imgs, setImgs] = useState(null);
   const [toast, setToast] = useState(null);
-  const [narrow, setNarrow] = useState(mobile);
   const canPx = useCanViewPrices();
   const loaded = useRef(false);
   const toastT = useRef(null);
   const more = useRef(null);
+  const grid = useRef(null);
+  const app = useRef(null);
   const searchRef = useRef(null);
-  const asideRef = useRef(null);
 
   useEffect(() => {
     const s = getSession(); setSess(s);
@@ -204,36 +197,48 @@ export default function CatalogueOrder({ mobile = false }) {
     getSitesList().then(setSites).catch(() => setSites([]));
     getCatalogue().then(setData).catch(e => setErr(e.message || "Could not load the catalogue."));
     loadCatalogueImages().then(setImgs);
-    const nw = () => setNarrow(window.innerWidth <= 560);
-    nw(); window.addEventListener("resize", nw);
-    return () => { window.removeEventListener("resize", nw); clearTimeout(toastT.current); };
+    return () => clearTimeout(toastT.current);
   }, []);
+  // phone: the screen sits between the top and the ERP bottom menu, whatever its real height (large system text etc.)
+  useEffect(() => {
+    const el = app.current; if (!el) return;
+    const nav = () => document.querySelector(".m-nav");
+    const set = () => { const n = nav(); el.style.setProperty("--co-navh", (n && n.getBoundingClientRect().height ? Math.round(n.getBoundingClientRect().height) : 0) + "px"); };
+    set(); const t = setTimeout(set, 600);
+    window.addEventListener("resize", set);
+    let ro = null; if (typeof ResizeObserver !== "undefined") { ro = new ResizeObserver(set); const n = nav(); if (n) ro.observe(n); }
+    return () => { clearTimeout(t); window.removeEventListener("resize", set); ro && ro.disconnect(); };
+  }, [data]);
   useEffect(() => { if (loaded.current) saveCart(cart); }, [cart]);
   useEffect(() => {
     if (canPx !== true || !data?.products?.length) return;
     getCataloguePrices(data.products.flatMap(p => p.opts)).then(setPrices).catch(() => setPrices({}));
   }, [canPx, data]);
+  useEffect(() => { if (searchOpen) setTimeout(() => searchRef.current?.focus(), 30); }, [searchOpen]);
 
   const showPx = canPx === true;
   const words = useMemo(() => searchWords(q), [q]);
   const all = data?.products || [];
-  const cats = useMemo(() => ["All", ...new Set(all.filter(p => fam === "All" || p.family === fam).map(p => p.category))], [all, fam]);
+  // categories straight from the data (catalogue category, or the Material Master type for other items) — busiest first
+  const cats = useMemo(() => {
+    const m = new Map(); all.forEach(p => { const c = p.category || "Other"; const e = m.get(c) || { n: 0, img: null, p: null }; e.n++; if (!e.img && p.image) { e.img = p.image; e.p = p; } if (!e.p) e.p = p; m.set(c, e); });
+    return [...m.entries()].sort((a, b) => b[1].n - a[1].n || a[0].localeCompare(b[0]));
+  }, [all]);
+  const fams = useMemo(() => (data?.families || []).map(f => [f, f]), [data]);
   const brands = useMemo(() => {
     const m = new Map(); all.forEach(p => p.opts.forEach(o => { const k = brandKey(o.make); if (k && !m.has(k)) m.set(k, o.make.trim()); }));
     return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [all]);
-  const base = useMemo(() => all.filter(p => (fam === "All" || p.family === fam) && (cat === "All" || p.category === cat)
-    && (!brand || p.opts.some(o => brandKey(o.make) === brand)) && matchProduct(p, words)), [all, fam, cat, brand, words]);
+  // a search looks through every category; otherwise the rail picks the category
+  const base = useMemo(() => all.filter(p => (words.length || !cat || (p.category || "Other") === cat) && (!fam || p.family === fam)
+    && (!brand || p.opts.some(o => brandKey(o.make) === brand)) && matchProduct(p, words)), [all, cat, fam, brand, words]);
   const sizeList = useMemo(() => [...new Set(base.flatMap(p => p.opts.map(o => o.size)).filter(s => s && s !== "—"))].sort(bySize), [base]);
-  const showSizeF = sizeList.length > 1 && sizeList.length <= 80;   // a size filter only makes sense once the list is narrowed
   useEffect(() => { if (sizeF && !sizeList.includes(sizeF)) setSizeF(""); }, [sizeList, sizeF]);
   const list = useMemo(() => (sizeF ? base.filter(p => p.opts.some(o => o.size === sizeF)) : base), [base, sizeF]);
-  useEffect(() => { if (cat !== "All" && !cats.includes(cat)) setCat("All"); }, [cats, cat]);
-  useEffect(() => { setShown(PAGE); }, [fam, cat, q, brand, sizeF]);
-  // load the next page by itself when the end of the list scrolls into view (the "Show more" button stays as fallback)
+  useEffect(() => { setShown(PAGE); if (grid.current) grid.current.scrollTop = 0; }, [cat, fam, brand, sizeF, q]);
   useEffect(() => {
     const el = more.current; if (!el || typeof IntersectionObserver === "undefined") return;
-    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) setShown(s => s + PAGE); }, { rootMargin: "600px 0px" });
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) setShown(s => s + PAGE); }, { rootMargin: "500px 0px" });
     io.observe(el); return () => io.disconnect();
   }, [list.length, shown]);
   const hitOf = p => {
@@ -244,29 +249,26 @@ export default function CatalogueOrder({ mobile = false }) {
 
   const pickSite = id => { const n = Number(id); setSiteId(n); setCurrentSite(n); setDone(null); };
   const mayRaise = !!sess && !!siteId && (sess.role === "director" || can(sess, "indent", "create", siteId) || can(sess, "indent", "manage", siteId));
+  const inCart = useMemo(() => Object.fromEntries(cart.map(x => [x.item_id, Number(x.qty) || 0])), [cart]);
 
-  function flash(text) {
-    clearTimeout(toastT.current); setToast({ text, k: Date.now() });
-    toastT.current = setTimeout(() => setToast(null), 2600);
-  }
-  function addLine(p, o, n, many) {
+  function flash(text) { clearTimeout(toastT.current); setToast({ text, k: Date.now() }); toastT.current = setTimeout(() => setToast(null), 2400); }
+  function addLine(p, o, n) {
+    if (!(n > 0)) return;
     setDone(null); setSendErr("");
     setCart(c => {
       const ex = c.find(x => x.item_id === o.item_id);   // same Material Master item → one line, quantities added
       if (ex) return c.map(x => x === ex ? { ...x, qty: String(Math.round((Number(x.qty) + n) * 1000) / 1000) } : x);
-      return [...c, { item_id: o.item_id, link_id: o.id, product: p.name, label: lab(o), code: o.code, unit: o.unit, name: o.name, item_type: o.item_type, qty: String(n) }];
+      return [...c, { item_id: o.item_id, link_id: o.id, product: titleOf(p), label: lab(o), code: o.code, unit: o.unit, name: o.name, item_type: o.item_type, qty: String(n) }];
     });
-    flash(many ? `Added sizes of ${p.name} to the cart` : `Added ${n} ${o.unit} · ${o.name}`);
+    flash(`Added ${n} ${o.unit} · ${o.name}`);
   }
-  const setLineQty = (id, v) => setCart(c => c.map(x => x.item_id === id ? { ...x, qty: v } : x));
+  const setQtyFor = (p, o, n) => setCart(c => (n > 0 ? c.map(x => x.item_id === o.item_id ? { ...x, qty: String(n) } : x) : c.filter(x => x.item_id !== o.item_id)));
+  const setLineQty = (id, v) => setCart(c => c.map(x => x.item_id === id ? { ...x, qty: String(v) } : x));
   const removeLine = id => setCart(c => c.filter(x => x.item_id !== id));
   const est = cart.reduce((s, x) => s + (prices[x.item_id]?.rate || 0) * (Number(x.qty) || 0), 0);
-  const openCart = () => {
-    if (typeof window !== "undefined" && window.innerWidth >= 1024 && asideRef.current) { asideRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); asideRef.current.focus({ preventScroll: true }); }
-    else setCartOpen(true);
-  };
-  const clearFilters = () => { setQ(""); setFam("All"); setCat("All"); setBrand(""); setSizeF(""); };
-  const filtered = !!(q || fam !== "All" || cat !== "All" || brand || sizeF);
+  const nFilters = (fam ? 1 : 0) + (brand ? 1 : 0) + (sizeF ? 1 : 0);
+  const clearFilters = () => { setFam(""); setBrand(""); setSizeF(""); };
+  const goBack = () => { if (typeof window === "undefined") return; if (window.history.length > 1) window.history.back(); else window.location.href = mobile ? "/m" : "/"; };
 
   async function send() {
     setSendErr(""); setDone(null);
@@ -286,24 +288,25 @@ export default function CatalogueOrder({ mobile = false }) {
 
   const siteName = (sites.find(s => Number(s.id) === Number(siteId))?.name || "").split(",")[0];
   const nItems = cart.length;
+  const title = words.length ? "Search results" : (cat || "All materials");
+  const siteSel = <select value={siteId || ""} onChange={e => pickSite(e.target.value)} aria-label="Site">{sites.map(s => <option key={s.id} value={s.id}>{s.name.split(",")[0]}</option>)}</select>;
+  const catThumb = (c, e) => (e?.p ? <Img p={e.p} imgs={imgs} alt="" /> : Ico.all);
 
   const cartBody = (
     <>
-      <div className="co-chead"><h2>Indent cart <span className={"co-badge" + (nItems ? "" : " z")}>{nItems}</span></h2>
-      <div className="co-sub">Each size is its own line, linked to its own Material Master item.{siteName ? <> Site: <b>{siteName}</b>.</> : null}</div></div>
+      <label className="co-site">Site{siteSel}</label>
       <div className="co-lines">
-        {!cart.length && <div className="co-empty">No items yet. Pick a size and tap Add.</div>}
+        {!cart.length && <div className="co-empty">No items yet. Tap ADD on a material.</div>}
         {Object.entries(cart.reduce((g, x) => { (g[x.product] = g[x.product] || []).push(x); return g; }, {})).map(([prod, xs]) => (
           <div key={prod} className="co-grp"><h4>{prod}</h4>
             {xs.map(x => (
               <div key={x.item_id} className="co-ln">
                 <div className="co-lt"><div className="co-ls">{x.name}</div><div className="co-lc">{x.code ? x.code + " · " : ""}{x.unit}{showPx && prices[x.item_id]?.rate != null ? " · " + inr(prices[x.item_id].rate * (Number(x.qty) || 0)) : ""}</div></div>
-                <Qty value={x.qty} min={0.001} onChange={v => setLineQty(x.item_id, v)} />
-                <button type="button" className="co-rm" aria-label={"Remove " + x.label} onClick={() => removeLine(x.item_id)}>Remove</button>
+                <Step value={x.qty} min={0.001} onChange={v => setLineQty(x.item_id, v)} label={"Quantity of " + x.name} />
+                <button type="button" className="co-rm" aria-label={"Remove " + x.name} onClick={() => removeLine(x.item_id)}>Remove</button>
               </div>))}
           </div>))}
       </div>
-      <div className="co-cfoot">
       {showPx && cart.length > 0 && <div className="co-tot"><span>Est. value (net list price)</span><b>{inr(est)}</b></div>}
       <div className="co-tot"><span>Lines</span><b>{cart.length}</b></div>
       <div className="co-meta">
@@ -314,230 +317,224 @@ export default function CatalogueOrder({ mobile = false }) {
       {sendErr && <div className="note red" style={{ marginTop: 8 }}>{sendErr}</div>}
       <button type="button" className="primary co-send" disabled={busy || !cart.length || !mayRaise} onClick={send}>{busy ? "Sending…" : "Send indent"}</button>
       {!mayRaise && sess && <div className="co-sub" style={{ marginTop: 6 }}>Raising indents for this site needs the Indent “create” right.</div>}
-      <div className="co-note">Only the ordered quantity is saved on the indent. Dispatched and received quantities are recorded separately on the challan and the site receipt.</div>
-      </div>
+      <div className="co-note">Only the ordered quantity is saved on the indent. Dispatched and received quantities are recorded separately on the challan and the site receipt. <a href={mobile ? "/m/indent" : "/procure"}>My indents</a></div>
     </>
   );
 
   return (
-    <div className={"co-wrap" + (mobile ? " co-mob" : "") + (nItems ? " co-hascart" : "")}>
+    <div ref={app} className={"co-app" + (mobile ? " co-mob" : "") + (nItems ? " co-hascart" : "")}>
       <style>{CSS}</style>
-      <div className="co-head">
-        <div className="co-ttl"><h1>Order Materials</h1><div className="co-sub">Pick a product, choose the size, add to the indent</div></div>
-        <div className="co-hr">
-          <select value={siteId || ""} onChange={e => pickSite(e.target.value)} aria-label="Site">{sites.map(s => <option key={s.id} value={s.id}>{s.name.split(",")[0]}</option>)}</select>
-          <a className="co-link" href={mobile ? "/m/indent" : "/procure"}>My indents</a>
-          <button type="button" className="co-cartbtn" onClick={openCart} aria-label={`Cart, ${plural(nItems, "item")}`}><CartIcon /><span className="co-cbl">Cart</span>{nItems > 0 && <span className="co-badge">{nItems}</span>}</button>
-        </div>
+      <header className="co-hd">
+        <button type="button" className="co-ib co-back" aria-label="Back" onClick={goBack}>{Ico.back}</button>
+        <div className="co-ht"><h1>{title}</h1><div className="co-hs">{data ? plural(list.length, "material") : "Loading…"}{siteName ? " · " + siteName : ""}</div></div>
+        <div className="co-dk co-hsite">{siteSel}<a className="co-link" href={mobile ? "/m/indent" : "/procure"}>My indents</a></div>
+        <button type="button" className={"co-ib co-sbtn" + (searchOpen || q ? " on" : "")} aria-label="Search" aria-expanded={searchOpen} onClick={() => setSearchOpen(o => !o)}>{Ico.search}</button>
+        <button type="button" className={"co-ib" + (nFilters ? " on" : "")} aria-label="Filters" onClick={() => setFilterOpen(true)}>{Ico.filter}{nFilters > 0 && <i className="co-dot">{nFilters}</i>}</button>
+        <button type="button" className="co-ib co-dk co-cartbtn" aria-label={`Indent cart, ${plural(nItems, "item")}`} onClick={() => setCartOpen(true)}>{Ico.cart}<span>Indent</span>{nItems > 0 && <i className="co-dot">{nItems}</i>}</button>
+      </header>
+      <div className={"co-sbar" + (searchOpen || q ? " open" : "")}>
+        <span className="co-sico">{Ico.search}</span>
+        <input ref={searchRef} type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, code, size, brand…" aria-label="Search the catalogue" />
+        {q && <button type="button" className="co-clr" aria-label="Clear search" onClick={() => { setQ(""); searchRef.current?.focus(); }}>×</button>}
       </div>
-      {done && <div className="note green">Indent <b>{done}</b> raised for {siteName || "the site"}. Track it under <a href={mobile ? "/m/indent" : "/procure"}>{mobile ? "Material indent" : "Indent & Purchase"}</a>.</div>}
-      {err && <div className="note red">{err}</div>}
-      {data?.error && <div className="note red">{data.error}</div>}
-      {data?.missing && <div className="note amber">The grouped catalogue is not installed yet. Use the normal indent screen meanwhile.</div>}
-      <div className="co-grid2">
-        <main className="co-main">
-          <div className="co-sbox">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" /></svg>
-            <input ref={searchRef} className="co-search" type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="Search product, size or code — e.g. elbow 25" aria-label="Search the catalogue" />
-            {q && <button type="button" className="co-clr" aria-label="Clear search" onClick={() => { setQ(""); searchRef.current?.focus(); }}>×</button>}
-          </div>
-          <div className="co-fchips" role="tablist" aria-label="Product range">{["All", ...(data?.families || [])].map(f => <button key={f} type="button" role="tab" aria-selected={f === fam} className={"co-chip" + (f === fam ? " on" : "")} onClick={() => setFam(f)}>{f === "All" ? "All ranges" : f}</button>)}</div>
-          <div className="co-fchips co-cats" aria-label="Category">{cats.map(c => <button key={c} type="button" aria-pressed={c === cat} className={"co-chip sm" + (c === cat ? " on" : "")} onClick={() => setCat(c)}>{c === "All" ? "All categories" : c}</button>)}</div>
-          <div className="co-bar">
-            <div className="co-count">{data ? `${plural(list.length, "product")} · ${list.reduce((s, p) => s + p.opts.length, 0)} orderable sizes` : "Loading the catalogue…"}</div>
-            <div className="co-sel">
-              {brands.length > 1 && <select value={brand} onChange={e => setBrand(e.target.value)} aria-label="Brand"><option value="">All brands</option>{brands.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>}
-              {showSizeF && <select value={sizeF} onChange={e => setSizeF(e.target.value)} aria-label="Size"><option value="">All sizes</option>{sizeList.map(s => <option key={s} value={s}>{s}</option>)}</select>}
-              {filtered && <button type="button" className="co-reset" onClick={clearFilters}>Clear filters</button>}
-            </div>
-          </div>
+      <div className="co-catbar" role="tablist" aria-label="Categories">
+        <button type="button" role="tab" aria-selected={!cat} className={"co-cb" + (!cat ? " on" : "")} onClick={() => setCat("")}><i>{Ico.all}</i>All</button>
+        {cats.map(([c, e]) => <button key={c} type="button" role="tab" aria-selected={cat === c} className={"co-cb" + (cat === c ? " on" : "")} onClick={() => setCat(c)}><i>{catThumb(c, e)}</i>{c}</button>)}
+      </div>
+      {(done || err || data?.error || data?.missing) && (
+        <div className="co-notes">
+          {done && <div className="note green">Indent <b>{done}</b> raised for {siteName || "the site"}. Track it under <a href={mobile ? "/m/indent" : "/procure"}>{mobile ? "Material indent" : "Indent & Purchase"}</a>.</div>}
+          {err && <div className="note red">{err}</div>}
+          {data?.error && <div className="note red">{data.error}</div>}
+          {data?.missing && <div className="note amber">The grouped catalogue is not installed yet. Use the normal indent screen meanwhile.</div>}
+        </div>)}
+      <div className="co-body">
+        <nav className="co-side" aria-label="Categories">
+          <button type="button" className={"co-sb" + (!cat ? " on" : "")} aria-current={!cat ? "true" : undefined} onClick={() => setCat("")}><i>{Ico.all}</i><span>All</span></button>
+          {cats.map(([c, e]) => <button key={c} type="button" className={"co-sb" + (cat === c ? " on" : "")} aria-current={cat === c ? "true" : undefined} onClick={() => setCat(c)}><i>{catThumb(c, e)}</i><span>{c}</span></button>)}
+        </nav>
+        <main className="co-grid" ref={grid}>
+          {nFilters > 0 && <div className="co-active">{[fam, brands.find(b => b[0] === brand)?.[1], sizeF].filter(Boolean).map(f => <span key={f}>{f}</span>)}<button type="button" onClick={clearFilters}>Clear</button></div>}
           <div className="co-cards">
             {!data && !err && Array.from({ length: 8 }, (_, i) => <SkeletonCard key={i} />)}
-            {list.slice(0, shown).map(p => <ProductCard key={p.id} p={p} imgs={imgs} prices={prices} showPx={showPx} firstHit={hitOf(p)} onAdd={addLine} onMulti={setMulti} chipLimit={6} narrow={narrow} />)}
+            {list.slice(0, shown).map(p => { const h = hitOf(p); return <ProductCard key={p.id} p={p} imgs={imgs} prices={prices} showPx={showPx} hit={h} inCart={inCart} onAddOne={(pp, o) => addLine(pp, o, 1)} onSetQty={setQtyFor} onOpen={(pp, hh) => setSheet({ p: pp, start: hh })} />; })}
           </div>
-          {data && !list.length && <div className="co-empty">Nothing matches. Try fewer words{filtered ? <>, or <button type="button" className="co-reset" onClick={clearFilters}>clear the filters</button></> : null}.</div>}
+          {data && !list.length && <div className="co-empty">No materials found.{(nFilters || q) ? <> <button type="button" className="co-reset" onClick={() => { clearFilters(); setQ(""); }}>Clear search and filters</button></> : null}</div>}
           {list.length > shown && <button type="button" ref={more} className="co-more" onClick={() => setShown(s => s + PAGE)}>Show more ({list.length - shown} left)</button>}
         </main>
-        <aside className="co-cart" ref={asideRef} tabIndex={-1} aria-label="Indent cart">{cartBody}</aside>
       </div>
-      {nItems > 0 && <div className="co-mbar"><b>Cart: {plural(nItems, "item")}</b><button type="button" className="primary" onClick={() => setCartOpen(true)}>View Cart</button></div>}
-      {toast && <div key={toast.k} className="co-toast" role="status" aria-live="polite"><span className="co-tick" aria-hidden="true">✓</span><span className="co-tt">{toast.text}</span><button type="button" onClick={() => { setToast(null); openCart(); }}>View cart</button></div>}
-      {cartOpen && <div className="co-modal" role="dialog" aria-modal="true" aria-label="Indent cart" onClick={e => { if (e.target === e.currentTarget) setCartOpen(false); }}>
-        <div className="co-sheet co-cartsheet"><header><h3>Indent cart · {plural(nItems, "item")}</h3><button type="button" className="co-x" aria-label="Close" onClick={() => setCartOpen(false)}>×</button></header><div className="co-st">{cartBody}</div></div>
-      </div>}
-      {multi && <MultiSheet p={multi} prices={prices} showPx={showPx} onClose={() => setMulti(null)} onAdd={addLine} />}
+      {nItems > 0 && <div className="co-mbar"><span><b>Indent · {plural(nItems, "item")}</b>{siteName ? <small>{siteName}</small> : null}</span><button type="button" className="primary" onClick={() => setCartOpen(true)}>View Cart</button></div>}
+      <Portal>
+      {toast && <div key={toast.k} className="co-toast" role="status" aria-live="polite"><span className="co-tick" aria-hidden="true">✓</span><span className="co-tt">{toast.text}</span></div>}
+      {sheet && <OptionSheet key={sheet.p.id} p={sheet.p} start={sheet.start} imgs={imgs} prices={prices} showPx={showPx} inCart={inCart} onAdd={addLine} onClose={() => setSheet(null)} />}
+      {filterOpen && (
+        <div className="co-modal" role="dialog" aria-modal="true" aria-label="Filters" onClick={e => { if (e.target === e.currentTarget) setFilterOpen(false); }}>
+          <div className="co-sheet co-filtsheet">
+            <header><h3>Filters</h3><button type="button" className="co-x" aria-label="Close" onClick={() => setFilterOpen(false)}>×</button></header>
+            <div className="co-st">
+              {fams.length > 1 && <><div className="co-lbl">Range</div><Chips items={fams} value={fam} onPick={setFam} all="All ranges" /></>}
+              {brands.length > 1 && <><div className="co-lbl">Brand</div><Chips items={brands} value={brand} onPick={setBrand} all="All brands" /></>}
+              <div className="co-lbl">Size</div>
+              {sizeList.length > 1 && sizeList.length <= 120 ? <Chips items={sizeList.map(s => [s, s])} value={sizeF} onPick={setSizeF} all="All sizes" />
+                : <div className="co-sub">{sizeList.length > 120 ? "Pick a category, range or brand first to choose a size." : "Only one size in this list."}</div>}
+            </div>
+            <footer><button type="button" className="co-reset" onClick={clearFilters} disabled={!nFilters}>Clear all</button><button type="button" className="primary co-cta" onClick={() => setFilterOpen(false)}>Show {plural(list.length, "material")}</button></footer>
+          </div>
+        </div>)}
+      {cartOpen && (
+        <div className="co-modal co-drawer" role="dialog" aria-modal="true" aria-label="Indent cart" onClick={e => { if (e.target === e.currentTarget) setCartOpen(false); }}>
+          <div className="co-sheet co-cartsheet"><header><h3>Indent cart · {plural(nItems, "item")}</h3><button type="button" className="co-x" aria-label="Close" onClick={() => setCartOpen(false)}>×</button></header><div className="co-st">{cartBody}</div></div>
+        </div>)}
+      </Portal>
     </div>
   );
 }
 
 // NB: no greater-than, ampersand or double-quote characters in this CSS — they break hydration of the inline style tag.
 const CSS = `
-.co-wrap{max-width:1560px;margin:0 auto;min-width:0;--co-line:#E3E6EA;--co-soft:#F5F6F8;--co-mut:var(--muted,#6E7780);--co-ink:var(--text,#1F2933)}
-.co-mob{padding:12px 12px calc(72px + env(safe-area-inset-bottom,0px));width:100%;max-width:100vw;box-sizing:border-box}
-.co-mob.co-hascart{padding-bottom:calc(140px + env(safe-area-inset-bottom,0px))}
-.co-head{display:flex;gap:10px 16px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px;min-width:0}
-.co-ttl{min-width:0}
-.co-head h1{font-size:22px;margin:0;letter-spacing:-.01em;line-height:1.2}
-.co-mob .co-ttl{padding-right:38px}
-.co-hr{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}.co-hr select{width:auto;max-width:240px;min-height:40px;min-width:0}
-.co-link{font-size:13.5px;font-weight:600;color:var(--copper-deep);padding:10px 4px;white-space:nowrap}
-.co-cartbtn{display:inline-flex;align-items:center;gap:6px;min-height:40px;border-radius:10px;font-weight:600;white-space:nowrap}
-.co-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--copper);color:#fff;font-size:11.5px;font-weight:700;line-height:1;box-sizing:border-box}
-.co-badge.z{background:#E6E8EB;color:var(--co-mut)}
-.co-sub{color:var(--co-mut);font-size:13px}
-.co-grid2{display:grid;grid-template-columns:minmax(0,1fr) clamp(280px,26%,340px);gap:20px;align-items:start}
-.co-main{min-width:0}
-.co-sbox{position:relative;display:flex;align-items:center;min-width:0}
-.co-sbox svg{position:absolute;left:14px;color:var(--co-mut);pointer-events:none}
-.co-search{width:100%;padding:11px 44px 11px 40px;border-radius:10px;font-size:15px;box-sizing:border-box;min-height:46px;-webkit-appearance:none;appearance:none;min-width:0}
-.co-search::-webkit-search-cancel-button{display:none}
-.co-clr{position:absolute;right:6px;width:34px;height:34px;border:0;border-radius:999px;background:var(--co-soft);font-size:20px;line-height:1;padding:0;color:var(--co-mut)}
-.co-fchips{display:flex;gap:8px;overflow-x:auto;padding:12px 0 2px;-webkit-overflow-scrolling:touch;scrollbar-width:none;min-width:0}
-.co-fchips::-webkit-scrollbar{display:none}
-.co-cats{padding-top:8px}
-.co-chip{white-space:nowrap;border-radius:999px;padding:7px 14px;font-size:13px;flex:0 0 auto;min-height:36px}
-.co-chip.sm{padding:5px 12px;font-size:12.5px;min-height:32px}
-.co-chip.on{background:var(--deep,#0F1419);color:#fff;border-color:var(--deep,#0F1419);font-weight:600}
-.co-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:12px 0}
-.co-count{color:var(--co-mut);font-size:13px}
-.co-sel{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
-.co-sel select{width:auto;max-width:180px;min-height:36px;font-size:13px;padding:5px 8px}
-.co-reset{border:0;background:none;color:var(--copper-deep);font-weight:600;font-size:13px;padding:6px 2px}
-.co-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(max(220px,calc((100% - 48px) / 4)),1fr));gap:16px;align-items:stretch}
-.co-card{background:#fff;border:1px solid var(--co-line);border-radius:12px;display:flex;flex-direction:column;min-width:0;overflow:hidden;transition:box-shadow .15s,border-color .15s}
-.co-card:hover{border-color:#D0D5DB;box-shadow:0 6px 18px rgba(15,20,25,.08)}
-.co-ph{width:100%;aspect-ratio:4/3;background:#fff;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--co-line);position:relative;padding:10px;box-sizing:border-box;flex:0 0 auto}
-.co-ph{min-height:0;overflow:hidden}
-.co-ph img{position:absolute;inset:0;display:block;width:100%;height:100%;padding:inherit;box-sizing:border-box;object-fit:contain;object-position:center}
-.co-noimg{display:flex;align-items:center;justify-content:center;text-align:center;width:100%;height:100%;border-radius:8px;background:var(--co-soft);color:var(--co-mut);font-size:12px}
-.co-skel{display:block;width:100%;height:100%;border-radius:8px;background:linear-gradient(90deg,#F1F3F5 25%,#E7EAED 50%,#F1F3F5 75%);background-size:200% 100%;animation:co-sh 1.3s linear infinite}
+.co-app,.co-portal{--o:var(--copper,#FF7A1A);--od:var(--copper-deep,#E2610B);--os:var(--copper-soft,#FFF2EA);--ink:var(--text,#1F2933);--mute:var(--muted,#6B7280);--tile:#F5F6FA;--line:#E7E8EB;--green:#1A8F3C;--sb:78px;--co-navh:0px;min-width:0;color:var(--ink)}
+.co-hd{display:flex;align-items:center;gap:8px;min-width:0}
+.co-ib{position:relative;width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:#fff;display:inline-flex;align-items:center;justify-content:center;padding:0;flex:0 0 auto;color:var(--ink)}
+.co-ib.on{border-color:var(--o);color:var(--od);background:var(--os)}
+.co-ht{flex:1 1 auto;min-width:0}
+.co-ht h1{font-size:17px;font-weight:750;margin:0;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.co-hs{font-size:12px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.co-dot{position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--o);color:#fff;font-size:10.5px;font-weight:700;font-style:normal;line-height:18px;text-align:center;box-sizing:border-box}
+.co-sbar{display:none;position:relative;align-items:center;min-width:0}
+.co-sbar.open{display:flex}
+.co-sico{position:absolute;left:12px;color:var(--mute);display:flex;pointer-events:none}
+.co-sbar input{width:100%;min-width:0;height:42px;border:1px solid var(--line);border-radius:10px;padding:0 40px 0 38px;font-size:15px;box-sizing:border-box;-webkit-appearance:none;appearance:none}
+.co-sbar input::-webkit-search-cancel-button{display:none}
+.co-clr{position:absolute;right:5px;width:32px;height:32px;border:0;border-radius:50%;background:var(--tile);font-size:19px;line-height:1;padding:0;color:var(--mute)}
+.co-notes{padding:0 0 6px}
+.co-body{display:flex;min-width:0}
+.co-side{display:none}
+.co-grid{flex:1 1 auto;min-width:0}
+.co-active{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px}
+.co-active span{font-size:12px;background:var(--os);color:var(--od);border-radius:999px;padding:3px 10px;font-weight:600}
+.co-active button{border:0;background:none;color:var(--od);font-size:12.5px;font-weight:700;padding:3px 4px}
+.co-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:20px 16px;align-content:start}
+.co-card{min-width:0;display:flex;flex-direction:column}
+.co-tile{position:relative;aspect-ratio:4/3;background:var(--tile);border-radius:10px;overflow:hidden;flex:0 0 auto}
+.co-tilebtn{all:unset;position:absolute;inset:0;padding:8px 8px 22px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.co-tilebtn img{display:block;width:100%;height:100%;object-fit:contain;mix-blend-mode:multiply}
+.co-noimg{display:flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:#fff;border:1px solid var(--line);color:var(--mute);font-size:15px}
+.co-skel{display:block;width:100%;height:100%;border-radius:8px;background:linear-gradient(90deg,#EEF0F4 25%,#E4E7EC 50%,#EEF0F4 75%);background-size:200% 100%;animation:co-sh 1.3s linear infinite}
 @keyframes co-sh{from{background-position:200% 0}to{background-position:-200% 0}}
-.co-sk .co-bd i{display:block;height:12px;border-radius:6px;background:#EEF0F3}.co-sk .co-bd i.s{width:60%}
-.co-bd{padding:12px 14px 14px;display:flex;flex-direction:column;gap:8px;flex:1 1 auto;min-width:0}
-.co-top{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
-.co-tag{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--copper-deep);background:var(--copper-soft,#FEF2EC);border-radius:6px;padding:2px 8px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.co-nsz{font-size:11.5px;color:var(--co-mut);white-space:nowrap;flex:0 0 auto}
-.co-nm{font-weight:650;font-size:15px;line-height:1.35;margin:0;color:var(--co-ink);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.7em}
-.co-grpnm{font-size:12.5px;color:var(--co-mut);line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.co-szbox{min-width:0}
-.co-lbl{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--co-mut);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;font-weight:600}
-.co-chips{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
-.co-sz{border-radius:8px;padding:5px 10px;font-size:13px;min-height:34px;min-width:46px;max-width:100%;overflow-wrap:anywhere;background:#fff;flex:0 0 auto;line-height:1.2}
-.co-sz.on{border-color:var(--copper);background:var(--copper-soft,#FEF2EC);color:var(--copper-deep);font-weight:700;box-shadow:inset 0 0 0 1px var(--copper)}
-.co-szmore{border:1px dashed #C4CAD1;border-radius:8px;padding:5px 10px;font-size:12.5px;min-height:34px;background:#fff;color:var(--copper-deep);font-weight:600;white-space:nowrap;flex:0 0 auto}
-.co-multi{border:0;background:none;color:var(--copper-deep);font-weight:600;font-size:12.5px;padding:0;text-transform:none;letter-spacing:0;white-space:nowrap}
-.co-spec{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:12.5px;color:var(--co-ink);min-width:0;line-height:1.45}
-.co-spec span{overflow-wrap:anywhere;min-width:0}.co-spec b{font-weight:500;color:var(--co-mut)}
-.co-buy{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding-top:2px;min-width:0}
-.co-price{font-weight:750;font-size:18px;line-height:1.2;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 4px;color:var(--co-ink)}.co-price span{font-weight:500;font-size:13px;color:var(--co-mut)}
-.co-price small{flex-basis:100%;font-size:12px;font-weight:400;color:var(--co-mut);margin-top:2px}
-.co-row{display:flex;gap:8px;align-items:stretch;min-width:0}
-.co-qty{display:flex;border:1px solid var(--co-line);border-radius:9px;overflow:hidden;flex:0 0 auto;background:#fff}
-.co-qty button{width:36px;border:0;border-radius:0;background:var(--co-soft);font-size:18px;padding:0;min-height:42px}
-.co-qty input{width:44px;border:0;border-radius:0;text-align:center;padding:6px 2px;min-width:0;font-size:14px}
-.co-add{flex:1 1 auto;font-weight:700;min-height:44px;min-width:56px;border-radius:9px;font-size:14px}
-.co-pend{font-size:11.5px;color:var(--co-mut);line-height:1.35}
-.co-more{width:100%;margin-top:14px;min-height:44px}
-.co-empty{color:var(--co-mut);font-size:13px;padding:14px 4px}
-.co-cart{background:#fff;border:1px solid var(--co-line);border-radius:12px;position:sticky;top:0;max-height:calc(100vh - 48px);display:flex;flex-direction:column;overflow:hidden;outline:none;min-width:0}
-.co-chead{padding:14px 16px 8px;flex:0 0 auto}
-.co-cart h2{font-size:16px;margin:0 0 4px;display:flex;align-items:center;gap:8px}
-.co-cart .co-lines{flex:1 1 auto;overflow:auto;min-height:72px;padding:0 16px;margin:0}
-.co-cart .co-cfoot{flex:0 0 auto;border-top:1px solid var(--co-line);padding:10px 16px 14px}
-.co-lines{margin:10px 0}
+.co-sk i{display:block;height:11px;border-radius:6px;background:#EEF0F3;margin-top:9px}.co-sk i.s{width:60%}
+.co-pill{position:absolute;right:6px;bottom:6px;min-width:62px;background:#fff;border:1.5px solid var(--o);color:var(--od);border-radius:9px;font-weight:800;font-size:13px;line-height:1.1;padding:6px 12px;text-align:center;box-shadow:0 1px 3px rgba(15,20,25,.08);overflow:visible}
+.co-pill small{display:block;font-size:9.5px;font-weight:600;background:var(--os);margin:4px -12px -6px;padding:2px 0 3px;border-radius:0 0 7px 7px;color:var(--od)}
+.co-pill .co-dot{top:-8px;right:-6px}
+.co-pill.on{padding:0;border:0;background:var(--o);min-width:0}
+.co-step{display:flex;align-items:center;border-radius:9px;overflow:hidden;background:var(--o);color:#fff}
+.co-step button{width:30px;height:32px;border:0;border-radius:0;background:transparent;color:#fff;font-size:18px;font-weight:700;padding:0}
+.co-step input{width:30px;height:32px;border:0;border-radius:0;background:transparent;color:#fff;text-align:center;font-weight:800;font-size:14px;padding:0;min-width:0}
+.co-step.big button{width:38px;height:44px}.co-step.big input{width:40px;height:44px;font-size:16px}
+.co-pr{margin-top:8px;display:flex;align-items:baseline;flex-wrap:wrap;gap:0 4px;line-height:1.2}
+.co-pr b{font-size:17px;font-weight:800}.co-from{font-size:11.5px;font-weight:600;color:var(--mute)}
+.co-per{font-size:11.5px;color:var(--mute)}
+.co-pr s,.co-shpx s{font-size:11.5px;color:var(--mute)}
+.co-off{font-size:12px;font-weight:800;color:var(--green);margin-top:1px}
+.co-nm{font-size:13px;line-height:1.35;margin-top:5px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.co-nm b{font-weight:600}.co-nm span{color:var(--mute)}
+.co-pend{font-size:11px;color:var(--mute);margin-top:3px}
+.co-more{width:100%;margin-top:16px;min-height:42px}
+.co-empty{color:var(--mute);font-size:13px;padding:30px 4px;text-align:center}
+.co-reset{border:0;background:none;color:var(--od);font-weight:700;font-size:13px;padding:6px 4px}
+.co-reset:disabled{color:var(--mute)}
+.co-mbar{position:fixed;z-index:120;right:84px;bottom:calc(18px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:12px;background:var(--deep,#1F2933);color:#fff;border-radius:14px;padding:8px 8px 8px 14px;box-shadow:0 8px 24px rgba(15,20,25,.22);max-width:calc(100vw - 24px);box-sizing:border-box}
+.co-mbar span{display:flex;flex-direction:column;min-width:0;line-height:1.2}
+.co-mbar b{font-size:14px;white-space:nowrap}.co-mbar small{font-size:11px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.co-mbar button{min-height:40px;padding:8px 16px;font-weight:700;border-radius:10px;white-space:nowrap;flex:0 0 auto}
+.co-toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:230;display:flex;align-items:center;gap:10px;max-width:min(460px,calc(100vw - 24px));width:max-content;box-sizing:border-box;background:#0F1419;color:#fff;border-radius:12px;padding:10px 14px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.18);animation:co-in .18s ease-out}
+.co-tick{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--green);font-size:13px;flex:0 0 auto}
+.co-tt{min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+@keyframes co-in{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+.co-modal{position:fixed;inset:0;background:rgba(15,20,25,.5);z-index:220;display:flex;align-items:flex-end;justify-content:center}
+.co-sheet{background:#fff;width:100%;max-width:520px;max-height:86vh;border-radius:16px 16px 0 0;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px);animation:co-up .2s ease-out}
+@keyframes co-up{from{transform:translateY(40px);opacity:.6}to{transform:none;opacity:1}}
+.co-sheet header{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 10px;gap:8px}
+.co-sheet h3{margin:0;font-size:16px;font-weight:750}
+.co-x{border:0;background:var(--tile);border-radius:50%;font-size:22px;line-height:1;width:34px;height:34px;padding:0;color:var(--mute)}
+.co-st{overflow:auto;padding:4px 16px 12px;min-height:0}
+.co-sheet footer{display:flex;align-items:center;gap:10px;padding:12px 16px 14px;border-top:1px solid var(--line)}
+.co-shp{display:flex;gap:12px;align-items:center;margin-bottom:14px}
+.co-shimg{width:64px;height:48px;border-radius:8px;background:var(--tile);display:flex;align-items:center;justify-content:center;padding:4px;box-sizing:border-box;flex:0 0 auto;overflow:hidden}
+.co-shimg img{width:100%;height:100%;object-fit:contain;mix-blend-mode:multiply}.co-shimg .co-noimg{width:36px;height:36px;font-size:12px}
+.co-shi{min-width:0}.co-shi b{font-size:14px;line-height:1.3;display:block}.co-shi div{font-size:12.5px;color:var(--mute);margin-top:2px}
+.co-lbl{font-size:12px;color:var(--mute);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:4px 0 8px}
+.co-ochips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.co-ochip{position:relative;border:1px solid var(--line);border-radius:10px;padding:7px 12px;font-size:13px;background:#fff;text-align:left;min-height:44px;line-height:1.25;max-width:100%}
+.co-ochip b{font-weight:700;display:block}.co-ochip small{display:block;font-size:10.5px;color:var(--mute)}
+.co-ochip .co-orate{color:var(--ink);font-weight:600}
+.co-ochip.on{border-color:var(--o);background:var(--os);box-shadow:inset 0 0 0 1px var(--o)}.co-ochip.on b{color:var(--od)}
+.co-sel1{background:var(--tile);border-radius:10px;padding:10px 12px;font-size:12.5px}
+.co-sel1n{font-weight:700;font-size:13.5px;overflow-wrap:anywhere}.co-sel1m{color:var(--mute);margin-top:3px;overflow-wrap:anywhere}.co-sel1c{color:var(--green);font-weight:700;margin-top:5px}
+.co-shpx{flex:1 1 auto;min-width:0;display:flex;align-items:baseline;gap:4px;flex-wrap:wrap}.co-shpx b{font-size:18px}.co-shpx span{font-size:12px;color:var(--mute)}
+.co-cta{min-height:44px;padding:0 18px;border-radius:10px;font-weight:800;font-size:14.5px;white-space:nowrap}
+.co-filtsheet footer{justify-content:space-between}
+.co-fchips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.co-fchip{border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-size:13px;background:#fff;min-height:36px}
+.co-fchip.on{border-color:var(--o);background:var(--os);color:var(--od);font-weight:700}
+.co-site{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mute);margin:2px 0 8px}
+.co-site select{width:100%;min-width:0;min-height:40px}
+.co-lines{margin:6px 0 10px}
 .co-grp h4{font-size:12.5px;margin:10px 0 4px}
-.co-ln{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 8px;align-items:center;padding:6px 0;border-bottom:1px dashed var(--co-line)}
-.co-ln .co-qty button{width:32px;min-height:36px}.co-ln .co-qty input{width:44px}
-.co-ls{font-weight:600;font-size:13px;overflow-wrap:anywhere}.co-lc{font-size:12px;color:var(--co-mut);overflow-wrap:anywhere}
+.co-ln{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 8px;align-items:center;padding:7px 0;border-bottom:1px dashed var(--line)}
+.co-ls{font-weight:600;font-size:13px;overflow-wrap:anywhere}.co-lc{font-size:12px;color:var(--mute);overflow-wrap:anywhere}
 .co-rm{grid-column:1/-1;justify-self:start;border:0;background:none;color:var(--red,#b91c1c);font-size:12.5px;padding:0}
 .co-tot{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}
 .co-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
-.co-meta label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--co-mut);min-width:0}
-.co-meta input,.co-meta select{width:100%;box-sizing:border-box;min-height:38px}
+.co-meta label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mute);min-width:0}
+.co-meta input,.co-meta select{width:100%;box-sizing:border-box;min-height:40px}
 .co-wide{grid-column:1/-1}
-.co-send{width:100%;margin-top:10px;min-height:44px;font-weight:700}
-.co-note{font-size:11.5px;color:var(--co-mut);margin-top:8px}
-.co-mbar{display:none}
-.co-toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom,0px));z-index:210;display:flex;align-items:center;gap:10px;max-width:calc(100vw - 24px);width:max-content;box-sizing:border-box;background:var(--deep,#0F1419);color:#fff;border-radius:12px;padding:10px 12px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.18);animation:co-in .18s ease-out}
-.co-tick{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#16A34A;font-size:13px;flex:0 0 auto}
-.co-tt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:46ch}
-.co-toast button{border:0;background:none;color:#FFB27A;font-weight:700;padding:4px 2px;white-space:nowrap;font-size:13px}
-@keyframes co-in{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
-.co-modal{position:fixed;inset:0;background:rgba(15,20,25,.45);z-index:220;display:flex;align-items:flex-end;justify-content:center}
-.co-sheet{background:#fff;width:100%;max-width:640px;max-height:88vh;border-radius:14px 14px 0 0;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px)}
-.co-sheet header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--co-line);gap:8px}
-.co-sheet h3{margin:0;font-size:15px}
-.co-x{border:0;background:none;font-size:24px;line-height:1;padding:2px 8px;min-width:40px;min-height:40px}
-.co-st{overflow:auto;padding:8px 14px}
-.co-st table{width:100%;font-size:13px}.co-st td,.co-st th{padding:6px 4px}
-.co-sheet footer{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-top:1px solid var(--co-line);gap:8px}
-@media (min-width:700px){.co-modal{align-items:center}.co-sheet{border-radius:14px}}
-@media (max-width:1023px){
-  .co-wrap{overflow-x:hidden;overflow-x:clip}
-  .co-grid2{grid-template-columns:minmax(0,1fr)}
-  .co-cart{display:none}
-  .co-hascart{padding-bottom:84px}
-  .co-mob.co-hascart{padding-bottom:calc(140px + env(safe-area-inset-bottom,0px))}
-  .co-mbar{display:flex;position:fixed;left:12px;right:78px;bottom:calc(14px + env(safe-area-inset-bottom,0px));justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid var(--co-line);border-radius:14px;padding:8px 8px 8px 14px;box-shadow:0 6px 22px rgba(15,20,25,.14);z-index:120;max-width:560px;margin:0 auto;box-sizing:border-box}
-  .co-mbar b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-  .co-mbar button{min-height:42px;padding:8px 16px;font-weight:700;white-space:nowrap;border-radius:10px;flex:0 0 auto}
-  .co-toast{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
-  .co-cartsheet .co-st h2{display:none}
+.co-send{width:100%;margin-top:12px;min-height:46px;font-weight:800;font-size:15px}
+.co-note{font-size:11.5px;color:var(--mute);margin-top:8px}
+.co-sub{color:var(--mute);font-size:12.5px}
+@media (min-width:700px){.co-modal{align-items:center}.co-sheet{border-radius:16px}.co-drawer{justify-content:flex-end;align-items:stretch}.co-drawer .co-sheet{max-height:none;height:100%;max-width:440px;border-radius:0}}
+/* desktop and tablet */
+@media (min-width:601px){
+  .co-app{max-width:1600px;margin:0 auto}
+  .co-hd{flex-wrap:wrap;gap:10px;margin-bottom:12px}
+  .co-back{display:none}
+  .co-ht h1{font-size:21px}
+  .co-hsite{display:flex;align-items:center;gap:10px;min-width:0}
+  .co-hsite select{width:auto;max-width:240px;min-height:38px;min-width:0}
+  .co-link{font-size:13.5px;font-weight:600;color:var(--od);white-space:nowrap}
+  .co-cartbtn{width:auto;border-radius:10px;padding:0 12px;gap:6px;font-weight:700;font-size:13px}
+  .co-sbtn{display:none}
+  .co-sbar{display:flex;margin-bottom:10px}
+  .co-catbar{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;scrollbar-width:thin;min-width:0}
+  .co-cb{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;border:1px solid var(--line);border-radius:999px;padding:4px 14px 4px 4px;font-size:13px;background:#fff;flex:0 0 auto;min-height:38px}
+  .co-cb i{width:28px;height:28px;border-radius:50%;background:var(--tile);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:0 0 auto;color:var(--mute)}
+  .co-cb i img{width:100%;height:100%;object-fit:cover}.co-cb i svg{width:16px;height:16px}.co-cb i .co-noimg{width:28px;height:28px;font-size:10px;border:0}
+  .co-cb.on{background:var(--o);border-color:var(--o);color:#fff;font-weight:700}
+  .co-hascart .co-grid{padding-bottom:70px}
 }
-body.has-global-mnav .co-mbar,.co-mob .co-mbar{bottom:calc(66px + env(safe-area-inset-bottom,0px))}
-body.has-global-mnav .co-toast,.co-mob .co-toast{bottom:calc(132px + env(safe-area-inset-bottom,0px))}
-@media (max-width:760px){
-  .co-hascart{padding-bottom:96px}
-  .co-mob.co-hascart{padding-bottom:calc(140px + env(safe-area-inset-bottom,0px))}
-  .co-tt{max-width:none;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-  .co-toast{width:calc(100vw - 24px)}
-}
-@media (max-width:560px){
-  .co-head{align-items:flex-start;margin-bottom:10px}
-  .co-head h1{font-size:20px}
-  .co-ttl .co-sub{display:none}
-  .co-hr{width:100%;flex-wrap:nowrap}.co-hr select{flex:1 1 0;width:0;min-width:0;max-width:none;text-overflow:ellipsis}
-  .co-cbl{display:none}
-  .co-fchips{gap:6px;padding-top:10px}
-  .co-bar{margin:10px 0 8px}
-  .co-sel select{max-width:150px}
-  .co-cards{grid-template-columns:minmax(0,1fr);gap:10px}
-  .co-card{display:grid;grid-template-columns:112px minmax(0,1fr);column-gap:12px;padding:10px;align-items:start}
-  .co-ph{width:112px;border:1px solid var(--co-line);border-radius:8px;padding:4px}
-  .co-bd{padding:0;gap:4px;min-height:100%}
-  .co-top,.co-lbl{display:none}
-  .co-nm{font-size:14px;min-height:0;line-height:1.28}
-  .co-grpnm{display:none}
-  .co-fam{font-weight:600;color:var(--co-ink)}
-  .co-szrow{display:flex;align-items:center;gap:6px;min-width:0}
-  .co-szrow .co-chips{flex:1 1 auto;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:1px}
-  .co-szrow .co-chips::-webkit-scrollbar{display:none}
-  .co-szrow.open{align-items:flex-start}
-  .co-szrow.open .co-chips{flex-wrap:wrap;overflow:visible}
-  .co-szrow .co-multi{border:1px dashed #C4CAD1;border-radius:8px;padding:4px 9px;min-height:32px;flex:0 0 auto}
-  .co-szrow .co-sz{max-width:none;white-space:nowrap}
-  .co-szrow.open .co-sz{white-space:normal;max-width:100%}
-  .co-sz,.co-szmore{min-height:32px;padding:3px 9px;font-size:12.5px;min-width:40px}
-  .co-szrow.open .co-multi{border:0;padding:6px 2px;min-height:0}
-  .co-var{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
-  .co-spec{font-size:12px;line-height:1.35;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .co-spec span{margin-right:10px}
-  .co-buy{gap:5px;padding-top:2px}
-  .co-price{font-size:16px;flex-wrap:nowrap;white-space:nowrap;min-width:0}.co-price span{font-size:12px}
-  .co-price small{flex:0 1 auto;margin:0 0 0 4px;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;min-width:0}
-  .co-row{gap:6px}
-  .co-qty button{width:32px;min-height:38px;font-size:17px}
-  .co-qty input{width:38px}
-  .co-add{min-height:40px;min-width:48px}
-  .co-c2{display:none}
-}
-@media (min-width:390px) and (max-width:560px){
-  .co-card{grid-template-columns:120px minmax(0,1fr)}
-  .co-ph{width:120px}
-}
-@media (max-width:359px){
-  .co-card{grid-template-columns:92px minmax(0,1fr);column-gap:10px}
-  .co-ph{width:92px}
-  .co-qty button{width:30px}.co-qty input{width:34px}
+@media (min-width:1280px){.co-cards{grid-template-columns:repeat(auto-fill,minmax(max(190px,calc((100% - 80px) / 6)),1fr))}}
+/* phone: full-height shop screen between the top of the screen and the ERP bottom menu */
+@media (max-width:600px){
+  .co-app{position:fixed;left:0;right:0;top:0;bottom:var(--co-navh);z-index:90;background:#fff;display:flex;flex-direction:column;overflow:hidden}
+  .co-hd{flex:0 0 auto;min-height:58px;padding:8px 58px 8px 10px;background:linear-gradient(#FFF1E4,#fff);padding-top:calc(8px + env(safe-area-inset-top,0px))}
+  .co-dk,.co-catbar{display:none}
+  .co-sbar.open{flex:0 0 auto;margin:0 10px 8px}
+  .co-notes{flex:0 0 auto;padding:0 10px 6px;max-height:30vh;overflow:auto}
+  .co-body{flex:1 1 auto;min-height:0}
+  .co-side{display:block;width:var(--sb);flex:0 0 var(--sb);overflow-y:auto;overscroll-behavior:contain;border-right:1px solid var(--line);padding:4px 0 90px;box-sizing:border-box;scrollbar-width:none}
+  .co-side::-webkit-scrollbar{display:none}
+  .co-sb{all:unset;position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;padding:8px 3px;box-sizing:border-box;font-size:11px;line-height:1.2;text-align:center;color:var(--mute);cursor:pointer;overflow-wrap:anywhere}
+  .co-sb i{width:50px;height:50px;border-radius:50%;background:var(--tile);border:1.5px solid var(--line);overflow:hidden;display:flex;align-items:center;justify-content:center;font-style:normal;color:var(--mute);box-sizing:border-box}
+  .co-sb i img{width:100%;height:100%;object-fit:cover}.co-sb i .co-noimg{width:100%;height:100%;border:0;font-size:13px}
+  .co-sb span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:100%}
+  .co-sb.on{color:var(--ink);font-weight:700}
+  .co-sb.on i{border:2px solid var(--o);box-shadow:0 0 0 2px var(--os)}
+  .co-sb.on{background:linear-gradient(var(--o),var(--o)) right 10px / 3px calc(100% - 20px) no-repeat}
+  .co-grid{overflow-y:auto;overscroll-behavior:contain;padding:8px 8px 96px;box-sizing:border-box;-webkit-overflow-scrolling:touch}
+  .co-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 8px}
+  .co-pr b{font-size:16px}
+  .co-mbar{left:12px;right:78px;bottom:12px;justify-content:space-between;margin:0 auto;max-width:420px}
+  .co-mob .co-mbar,.co-app.co-mob .co-mbar{bottom:12px}
+  .co-mbar{position:absolute}
+  .co-toast{width:calc(100vw - 24px);bottom:calc(var(--co-toastb,140px) + env(safe-area-inset-bottom,0px))}
 }
 `;
