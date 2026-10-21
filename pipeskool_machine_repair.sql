@@ -165,6 +165,8 @@ begin
  end loop;
  insert into machine_repair_audit(request_id,action,staff_id,meta) values(rid,'created',sid,jsonb_build_object('machine_count',i));
  insert into notifications(staff_id,kind,title,body,link,site_id,status,request_id)
+ values(sid,'machine_repair','Repair request submitted',(select number from machine_repair_requests where id=rid)||' · '||i||' machine(s)','/go?to=repairs&repair='||rid,p_site_id,'submitted',rid);
+ insert into notifications(staff_id,kind,title,body,link,site_id,status,request_id)
  select u.id,'machine_repair','Repair request submitted',
    (select number from machine_repair_requests where id=rid)||' · '||i||' machine(s)',
    '/go?to=repairs&repair='||rid,p_site_id,'pending',rid
@@ -223,6 +225,8 @@ begin
  if m.received_at is not null then raise exception 'Machine is already marked received'; end if;
  update machine_repair_machines set received_at=now(),received_by=sid,remark=nullif(trim(coalesce(p_remark,'')),'') where id=p_machine_id;
  insert into machine_repair_audit(request_id,machine_id,action,staff_id,meta) values(m.request_id,m.id,'received',sid,jsonb_build_object('remark',nullif(trim(coalesce(p_remark,'')),'')));
+ insert into notifications(staff_id,kind,title,body,link,site_id,status,request_id)
+ values(sid,'machine_repair','Machine received',r.number||' · '||m.name||' received at site.','/go?to=repairs&repair='||r.id,r.site_id,'received',r.id);
  insert into notifications(staff_id,kind,title,body,link,site_id,status,request_id)
  select u.id,'machine_repair','Machine received',r.number||' · '||m.name||' received at site.','/go?to=repairs&repair='||r.id,r.site_id,'received',r.id
  from app_users u where u.is_active and (u.role in ('director','ho_admin','it_executive') or
