@@ -181,7 +181,7 @@ export default function MusterScreen() {
   };
 
   return (
-    <div className="m-wrap" style={{ paddingBottom: 116 }}>
+    <div className="m-wrap" style={{ paddingBottom: 150 }}>
       <div className="m-head">
         <div>
           <div className="title">Daily muster</div>
@@ -285,7 +285,7 @@ export default function MusterScreen() {
       </div>
 
       {canVerify && rows && (
-        <div style={{ position: "fixed", left: 0, right: 0, bottom: 56, maxWidth: 430, margin: "0 auto", background: "#fff", borderTop: "1px solid var(--border)", padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, zIndex: 40 }}>
+        <div style={{ position: "fixed", left: 0, right: 0, bottom: "calc(78px + env(safe-area-inset-bottom, 0px))", maxWidth: 430, margin: "0 auto", background: "#fff", borderTop: "1px solid var(--border)", padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, zIndex: 40 }}>
           <div style={{ fontSize: 12.5 }}><b>{pending.length}</b> pending verification<div className="muted" style={{ fontSize: 11 }}>{rows.filter(r => r.verify === "verified" && !r.elsewhere).length} verified · {noPunch} no punch yet</div></div>
           <button className="primary" style={{ marginLeft: "auto", padding: "10px 16px", fontSize: 14 }} disabled={busy || pending.length === 0} onClick={doVerifyAll}>✓ Verify all ({pending.length})</button>
         </div>

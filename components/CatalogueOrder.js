@@ -203,7 +203,7 @@ export default function CatalogueOrder({ mobile = false }) {
   useEffect(() => {
     const el = app.current; if (!el) return;
     const nav = () => document.querySelector(".m-nav");
-    const set = () => { const n = nav(); el.style.setProperty("--co-navh", (n && n.getBoundingClientRect().height ? Math.round(n.getBoundingClientRect().height) : 0) + "px"); };
+    const set = () => { const n = nav(); el.style.setProperty("--co-navh", (n && n.getBoundingClientRect().height ? Math.round(n.getBoundingClientRect().height) : 58) + "px"); };
     set(); const t = setTimeout(set, 600);
     window.addEventListener("resize", set);
     let ro = null; if (typeof ResizeObserver !== "undefined") { ro = new ResizeObserver(set); const n = nav(); if (n) ro.observe(n); }
@@ -514,7 +514,7 @@ const CSS = `
 @media (min-width:1280px){.co-cards{grid-template-columns:repeat(auto-fill,minmax(max(190px,calc((100% - 80px) / 6)),1fr))}}
 /* phone: full-height shop screen between the top of the screen and the ERP bottom menu */
 @media (max-width:600px){
-  .co-app{position:fixed;left:0;right:0;top:0;bottom:var(--co-navh);z-index:90;background:#fff;display:flex;flex-direction:column;overflow:hidden}
+  .co-app{position:fixed;left:0;right:0;top:0;bottom:var(--co-navh,58px);z-index:90;background:#fff;display:flex;flex-direction:column;overflow:hidden}
   .co-hd{flex:0 0 auto;min-height:58px;padding:8px 58px 8px 10px;background:linear-gradient(#FFF1E4,#fff);padding-top:calc(8px + env(safe-area-inset-top,0px))}
   .co-dk,.co-catbar{display:none}
   .co-sbar.open{flex:0 0 auto;margin:0 10px 8px}

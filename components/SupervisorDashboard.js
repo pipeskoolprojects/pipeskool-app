@@ -13,6 +13,7 @@ import { getMyNotifications } from "@/lib/notify";
 import { approvedExpenseTotal, countOpenIndents, progressPercent } from "@/lib/supervisor-dashboard.mjs";
 
 const modules = [
+  ["⏱","Punch","Punch in and out","/m",null],
   ["🛒","Order Material","Create indent and track material","/m/indent","indent"],
   ["👥","Muster","Review worker attendance and muster roll","/m/muster","attendance"],
   ["📋","DPR","Create and submit Daily Progress Report","/m/dpr","dpr"],
