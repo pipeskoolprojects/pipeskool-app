@@ -29,6 +29,7 @@ const GROUPS = [
       { href: "/items", label: "Item / Material Master", module: "stock" },
       { href: "/vendors", label: "Vendor Master", module: "indent" },
       { href: "/assets", label: "Tools & Assets", module: "assets" },
+      { href: "/repairs", label: "Machine Repair", module: "machine_repair" },
     ] },
     { label: "Site Execution", items: [
       { href: "/dpr", label: "Daily Progress Report (DPR)", module: "dpr" },
