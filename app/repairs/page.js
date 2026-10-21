@@ -1,9 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Logo from "@/components/Logo";
-import { getSession, can, canAnySite } from "@/lib/auth";
+import { getSession, can } from "@/lib/auth";
 import { fileStore, fileHref } from "@/lib/files";
 import { clearRepairDraft, readRepairDraft, writeRepairDraft } from "@/lib/repair-draft";
 import { createRepairRequest, getRepairDetail, listRepairRequests, listRepairVendors, makeRepairPdf, receiveRepairMachine, sendRepairRequest, saveRepairReceiptVersion, repairPages } from "@/lib/machine-repair";
@@ -66,8 +65,8 @@ export default function MachineRepairPage() {
   const load=useCallback(async(keepSelection=true)=>{
     setLoading(true);setError("");
     try {
-      const [list,v]=await Promise.all([listRepairRequests(),office?listRepairVendors():Promise.resolve([])]);
-      const matched=list.filter(r=>repairTabMatches(tab,r.status)).filter(r=>office|| (sess?.sites||[]).some(s=>String(s.id)===String(r.site_id)));
+      const [list,v]=await Promise.all([listRepairRequests(),listRepairVendors()]);
+      const matched=list.filter(r=>office|| (sess?.sites||[]).some(s=>String(s.id)===String(r.site_id)));
       setRows(matched);setVendors(v);
       const id=selected||params.get("id");
       if(keepSelection&&id) {
