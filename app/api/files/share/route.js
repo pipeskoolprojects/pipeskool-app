@@ -1,4 +1,4 @@
-// update460: POST { key } (staff Bearer) → { url } — a no-login link for ONE Delivery Challan PDF (dc/…), for WhatsApp.
+// POST { key } (staff Bearer) → a no-login link for approved delivery or repair PDFs.
 import { userFromToken, staffByAuthId, validKey, folderOf, SHARE_FOLDERS, shareSig } from "@/lib/server/fileAuth";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export async function POST(req) {
   try {
     const { key } = await req.json().catch(() => ({}));
-    if (!validKey(key) || !SHARE_FOLDERS.includes(folderOf(key))) return Response.json({ ok: false, error: "Only challan PDFs can be shared." }, { status: 400 });
+    if (!validKey(key) || !SHARE_FOLDERS.includes(folderOf(key)) || (folderOf(key) === "repairs" && !/^repairs\/receipts\/[A-Za-z0-9_-]+\.pdf$/i.test(String(key)))) return Response.json({ ok: false, error: "Only delivery and repair PDFs can be shared." }, { status: 400 });
     const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
     const u = await userFromToken(token);
     const staff = u ? await staffByAuthId(u.authId) : null;

@@ -71,6 +71,7 @@
 .icon { display:grid; place-items:center; width:54px; height:54px; flex:0 0 54px; border-radius:50%; background:#ffffffaa; font-size:27px; }
 .cardTitle { display:block; width:100%; font-size:15px; line-height:1.25; overflow-wrap:anywhere; }
 .cardDescription { display:block; width:100%; font-size:12px; line-height:1.4; color:#475467; overflow-wrap:anywhere; }
+.liveChip { display:inline-flex; width:max-content; max-width:100%; padding:4px 8px; border-radius:20px; background:#fff;color:#a64b0d;font-size:11px;font-weight:800;box-shadow:0 1px 3px #10182818; }
 .arrow { position:absolute; right:12px; bottom:9px; font-style:normal; border-radius:20px; background:#ffffffaa; padding:4px 11px; font-size:18px; }
 .panel { min-width:0; background:#fff; border-radius:17px; padding:14px; margin-top:12px; box-shadow:0 2px 8px #1018280b; }
 .panelHead { display:flex; justify-content:space-between; align-items:center; gap:8px; }
