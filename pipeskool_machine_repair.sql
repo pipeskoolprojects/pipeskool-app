@@ -50,6 +50,17 @@ create index if not exists machine_repair_site_created on machine_repair_request
 create index if not exists machine_repair_machine_request on machine_repair_machines(request_id, sequence_no);
 create index if not exists machine_repair_audit_request on machine_repair_audit(request_id, at desc);
 
+-- Add only this module's default permissions for existing assigned staff.
+insert into permissions(user_id,site_id,module,action,allowed)
+select us.user_id,us.site_id,'machine_repair',a.action,true
+from user_sites us join app_users u on u.id=us.user_id and u.is_active
+cross join lateral (select unnest(case
+ when u.role='director' then array['view','create','approve','manage']::text[]
+ when u.role in ('ho_admin','it_executive') then array['view','approve']::text[]
+ when u.role in ('supervisor','site_engineer') then array['view','create']::text[]
+ else array[]::text[] end) as action) a
+on conflict(user_id,site_id,module,action) do update set allowed=true;
+
 create or replace function fn_repair_staff_id()
 returns bigint language sql stable security definer set search_path = public, auth
 as $$ select id from app_users where auth_id = auth.uid() and is_active limit 1 $$;
@@ -171,6 +182,61 @@ begin
  values(r.raised_by,'machine_repair','Machines sent to vendor',r.number||' has been sent to the repair vendor.','/go?to=repairs&repair='||p_request_id,r.site_id,'sent',p_request_id);
  return jsonb_build_object('ok',true,'version',ver,'sent_at',now());
 end $$;
+
+
+create or replace function fn_machine_repair_receipt_version(p_request_id bigint,p_pdf_path text,p_pdf_url text)
+returns jsonb language plpgsql security definer set search_path=public,auth
+as $
+declare sid bigint:=fn_repair_staff_id(); r machine_repair_requests%rowtype; ver integer;
+begin
+ if sid is null then raise exception 'Sign in required'; end if;
+ select * into r from machine_repair_requests where id=p_request_id for update;
+ if not found or r.sent_at is null then raise exception 'Sent repair request not found'; end if;
+ if not fn_repair_site_access(sid,r.site_id) or not fn_repair_is_office(sid,r.site_id) then raise exception 'Office permission is required'; end if;
+ if p_pdf_path !~ '^repairs/receipts/[A-Za-z0-9_-]+\\.pdf(p_machine_id bigint,p_remark text default null)
+returns jsonb language plpgsql security definer set search_path=public,auth
+as $$
+declare sid bigint:=fn_repair_staff_id(); m machine_repair_machines%rowtype; r machine_repair_requests%rowtype;
+begin
+ if sid is null then raise exception 'Sign in required'; end if;
+ select * into m from machine_repair_machines where id=p_machine_id for update;
+ if not found then raise exception 'Machine not found'; end if;
+ select * into r from machine_repair_requests where id=m.request_id;
+ if not fn_repair_site_access(sid,r.site_id) or not exists(select 1 from app_users where id=sid and role in ('supervisor','site_engineer'))
+ then raise exception 'Assigned site supervisor access is required'; end if;
+ if r.sent_at is null then raise exception 'Machine has not been sent to the vendor'; end if;
+ if m.received_at is not null then raise exception 'Machine is already marked received'; end if;
+ update machine_repair_machines set received_at=now(),received_by=sid,remark=nullif(trim(coalesce(p_remark,'')),'') where id=p_machine_id;
+ insert into machine_repair_audit(request_id,machine_id,action,staff_id,meta) values(m.request_id,m.id,'received',sid,jsonb_build_object('remark',nullif(trim(coalesce(p_remark,'')),'')));
+ insert into notifications(staff_id,kind,title,body,link,site_id,status,request_id)
+ select u.id,'machine_repair','Machine received',r.number||' · '||m.name||' received at site.','/go?to=repairs&repair='||r.id,r.site_id,'received',r.id
+ from app_users u where u.is_active and (u.role in ('director','ho_admin','it_executive') or
+   exists(select 1 from permissions p where p.user_id=u.id and p.site_id=r.site_id and p.module='machine_repair' and p.allowed and p.action in ('approve','manage')));
+ return jsonb_build_object('ok',true,'received_at',now());
+end $$;
+
+create or replace function fn_machine_repair_dashboard(p_site_id bigint default null)
+returns table(with_vendor bigint) language plpgsql security definer set search_path=public,auth
+as $$
+declare sid bigint:=fn_repair_staff_id();
+begin
+ if sid is null then raise exception 'Sign in required'; end if;
+ return query select count(*) from v_machine_repair_requests v where v.status in ('Sent to vendor','Partially received')
+ and fn_repair_site_access(sid,v.site_id) and (p_site_id is null or p_site_id=v.site_id)
+ and (exists(select 1 from app_users where id=sid and role='director') or v.raised_by=sid or v.site_id=p_site_id);
+end $$;
+
+grant execute on function fn_machine_repair_create(bigint,jsonb),fn_machine_repair_send(bigint,bigint,text,text),
+ fn_machine_repair_receive(bigint,text),fn_machine_repair_dashboard(bigint),fn_machine_repair_receipt_version(bigint,text,text) to authenticated;
+commit;
+ or p_pdf_url not like 'http%' then raise exception 'A generated receipt PDF is required'; end if;
+ select coalesce(max(version),0)+1 into ver from machine_repair_receipts where request_id=p_request_id;
+ insert into machine_repair_receipts(request_id,version,pdf_path,pdf_url,generated_by)
+ values(p_request_id,ver,p_pdf_path,p_pdf_url,sid);
+ insert into machine_repair_audit(request_id,action,staff_id,meta)
+ values(p_request_id,'sent',sid,jsonb_build_object('receipt_version',ver,'regenerated',true,'pdf_url',p_pdf_url));
+ return jsonb_build_object('ok',true,'version',ver,'generated_at',now());
+end $;
 
 create or replace function fn_machine_repair_receive(p_machine_id bigint,p_remark text default null)
 returns jsonb language plpgsql security definer set search_path=public,auth
