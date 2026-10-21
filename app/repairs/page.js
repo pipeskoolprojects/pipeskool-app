@@ -21,12 +21,17 @@ async function compressPhoto(file) {
   return new File([blob],"repair-photo.jpg",{type:"image/jpeg"});
 }
 function filePreview(file) { return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(file);}); }
-function shareContact(vendor, url) {
-  if (!url) return;
+function vendorShareUrl(vendor, url) {
+  if (!url) return "";
   const phone=String(vendor?.contact_mobile||vendor?.phone||"").replace(/\D/g,"");
   const text=encodeURIComponent("Repair challan from Pipeskool: "+url);
-  if (phone) window.open("https://wa.me/"+phone+"?text="+text,"_blank","noopener,noreferrer");
-  else if (vendor?.email) window.location.href="mailto:"+encodeURIComponent(vendor.email)+"?subject="+encodeURIComponent("Pipeskool repair challan")+"&body="+text;
+  if (phone) return "https://wa.me/"+(phone.length===10?"91"+phone:phone)+"?text="+text;
+  if (vendor?.email) return "mailto:"+encodeURIComponent(vendor.email)+"?subject="+encodeURIComponent("Pipeskool repair challan")+"&body="+text;
+  return "";
+}
+function shareContact(vendor, url) {
+  const target=vendorShareUrl(vendor,url);
+  if(target)window.open(target,"_blank","noopener,noreferrer");
 }
 function A4Receipt({ request, vendor, rootRef }) {
   const pages=repairPages(request.machines);
@@ -131,8 +136,10 @@ export default function MachineRepairPage() {
   const sendReceipt=async()=>{
     if(!detail||!vendorId||busy)return;setBusy(true);setError("");
     try{
+      const shareWindow=window.open("about:blank","_blank");
       const blob=await makeRepairPdf(receiptRef.current,detail);
       const sent=await sendRepairRequest(detail.id,vendorId,blob);setPdfUrl(sent.pdf_url);setNotice("Machines sent to vendor. Receipt PDF saved.");
+      const vendor=vendors.find(v=>String(v.id)===String(vendorId));const shareUrl=vendorShareUrl(vendor,sent.pdf_url);if(shareWindow){if(shareUrl){shareWindow.opener=null;shareWindow.location.href=shareUrl;}else shareWindow.close();}
       await load(true);setShowReceipt(true);
     }catch(e){setError(e?.message||"Could not generate or send the receipt.");}
     finally{setBusy(false);}
