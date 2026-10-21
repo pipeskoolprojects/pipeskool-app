@@ -58,7 +58,7 @@ export default function MachineRepairPage() {
   const [loading,setLoading]=useState(true),[error,setError]=useState(""),[notice,setNotice]=useState("");
   const [tab,setTab]=useState("All"),[selected,setSelected]=useState(null),[creating,setCreating]=useState(false),[showReceipt,setShowReceipt]=useState(false);
   const [machines,setMachines]=useState([{name:"",problem:"",photo:null,preview:""}]),[invalid,setInvalid]=useState([]),[uploading,setUploading]=useState(false),[uploadStep,setUploadStep]=useState("");
-  const [vendorId,setVendorId]=useState(""),[confirmMachine,setConfirmMachine]=useState(null),[remark,setRemark]=useState(""),[busy,setBusy]=useState(false),[pdfUrl,setPdfUrl]=useState("");
+  const [vendorId,setVendorId]=useState(""),[confirmMachine,setConfirmMachine]=useState(null),[remark,setRemark]=useState(""),[busy,setBusy]=useState(false);
   const [draftReady,setDraftReady]=useState(false),[regenerating,setRegenerating]=useState(false),[draftKey,setDraftKey]=useState("");
   useEffect(()=>{setQuery(window.location.search);},[]);
   const receiptRef=useRef(null);
@@ -138,7 +138,7 @@ export default function MachineRepairPage() {
     try{
       const shareWindow=window.open("about:blank","_blank");
       const blob=await makeRepairPdf(receiptRef.current,detail);
-      const sent=await sendRepairRequest(detail.id,vendorId,blob);setPdfUrl(sent.pdf_url);setNotice("Machines sent to vendor. Receipt PDF saved.");
+      const sent=await sendRepairRequest(detail.id,vendorId,blob);setNotice("Machines sent to vendor. Receipt PDF saved.");
       const vendor=vendors.find(v=>String(v.id)===String(vendorId));const shareUrl=vendorShareUrl(vendor,sent.pdf_url);if(shareWindow){if(shareUrl){shareWindow.opener=null;shareWindow.location.href=shareUrl;}else shareWindow.close();}
       await load(true);setShowReceipt(true);
     }catch(e){setError(e?.message||"Could not generate or send the receipt.");}
@@ -172,7 +172,7 @@ export default function MachineRepairPage() {
       <button className={styles.primary+" "+styles.doneButton} onClick={submit} disabled={busy}>{busy?"Saving request…":"Done"}</button>
     </section> : showReceipt&&detail ? <section className={styles.receiptScreen}>
       <div className={styles.sectionHeading}><div><h2>Repair Receipt</h2><p>{detail.number} · {repairPages(detail.machines).length} A4 page{repairPages(detail.machines).length===1?"":"s"}</p></div><button className={styles.secondary} onClick={()=>setShowReceipt(false)}>Back to request</button></div>
-      <div className={styles.receiptActions}><button className={styles.primary} onClick={printReceipt}>Print / PDF</button><button className={styles.secondary} onClick={downloadPdf}>Download PDF</button>{!detail.sent_at&&<button className={styles.primary} onClick={sendReceipt} disabled={!vendorId||busy}>{busy?"Sending…":"Generate Receipt & Send to Vendor"}</button>}{detail.sent_at&&<button className={styles.secondary} onClick={()=>shareContact(vendors.find(v=>String(v.id)===String(detail.vendor_id)),detail.receipts?.[0]?.pdf_url)}>Send to Vendor (WhatsApp / email)</button>}{detail.sent_at&&office&&<button className={styles.secondary} disabled={regenerating} onClick={async()=>{setRegenerating(true);try{const blob=await makeRepairPdf(receiptRef.current,detail);const v=await saveRepairReceiptVersion(detail.id,blob);setPdfUrl(v.pdf_url);setNotice("New receipt version "+v.version+" saved.");await load(true);}catch(e){setError(e.message||"Receipt version could not be saved.");}finally{setRegenerating(false);}}}>{regenerating?"Saving…":"Regenerate PDF version"}</button>}</div>
+      <div className={styles.receiptActions}><button className={styles.primary} onClick={printReceipt}>Print / PDF</button><button className={styles.secondary} onClick={downloadPdf}>Download PDF</button>{!detail.sent_at&&<button className={styles.primary} onClick={sendReceipt} disabled={!vendorId||busy}>{busy?"Sending…":"Generate Receipt & Send to Vendor"}</button>}{detail.sent_at&&<button className={styles.secondary} onClick={()=>shareContact(vendors.find(v=>String(v.id)===String(detail.vendor_id)),detail.receipts?.[0]?.pdf_url)}>Send to Vendor (WhatsApp / email)</button>}{detail.sent_at&&office&&<button className={styles.secondary} disabled={regenerating} onClick={async()=>{setRegenerating(true);try{const blob=await makeRepairPdf(receiptRef.current,detail);const v=await saveRepairReceiptVersion(detail.id,blob);setNotice("New receipt version "+v.version+" saved.");await load(true);}catch(e){setError(e.message||"Receipt version could not be saved.");}finally{setRegenerating(false);}}}>{regenerating?"Saving…":"Regenerate PDF version"}</button>}</div>
       {detail.sent_at&&detail.receipts?.length>0&&<div className={styles.history}><strong>Receipt versions</strong>{detail.receipts.map(r=><a key={r.id} href={r.pdf_url||fileHref(r.pdf_path)} target="_blank" rel="noreferrer">Version {r.version} · {displayDate(r.generated_at)} · Open PDF</a>)}</div>}
       <A4Receipt request={detail} vendor={vendors.find(v=>String(v.id)===String(vendorId))} rootRef={receiptRef}/>
     </section> : <div className={styles.workspace+(selected&&!creating? " "+styles.showDetail:"")}>
