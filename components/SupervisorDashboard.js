@@ -9,6 +9,7 @@ import { getTodayDpr, getProgress } from "@/lib/dpr";
 import { getExpenseClaimQueue } from "@/lib/money";
 import { getTasks } from "@/lib/tasks";
 import { getMyNotifications } from "@/lib/notify";
+import { approvedExpenseTotal, countOpenIndents, progressPercent } from "@/lib/supervisor-dashboard.mjs";
 
 const modules = [
   ["🛒","Order Material","Create indent and track material","/m/indent","indent"],
@@ -49,10 +50,10 @@ export default function SupervisorDashboard({ sess }) {
   const tasks=Array.isArray(taskResult)?taskResult:[];
   const todayTasks=tasks.filter(t=>t.status!=="completed").slice(0,4);
   const progress=(dprPack?.[1]||[]).slice(0,4);
-  const expenseMonth=useMemo(()=>Array.isArray(expenses)?expenses.filter(e=>String(e.expense_date||e.date||"").slice(0,7)===dateKey().slice(0,7)&&e.status==="approved").reduce((n,e)=>n+Number(e.amount||0),0):null,[expenses]);
+  const expenseMonth=useMemo(()=>approvedExpenseTotal(expenses,dateKey().slice(0,7)),[expenses]);
   const links=modules.filter(m=>canOpen(sess,m[4]));
   const workerCount=Array.isArray(muster)?muster.length:null;
-  const pendingIndents=Array.isArray(indents)?indents.filter(x=>["open","pending","quoting"].includes(String(x.status||"").toLowerCase())).length:null;
+  const pendingIndents=countOpenIndents(indents);
   const dprDone=dprPack?.[0]!==null&&dprPack?.[0]!==undefined;
   return <main className="sv-wrap">
     <header className="sv-hero">
@@ -71,11 +72,11 @@ export default function SupervisorDashboard({ sess }) {
       {err&&<div className="sv-error" role="alert">{err}<button onClick={load}>Retry</button></div>}
       <section className="sv-grid" aria-label="Supervisor modules">{links.map((m)=>{const i=modules.indexOf(m);return <Link key={m[1]} href={m[3]} className="sv-card" style={{background:colors[i]}}><span className="sv-icon">{m[0]}</span><b>{i+1}. {m[1]}</b><span>{m[2]}</span><i aria-hidden="true">→</i></Link>})}</section>
       <section className="sv-panel"><div className="sv-panel-head"><h2>Today’s Site Progress</h2><Link href="/m/report">View all →</Link></div>
-        {busy?<p className="sv-muted">Loading progress…</p>:progress.length?progress.map((p,i)=>{const pct=Number(p.boq)>0?Math.max(0,Math.min(100,Math.round(Number(p.done||0)/Number(p.boq)*100))):null;return <div className="sv-progress" key={p.description+i}><span>🏗</span><div><b>{p.description}</b><div className="sv-track"><span style={{width:pct===null?"0%":pct+"%"}}/></div></div><strong>{pct===null?"—":pct+"%"}</strong></div>}):<p className="sv-muted">No progress records available for this site.</p>}
+        {busy?<p className="sv-muted">Loading progress…</p>:progress.length?progress.map((p,i)=>{const pct=progressPercent(p.done,p.boq);return <div className="sv-progress" key={p.description+i}><span>🏗</span><div><b>{p.description}</b><div className="sv-track"><span style={{width:pct===null?"0%":pct+"%"}}/></div></div><strong>{pct===null?"—":pct+"%"}</strong></div>}):<p className="sv-muted">No progress records available for this site.</p>}
       </section>
       <section className="sv-lower">
         <div className="sv-panel"><div className="sv-panel-head"><h2>Today’s Tasks</h2><Link href="/m/tasks">View all →</Link></div>{busy?<p className="sv-muted">Loading tasks…</p>:todayTasks.length?todayTasks.map(t=><Link className="sv-row" href="/m/tasks" key={t.id}><span className="sv-check">○</span><span>{t.title}</span><small>{t.due||t.status}</small></Link>):<p className="sv-muted">No open tasks.</p>}</div>
-        <div className="sv-panel"><div className="sv-panel-head"><h2>Recent Activity</h2><button type="button" onClick={() => window.dispatchEvent(new Event("psk-open-notifications"))} className="sv-view-all">View all →</button></div>{(notifications?.rows||[]).length?(notifications.rows.slice(0,4).map(n=><Link className="sv-row" href={n.link?.startsWith("/")?n.link:"/m/notifications"} key={n.id}><span className="sv-check">•</span><span><b>{n.title}</b><small>{n.body||n.sites?.name||""}</small></span><small>{n.created_at?new Date(n.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):""}</small></Link>)): <p className="sv-muted">No recent activity.</p>}</div>
+        <div className="sv-panel"><div className="sv-panel-head"><h2>Recent Activity</h2><button type="button" onClick={() => window.dispatchEvent(new Event("psk-open-notifications"))} className="sv-view-all">View all →</button></div>{(notifications?.rows||[]).length?(notifications.rows.slice(0,4).map(n=><Link className="sv-row" href={n.link?.startsWith("/")?n.link:"/m/dashboard"} key={n.id}><span className="sv-check">•</span><span><b>{n.title}</b><small>{n.body||n.sites?.name||""}</small></span><small>{n.created_at?new Date(n.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):""}</small></Link>)): <p className="sv-muted">No recent activity.</p>}</div>
       </section>
     </div>
     <style jsx>{`
