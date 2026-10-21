@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export async function POST(req) {
   try {
     const { key } = await req.json().catch(() => ({}));
-    if (!validKey(key) || !SHARE_FOLDERS.includes(folderOf(key))) return Response.json({ ok: false, error: "Only delivery and repair PDFs can be shared." }, { status: 400 });
+    if (!validKey(key) || !SHARE_FOLDERS.includes(folderOf(key)) || (folderOf(key) === "repairs" && !/^repairs\/receipts\/[A-Za-z0-9_-]+\.pdf$/i.test(String(key)))) return Response.json({ ok: false, error: "Only delivery and repair PDFs can be shared." }, { status: 400 });
     const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
     const u = await userFromToken(token);
     const staff = u ? await staffByAuthId(u.authId) : null;
