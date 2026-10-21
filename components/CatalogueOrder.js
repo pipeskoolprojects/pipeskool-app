@@ -203,7 +203,7 @@ export default function CatalogueOrder({ mobile = false }) {
   useEffect(() => {
     const el = app.current; if (!el) return;
     const nav = () => document.querySelector(".m-nav");
-    const set = () => { const n = nav(); el.style.setProperty("--co-navh", (n && n.getBoundingClientRect().height ? Math.round(n.getBoundingClientRect().height) : 0) + "px"); };
+    const set = () => { const n = nav(); el.style.setProperty("--co-navh", (n && n.getBoundingClientRect().height ? Math.round(n.getBoundingClientRect().height) : 58) + "px"); };
     set(); const t = setTimeout(set, 600);
     window.addEventListener("resize", set);
     let ro = null; if (typeof ResizeObserver !== "undefined") { ro = new ResizeObserver(set); const n = nav(); if (n) ro.observe(n); }
