@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Logo from "@/components/Logo";
+import { Letterhead } from "@/components/Letterhead";
+import { getCompany } from "@/lib/letters";
 import { getSession, can } from "@/lib/auth";
 import { fileStore, fileHref } from "@/lib/files";
 import { clearRepairDraft, readRepairDraft, writeRepairDraft } from "@/lib/repair-draft";
@@ -33,12 +35,13 @@ function shareContact(vendor, url) {
   const target=vendorShareUrl(vendor,url);
   if(target)window.open(target,"_blank","noopener,noreferrer");
 }
-function A4Receipt({ request, vendor, rootRef }) {
+function A4Receipt({ request, vendor, company, rootRef }) {
   const pages=repairPages(request.machines);
+  const logoPath=/^company\/logo-[A-Za-z0-9_-]+\.(?:png|jpe?g|svg|webp)$/i.test(String(company?.logo_url||""))?company.logo_url:"";
+  const receiptCompany=logoPath?company:{...company,logo_url:""};
   return <div ref={rootRef} className={"repair-print-root "+styles.receiptRoot}>
     {pages.map((group,pageIndex)=><section key={pageIndex} className={"repairReceiptPage "+styles.receiptPage}>
-      <header className={styles.receiptHeader}><Logo height={24}/><div><strong>REPAIR CHALLAN</strong><span>{request.number.replace(/^REP-/,"RPC-")} · {displayDate(request.sent_at||request.created_at)}</span></div></header>
-      <div className={styles.orangeRule}/>
+      <div className={styles.receiptLetterhead}><Letterhead company={receiptCompany} logoSrc={logoPath?"/api/files/image?k="+encodeURIComponent(logoPath):null}/><div className={styles.receiptDocMeta}><strong>REPAIR CHALLAN</strong><span>{request.number.replace(/^REP-/,"RPC-")} · {displayDate(request.sent_at||request.created_at)}</span></div></div>
       <div className={styles.addresses}>
         <div><b>From</b><span>Pipeskool Projects Pvt. Ltd.</span><span>{request.site_name}</span><small>Sent by: {request.sent_by_name||request.raised_by_name}</small></div>
         <div><b>To (Repair vendor)</b><span>{vendor?.name||request.vendor_name||"—"}</span><small>{vendor?.contact_person||""}</small><small>{vendor?.contact_mobile||vendor?.phone||""}</small></div>
@@ -54,6 +57,7 @@ function A4Receipt({ request, vendor, rootRef }) {
 }
 export default function MachineRepairPage() {
   const [query,setQuery]=useState("");
+  const [company,setCompany]=useState({name:"PIPESKOOL PROJECTS PVT LTD."});
   const [sess,setSess]=useState(null),[rows,setRows]=useState([]),[vendors,setVendors]=useState([]),[detail,setDetail]=useState(null);
   const [loading,setLoading]=useState(true),[error,setError]=useState(""),[notice,setNotice]=useState("");
   const [tab,setTab]=useState("All"),[selected,setSelected]=useState(null),[creating,setCreating]=useState(false),[showReceipt,setShowReceipt]=useState(false);
@@ -84,6 +88,7 @@ export default function MachineRepairPage() {
     finally {setLoading(false);}
   },[office,query,selected,sess,tab]);
   useEffect(()=>{const s=getSession();setSess(s);if(!s){setError("Sign in to open Machine Repair.");setLoading(false);return;}},[]);
+  useEffect(()=>{if(sess)getCompany().then(setCompany).catch(()=>{});},[sess?.id]);
   useEffect(()=>{if(sess)load();},[sess,tab,load]);
   useEffect(()=>{if(new URLSearchParams(query).get("new")==="1"&&canCreate){setCreating(true);setSelected(null);setDetail(null);}},[query,canCreate]);
   useEffect(()=>{
@@ -189,7 +194,7 @@ export default function MachineRepairPage() {
       <div className={styles.sectionHeading}><div><h2>Repair Receipt</h2><p>{detail.number} · {repairPages(detail.machines).length} A4 page{repairPages(detail.machines).length===1?"":"s"}</p></div><button className={styles.secondary} onClick={()=>setShowReceipt(false)}>Back to request</button></div>
       <div className={styles.receiptActions}><button className={styles.primary} onClick={printReceipt}>Print / PDF</button><button className={styles.secondary} onClick={downloadPdf}>Download PDF</button>{!detail.sent_at&&<button className={styles.primary} onClick={sendReceipt} disabled={!vendorId||busy}>{busy?"Sending…":"Generate Receipt & Send to Vendor"}</button>}{detail.sent_at&&<button className={styles.secondary} onClick={()=>shareContact(vendors.find(v=>String(v.id)===String(detail.vendor_id)),detail.receipts?.[0]?.pdf_url)}>Send to Vendor (WhatsApp / email)</button>}{detail.sent_at&&office&&<button className={styles.secondary} disabled={regenerating} onClick={async()=>{setRegenerating(true);try{const blob=await makeRepairPdf(receiptRef.current,detail);const v=await saveRepairReceiptVersion(detail.id,blob);setNotice("New receipt version "+v.version+" saved.");await load(true);}catch(e){setError(e.message||"Receipt version could not be saved.");}finally{setRegenerating(false);}}}>{regenerating?"Saving…":"Regenerate PDF version"}</button>}</div>
       {detail.sent_at&&detail.receipts?.length>0&&<div className={styles.history}><strong>Receipt versions</strong>{detail.receipts.map(r=><a key={r.id} href={r.pdf_url||fileHref(r.pdf_path)} target="_blank" rel="noreferrer">Version {r.version} · {displayDate(r.generated_at)} · Open PDF</a>)}</div>}
-      <A4Receipt request={detail} vendor={vendors.find(v=>String(v.id)===String(vendorId))} rootRef={receiptRef}/>
+      <A4Receipt request={detail} vendor={vendors.find(v=>String(v.id)===String(vendorId))} company={company} rootRef={receiptRef}/>
     </section> : <div className={styles.workspace+(selected&&!creating? " "+styles.showDetail:"")}>
       <section className={styles.listPanel}>
         <div className={styles.tabs}>{["All","Requested","With vendor","Received"].map(t=><button key={t} className={tab===t?styles.activeTab:""} onClick={()=>setTab(t)}>{t}<b>{counts[t]||0}</b></button>)}</div>
