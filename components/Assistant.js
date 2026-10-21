@@ -48,6 +48,7 @@ export default function Assistant() {
   const endRef = useRef(null);
 
   useEffect(() => { setSess(getSession()); }, [path]);
+  useEffect(() => { const show = () => setOpen(true); window.addEventListener("psk-open-assistant", show); return () => window.removeEventListener("psk-open-assistant", show); }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, open, ticket]);
   if (!sess || path === "/login" || path.startsWith("/m/login")) return null;
   const t = T[lang];
@@ -115,7 +116,7 @@ export default function Assistant() {
 
   return (
     <>
-      {!open && <button onClick={() => setOpen(true)} title="Pipeskool Assistant" className="no-print asst-fab"
+      {!open && path !== "/m/dashboard" && <button onClick={() => setOpen(true)} title="Pipeskool Assistant" className="no-print asst-fab"
         style={{ position: "fixed", right: 14, bottom: (path || "").startsWith("/m") ? "calc(74px + env(safe-area-inset-bottom, 0px))" : 18, zIndex: 150, width: 52, height: 52, borderRadius: "50%",
           background: "linear-gradient(180deg,#FF7A45,#E8622B)", color: "#1a1207", fontSize: 24, border: "none", boxShadow: "0 4px 14px rgba(0,0,0,.25)", cursor: "pointer" }}>🤖</button>}
       {open && (
