@@ -10,6 +10,7 @@ import { getTodayDpr, getProgress } from "@/lib/dpr";
 import { getExpenseClaimQueue } from "@/lib/money";
 import { getTasks } from "@/lib/tasks";
 import { getMyNotifications } from "@/lib/notify";
+import { getRepairDashboardCount } from "@/lib/machine-repair";
 import { approvedExpenseTotal, countOpenIndents, progressPercent } from "@/lib/supervisor-dashboard.mjs";
 
 const modules = [
@@ -21,8 +22,9 @@ const modules = [
   ["₹","Money & Expenses","Site expense claims and petty cash","/m/money","money"],
   ["☑","My Task","Today’s work, pending items and approvals","/m/tasks",null],
   ["👷","Add Worker","Register and update worker details","/m/add","workers"],
+  ["🛠","Machine Repair","Send tools & machines for repair and track them","/m/repairs","machine_repair"],
 ];
-const colors = ["#fff0e5","#eaf6ff","#eaffef","#f3eaff","#ffecef","#fff8df","#e5fbff"];
+const colors = ["#fff0e5","#eaf6ff","#eaffef","#f3eaff","#ffecef","#fff8df","#e5fbff","#f0edff"];
 const dateKey = () => new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kolkata"}).format(new Date());
 function canOpen(sess, module) { return !module || canSeeModule(sess,module) || (module==="workers" && (canAnySite(sess,"workers","create") || canAnySite(sess,"workers","manage"))); }
 
@@ -40,6 +42,7 @@ export default function SupervisorDashboard({ sess }) {
       canSeeModule(sess,"dpr",siteId)?Promise.all([getTodayDpr(siteId),getProgress(siteId)]):Promise.resolve(null),
       canSeeModule(sess,"money",siteId)?getExpenseClaimQueue(siteId):Promise.resolve(null),
       getTasks(),getMyNotifications(8),
+      canSeeModule(sess,"machine_repair",siteId)?getRepairDashboardCount(siteId):Promise.resolve(0),
     ]);
     const next={};
     jobs.forEach((j,i)=>{if(j.status==="fulfilled")next[i]=j.value;});
@@ -72,7 +75,7 @@ export default function SupervisorDashboard({ sess }) {
     </header>
     <div className={styles.content}>
       {err&&<div className={styles.error} role="alert">{err}<button onClick={load}>Retry</button></div>}
-      <section className={styles.grid} aria-label="Supervisor modules">{links.map((m)=>{const i=modules.indexOf(m);return <Link key={m[1]} href={m[3]} className={styles.card} style={{background:colors[i]}}><span className={styles.icon}>{m[0]}</span><b className={styles.cardTitle}>{i+1}. {m[1]}</b><span className={styles.cardDescription}>{m[2]}</span><i className={styles.arrow} aria-hidden="true">→</i></Link>})}</section>
+      <section className={styles.grid} aria-label="Supervisor modules">{links.map((m)=>{const i=modules.indexOf(m);return <Link key={m[1]} href={m[3]} className={styles.card} style={{background:colors[i]}}><span className={styles.icon}>{m[0]}</span><b className={styles.cardTitle}>{m[1]==="Machine Repair"?"7. Machine Repair":(i+1)+". "+m[1]}</b>{m[1]==="Machine Repair"&&repairCount>0&&<small className={styles.liveChip}>{repairCount} with vendor</small>}<span className={styles.cardDescription}>{m[2]}</span><i className={styles.arrow} aria-hidden="true">→</i></Link>})}</section>
       <section className={styles.panel}><div className={styles.panelHead}><h2>Today’s Site Progress</h2><Link href="/m/report">View all →</Link></div>
         {busy?<p className={styles.muted}>Loading progress…</p>:progress.length?progress.map((p,i)=>{const pct=progressPercent(p.done,p.boq);return <div className={styles.progress} key={p.description+i}><span>🏗</span><div><b className={styles.progressTitle}>{p.description}</b><div className={styles.track}><span className={styles.trackFill} style={{width:pct===null?"0%":pct+"%"}}/></div></div><strong>{pct===null?"—":pct+"%"}</strong></div>}):<p className={styles.muted}>No progress records available for this site.</p>}
       </section>
