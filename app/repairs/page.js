@@ -120,7 +120,10 @@ export default function MachineRepairPage() {
         if(e)throw new Error((!navigator.onLine?"Offline: ":"")+"Photo "+(i+1)+" could not upload. Your saved draft is still here. Retry to continue.");
         submitted.push({name:machines[i].name.trim(),problem:machines[i].problem.trim(),photo_url:path});
       }
-      const res=await createRepairRequest(siteId,submitted,submissionKey);
+      const requestKey=draftKey||crypto.randomUUID();
+      setDraftKey(requestKey);
+      await writeRepairDraft(`${sess.id}:${siteId}`,{submissionKey:requestKey,machines:machines.map(({name,problem,preview})=>({name,problem,preview}))});
+      const res=await createRepairRequest(siteId,submitted,requestKey);
       await clearRepairDraft(`${sess.id}:${siteId}`);
       setMachines([{name:"",problem:"",photo:null,preview:""}]);setDraftKey("");setCreating(false);setDraftReady(false);setNotice("Repair request "+res.number+" submitted.");setSelected(res.id);await load(false);setDetail(await getRepairDetail(res.id));
     }catch(e){setError(e?.message||"Request could not be submitted. Your draft is saved.");}
