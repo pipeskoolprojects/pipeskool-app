@@ -24,7 +24,7 @@ const modules = [
   ["👷","Add Worker","Register and update worker details","/m/add","workers"],
   ["🛠","Machine Repair","Send tools & machines for repair and track them","/m/repairs","machine_repair"],
 ];
-const colors = ["#fff0e5","#eaf6ff","#eaffef","#f3eaff","#ffecef","#fff8df","#e5fbff","#f0edff"];
+const colors = ["#fff0e5","#eaf6ff","#eaffef","#f3eaff","#ffecef","#fff8df","#e5fbff","#f0edff","#e8f8f4"];
 const dateKey = () => new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kolkata"}).format(new Date());
 function canOpen(sess, module) { return !module || canSeeModule(sess,module) || (module==="workers" && (canAnySite(sess,"workers","create") || canAnySite(sess,"workers","manage"))); }
 
