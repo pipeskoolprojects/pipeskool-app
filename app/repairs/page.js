@@ -6,7 +6,7 @@ import Logo from "@/components/Logo";
 import { getSession, can, canAnySite } from "@/lib/auth";
 import { fileStore, fileHref } from "@/lib/files";
 import { clearRepairDraft, readRepairDraft, writeRepairDraft } from "@/lib/repair-draft";
-import { createRepairRequest, getRepairDetail, listRepairRequests, listRepairVendors, makeRepairPdf, receiveRepairMachine, sendRepairRequest, repairPages } from "@/lib/machine-repair";
+import { createRepairRequest, getRepairDetail, listRepairRequests, listRepairVendors, makeRepairPdf, receiveRepairMachine, sendRepairRequest, saveRepairReceiptVersion, repairPages } from "@/lib/machine-repair";
 import { incompleteRepairMachines, repairTabMatches } from "@/lib/machine-repair-core.mjs";
 import styles from "./machine-repair.module.css";
 
@@ -34,7 +34,7 @@ function A4Receipt({ request, vendor, rootRef }) {
   const pages=repairPages(request.machines);
   return <div ref={rootRef} className={styles.receiptRoot}>
     {pages.map((group,pageIndex)=><section key={pageIndex} className={"repairReceiptPage "+styles.receiptPage}>
-      <header className={styles.receiptHeader}><Logo height={24}/><div><strong>REPAIR CHALLAN</strong><span>{request.number} · {displayDate(request.sent_at||request.created_at)}</span></div></header>
+      <header className={styles.receiptHeader}><Logo height={24}/><div><strong>REPAIR CHALLAN</strong><span>{request.number.replace(/^REP-/,"RPC-")} · {displayDate(request.sent_at||request.created_at)}</span></div></header>
       <div className={styles.orangeRule}/>
       <div className={styles.addresses}>
         <div><b>From</b><span>Pipeskool Projects Pvt. Ltd.</span><span>{request.site_name}</span><small>Sent by: {request.sent_by_name||request.raised_by_name}</small></div>
@@ -56,7 +56,7 @@ export default function MachineRepairPage() {
   const [tab,setTab]=useState("All"),[selected,setSelected]=useState(null),[creating,setCreating]=useState(false),[showReceipt,setShowReceipt]=useState(false);
   const [machines,setMachines]=useState([{name:"",problem:"",photo:null,preview:""}]),[invalid,setInvalid]=useState([]),[uploading,setUploading]=useState(false),[uploadStep,setUploadStep]=useState("");
   const [vendorId,setVendorId]=useState(""),[confirmMachine,setConfirmMachine]=useState(null),[remark,setRemark]=useState(""),[busy,setBusy]=useState(false),[pdfUrl,setPdfUrl]=useState("");
-  const [draftReady,setDraftReady]=useState(false);
+  const [draftReady,setDraftReady]=useState(false),[regenerating,setRegenerating]=useState(false);
   const receiptRef=useRef(null);
   const siteId=sess?.currentSite||sess?.sites?.[0]?.id;
   const supervisor=["supervisor","site_engineer"].includes(sess?.role);
@@ -94,7 +94,7 @@ export default function MachineRepairPage() {
     const timer=setTimeout(()=>writeRepairDraft(key,{machines:machines.map(({name,problem,preview})=>({name,problem,preview}))}),300);
     return()=>clearTimeout(timer);
   },[sess,siteId,creating,draftReady,machines]);
-  const filtered=rows;
+  const filtered=rows.filter(r=>repairTabMatches(tab,r.status));
   const counts=useMemo(()=>Object.fromEntries(["All","Requested","With vendor","Received"].map(t=>[t,t==="All"?rows.length:rows.filter(r=>repairTabMatches(t,r.status)).length])),[rows]);
   const selectRequest=async r=>{setCreating(false);setShowReceipt(false);setSelected(r.id);setError("");try{setDetail(await getRepairDetail(r.id));}catch(e){setError(e.message||"Could not open request.");}};
   const setMachine=(i,key,value)=>setMachines(old=>old.map((m,n)=>n===i?{...m,[key]:value}:m));
@@ -139,7 +139,7 @@ export default function MachineRepairPage() {
     finally{setBusy(false);}
   };
   const downloadPdf=async()=>{
-    if(!detail)return;try{const blob=await makeRepairPdf(receiptRef.current,detail);const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=detail.number+"-repair-receipt.pdf";a.click();URL.revokeObjectURL(a.href);}catch(e){setError(e.message||"PDF could not be generated.");}
+    if(!detail)return;try{const blob=await makeRepairPdf(receiptRef.current,detail);const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=detail.number.replace(/^REP-/,"RPC-")+"-repair-receipt.pdf";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}catch(e){setError(e.message||"PDF could not be generated.");}
   };
   if(!sess)return <main className={styles.page}><p>{error||"Loading…"}</p></main>;
   if(!canRead&&!canCreate)return <main className={styles.page}><h1>Machine Repair</h1><p>You do not have permission to view Machine Repair for this site.</p></main>;
@@ -166,8 +166,8 @@ export default function MachineRepairPage() {
       <button className={styles.primary+" "+styles.doneButton} onClick={submit} disabled={busy}>{busy?"Saving request…":"Done"}</button>
     </section> : showReceipt&&detail ? <section className={styles.receiptScreen}>
       <div className={styles.sectionHeading}><div><h2>Repair Receipt</h2><p>{detail.number} · {repairPages(detail.machines).length} A4 page{repairPages(detail.machines).length===1?"":"s"}</p></div><button className={styles.secondary} onClick={()=>setShowReceipt(false)}>Back to request</button></div>
-      <div className={styles.receiptActions}><button className={styles.primary} onClick={printReceipt}>Print / PDF</button><button className={styles.secondary} onClick={downloadPdf}>Download PDF</button>{!detail.sent_at&&<button className={styles.primary} onClick={sendReceipt} disabled={!vendorId||busy}>{busy?"Sending…":"Generate Receipt & Send to Vendor"}</button>}{detail.sent_at&&<button className={styles.secondary} onClick={()=>shareContact(detail,detail.receipts?.[0]?.pdf_url)}>Send to Vendor (WhatsApp / email)</button>}</div>
-      {detail.sent_at&&detail.receipts?.length>0&&<div className={styles.notice}>Saved receipt version {detail.receipts[0].version} · <a href={fileHref(detail.receipts[0].pdf_path)} target="_blank" rel="noreferrer">Open stored PDF</a></div>}
+      <div className={styles.receiptActions}><button className={styles.primary} onClick={printReceipt}>Print / PDF</button><button className={styles.secondary} onClick={downloadPdf}>Download PDF</button>{!detail.sent_at&&<button className={styles.primary} onClick={sendReceipt} disabled={!vendorId||busy}>{busy?"Sending…":"Generate Receipt & Send to Vendor"}</button>}{detail.sent_at&&<button className={styles.secondary} onClick={()=>shareContact(vendors.find(v=>String(v.id)===String(detail.vendor_id)),detail.receipts?.[0]?.pdf_url)}>Send to Vendor (WhatsApp / email)</button>}{detail.sent_at&&office&&<button className={styles.secondary} disabled={regenerating} onClick={async()=>{setRegenerating(true);try{const blob=await makeRepairPdf(receiptRef.current,detail);const v=await saveRepairReceiptVersion(detail.id,blob);setPdfUrl(v.pdf_url);setNotice("New receipt version "+v.version+" saved.");await load(true);}catch(e){setError(e.message||"Receipt version could not be saved.");}finally{setRegenerating(false);}}}>{regenerating?"Saving…":"Regenerate PDF version"}</button>}</div>
+      {detail.sent_at&&detail.receipts?.length>0&&<div className={styles.notice}>Saved receipt version {detail.receipts[0].version} · <a href={detail.receipts[0].pdf_url||fileHref(detail.receipts[0].pdf_path)} target="_blank" rel="noreferrer">Open stored PDF</a></div>}
       <A4Receipt request={detail} vendor={vendors.find(v=>String(v.id)===String(vendorId))} rootRef={receiptRef}/>
     </section> : <div className={styles.workspace}>
       <section className={styles.listPanel}>
