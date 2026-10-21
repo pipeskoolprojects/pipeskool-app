@@ -94,10 +94,13 @@
 .error button { float:right; }
 @media (max-width:380px) {
   .content { padding-left:9px; padding-right:9px; }
-  .stats { padding:10px 2px; }
-  .stat { padding:2px 4px; }
+  .stats { grid-template-columns:repeat(2,minmax(0,1fr)); row-gap:8px; padding:10px 4px; }
+  .stat { padding:4px 7px; }
+  .stat:nth-child(odd) { border-right:1px solid #e4e7ec; }
+  .stat:nth-child(even) { border-right:0; }
+  .stat:nth-child(-n+2) { border-bottom:1px solid #e4e7ec; padding-bottom:8px; }
   .statLabel { font-size:11px; }
-  .statHint { font-size:9px; }
+  .statHint { font-size:10px; }
   .card { padding:12px 10px 36px; min-height:160px; }
   .cardTitle { font-size:14px; }
   .lower { grid-template-columns:1fr; }
