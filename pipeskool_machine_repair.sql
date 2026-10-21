@@ -91,7 +91,7 @@ $$;
 
 create or replace view v_machine_repair_requests with (security_invoker=true) as
 select r.id,r.number,r.site_id,s.name as site_name,r.raised_by,u.full_name as raised_by_name,
- r.created_at,r.vendor_id,v.name as vendor_name,r.sent_by,r.sent_at,
+ r.created_at,r.vendor_id,v.name as vendor_name,r.sent_by,sb.full_name as sent_by_name,r.sent_at,
  count(m.id)::integer as machine_count,
  count(m.id) filter(where m.received_at is not null)::integer as received_count,
  case when r.sent_at is null then 'Requested'
@@ -102,7 +102,7 @@ from machine_repair_requests r join sites s on s.id=r.site_id
 join app_users u on u.id=r.raised_by
 left join vendors v on v.id=r.vendor_id
 left join machine_repair_machines m on m.request_id=r.id
-group by r.id,s.name,u.full_name,v.name;
+group by r.id,s.name,u.full_name,v.name,sb.full_name;
 
 alter table machine_repair_requests enable row level security;
 alter table machine_repair_machines enable row level security;
