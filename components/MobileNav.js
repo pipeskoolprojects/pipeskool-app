@@ -5,7 +5,7 @@ import NotifyBell from "@/components/NotifyBell";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { logoutAuth, getSession, refreshSessionRights, canSeeModuleAnySite, canAnySite } from "@/lib/auth";
+import { logoutAuth, getSession, refreshSessionRights, canSeeModuleAnySite, canSeeModule, canAnySite } from "@/lib/auth";
 import { getLocalWorker } from "@/lib/mobile";
 import { LANGS, getLang, setLang, t } from "@/lib/i18n";
 
