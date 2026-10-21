@@ -45,7 +45,7 @@ function A4Receipt({ request, vendor, rootRef }) {
       </div>
       <p className={styles.receiptNote}>The following {request.machines.length} machine{request.machines.length===1?"":"s"} are sent for repair. Please repair and return.</p>
       <div className={styles.machineGrid}>{group.map(m=><article key={m.id} className={styles.receiptMachine}>
-        <img src={fileHref(m.photo_url)} alt={m.name}/>
+        <img src={"/api/files/image?k="+encodeURIComponent(m.photo_url)} alt={m.name}/>
         <b>{m.sequence_no}. {m.name}</b><span><strong>Problem:</strong> {m.problem}</span>
       </article>)}{Array.from({length:4-group.length},(_,i)=><div key={"blank"+i}/>)}</div>
       <footer className={styles.receiptFooter}><div><span>Sent by (Pipeskool)</span><i/></div><div><span>Received by (Vendor)</span><i/></div><small>Page {pageIndex+1} of {pages.length}</small></footer>
