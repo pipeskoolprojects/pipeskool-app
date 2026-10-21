@@ -54,7 +54,7 @@ export default function MachineRepairPage() {
   const [tab,setTab]=useState("All"),[selected,setSelected]=useState(null),[creating,setCreating]=useState(false),[showReceipt,setShowReceipt]=useState(false);
   const [machines,setMachines]=useState([{name:"",problem:"",photo:null,preview:""}]),[invalid,setInvalid]=useState([]),[uploading,setUploading]=useState(false),[uploadStep,setUploadStep]=useState("");
   const [vendorId,setVendorId]=useState(""),[confirmMachine,setConfirmMachine]=useState(null),[remark,setRemark]=useState(""),[busy,setBusy]=useState(false),[pdfUrl,setPdfUrl]=useState("");
-  const [draftReady,setDraftReady]=useState(false),[regenerating,setRegenerating]=useState(false);
+  const [draftReady,setDraftReady]=useState(false),[regenerating,setRegenerating]=useState(false),[draftKey,setDraftKey]=useState("");
   useEffect(()=>{setQuery(window.location.search);},[]);
   const receiptRef=useRef(null);
   const siteId=sess?.currentSite||sess?.sites?.[0]?.id;
@@ -84,15 +84,15 @@ export default function MachineRepairPage() {
   useEffect(()=>{
     if(!sess||!creating)return;
     const key=`${sess.id}:${siteId}`;let alive=true;
-    readRepairDraft(key).then(d=>{if(!alive||!d)return;setMachines(d.machines?.length?d.machines.map(m=>({...m,photo:null})):machines);setDraftReady(true);});
+    readRepairDraft(key).then(d=>{if(!alive||!d)return;setMachines(d.machines?.length?d.machines.map(m=>({...m,photo:null})):machines);setDraftKey(d.submissionKey||"");setDraftReady(true);});
     return()=>{alive=false;};
   },[sess?.id,siteId,creating]);
   useEffect(()=>{
     if(!sess||!creating||!draftReady)return;
     const key=`${sess.id}:${siteId}`;
-    const timer=setTimeout(()=>writeRepairDraft(key,{machines:machines.map(({name,problem,preview})=>({name,problem,preview}))}),300);
+    const timer=setTimeout(()=>writeRepairDraft(key,{submissionKey:draftKey,machines:machines.map(({name,problem,preview})=>({name,problem,preview}))}),300);
     return()=>clearTimeout(timer);
-  },[sess,siteId,creating,draftReady,machines]);
+  },[sess,siteId,creating,draftReady,draftKey,machines]);
   const filtered=rows.filter(r=>repairTabMatches(tab,r.status));
   const counts=useMemo(()=>Object.fromEntries(["All","Requested","With vendor","Received"].map(t=>[t,t==="All"?rows.length:rows.filter(r=>repairTabMatches(t,r.status)).length])),[rows]);
   const selectRequest=async r=>{setCreating(false);setShowReceipt(false);setSelected(r.id);setError("");try{setDetail(await getRepairDetail(r.id));}catch(e){setError(e.message||"Could not open request.");}};
@@ -115,9 +115,9 @@ export default function MachineRepairPage() {
         if(e)throw new Error((!navigator.onLine?"Offline: ":"")+"Photo "+(i+1)+" could not upload. Your saved draft is still here. Retry to continue.");
         submitted.push({name:machines[i].name.trim(),problem:machines[i].problem.trim(),photo_url:path});
       }
-      const res=await createRepairRequest(siteId,submitted);
+      const res=await createRepairRequest(siteId,submitted,submissionKey);
       await clearRepairDraft(`${sess.id}:${siteId}`);
-      setMachines([{name:"",problem:"",photo:null,preview:""}]);setCreating(false);setDraftReady(false);setNotice("Repair request "+res.number+" submitted.");setSelected(res.id);await load(false);setDetail(await getRepairDetail(res.id));
+      setMachines([{name:"",problem:"",photo:null,preview:""}]);setDraftKey("");setCreating(false);setDraftReady(false);setNotice("Repair request "+res.number+" submitted.");setSelected(res.id);await load(false);setDetail(await getRepairDetail(res.id));
     }catch(e){setError(e?.message||"Request could not be submitted. Your draft is saved.");}
     finally{setUploading(false);setUploadStep("");setBusy(false);}
   };
@@ -143,7 +143,7 @@ export default function MachineRepairPage() {
   if(!sess)return <main className={styles.page}><p>{error||"Loading…"}</p></main>;
   if(!canRead&&!canCreate)return <main className={styles.page}><h1>Machine Repair</h1><p>You do not have permission to view Machine Repair for this site.</p></main>;
   return <main className={styles.page}>
-    <header className={styles.heading}><div><h1>Machine Repair</h1><p>Track faulty tools from site to vendor and back.</p></div>{canCreate&&!creating&&!showReceipt&&<button className={styles.primary} onClick={()=>{setMachines([{name:"",problem:"",photo:null,preview:""}]);setDraftReady(true);setCreating(true);setDetail(null);setSelected(null);setError("");}}>＋ New Repair</button>}</header>
+    <header className={styles.heading}><div><h1>Machine Repair</h1><p>Track faulty tools from site to vendor and back.</p></div>{canCreate&&!creating&&!showReceipt&&<button className={styles.primary} onClick={()=>{setMachines([{name:"",problem:"",photo:null,preview:""}]);setDraftKey("");setDraftReady(true);setCreating(true);setDetail(null);setSelected(null);setError("");}}>＋ New Repair</button>}</header>
     {notice&&<div className={styles.notice} role="status">{notice}<button onClick={()=>setNotice("")}>×</button></div>}
     {error&&<div className={styles.error} role="alert">{error}<button onClick={()=>load(true)} disabled={loading}>Retry</button></div>}
     {creating? <section className={styles.formCard}>
