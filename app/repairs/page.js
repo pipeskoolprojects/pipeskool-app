@@ -1,6 +1,5 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Logo from "@/components/Logo";
 import { Letterhead } from "@/components/Letterhead";
 import { getCompany } from "@/lib/letters";
 import { getSession, can } from "@/lib/auth";
