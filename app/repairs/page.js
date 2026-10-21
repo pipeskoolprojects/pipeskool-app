@@ -22,17 +22,21 @@ async function compressPhoto(file) {
   return new File([blob],"repair-photo.jpg",{type:"image/jpeg"});
 }
 function filePreview(file) { return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(file);}); }
-function vendorShareUrl(vendor, url) {
+function vendorShareUrl(vendor, url, channel) {
   if (!url) return "";
-  const phone=String(vendor?.contact_mobile||vendor?.phone||"").replace(/\D/g,"");
   const text=encodeURIComponent("Repair challan from Pipeskool: "+url);
-  if (phone) return "https://wa.me/"+(phone.length===10?"91"+phone:phone)+"?text="+text;
-  if (vendor?.email) return "mailto:"+encodeURIComponent(vendor.email)+"?subject="+encodeURIComponent("Pipeskool repair challan")+"&body="+text;
+  const phone=String(vendor?.contact_mobile||vendor?.phone||"").replace(/\D/g,"").replace(/^0+(?=\d{10}$)/,"");
+  const email=String(vendor?.email||"").trim();
+  if (channel==="whatsapp" && phone) return "https://wa.me/"+(phone.length===10?"91"+phone:phone)+"?text="+text;
+  if (channel==="email" && email) return "mailto:"+encodeURIComponent(email)+"?subject="+encodeURIComponent("Pipeskool repair challan")+"&body="+text;
   return "";
 }
-function shareContact(vendor, url) {
-  const target=vendorShareUrl(vendor,url);
-  if(target)window.open(target,"_blank","noopener,noreferrer");
+function shareContact(vendor, url, channel) {
+  const target=vendorShareUrl(vendor,url,channel);
+  if(!target)return false;
+  // Navigate directly from the click so browsers do not silently block a delayed popup.
+  window.location.assign(target);
+  return true;
 }
 function A4Receipt({ request, vendor, company, rootRef }) {
   const pages=repairPages(request.machines);
@@ -104,6 +108,17 @@ export default function MachineRepairPage() {
   },[sess,siteId,creating,draftReady,draftKey,machines]);
   const filtered=rows.filter(r=>repairTabMatches(tab,r.status));
   const counts=useMemo(()=>Object.fromEntries(["All","Requested","With vendor","Received"].map(t=>[t,t==="All"?rows.length:rows.filter(r=>repairTabMatches(t,r.status)).length])),[rows]);
+  const receiptVendor=detail?vendors.find(v=>String(v.id)===String(detail.vendor_id)):null;
+  const shareReceipt=channel=>{
+    const receipt=detail?.receipts?.[0];
+    if(!receipt?.pdf_url){setError("The receipt share link is missing. Regenerate the PDF receipt and try again.");return;}
+    if(!receiptVendor){setError("Vendor details are not loaded. Reload this request and try again.");return;}
+    if(!vendorShareUrl(receiptVendor,receipt.pdf_url,channel)){
+      setError(channel==="email"?"Add an email address to this vendor in the Vendor master first.":"Add a WhatsApp/mobile number to this vendor in the Vendor master first.");
+      return;
+    }
+    shareContact(receiptVendor,receipt.pdf_url,channel);
+  };
   const selectRequest=async r=>{setCreating(false);setShowReceipt(false);setSelected(r.id);setError("");try{setDetail(await getRepairDetail(r.id));}catch(e){setError(e.message||"Could not open request.");}};
   const setMachine=(i,key,value)=>setMachines(old=>old.map((m,n)=>n===i?{...m,[key]:value}:m));
   const choosePhoto=async(e,i)=>{
@@ -191,7 +206,7 @@ export default function MachineRepairPage() {
       <button className={styles.primary+" "+styles.doneButton} onClick={submit} disabled={busy}>{busy?"Saving request…":"Done"}</button>
     </section> : showReceipt&&detail ? <section className={styles.receiptScreen}>
       <div className={styles.sectionHeading}><div><h2>Repair Receipt</h2><p>{detail.number} · {repairPages(detail.machines).length} A4 page{repairPages(detail.machines).length===1?"":"s"}</p></div><button className={styles.secondary} onClick={()=>setShowReceipt(false)}>Back to request</button></div>
-      <div className={styles.receiptActions}><button className={styles.primary} onClick={printReceipt}>Print / PDF</button><button className={styles.secondary} onClick={downloadPdf}>Download PDF</button>{!detail.sent_at&&<button className={styles.primary} onClick={sendReceipt} disabled={!vendorId||busy}>{busy?"Sending…":"Generate Receipt & Send to Vendor"}</button>}{detail.sent_at&&<button className={styles.secondary} onClick={()=>shareContact(vendors.find(v=>String(v.id)===String(detail.vendor_id)),detail.receipts?.[0]?.pdf_url)}>Send to Vendor (WhatsApp / email)</button>}{detail.sent_at&&office&&<button className={styles.secondary} disabled={regenerating} onClick={async()=>{setRegenerating(true);try{const blob=await makeRepairPdf(receiptRef.current,detail);const v=await saveRepairReceiptVersion(detail.id,blob);setNotice("New receipt version "+v.version+" saved.");await load(true);}catch(e){setError(e.message||"Receipt version could not be saved.");}finally{setRegenerating(false);}}}>{regenerating?"Saving…":"Regenerate PDF version"}</button>}</div>
+      <div className={styles.receiptActions}><button className={styles.primary} onClick={printReceipt}>Print / PDF</button><button className={styles.secondary} onClick={downloadPdf}>Download PDF</button>{!detail.sent_at&&<button className={styles.primary} onClick={sendReceipt} disabled={!vendorId||busy}>{busy?"Sending…":"Generate Receipt & Send to Vendor"}</button>}{detail.sent_at&&<>{receiptVendor?.contact_mobile||receiptVendor?.phone?<button className={styles.secondary} onClick={()=>shareReceipt("whatsapp")}>Send on WhatsApp</button>:null}{receiptVendor?.email?<button className={styles.secondary} onClick={()=>shareReceipt("email")}>Send by email</button>:null}{!receiptVendor?.contact_mobile&&!receiptVendor?.phone&&!receiptVendor?.email?<span className={styles.muted}>Add the vendor’s WhatsApp number or email in the Vendor master to share this receipt.</span>:null}</>}{detail.sent_at&&office&&<button className={styles.secondary} disabled={regenerating} onClick={async()=>{setRegenerating(true);try{const blob=await makeRepairPdf(receiptRef.current,detail);const v=await saveRepairReceiptVersion(detail.id,blob);setNotice("New receipt version "+v.version+" saved.");await load(true);}catch(e){setError(e.message||"Receipt version could not be saved.");}finally{setRegenerating(false);}}}>{regenerating?"Saving…":"Regenerate PDF version"}</button>}</div>
       {detail.sent_at&&detail.receipts?.length>0&&<div className={styles.history}><strong>Receipt versions</strong>{detail.receipts.map(r=><a key={r.id} href={r.pdf_url||fileHref(r.pdf_path)} target="_blank" rel="noreferrer">Version {r.version} · {displayDate(r.generated_at)} · Open PDF</a>)}</div>}
       <A4Receipt request={detail} vendor={vendors.find(v=>String(v.id)===String(vendorId))} company={company} rootRef={receiptRef}/>
     </section> : <div className={styles.workspace+(selected&&!creating? " "+styles.showDetail:"")}>
