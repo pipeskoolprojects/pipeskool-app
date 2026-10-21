@@ -218,4 +218,3 @@ export default function MachineRepairPage() {
     {confirmMachine&&<div className={styles.modalShade} onClick={()=>setConfirmMachine(null)}><section className={styles.modal} role="dialog" aria-modal="true" onClick={e=>e.stopPropagation()}><h2>Mark {confirmMachine.name} received?</h2><p>This records that the machine has returned to your site.</p><label>Remark (optional)<textarea rows={3} value={remark} onChange={e=>setRemark(e.target.value)} placeholder="Condition or repair notes"/></label><div className={styles.modalActions}><button className={styles.secondary} onClick={()=>setConfirmMachine(null)}>Cancel</button><button className={styles.primary} onClick={saveReceived} disabled={busy}>{busy?"Saving…":"Confirm received"}</button></div></section></div>}
   </main>;
 }
-
