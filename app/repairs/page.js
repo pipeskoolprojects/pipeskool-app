@@ -68,7 +68,7 @@ export default function MachineRepairPage() {
       const [list,v]=await Promise.all([listRepairRequests(),listRepairVendors()]);
       const matched=list.filter(r=>office|| (sess?.sites||[]).some(s=>String(s.id)===String(r.site_id)));
       setRows(matched);setVendors(v);
-      const id=selected||new URLSearchParams(query).get("id");
+      const id=selected||(new URLSearchParams(query).get("id")||new URLSearchParams(query).get("repair"));
       if(keepSelection&&id) {
         const found=list.find(r=>String(r.id)===String(id));
         setSelected(found?.id||null);setDetail(found?await getRepairDetail(found.id):null);
