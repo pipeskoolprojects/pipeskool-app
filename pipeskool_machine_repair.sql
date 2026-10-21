@@ -53,8 +53,12 @@ create index if not exists machine_repair_audit_request on machine_repair_audit(
 
 -- Add only this module's default permissions for existing assigned staff.
 insert into permissions(user_id,site_id,module,action,allowed)
-select us.user_id,us.site_id,'machine_repair',a.action,true
-from user_sites us join app_users u on u.id=us.user_id and u.is_active
+select assigned.user_id,assigned.site_id,'machine_repair',a.action,true
+from (
+  select user_id,site_id from user_sites
+  union
+  select id as user_id,site_id from app_users where site_id is not null
+) assigned join app_users u on u.id=assigned.user_id and u.is_active
 cross join lateral (select unnest(case
  when u.role='director' then array['view','create','approve','manage']::text[]
  when u.role in ('ho_admin','it_executive') then array['view','approve']::text[]
@@ -86,7 +90,8 @@ as $$
      u.role='director'
      or (
        (exists(select 1 from user_sites us where us.user_id=u.id and us.site_id=p_site)
-        or u.site_id=p_site)
+        or u.site_id=p_site
+        or exists(select 1 from machine_repair_requests own where own.raised_by=u.id and own.site_id=p_site))
        and exists(select 1 from permissions p where p.user_id=u.id and p.site_id=p_site
          and p.module='machine_repair' and p.allowed
          and p.action in ('view','create','approve','manage'))
