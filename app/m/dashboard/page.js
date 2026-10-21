@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import MobileNav from "@/components/MobileNav";
 import HomeHeader from "@/components/HomeHeader";
 import HomeDashboard from "@/components/HomeDashboard";
+import SupervisorDashboard from "@/components/SupervisorDashboard";
 import { getSession } from "@/lib/auth";
 
 export default function MobileHomePage() {
@@ -38,10 +39,12 @@ export default function MobileHomePage() {
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100dvh" }}>
-      <HomeHeader mode="mobile" sess={sess} sites={sites} isDirector={isDirector}
-        asSite={asSite} setAsSite={setAsSite} siteName={siteName}
-        pickSite={pickSite} setPickSite={setPickSite} />
-      <HomeDashboard mode="mobile" asSite={asSite} setAsSite={setAsSite} onSites={setSites} />
+      {sess.role === "supervisor" ? <SupervisorDashboard sess={sess} /> : <>
+        <HomeHeader mode="mobile" sess={sess} sites={sites} isDirector={isDirector}
+          asSite={asSite} setAsSite={setAsSite} siteName={siteName}
+          pickSite={pickSite} setPickSite={setPickSite} />
+        <HomeDashboard mode="mobile" asSite={asSite} setAsSite={setAsSite} onSites={setSites} />
+      </>}
       <MobileNav />
     </div>
   );
