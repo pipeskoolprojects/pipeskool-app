@@ -63,17 +63,17 @@ export default function SupervisorDashboard({ sess }) {
       <div className={styles.sub}>📍 Supervisor {site?<>　|　{site.name}</>:null}</div>
       {(sess.sites||[]).length>1&&<select aria-label="Current site" className={styles.site} value={siteId} onChange={e=>{setSiteId(e.target.value);setCurrentSite(e.target.value);}}>{sess.sites.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>}
       <div className={styles.stats}>
-        <Link href="/m/muster"><b className={styles.statValue}>{busy?"—":workerCount??"—"}</b><strong className={styles.statLabel}>Workers</strong><small className={styles.statHint}>Assigned site</small></Link>
-        <Link href="/m/indent"><b className={styles.statValue}>{busy?"—":pendingIndents??"—"}</b><strong className={styles.statLabel}>Materials</strong><small className={styles.statHint}>Open requests</small></Link>
-        <Link href="/m/dpr"><b className={styles.statValue}>{busy?"—":dprDone?"✓":"—"}</b><strong className={styles.statLabel}>DPR</strong><small className={styles.statHint}>Today</small></Link>
-        <Link href="/m/money"><b className={styles.statValue}>{busy?"—":expenseMonth===null?"—":"₹"+expenseMonth.toLocaleString("en-IN")}</b><strong className={styles.statLabel}>Expenses</strong><small className={styles.statHint}>This month</small></Link>
+        <Link href="/m/muster" className={styles.stat}><b className={styles.statValue}>{busy?"—":workerCount??"—"}</b><strong className={styles.statLabel}>Workers</strong><small className={styles.statHint}>Assigned site</small></Link>
+        <Link href="/m/indent" className={styles.stat}><b className={styles.statValue}>{busy?"—":pendingIndents??"—"}</b><strong className={styles.statLabel}>Materials</strong><small className={styles.statHint}>Open requests</small></Link>
+        <Link href="/m/dpr" className={styles.stat}><b className={styles.statValue}>{busy?"—":dprDone?"✓":"—"}</b><strong className={styles.statLabel}>DPR</strong><small className={styles.statHint}>Today</small></Link>
+        <Link href="/m/money" className={styles.stat}><b className={styles.statValue}>{busy?"—":expenseMonth===null?"—":"₹"+expenseMonth.toLocaleString("en-IN")}</b><strong className={styles.statLabel}>Expenses</strong><small className={styles.statHint}>This month</small></Link>
       </div>
     </header>
     <div className={styles.content}>
       {err&&<div className={styles.error} role="alert">{err}<button onClick={load}>Retry</button></div>}
       <section className={styles.grid} aria-label="Supervisor modules">{links.map((m)=>{const i=modules.indexOf(m);return <Link key={m[1]} href={m[3]} className={styles.card} style={{background:colors[i]}}><span className={styles.icon}>{m[0]}</span><b className={styles.cardTitle}>{i+1}. {m[1]}</b><span className={styles.cardDescription}>{m[2]}</span><i className={styles.arrow} aria-hidden="true">→</i></Link>})}</section>
       <section className={styles.panel}><div className={styles.panelHead}><h2>Today’s Site Progress</h2><Link href="/m/report">View all →</Link></div>
-        {busy?<p className={styles.muted}>Loading progress…</p>:progress.length?progress.map((p,i)=>{const pct=progressPercent(p.done,p.boq);return <div className={styles.progress} key={p.description+i}><span>🏗</span><div><b>{p.description}</b><div className={styles.track}><span style={{width:pct===null?"0%":pct+"%"}}/></div></div><strong>{pct===null?"—":pct+"%"}</strong></div>}):<p className={styles.muted}>No progress records available for this site.</p>}
+        {busy?<p className={styles.muted}>Loading progress…</p>:progress.length?progress.map((p,i)=>{const pct=progressPercent(p.done,p.boq);return <div className={styles.progress} key={p.description+i}><span>🏗</span><div><b className={styles.progressTitle}>{p.description}</b><div className={styles.track}><span className={styles.trackFill} style={{width:pct===null?"0%":pct+"%"}}/></div></div><strong>{pct===null?"—":pct+"%"}</strong></div>}):<p className={styles.muted}>No progress records available for this site.</p>}
       </section>
       <section className={styles.lower}>
         <div className={styles.panel}><div className={styles.panelHead}><h2>Today’s Tasks</h2><Link href="/m/tasks">View all →</Link></div>{busy?<p className={styles.muted}>Loading tasks…</p>:todayTasks.length?todayTasks.map(t=><Link className={styles.row} href="/m/tasks" key={t.id}><span className={styles.check}>○</span><span className={styles.rowMain}>{t.title}</span><small>{t.due||t.status}</small></Link>):<p className={styles.muted}>No open tasks.</p>}</div>
