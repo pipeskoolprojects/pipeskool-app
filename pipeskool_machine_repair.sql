@@ -8,6 +8,7 @@ create table if not exists machine_repair_requests (
   number text not null unique,
   site_id bigint not null references sites(id),
   raised_by bigint not null references app_users(id),
+  submission_key uuid not null unique,
   created_at timestamptz not null default now(),
   vendor_id bigint references vendors(id),
   sent_by bigint references app_users(id),
@@ -123,12 +124,16 @@ create policy repair_audit_read on machine_repair_audit for select to authentica
 revoke all on machine_repair_requests,machine_repair_machines,machine_repair_receipts,machine_repair_audit from anon,authenticated;
 grant select on machine_repair_requests,machine_repair_machines,machine_repair_receipts,machine_repair_audit,v_machine_repair_requests to authenticated;
 
-create or replace function fn_machine_repair_create(p_site_id bigint,p_machines jsonb)
+create or replace function fn_machine_repair_create(p_site_id bigint,p_machines jsonb,p_submission_key uuid)
 returns jsonb language plpgsql security definer set search_path=public,auth
 as $$
 declare sid bigint:=fn_repair_staff_id(); rid bigint; n integer; x jsonb; i integer:=0;
 begin
  if sid is null then raise exception 'Sign in required'; end if;
+ if p_submission_key is null then raise exception 'Request key is required'; end if;
+ if exists(select 1 from machine_repair_requests where submission_key=p_submission_key and raised_by=sid and site_id=p_site_id) then
+   return (select jsonb_build_object('ok',true,'id',id,'number',number) from machine_repair_requests where submission_key=p_submission_key and raised_by=sid and site_id=p_site_id);
+ end if;
  if not fn_repair_site_access(sid,p_site_id) then raise exception 'You are not assigned to this site'; end if;
  if not exists(select 1 from app_users where id=sid and role in ('supervisor','site_engineer')) then
    raise exception 'Only a site supervisor can create repair requests';
@@ -138,7 +143,7 @@ begin
  if jsonb_typeof(p_machines)<>'array' or jsonb_array_length(p_machines)<1 or jsonb_array_length(p_machines)>20
  then raise exception 'Add between 1 and 20 machines'; end if;
  n:=nextval('machine_repair_request_seq');
- insert into machine_repair_requests(number,site_id,raised_by) values ('REP-'||lpad(n::text,4,'0'),p_site_id,sid) returning id into rid;
+ insert into machine_repair_requests(number,site_id,raised_by,submission_key) values ('REP-'||lpad(n::text,4,'0'),p_site_id,sid,p_submission_key) returning id into rid;
  for x in select value from jsonb_array_elements(p_machines) loop
    i:=i+1;
    if length(trim(coalesce(x->>'name','')))=0 or length(trim(coalesce(x->>'problem','')))=0 or length(trim(coalesce(x->>'photo_url','')))=0 then
@@ -226,7 +231,7 @@ begin
  and (exists(select 1 from app_users where id=sid and role='director') or v.raised_by=sid or v.site_id=p_site_id);
 end $$;
 
-grant execute on function fn_machine_repair_create(bigint,jsonb),fn_machine_repair_send(bigint,bigint,text,text),
+grant execute on function fn_machine_repair_create(bigint,jsonb,uuid),fn_machine_repair_send(bigint,bigint,text,text),
  fn_machine_repair_receive(bigint,text),fn_machine_repair_dashboard(bigint),fn_machine_repair_receipt_version(bigint,text,text) to authenticated;
 commit;
  or p_pdf_url not like 'http%' then raise exception 'A generated receipt PDF is required'; end if;
