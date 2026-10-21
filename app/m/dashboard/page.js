@@ -37,5 +37,15 @@ export default function MobileHomePage() {
 
   if (!sess) return null;
 
-  return (\n    <div style={{ background: "var(--bg)", minHeight: "100dvh" }}>\n      {sess.role === "supervisor" ? <SupervisorDashboard sess={sess} /> : <>\n        <HomeHeader mode="mobile" sess={sess} sites={sites} isDirector={isDirector}\n          asSite={asSite} setAsSite={setAsSite} siteName={siteName}\n          pickSite={pickSite} setPickSite={setPickSite} />\n        <HomeDashboard mode="mobile" asSite={asSite} setAsSite={setAsSite} onSites={setSites} />\n      </>}\n      <MobileNav />\n    </div>\n  );
+  return (
+    <div style={{ background: "var(--bg)", minHeight: "100dvh" }}>
+      {sess.role === "supervisor" ? <SupervisorDashboard sess={sess} /> : <>
+        <HomeHeader mode="mobile" sess={sess} sites={sites} isDirector={isDirector}
+          asSite={asSite} setAsSite={setAsSite} siteName={siteName}
+          pickSite={pickSite} setPickSite={setPickSite} />
+        <HomeDashboard mode="mobile" asSite={asSite} setAsSite={setAsSite} onSites={setSites} />
+      </>}
+      <MobileNav />
+    </div>
+  );
 }
