@@ -132,6 +132,10 @@ export default function MobileNav() {
                 </button>
               ))}
             </div>
+            <button type="button" onClick={() => { setOpen(false); window.dispatchEvent(new Event("psk-open-assistant")); }}
+               style={{ width: "100%", display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", fontSize: 14, color: "var(--text)", cursor: "pointer", background: "transparent", border: 0, textAlign: "left" }}>
+              <span style={{ fontSize: 18 }}>🤖</span>Pipeskool Assistant
+            </button>
             <a onClick={logout}
                style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", fontSize: 14, color: "var(--red)", cursor: "pointer" }}>
               <span style={{ fontSize: 18 }}>⎋</span>{t(lang, "m_logout")}
