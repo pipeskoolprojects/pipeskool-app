@@ -84,11 +84,16 @@ as $$
  select exists (
    select 1 from app_users u where u.id=p_staff and u.is_active and (
      u.role='director'
-     or exists(select 1 from user_sites us where us.user_id=u.id and us.site_id=p_site)
-     or exists(select 1 from app_users s where s.id=u.id and s.site_id=p_site)
+     or (
+       (exists(select 1 from user_sites us where us.user_id=u.id and us.site_id=p_site)
+        or u.site_id=p_site)
+       and exists(select 1 from permissions p where p.user_id=u.id and p.site_id=p_site
+         and p.module='machine_repair' and p.allowed
+         and p.action in ('view','create','approve','manage'))
+     )
    )
  )
-$$;
+$;
 
 create or replace view v_machine_repair_requests with (security_invoker=true) as
 select r.id,r.number,r.site_id,s.name as site_name,r.raised_by,u.full_name as raised_by_name,
@@ -207,7 +212,7 @@ begin
  select * into m from machine_repair_machines where id=p_machine_id for update;
  if not found then raise exception 'Machine not found'; end if;
  select * into r from machine_repair_requests where id=m.request_id;
- if not fn_repair_site_access(sid,r.site_id) or not exists(select 1 from app_users where id=sid and role in ('supervisor','site_engineer'))
+ if not fn_repair_site_access(sid,r.site_id) or not exists(select 1 from app_users where id=sid and role in ('supervisor','site_engineer')) or not exists(select 1 from permissions where user_id=sid and site_id=r.site_id and module='machine_repair' and allowed and action in ('view','create','manage'))
  then raise exception 'Assigned site supervisor access is required'; end if;
  if r.sent_at is null then raise exception 'Machine has not been sent to the vendor'; end if;
  if m.received_at is not null then raise exception 'Machine is already marked received'; end if;
