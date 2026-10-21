@@ -5,7 +5,7 @@ import NotifyBell from "@/components/NotifyBell";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { logoutAuth, getSession, refreshSessionRights, canSeeModuleAnySite, canSeeModule, canAnySite } from "@/lib/auth";
+import { logoutAuth, getSession, refreshSessionRights, canSeeModuleAnySite, canSeeModule, canAnySite, can } from "@/lib/auth";
 import { getLocalWorker } from "@/lib/mobile";
 import { LANGS, getLang, setLang, t } from "@/lib/i18n";
 
@@ -29,6 +29,7 @@ const more = [
   { href: "/m/order", ico: "🛒", key: "m_order", show: s => canSeeModuleAnySite(s, "indent") },   // update464
   { href: "/m/deliveries", ico: "📥", key: "m_deliveries", show: s => canSeeModuleAnySite(s, "stock") || canSeeModuleAnySite(s, "indent") },   // update462
   { href: "/m/assets", ico: "🔧", key: "m_assets", show: s => canSeeModuleAnySite(s, "assets") },
+  { href: "/m/repairs", ico: "🛠", key: "m_machine_repair", show: s => canSeeModuleAnySite(s, "machine_repair") },
   { href: "/m/rentals", ico: "🚜", key: "m_rentals", show: s => canSeeModuleAnySite(s, "rentals") },
   { href: "/m/money", ico: "₹", key: "m_money", show: s => canSeeModuleAnySite(s, "money") },
   { href: "/m/tasks", ico: "📋", key: "m_tasks", show: s => !!s?.id },   // update327: My Tasks — every signed-in user
@@ -77,6 +78,7 @@ export default function MobileNav() {
     { href: "/m/muster", label: "Review Muster", icon: "👥", show: canSeeModule(sess, "attendance") },
     { href: "/m/dpr", label: "Create DPR", icon: "📋", show: canSeeModule(sess, "dpr") },
     { href: "/m/money", label: "Site Expenses", icon: "₹", show: canSeeModule(sess, "money") },
+    { href: "/m/repairs?new=1", label: "Send Machine for Repair", icon: "🛠", show: can(sess, "machine_repair", "create") || can(sess, "machine_repair", "manage") },
     { href: "/m/add", label: "Add Worker", icon: "👷", show: canAnySite(sess, "workers", "create") || canAnySite(sess, "workers", "manage") },
   ].filter(x => x.show);
   useEffect(() => {
