@@ -23,6 +23,11 @@ const LEGACY = { "/expenses": "/go?to=money", "/approvals": "/go?to=money", "/go
 export default function NotifyBell({ mobile }) {
   const [open, setOpen] = useState(false);
   const [pstat, setPstat] = useState(null);   // update267: real device push status
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener("psk-open-notifications", show);
+    return () => window.removeEventListener("psk-open-notifications", show);
+  }, []);
   useEffect(() => { if (open) pushStatus().then(setPstat); }, [open]);   // update267
   const [rows, setRows] = useState([]);
   const [unread, setUnread] = useState(0);
