@@ -526,14 +526,13 @@ body.has-global-mnav { padding-bottom: calc(58px + env(safe-area-inset-bottom));
   body.has-global-mnav, body.has-global-mnav .main, body.has-global-mnav .layout > main { padding-bottom: 0 !important; }
 }
 
+/* update391: assistant bubble clears the bottom bar (global bar on desktop routes too) — never over the tabs */
+body.has-global-mnav .asst-fab { bottom: calc(74px + env(safe-area-inset-bottom, 0px)) !important; }
+body.has-global-mnav .asst-panel { bottom: calc(136px + env(safe-area-inset-bottom, 0px)) !important; }
+
 /* Machine Repair receipt: print only the A4 challan pages. */
 @media print {
   body.repair-print-mode * { visibility: hidden !important; }
   body.repair-print-mode .repair-print-root,
   body.repair-print-mode .repair-print-root * { visibility: visible !important; }
 }
-
-/* update391: assistant bubble clears the bottom bar (global bar on desktop routes too) — never over the tabs */
-body.has-global-mnav .asst-fab { bottom: calc(74px + env(safe-area-inset-bottom, 0px)) !important; }
-body.has-global-mnav .asst-panel { bottom: calc(136px + env(safe-area-inset-bottom, 0px)) !important; }
-
