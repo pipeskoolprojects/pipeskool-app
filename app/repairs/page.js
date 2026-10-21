@@ -1,6 +1,5 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import Logo from "@/components/Logo";
 import { getSession, can } from "@/lib/auth";
 import { fileStore, fileHref } from "@/lib/files";
@@ -49,13 +48,14 @@ function A4Receipt({ request, vendor, rootRef }) {
   </div>;
 }
 export default function MachineRepairPage() {
-  const params=useSearchParams();
+  const [query,setQuery]=useState("");
   const [sess,setSess]=useState(null),[rows,setRows]=useState([]),[vendors,setVendors]=useState([]),[detail,setDetail]=useState(null);
   const [loading,setLoading]=useState(true),[error,setError]=useState(""),[notice,setNotice]=useState("");
   const [tab,setTab]=useState("All"),[selected,setSelected]=useState(null),[creating,setCreating]=useState(false),[showReceipt,setShowReceipt]=useState(false);
   const [machines,setMachines]=useState([{name:"",problem:"",photo:null,preview:""}]),[invalid,setInvalid]=useState([]),[uploading,setUploading]=useState(false),[uploadStep,setUploadStep]=useState("");
   const [vendorId,setVendorId]=useState(""),[confirmMachine,setConfirmMachine]=useState(null),[remark,setRemark]=useState(""),[busy,setBusy]=useState(false),[pdfUrl,setPdfUrl]=useState("");
   const [draftReady,setDraftReady]=useState(false),[regenerating,setRegenerating]=useState(false);
+  useEffect(()=>{setQuery(window.location.search);},[]);
   const receiptRef=useRef(null);
   const siteId=sess?.currentSite||sess?.sites?.[0]?.id;
   const supervisor=["supervisor","site_engineer"].includes(sess?.role);
@@ -68,19 +68,19 @@ export default function MachineRepairPage() {
       const [list,v]=await Promise.all([listRepairRequests(),listRepairVendors()]);
       const matched=list.filter(r=>office|| (sess?.sites||[]).some(s=>String(s.id)===String(r.site_id)));
       setRows(matched);setVendors(v);
-      const id=selected||params.get("id");
+      const id=selected||new URLSearchParams(query).get("id");
       if(keepSelection&&id) {
         const found=list.find(r=>String(r.id)===String(id));
-        setDetail(found?await getRepairDetail(found.id):null);
+        setSelected(found?.id||null);setDetail(found?await getRepairDetail(found.id):null);
       } else if(matched.length&&!window.matchMedia("(max-width: 999px)").matches) {
         setSelected(matched[0].id);setDetail(await getRepairDetail(matched[0].id));
       } else if(!matched.length) {setSelected(null);setDetail(null);}
     } catch(e) {setError(e?.message||"Repair requests could not load.");}
     finally {setLoading(false);}
-  },[office,params,selected,sess,tab]);
+  },[office,query,selected,sess,tab]);
   useEffect(()=>{const s=getSession();setSess(s);if(!s){setError("Sign in to open Machine Repair.");setLoading(false);return;}},[]);
   useEffect(()=>{if(sess)load();},[sess,tab,load]);
-  useEffect(()=>{if(params.get("new")==="1"&&canCreate){setCreating(true);setSelected(null);setDetail(null);}},[params,canCreate]);
+  useEffect(()=>{if(new URLSearchParams(query).get("new")==="1"&&canCreate){setCreating(true);setSelected(null);setDetail(null);}},[query,canCreate]);
   useEffect(()=>{
     if(!sess||!creating)return;
     const key=`${sess.id}:${siteId}`;let alive=true;
@@ -168,7 +168,7 @@ export default function MachineRepairPage() {
       <div className={styles.receiptActions}><button className={styles.primary} onClick={printReceipt}>Print / PDF</button><button className={styles.secondary} onClick={downloadPdf}>Download PDF</button>{!detail.sent_at&&<button className={styles.primary} onClick={sendReceipt} disabled={!vendorId||busy}>{busy?"Sending…":"Generate Receipt & Send to Vendor"}</button>}{detail.sent_at&&<button className={styles.secondary} onClick={()=>shareContact(vendors.find(v=>String(v.id)===String(detail.vendor_id)),detail.receipts?.[0]?.pdf_url)}>Send to Vendor (WhatsApp / email)</button>}{detail.sent_at&&office&&<button className={styles.secondary} disabled={regenerating} onClick={async()=>{setRegenerating(true);try{const blob=await makeRepairPdf(receiptRef.current,detail);const v=await saveRepairReceiptVersion(detail.id,blob);setPdfUrl(v.pdf_url);setNotice("New receipt version "+v.version+" saved.");await load(true);}catch(e){setError(e.message||"Receipt version could not be saved.");}finally{setRegenerating(false);}}}>{regenerating?"Saving…":"Regenerate PDF version"}</button>}</div>
       {detail.sent_at&&detail.receipts?.length>0&&<div className={styles.notice}>Saved receipt version {detail.receipts[0].version} · <a href={detail.receipts[0].pdf_url||fileHref(detail.receipts[0].pdf_path)} target="_blank" rel="noreferrer">Open stored PDF</a></div>}
       <A4Receipt request={detail} vendor={vendors.find(v=>String(v.id)===String(vendorId))} rootRef={receiptRef}/>
-    </section> : <div className={styles.workspace}>
+    </section> : <div className={styles.workspace+(selected&&!creating? " "+styles.showDetail:"")}>
       <section className={styles.listPanel}>
         <div className={styles.tabs}>{["All","Requested","With vendor","Received"].map(t=><button key={t} className={tab===t?styles.activeTab:""} onClick={()=>setTab(t)}>{t}<b>{counts[t]||0}</b></button>)}</div>
         {loading?<div className={styles.skeletons}>{[1,2,3].map(x=><div key={x} className={styles.skeleton}/>)}</div>:filtered.length===0?<div className={styles.empty}><span>🛠</span><strong>No repair requests</strong><p>New repair requests will appear here.</p></div>:filtered.map(r=><button key={r.id} className={styles.requestRow+(String(selected)===String(r.id)? " "+styles.selectedRow:"")} onClick={()=>selectRequest(r)}>
@@ -180,7 +180,7 @@ export default function MachineRepairPage() {
       </section>
       <section className={styles.detailPanel}>
         {!detail?<div className={styles.empty}><span>↖</span><strong>Select a repair request</strong><p>Request details will appear here.</p></div>:<>
-          <div className={styles.detailHead}><div><h2>{detail.number}</h2><span className={styles["status_"+statusTone(detail.status)]}>{detail.status}</span></div>{detail.sent_at&&<button className={styles.secondary} onClick={()=>setShowReceipt(true)}>View Repair Receipt ({repairPages(detail.machines).length} pages)</button>}</div>
+          <div className={styles.detailHead}><button className={styles.mobileBack} onClick={()=>{setSelected(null);setDetail(null);}}>← Requests</button><div><h2>{detail.number}</h2><span className={styles["status_"+statusTone(detail.status)]}>{detail.status}</span></div>{detail.sent_at&&<button className={styles.secondary} onClick={()=>setShowReceipt(true)}>View Repair Receipt ({repairPages(detail.machines).length} pages)</button>}</div>
           <div className={styles.infoGrid}><div><small>Raised by</small><b>{detail.raised_by_name}</b></div><div><small>Site</small><b>{detail.site_name}</b></div><div><small>Date</small><b>{displayDate(detail.created_at)}</b></div><div><small>Vendor</small><b>{detail.vendor_name||"Not assigned yet"}</b></div></div>
           {!detail.sent_at&&office&&<div className={styles.sendBox}><label>Repair vendor<select value={vendorId} onChange={e=>setVendorId(e.target.value)}><option value="">Select vendor</option>{vendors.map(v=><option value={v.id} key={v.id}>{v.name}</option>)}</select></label><button className={styles.primary} disabled={!vendorId} onClick={()=>setShowReceipt(true)}>Preview repair receipt</button></div>}
           <div className={styles.machineList}>{detail.machines.map(m=><article key={m.id} className={styles.machineDetail}>
