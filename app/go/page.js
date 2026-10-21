@@ -53,4 +53,3 @@ export default function Go() {
 
   return <div style={{ padding: 24 }} className="muted">Opening…</div>;
 }
-
