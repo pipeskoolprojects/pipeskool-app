@@ -35,7 +35,7 @@ function shareContact(vendor, url) {
 }
 function A4Receipt({ request, vendor, rootRef }) {
   const pages=repairPages(request.machines);
-  return <div ref={rootRef} className={styles.receiptRoot}>
+  return <div ref={rootRef} className={"repair-print-root "+styles.receiptRoot}>
     {pages.map((group,pageIndex)=><section key={pageIndex} className={"repairReceiptPage "+styles.receiptPage}>
       <header className={styles.receiptHeader}><Logo height={24}/><div><strong>REPAIR CHALLAN</strong><span>{request.number.replace(/^REP-/,"RPC-")} · {displayDate(request.sent_at||request.created_at)}</span></div></header>
       <div className={styles.orangeRule}/>
@@ -135,7 +135,12 @@ export default function MachineRepairPage() {
     catch(e){setError(e?.message||"Could not mark machine received.");}
     finally{setBusy(false);}
   };
-  const printReceipt=()=>window.print();
+  const printReceipt=()=>{
+    const clearPrintMode=()=>document.body.classList.remove("repair-print-mode");
+    document.body.classList.add("repair-print-mode");
+    window.addEventListener("afterprint",clearPrintMode,{once:true});
+    window.print();
+  };
   const sendReceipt=async()=>{
     if(!detail||!vendorId||busy)return;
     setBusy(true);setError("");
@@ -213,3 +218,4 @@ export default function MachineRepairPage() {
     {confirmMachine&&<div className={styles.modalShade} onClick={()=>setConfirmMachine(null)}><section className={styles.modal} role="dialog" aria-modal="true" onClick={e=>e.stopPropagation()}><h2>Mark {confirmMachine.name} received?</h2><p>This records that the machine has returned to your site.</p><label>Remark (optional)<textarea rows={3} value={remark} onChange={e=>setRemark(e.target.value)} placeholder="Condition or repair notes"/></label><div className={styles.modalActions}><button className={styles.secondary} onClick={()=>setConfirmMachine(null)}>Cancel</button><button className={styles.primary} onClick={saveReceived} disabled={busy}>{busy?"Saving…":"Confirm received"}</button></div></section></div>}
   </main>;
 }
+
