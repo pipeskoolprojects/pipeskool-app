@@ -66,7 +66,7 @@ export default function MachineRepairPage() {
   const supervisor=["supervisor","site_engineer"].includes(sess?.role);
   const office=["director","ho_admin","it_executive"].includes(sess?.role)||can(sess,"machine_repair","approve",siteId)||can(sess,"machine_repair","manage",siteId);
   const canCreate=supervisor&&(can(sess,"machine_repair","create",siteId)||can(sess,"machine_repair","manage",siteId));
-  const canRead=office||supervisor||can(sess,"machine_repair","view",siteId);
+  const canRead=office||(sess?.sites||[]).some(s=>["view","create","manage"].some(a=>can(sess,"machine_repair",a,s.id)));
   const load=useCallback(async(keepSelection=true)=>{
     setLoading(true);setError("");
     try {
