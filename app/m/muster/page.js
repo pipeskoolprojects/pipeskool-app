@@ -181,7 +181,7 @@ export default function MusterScreen() {
   };
 
   return (
-    <div className="m-wrap" style={{ paddingBottom: 116 }}>
+    <div className="m-wrap" style={{ paddingBottom: 150 }}>
       <div className="m-head">
         <div>
           <div className="title">Daily muster</div>
