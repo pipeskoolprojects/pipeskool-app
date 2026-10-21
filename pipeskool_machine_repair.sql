@@ -79,7 +79,7 @@ as $$
   select exists(
     select 1 from public.app_users u
     where u.id=p_staff and u.is_active and (
-      u.role='director'
+      u.role in ('director','ho_admin','it_executive')
       or (
         (exists(select 1 from public.user_sites us where us.user_id=u.id and us.site_id=p_site)
          or u.site_id=p_site

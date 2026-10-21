@@ -35,7 +35,7 @@ function shareContact(vendor, url) {
 }
 function A4Receipt({ request, vendor, rootRef }) {
   const pages=repairPages(request.machines);
-  return <div ref={rootRef} className={styles.receiptRoot}>
+  return <div ref={rootRef} className={"repair-print-root "+styles.receiptRoot}>
     {pages.map((group,pageIndex)=><section key={pageIndex} className={"repairReceiptPage "+styles.receiptPage}>
       <header className={styles.receiptHeader}><Logo height={24}/><div><strong>REPAIR CHALLAN</strong><span>{request.number.replace(/^REP-/,"RPC-")} · {displayDate(request.sent_at||request.created_at)}</span></div></header>
       <div className={styles.orangeRule}/>
@@ -66,7 +66,7 @@ export default function MachineRepairPage() {
   const supervisor=["supervisor","site_engineer"].includes(sess?.role);
   const office=["director","ho_admin","it_executive"].includes(sess?.role)||can(sess,"machine_repair","approve",siteId)||can(sess,"machine_repair","manage",siteId);
   const canCreate=supervisor&&(can(sess,"machine_repair","create",siteId)||can(sess,"machine_repair","manage",siteId));
-  const canRead=office||supervisor||can(sess,"machine_repair","view",siteId);
+  const canRead=office||(sess?.sites||[]).some(s=>["view","create","manage"].some(a=>can(sess,"machine_repair",a,s.id)));
   const load=useCallback(async(keepSelection=true)=>{
     setLoading(true);setError("");
     try {
@@ -135,7 +135,12 @@ export default function MachineRepairPage() {
     catch(e){setError(e?.message||"Could not mark machine received.");}
     finally{setBusy(false);}
   };
-  const printReceipt=()=>window.print();
+  const printReceipt=()=>{
+    const clearPrintMode=()=>document.body.classList.remove("repair-print-mode");
+    document.body.classList.add("repair-print-mode");
+    window.addEventListener("afterprint",clearPrintMode,{once:true});
+    window.print();
+  };
   const sendReceipt=async()=>{
     if(!detail||!vendorId||busy)return;
     setBusy(true);setError("");

@@ -56,6 +56,7 @@ export default function SupervisorDashboard({ sess }) {
   const todayTasks=tasks.filter(t=>t.status!=="completed").slice(0,4);
   const progress=(dprPack?.[1]||[]).slice(0,4);
   const expenseMonth=useMemo(()=>approvedExpenseTotal(expenses,dateKey().slice(0,7)),[expenses]);
+  const repairCount=Number(data?.[6]||0);
   const links=modules.filter(m=>canOpen(sess,m[4]));
   const workerCount=Array.isArray(muster)?muster.length:null;
   const pendingIndents=countOpenIndents(indents);

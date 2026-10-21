@@ -18,7 +18,8 @@ export const ROUTES = {
   tasks:     ["/tasks",     "/m/tasks"],
   indent:    ["/procure",   "/m/indent"],
   stock:     ["/stock",     "/m/stock"],
-  repairs:   ["/repairs", "/m/repairs"],\n  deliveries: ["/stock/deliveries", "/m/deliveries"],        // update462: site receiving
+  repairs:   ["/repairs", "/m/repairs"],
+  deliveries: ["/stock/deliveries", "/m/deliveries"],        // update462: site receiving
   order:     ["/order",     "/m/order"],                     // update464: catalogue ordering
   challans:  ["/stock/challans", "/stock/challans"],          // update462: office challan list (no phone shell)
   dpr:       ["/dpr",       "/m/dpr"],
