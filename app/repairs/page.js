@@ -134,15 +134,22 @@ export default function MachineRepairPage() {
   };
   const printReceipt=()=>window.print();
   const sendReceipt=async()=>{
-    if(!detail||!vendorId||busy)return;setBusy(true);setError("");
+    if(!detail||!vendorId||busy)return;
+    setBusy(true);setError("");
+    let shareWindow=null;
     try{
-      const shareWindow=window.open("about:blank","_blank");
+      shareWindow=window.open("about:blank","_blank");
       const blob=await makeRepairPdf(receiptRef.current,detail);
-      const sent=await sendRepairRequest(detail.id,vendorId,blob);setNotice("Machines sent to vendor. Receipt PDF saved.");
-      const vendor=vendors.find(v=>String(v.id)===String(vendorId));const shareUrl=vendorShareUrl(vendor,sent.pdf_url);if(shareWindow){if(shareUrl){shareWindow.opener=null;shareWindow.location.href=shareUrl;}else shareWindow.close();}
+      const sent=await sendRepairRequest(detail.id,vendorId,blob);
+      setNotice("Machines sent to vendor. Receipt PDF saved.");
+      const vendor=vendors.find(v=>String(v.id)===String(vendorId));
+      const shareUrl=vendorShareUrl(vendor,sent.pdf_url);
+      if(shareWindow){if(shareUrl){shareWindow.opener=null;shareWindow.location.href=shareUrl;}else shareWindow.close();}
       await load(true);setShowReceipt(true);
-    }catch(e){setError(e?.message||"Could not generate or send the receipt.");}
-    finally{setBusy(false);}
+    }catch(e){
+      if(shareWindow)shareWindow.close();
+      setError(e?.message||"Could not generate or send the receipt.");
+    }finally{setBusy(false);}
   };
   const downloadPdf=async()=>{
     if(!detail)return;try{const blob=await makeRepairPdf(receiptRef.current,detail);const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=detail.number.replace(/^REP-/,"RPC-")+"-repair-receipt.pdf";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}catch(e){setError(e.message||"PDF could not be generated.");}
