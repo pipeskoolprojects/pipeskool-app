@@ -84,7 +84,7 @@ export default function MachineRepairPage() {
   useEffect(()=>{
     if(!sess||!creating)return;
     const key=`${sess.id}:${siteId}`;let alive=true;
-    readRepairDraft(key).then(d=>{if(!alive||!d)return;setMachines(d.machines?.length?d.machines.map(m=>({...m,photo:null})):machines);setDraftKey(d.submissionKey||"");setDraftReady(true);});
+    readRepairDraft(key).then(d=>{if(!alive)return;if(d){setMachines(d.machines?.length?d.machines.map(m=>({...m,photo:null})):machines);setDraftKey(d.submissionKey||"");}setDraftReady(true);});
     return()=>{alive=false;};
   },[sess?.id,siteId,creating]);
   useEffect(()=>{
@@ -143,7 +143,7 @@ export default function MachineRepairPage() {
   if(!sess)return <main className={styles.page}><p>{error||"Loading…"}</p></main>;
   if(!canRead&&!canCreate)return <main className={styles.page}><h1>Machine Repair</h1><p>You do not have permission to view Machine Repair for this site.</p></main>;
   return <main className={styles.page}>
-    <header className={styles.heading}><div><h1>Machine Repair</h1><p>Track faulty tools from site to vendor and back.</p></div>{canCreate&&!creating&&!showReceipt&&<button className={styles.primary} onClick={()=>{setMachines([{name:"",problem:"",photo:null,preview:""}]);setDraftKey("");setDraftReady(true);setCreating(true);setDetail(null);setSelected(null);setError("");}}>＋ New Repair</button>}</header>
+    <header className={styles.heading}><div><h1>Machine Repair</h1><p>Track faulty tools from site to vendor and back.</p></div>{canCreate&&!creating&&!showReceipt&&<button className={styles.primary} onClick={()=>{setMachines([{name:"",problem:"",photo:null,preview:""}]);setDraftKey("");setDraftReady(false);setCreating(true);setDetail(null);setSelected(null);setError("");}}>＋ New Repair</button>}</header>
     {notice&&<div className={styles.notice} role="status">{notice}<button onClick={()=>setNotice("")}>×</button></div>}
     {error&&<div className={styles.error} role="alert">{error}<button onClick={()=>load(true)} disabled={loading}>Retry</button></div>}
     {creating? <section className={styles.formCard}>
@@ -166,7 +166,7 @@ export default function MachineRepairPage() {
     </section> : showReceipt&&detail ? <section className={styles.receiptScreen}>
       <div className={styles.sectionHeading}><div><h2>Repair Receipt</h2><p>{detail.number} · {repairPages(detail.machines).length} A4 page{repairPages(detail.machines).length===1?"":"s"}</p></div><button className={styles.secondary} onClick={()=>setShowReceipt(false)}>Back to request</button></div>
       <div className={styles.receiptActions}><button className={styles.primary} onClick={printReceipt}>Print / PDF</button><button className={styles.secondary} onClick={downloadPdf}>Download PDF</button>{!detail.sent_at&&<button className={styles.primary} onClick={sendReceipt} disabled={!vendorId||busy}>{busy?"Sending…":"Generate Receipt & Send to Vendor"}</button>}{detail.sent_at&&<button className={styles.secondary} onClick={()=>shareContact(vendors.find(v=>String(v.id)===String(detail.vendor_id)),detail.receipts?.[0]?.pdf_url)}>Send to Vendor (WhatsApp / email)</button>}{detail.sent_at&&office&&<button className={styles.secondary} disabled={regenerating} onClick={async()=>{setRegenerating(true);try{const blob=await makeRepairPdf(receiptRef.current,detail);const v=await saveRepairReceiptVersion(detail.id,blob);setPdfUrl(v.pdf_url);setNotice("New receipt version "+v.version+" saved.");await load(true);}catch(e){setError(e.message||"Receipt version could not be saved.");}finally{setRegenerating(false);}}}>{regenerating?"Saving…":"Regenerate PDF version"}</button>}</div>
-      {detail.sent_at&&detail.receipts?.length>0&&<div className={styles.notice}>Saved receipt version {detail.receipts[0].version} · <a href={detail.receipts[0].pdf_url||fileHref(detail.receipts[0].pdf_path)} target="_blank" rel="noreferrer">Open stored PDF</a></div>}
+      {detail.sent_at&&detail.receipts?.length>0&&<div className={styles.history}><strong>Receipt versions</strong>{detail.receipts.map(r=><a key={r.id} href={r.pdf_url||fileHref(r.pdf_path)} target="_blank" rel="noreferrer">Version {r.version} · {displayDate(r.generated_at)} · Open PDF</a>)}</div>}
       <A4Receipt request={detail} vendor={vendors.find(v=>String(v.id)===String(vendorId))} rootRef={receiptRef}/>
     </section> : <div className={styles.workspace+(selected&&!creating? " "+styles.showDetail:"")}>
       <section className={styles.listPanel}>
