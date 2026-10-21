@@ -10,7 +10,6 @@ import { getExpenseClaimQueue } from "@/lib/money";
 import { getTasks } from "@/lib/tasks";
 import { getMyNotifications } from "@/lib/notify";
 
-const ORANGE = "#f47716";
 const modules = [
   ["🛒","Order Material","Create indent and track material","/m/indent","indent"],
   ["👥","Muster","Review worker attendance and muster roll","/m/muster","attendance"],
@@ -76,7 +75,7 @@ export default function SupervisorDashboard({ sess }) {
       </section>
       <section className="sv-lower">
         <div className="sv-panel"><div className="sv-panel-head"><h2>Today’s Tasks</h2><Link href="/m/tasks">View all →</Link></div>{busy?<p className="sv-muted">Loading tasks…</p>:todayTasks.length?todayTasks.map(t=><Link className="sv-row" href="/m/tasks" key={t.id}><span className="sv-check">○</span><span>{t.title}</span><small>{t.due||t.status}</small></Link>):<p className="sv-muted">No open tasks.</p>}</div>
-        <div className="sv-panel"><div className="sv-panel-head"><h2>Recent Activity</h2><Link href="/m/notifications">View all →</Link></div>{(notifications?.rows||[]).length?(notifications.rows.slice(0,4).map(n=><Link className="sv-row" href={n.link?.startsWith("/")?n.link:"/m/notifications"} key={n.id}><span className="sv-check">•</span><span><b>{n.title}</b><small>{n.body||n.sites?.name||""}</small></span><small>{n.created_at?new Date(n.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):""}</small></Link>)): <p className="sv-muted">No recent activity.</p>}</div>
+        <div className="sv-panel"><div className="sv-panel-head"><h2>Recent Activity</h2><button type="button" onClick={() => window.dispatchEvent(new Event("psk-open-notifications"))} className="sv-view-all">View all →</button></div>{(notifications?.rows||[]).length?(notifications.rows.slice(0,4).map(n=><Link className="sv-row" href={n.link?.startsWith("/")?n.link:"/m/notifications"} key={n.id}><span className="sv-check">•</span><span><b>{n.title}</b><small>{n.body||n.sites?.name||""}</small></span><small>{n.created_at?new Date(n.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):""}</small></Link>)): <p className="sv-muted">No recent activity.</p>}</div>
       </section>
     </div>
     <style jsx>{`
@@ -90,7 +89,7 @@ export default function SupervisorDashboard({ sess }) {
       .sv-content{max-width:900px;margin:0 auto;padding:14px 12px}.sv-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
       .sv-card{position:relative;min-height:158px;padding:15px 13px;border-radius:17px;text-decoration:none;color:#101828;display:flex;flex-direction:column;align-items:flex-start;gap:7px;box-shadow:0 2px 8px #1018280b}
       .sv-icon{display:grid;place-items:center;width:54px;height:54px;border-radius:50%;background:#ffffffaa;font-size:27px}.sv-card b{font-size:15px}.sv-card>span:not(.sv-icon){font-size:12px;line-height:1.4;color:#475467;padding-right:12px}.sv-card i{position:absolute;right:12px;bottom:11px;font-style:normal;border-radius:20px;background:#ffffffaa;padding:5px 11px;font-size:18px}
-      .sv-panel{background:#fff;border-radius:17px;padding:14px;margin-top:12px;box-shadow:0 2px 8px #1018280b;min-width:0}.sv-panel-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.sv-panel-head h2{font-size:16px;margin:0}.sv-panel-head a{font-size:12px;color:#1674d1;text-decoration:none;white-space:nowrap}
+      .sv-panel{background:#fff;border-radius:17px;padding:14px;margin-top:12px;box-shadow:0 2px 8px #1018280b;min-width:0}.sv-panel-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.sv-panel-head h2{font-size:16px;margin:0}.sv-panel-head a,.sv-view-all{font-size:12px;color:#1674d1;text-decoration:none;white-space:nowrap}.sv-view-all{border:0;background:transparent;padding:8px;cursor:pointer}
       .sv-progress{display:grid;grid-template-columns:34px minmax(0,1fr) 42px;gap:8px;align-items:center;border-bottom:1px solid #eef0f3;padding:10px 0}.sv-progress:last-child{border:0}.sv-progress b{font-size:12px;font-weight:600}.sv-progress strong{font-size:12px;text-align:right}.sv-track{height:8px;background:#e9edf2;border-radius:8px;margin-top:6px;overflow:hidden}.sv-track span{height:100%;display:block;background:#18b86a;border-radius:8px}
       .sv-lower{display:grid;grid-template-columns:1fr 1fr;gap:10px}.sv-row{min-height:48px;display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eef0f3;text-decoration:none;color:#101828;font-size:12px}.sv-row>span:nth-child(2){flex:1;min-width:0}.sv-row small{font-size:10px;color:#667085}.sv-row span small{display:block;margin-top:3px}.sv-check{font-size:20px;color:#12a35a}.sv-muted{color:#667085;font-size:13px}.sv-error{padding:12px;background:#fff0f0;border-radius:10px;color:#a32727;font-size:13px}.sv-error button{float:right}
       @media(max-width:360px){.sv-stats{padding:10px 2px}.sv-stats a{padding:2px 4px}.sv-stats small{font-size:9px}.sv-content{padding-left:9px;padding-right:9px}.sv-card{padding:12px 10px;min-height:150px}.sv-lower{grid-template-columns:1fr}}
