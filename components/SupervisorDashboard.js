@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Logo from "@/components/Logo";
+import styles from "./SupervisorDashboard.module.css";
 import { canSeeModule, canAnySite, setCurrentSite } from "@/lib/auth";
 import { getMuster } from "@/lib/mobile";
 import { getOpenIndents } from "@/lib/procure";
@@ -55,45 +56,30 @@ export default function SupervisorDashboard({ sess }) {
   const workerCount=Array.isArray(muster)?muster.length:null;
   const pendingIndents=countOpenIndents(indents);
   const dprDone=dprPack?.[0]!==null&&dprPack?.[0]!==undefined;
-  return <main className="sv-wrap">
-    <header className="sv-hero">
-      <div className="sv-top"><Logo variant="white" height={26}/><button aria-label="Open menu" className="sv-avatar" onClick={()=>window.dispatchEvent(new Event("psk-open-more"))}>☰</button></div>
-      <div className="sv-greet">{greeting},</div><div className="sv-name">{sess.name||"Supervisor"}</div>
-      <div className="sv-sub">📍 Supervisor {site?<>　|　{site.name}</>:null}</div>
-      {(sess.sites||[]).length>1&&<select aria-label="Current site" className="sv-site" value={siteId} onChange={e=>{setSiteId(e.target.value);setCurrentSite(e.target.value);}}>{sess.sites.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>}
-      <div className="sv-stats">
-        <Link href="/m/muster"><b>{busy?"—":workerCount??"—"}</b><strong>Workers</strong><small>Assigned site</small></Link>
-        <Link href="/m/indent"><b>{busy?"—":pendingIndents??"—"}</b><strong>Materials</strong><small>Open requests</small></Link>
-        <Link href="/m/dpr"><b>{busy?"—":dprDone?"✓":"—"}</b><strong>DPR</strong><small>Today</small></Link>
-        <Link href="/m/money"><b>{busy?"—":expenseMonth===null?"—":"₹"+expenseMonth.toLocaleString("en-IN")}</b><strong>Expenses</strong><small>This month</small></Link>
+  return <main className={styles.wrap}>
+    <header className={styles.hero}>
+      <div className={styles.top}><Logo variant="white" height={26}/><button aria-label="Open menu" className={styles.avatar} onClick={()=>window.dispatchEvent(new Event("psk-open-more"))}>☰</button></div>
+      <div className={styles.greet}>{greeting},</div><div className={styles.name}>{sess.name||"Supervisor"}</div>
+      <div className={styles.sub}>📍 Supervisor {site?<>　|　{site.name}</>:null}</div>
+      {(sess.sites||[]).length>1&&<select aria-label="Current site" className={styles.site} value={siteId} onChange={e=>{setSiteId(e.target.value);setCurrentSite(e.target.value);}}>{sess.sites.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>}
+      <div className={styles.stats}>
+        <Link href="/m/muster" className={styles.stat}><b className={styles.statValue}>{busy?"—":workerCount??"—"}</b><strong className={styles.statLabel}>Workers</strong><small className={styles.statHint}>Assigned site</small></Link>
+        <Link href="/m/indent" className={styles.stat}><b className={styles.statValue}>{busy?"—":pendingIndents??"—"}</b><strong className={styles.statLabel}>Materials</strong><small className={styles.statHint}>Open requests</small></Link>
+        <Link href="/m/dpr" className={styles.stat}><b className={styles.statValue}>{busy?"—":dprDone?"✓":"—"}</b><strong className={styles.statLabel}>DPR</strong><small className={styles.statHint}>Today</small></Link>
+        <Link href="/m/money" className={styles.stat}><b className={styles.statValue}>{busy?"—":expenseMonth===null?"—":"₹"+expenseMonth.toLocaleString("en-IN")}</b><strong className={styles.statLabel}>Expenses</strong><small className={styles.statHint}>This month</small></Link>
       </div>
     </header>
-    <div className="sv-content">
-      {err&&<div className="sv-error" role="alert">{err}<button onClick={load}>Retry</button></div>}
-      <section className="sv-grid" aria-label="Supervisor modules">{links.map((m)=>{const i=modules.indexOf(m);return <Link key={m[1]} href={m[3]} className="sv-card" style={{background:colors[i]}}><span className="sv-icon">{m[0]}</span><b>{i+1}. {m[1]}</b><span>{m[2]}</span><i aria-hidden="true">→</i></Link>})}</section>
-      <section className="sv-panel"><div className="sv-panel-head"><h2>Today’s Site Progress</h2><Link href="/m/report">View all →</Link></div>
-        {busy?<p className="sv-muted">Loading progress…</p>:progress.length?progress.map((p,i)=>{const pct=progressPercent(p.done,p.boq);return <div className="sv-progress" key={p.description+i}><span>🏗</span><div><b>{p.description}</b><div className="sv-track"><span style={{width:pct===null?"0%":pct+"%"}}/></div></div><strong>{pct===null?"—":pct+"%"}</strong></div>}):<p className="sv-muted">No progress records available for this site.</p>}
+    <div className={styles.content}>
+      {err&&<div className={styles.error} role="alert">{err}<button onClick={load}>Retry</button></div>}
+      <section className={styles.grid} aria-label="Supervisor modules">{links.map((m)=>{const i=modules.indexOf(m);return <Link key={m[1]} href={m[3]} className={styles.card} style={{background:colors[i]}}><span className={styles.icon}>{m[0]}</span><b className={styles.cardTitle}>{i+1}. {m[1]}</b><span className={styles.cardDescription}>{m[2]}</span><i className={styles.arrow} aria-hidden="true">→</i></Link>})}</section>
+      <section className={styles.panel}><div className={styles.panelHead}><h2>Today’s Site Progress</h2><Link href="/m/report">View all →</Link></div>
+        {busy?<p className={styles.muted}>Loading progress…</p>:progress.length?progress.map((p,i)=>{const pct=progressPercent(p.done,p.boq);return <div className={styles.progress} key={p.description+i}><span>🏗</span><div><b className={styles.progressTitle}>{p.description}</b><div className={styles.track}><span className={styles.trackFill} style={{width:pct===null?"0%":pct+"%"}}/></div></div><strong>{pct===null?"—":pct+"%"}</strong></div>}):<p className={styles.muted}>No progress records available for this site.</p>}
       </section>
-      <section className="sv-lower">
-        <div className="sv-panel"><div className="sv-panel-head"><h2>Today’s Tasks</h2><Link href="/m/tasks">View all →</Link></div>{busy?<p className="sv-muted">Loading tasks…</p>:todayTasks.length?todayTasks.map(t=><Link className="sv-row" href="/m/tasks" key={t.id}><span className="sv-check">○</span><span>{t.title}</span><small>{t.due||t.status}</small></Link>):<p className="sv-muted">No open tasks.</p>}</div>
-        <div className="sv-panel"><div className="sv-panel-head"><h2>Recent Activity</h2><button type="button" onClick={() => window.dispatchEvent(new Event("psk-open-notifications"))} className="sv-view-all">View all →</button></div>{(notifications?.rows||[]).length?(notifications.rows.slice(0,4).map(n=><Link className="sv-row" href={n.link?.startsWith("/")?n.link:"/m/dashboard"} key={n.id}><span className="sv-check">•</span><span><b>{n.title}</b><small>{n.body||n.sites?.name||""}</small></span><small>{n.created_at?new Date(n.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):""}</small></Link>)): <p className="sv-muted">No recent activity.</p>}</div>
+      <section className={styles.lower}>
+        <div className={styles.panel}><div className={styles.panelHead}><h2>Today’s Tasks</h2><Link href="/m/tasks">View all →</Link></div>{busy?<p className={styles.muted}>Loading tasks…</p>:todayTasks.length?todayTasks.map(t=><Link className={styles.row} href="/m/tasks" key={t.id}><span className={styles.check}>○</span><span className={styles.rowMain}>{t.title}</span><small>{t.due||t.status}</small></Link>):<p className={styles.muted}>No open tasks.</p>}</div>
+        <div className={styles.panel}><div className={styles.panelHead}><h2>Recent Activity</h2><button type="button" onClick={() => window.dispatchEvent(new Event("psk-open-notifications"))} className={styles.viewAll}>View all →</button></div>{(notifications?.rows||[]).length?(notifications.rows.slice(0,4).map(n=><Link className={styles.row} href={n.link?.startsWith("/")?n.link:"/m/dashboard"} key={n.id}><span className={styles.check}>•</span><span className={styles.rowMain}><b>{n.title}</b><small>{n.body||n.sites?.name||""}</small></span><small>{n.created_at?new Date(n.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):""}</small></Link>)): <p className={styles.muted}>No recent activity.</p>}</div>
       </section>
     </div>
-    <style jsx>{`
-      .sv-wrap{min-height:100dvh;background:#f3f6fa;color:#101828;padding-bottom:calc(82px + env(safe-area-inset-bottom));font-family:inherit}
-      .sv-hero{background:linear-gradient(135deg,#101c30,#263e57);color:white;padding:calc(16px + env(safe-area-inset-top)) 16px 18px;border-radius:0 0 24px 24px}
-      .sv-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:26px}.sv-avatar{height:44px;min-width:44px;border:1px solid #ffffff55;border-radius:50%;background:#ffffff18;color:white;font-size:22px}
-      .sv-greet{font-size:16px;opacity:.86}.sv-name{font-size:25px;font-weight:800;margin:1px 0 6px}.sv-sub{font-size:14px;opacity:.9}
-      .sv-site{margin-top:12px;border-radius:10px;border:1px solid #ffffff55;background:#20344d;color:white;padding:8px;max-width:100%}
-      .sv-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:22px -3px 0;background:white;color:#101828;border-radius:18px;padding:12px 4px;box-shadow:0 5px 18px #0002}
-      .sv-stats a{min-width:0;text-decoration:none;color:inherit;padding:3px 7px;border-right:1px solid #e4e7ec;display:flex;flex-direction:column;gap:2px}.sv-stats a:last-child{border:0}.sv-stats b{font-size:clamp(15px,4.5vw,23px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sv-stats strong{font-size:12px}.sv-stats small{font-size:10px;color:#667085}
-      .sv-content{max-width:900px;margin:0 auto;padding:14px 12px}.sv-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-      .sv-card{position:relative;min-height:158px;padding:15px 13px;border-radius:17px;text-decoration:none;color:#101828;display:flex;flex-direction:column;align-items:flex-start;gap:7px;box-shadow:0 2px 8px #1018280b}
-      .sv-icon{display:grid;place-items:center;width:54px;height:54px;border-radius:50%;background:#ffffffaa;font-size:27px}.sv-card b{font-size:15px}.sv-card>span:not(.sv-icon){font-size:12px;line-height:1.4;color:#475467;padding-right:12px}.sv-card i{position:absolute;right:12px;bottom:11px;font-style:normal;border-radius:20px;background:#ffffffaa;padding:5px 11px;font-size:18px}
-      .sv-panel{background:#fff;border-radius:17px;padding:14px;margin-top:12px;box-shadow:0 2px 8px #1018280b;min-width:0}.sv-panel-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.sv-panel-head h2{font-size:16px;margin:0}.sv-panel-head a,.sv-view-all{font-size:12px;color:#1674d1;text-decoration:none;white-space:nowrap}.sv-view-all{border:0;background:transparent;padding:8px;cursor:pointer}
-      .sv-progress{display:grid;grid-template-columns:34px minmax(0,1fr) 42px;gap:8px;align-items:center;border-bottom:1px solid #eef0f3;padding:10px 0}.sv-progress:last-child{border:0}.sv-progress b{font-size:12px;font-weight:600}.sv-progress strong{font-size:12px;text-align:right}.sv-track{height:8px;background:#e9edf2;border-radius:8px;margin-top:6px;overflow:hidden}.sv-track span{height:100%;display:block;background:#18b86a;border-radius:8px}
-      .sv-lower{display:grid;grid-template-columns:1fr 1fr;gap:10px}.sv-row{min-height:48px;display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eef0f3;text-decoration:none;color:#101828;font-size:12px}.sv-row>span:nth-child(2){flex:1;min-width:0}.sv-row small{font-size:10px;color:#667085}.sv-row span small{display:block;margin-top:3px}.sv-check{font-size:20px;color:#12a35a}.sv-muted{color:#667085;font-size:13px}.sv-error{padding:12px;background:#fff0f0;border-radius:10px;color:#a32727;font-size:13px}.sv-error button{float:right}
-      @media(max-width:360px){.sv-stats{padding:10px 2px}.sv-stats a{padding:2px 4px}.sv-stats small{font-size:9px}.sv-content{padding-left:9px;padding-right:9px}.sv-card{padding:12px 10px;min-height:150px}.sv-lower{grid-template-columns:1fr}}
-    `}</style>
+
   </main>;
 }
