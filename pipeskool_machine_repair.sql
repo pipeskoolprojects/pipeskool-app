@@ -78,7 +78,7 @@ as $$
  )
 $$;
 
-create or replace view v_machine_repair_requests as
+create or replace view v_machine_repair_requests with (security_invoker=true) as
 select r.id,r.number,r.site_id,s.name as site_name,r.raised_by,u.full_name as raised_by_name,
  r.created_at,r.vendor_id,v.name as vendor_name,r.sent_by,r.sent_at,
  count(m.id)::integer as machine_count,
