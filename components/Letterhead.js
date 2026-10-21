@@ -30,9 +30,9 @@ export const letterheadCss = `
   .lh-page:last-child { page-break-after: auto; break-after: auto; }
 `;
 
-export function Letterhead({ company: c }) {
+export function Letterhead({ company: c, logoSrc = null }) {
   if (!c) return null;
-  const logo = c.logo_url ? <img src={billUrl(c.logo_url)} alt="logo" style={{ height: 40, width: "auto", display: "block", marginTop: 2 }} /> : <div style={{ marginTop: 4 }}><Logo height={26} /></div>;
+  const logo = c.logo_url ? <img src={logoSrc || billUrl(c.logo_url)} alt="logo" style={{ height: 40, width: "auto", display: "block", marginTop: 2 }} /> : <div style={{ marginTop: 4 }}><Logo height={26} /></div>;
   const meta1 = [c.gstin && <><b>GSTIN/UIN:</b> {c.gstin}</>, (c.state || c.state_code) && <><b>State:</b> {c.state}{c.state_code ? `, Code ${c.state_code}` : ""}</>, c.cin && <><b>CIN:</b> {c.cin}</>].filter(Boolean);
   const meta2 = [c.email && <><b>Email:</b> {c.email}</>, c.mobile && <><b>Mobile:</b> {c.mobile}</>].filter(Boolean);
   const join = arr => arr.map((x, i) => <span key={i}>{i > 0 && <span> &nbsp;·&nbsp; </span>}{x}</span>);
