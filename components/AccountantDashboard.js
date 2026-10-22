@@ -48,7 +48,7 @@ function Skeleton({mobile}) { return <div style={{display:"grid",gridTemplateCol
 export default function AccountantDashboard({ mobile = false }) {
   const [session,setSession]=useState(null), [sites,setSites]=useState([]), [siteId,setSiteId]=useState("all"), [month,setMonth]=useState(dateMonth());
   const [data,setData]=useState(null), [busy,setBusy]=useState(true), [error,setError]=useState("");
-  const [now,setNow]=useState(dateMonth()), [reload,setReload]=useState(0);
+  const [now]=useState(dateMonth()), [reload,setReload]=useState(0);
   useEffect(()=>{setSession(getSession()); getSites({allForMoney:true}).then(setSites).catch(()=>setSites([]));},[]);
   useEffect(()=>{
     if (!session || session.role!=="ho_admin") return;
@@ -102,7 +102,7 @@ export default function AccountantDashboard({ mobile = false }) {
       <Card title="Total Wages" value={inr(summary.wageTotal)} detail={"Net payroll · "+monthName} emoji="👥" href={mobile?"/m/muster":"/wages"} small={mobile}/>
       <Card title="Advance Salary Outstanding" value={inr(summary.outstanding)} detail="Approved advances less recorded recovery" emoji="📒" href={goExpenses} small={mobile}/>
       <Card title="Petty Cash Balance" value={inr(summary.petty)} detail="Current assigned custodian balances" emoji="💵" href={goExpenses} small={mobile}/>
-      <Card title="Total Vendors" value={String(summary.vendorCount)} detail="Active vendor records" emoji="🏦" href={mobile?"/m/stock":"/vendors"} small={mobile}/>
+      <Card title="Total Vendors" value={String(summary.vendorCount)} detail="Active vendor records" emoji="🏦" href="/vendors" small={mobile}/>
     </div>}
     <Section title="Accountant Modules">
       <div style={{display:"grid",gridTemplateColumns:mobile?"repeat(2,minmax(0,1fr))":"repeat(auto-fit,minmax(185px,1fr))",gap:10}}>
@@ -123,7 +123,7 @@ export default function AccountantDashboard({ mobile = false }) {
       </Section>
     </div>}
     {!busy&&summary&&<Section title="Recent Approved Expenses" action={<Link href={goExpenses} style={{fontSize:12,color:"#0875d1",textDecoration:"none"}}>View all →</Link>}>
-      {summary.recent.length?<div style={{background:"#fff",border:"1px solid "+BORDER,borderRadius:14,overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:mobile?460:620}}><thead><tr style={{background:"#f8fafc",textAlign:"left"}}>{["Date","Type","Description / vendor","Site","Amount","Status"].map(h=><th key={h} style={{padding:"10px 9px",color:MUTED,fontWeight:700}}>{h}</th>)}</tr></thead><tbody>{summary.recent.map(e=><tr key={e.id} style={{borderTop:"1px solid #f0f2f5"}}><td style={{padding:"10px 9px"}}>{e.expense_date||e.date||"—"}</td><td style={{padding:"10px 9px"}}>{String(e.category||"Expense").replace(/_/g," ")}</td><td style={{padding:"10px 9px"}}>{e.paid_to||e.note||"—"}</td><td style={{padding:"10px 9px"}}>{e.site||"—"}</td><td style={{padding:"10px 9px",fontWeight:700}}>{inr(e.amount)}</td><td style={{padding:"10px 9px"}}><span style={{color:"#16803c"}}>{e.status}</span></td></tr>)}</tbody></table></div>:<div style={{padding:18,background:"#fff",borderRadius:14,color:MUTED,fontSize:13}}>No approved expenses for this period.</div>}
+      {summary.recent.length?mobile?<div style={{display:"grid",gap:8}}>{summary.recent.map(e=><Link key={e.id} href={goExpenses} style={{display:"grid",gridTemplateColumns:"1fr auto",gap:"4px 10px",padding:12,background:"#fff",border:"1px solid "+BORDER,borderRadius:13,color:NAVY,textDecoration:"none"}}><b style={{fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.paid_to||e.note||"Expense"}</b><b style={{fontSize:12}}>{inr(e.amount)}</b><span style={{fontSize:10.5,color:MUTED}}>{e.expense_date||e.date||"—"} · {e.site||"Site"} · {String(e.category||"Expense").replace(/_/g," ")}</span><span style={{fontSize:10.5,color:"#16803c",textAlign:"right"}}>{e.status}</span></Link>)}</div>:<div style={{background:"#fff",border:"1px solid "+BORDER,borderRadius:14,overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:620}}><thead><tr style={{background:"#f8fafc",textAlign:"left"}}>{["Date","Type","Description / vendor","Site","Amount","Status"].map(h=><th key={h} style={{padding:"10px 9px",color:MUTED,fontWeight:700}}>{h}</th>)}</tr></thead><tbody>{summary.recent.map(e=><tr key={e.id} style={{borderTop:"1px solid #f0f2f5"}}><td style={{padding:"10px 9px"}}>{e.expense_date||e.date||"—"}</td><td style={{padding:"10px 9px"}}>{String(e.category||"Expense").replace(/_/g," ")}</td><td style={{padding:"10px 9px"}}>{e.paid_to||e.note||"—"}</td><td style={{padding:"10px 9px"}}>{e.site||"—"}</td><td style={{padding:"10px 9px",fontWeight:700}}>{inr(e.amount)}</td><td style={{padding:"10px 9px"}}><span style={{color:"#16803c"}}>{e.status}</span></td></tr>)}</tbody></table></div>:<div style={{padding:18,background:"#fff",borderRadius:14,color:MUTED,fontSize:13}}>No approved expenses for this period.</div>
     </Section>}
   </div></main>;
 }
