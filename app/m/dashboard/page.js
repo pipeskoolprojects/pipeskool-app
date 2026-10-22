@@ -40,7 +40,7 @@ export default function MobileHomePage() {
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100dvh" }}>
-      {["supervisor","storekeeper","site_engineer","project_coodinator","ho_admin"].includes(sess.role) ? <SupervisorDashboard sess={sess} /> : <>
+      {["supervisor","storekeeper","site_engineer","project_coodinator","ho_admin"].includes(sess.role) ? <SupervisorDashboard sess={sess} mode="mobile" /> : <>
         <HomeHeader mode="mobile" sess={sess} sites={sites} isDirector={isDirector}
           asSite={asSite} setAsSite={setAsSite} siteName={siteName}
           pickSite={pickSite} setPickSite={setPickSite} />
