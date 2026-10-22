@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import MobileNav from "@/components/MobileNav";
 import { isDemo } from "@/lib/supabase";
 import { getWorkerSiteOptions } from "@/lib/mobile";
-import { getLocalWorker, setLocalWorker, findWorkerByMobile, createStaffPunchProfile, getPosition, distanceMeters, getTodayPunch, punch } from "@/lib/mobile";
+import { getLocalWorker, setLocalWorker, findWorkerByMobile, createStaffPunchProfile, getPositionDetailed, distanceMeters, getTodayPunch, punch } from "@/lib/mobile";
 import { getSession, refreshSessionMobile, setCurrentSite } from "@/lib/auth";
 import { siteForPunch, workerRaiseAdvance, workerMyAdvances } from "@/lib/mobile";   // update436
 import { getLang, t } from "@/lib/i18n";
@@ -36,14 +36,41 @@ export default function PunchScreen() {
     const ov = await siteForPunch(id, worker?.id);
     if (!ov) return;
     setWorker(w => { const nw = { ...w, ...ov }; setLocalWorker(nw); return nw; });
-    setDist(null);
-    getPosition().then(p => {
-      setPos(p);
-      if (ov.geofence_lat == null) setDist(0);                    // no geofence configured -> nothing to enforce
-      else if (p) setDist(distanceMeters(p.lat, p.lng, ov.geofence_lat, ov.geofence_lng));
-      else setDist(null);                                          // geofence set but no GPS -> stay locked (update144)
+    fenceRef.current = ov; applyFence();
+    locate();
+  }
+  // update470: one place that reads GPS for this screen. A failure is shown with its reason and a Try again
+  // button (it used to look like "Checking your location…" forever). The punch stays locked until a real fix.
+  const fenceRef = useRef(null);   // the site's current pin/radius
+  const posRef = useRef(null);
+  const geoRun = useRef(0);
+  const [geoErr, setGeoErr] = useState(null);
+  const [locating, setLocating] = useState(false);
+  function applyFence() {
+    const f = fenceRef.current, p = posRef.current;
+    if (!f) return;
+    if (f.geofence_lat == null) { setDist(0); return; }          // no geofence configured -> nothing to enforce
+    if (p) setDist(distanceMeters(p.lat, p.lng, f.geofence_lat, f.geofence_lng));
+    else setDist(null);                                           // geofence set but no GPS -> stay locked (update144)
+  }
+  function locate() {
+    const run = ++geoRun.current;
+    setGeoErr(null); setLocating(true);
+    if (!posRef.current) setDist(fenceRef.current && fenceRef.current.geofence_lat == null ? 0 : null);
+    getPositionDetailed().then(r => {
+      if (run !== geoRun.current) return;                         // a newer request is running
+      setLocating(false);
+      if (r.pos) { posRef.current = r.pos; setPos(r.pos); setGeoErr(null); }
+      else { setGeoErr(r.error || "timeout"); }
+      applyFence();
     });
   }
+  // coming back to the app (e.g. after switching Location on in Settings) tries again by itself
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === "visible" && fenceRef.current && (geoErr || !posRef.current)) locate(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  });
   const [lang, setLangState] = useState("en");
   useEffect(() => { setLangState(getLang()); }, []);
   const [dist, setDist] = useState(null);
@@ -97,15 +124,11 @@ export default function PunchScreen() {
       // update411: never trust the geofence cached on the phone — re-read the site's current pin/radius
       // from the server every open (Raju Sahani case: phone said "inside", server said 18 km — stale cache).
       siteForPunch(wv.site_id, wv.id).then(fresh => { if (fresh) { const nw = { ...wv, ...fresh }; setLocalWorker(nw); setWorker(nw);
-        getPosition().then(p => { if (!p) return; setPos(p); setDist(fresh.geofence_lat == null ? 0 : distanceMeters(p.lat, p.lng, fresh.geofence_lat, fresh.geofence_lng)); }); } });
+        fenceRef.current = fresh; applyFence(); } });              // update470: re-check the GPS fix we already have, no second GPS request
       setWorker(wv);
       getTodayPunch(wv.id).then(setToday);
-      getPosition().then(p => {
-        setPos(p);
-        if (wv.geofence_lat == null) setDist(0);                   // no geofence configured -> nothing to enforce
-        else if (p) setDist(distanceMeters(p.lat, p.lng, wv.geofence_lat, wv.geofence_lng));
-        else setDist(null);                                        // geofence set but no GPS -> stay locked (update144)
-      });
+      fenceRef.current = wv;
+      locate();
     })();
   }, [router]);
 
@@ -201,7 +224,12 @@ export default function PunchScreen() {
           </div>
         )}
         <div style={{ margin: "10px 0" }}>
-          {dist === null ? (
+          {dist === null && geoErr && !locating ? (
+            <div role="alert" className="geo-err" style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#991B1B", borderRadius: 12, padding: "10px 12px", fontSize: 13, textAlign: "left", margin: "0 4px" }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>📍 {t(lang, geoErr === "denied" ? "gps_denied" : geoErr === "unavailable" ? "gps_off" : geoErr === "timeout" ? "gps_timeout" : "gps_unsupported")}</div>
+              <button type="button" className="primary" onClick={locate} style={{ marginTop: 6, width: "100%", minHeight: 42, fontWeight: 700 }}>↻ {t(lang, "gps_retry")}</button>
+            </div>
+          ) : dist === null ? (
             <span className="geo-chip geo-wait">{t(lang, "checking_loc")}</span>
           ) : insideFence ? (
             <span className="geo-chip geo-ok">{t(lang, "inside_site")}</span>
@@ -210,7 +238,7 @@ export default function PunchScreen() {
           )}
           {dist !== null && (insideFence
             ? <div style={{ fontSize: 11.5, color: "var(--green)", marginTop: 4 }}>📍 You are within the site location{pos?.acc ? " · Accuracy " + Math.round(pos.acc) + "m" : ""}</div>
-            : <div style={{ fontSize: 11.5, color: "var(--red)", marginTop: 4 }}>You are outside <b>{worker.site_name}</b> — move closer to punch here, or pick another of your sites above.</div>)}
+            : <div style={{ fontSize: 11.5, color: "var(--red)", marginTop: 4 }}>You are outside <b>{worker.site_name}</b>{pos?.acc ? " (GPS accuracy " + Math.round(pos.acc) + "m)" : ""} — move closer to punch here, or pick another of your sites above. <button type="button" onClick={locate} disabled={locating} style={{ fontSize: 11.5, padding: "2px 8px", marginLeft: 4 }}>{locating ? "…" : "↻ " + t(lang, "gps_retry")}</button></div>)}
         </div>
 
         <button
@@ -240,7 +268,7 @@ export default function PunchScreen() {
           <div className="stat-box"><div className="k">Hours</div><div className="v">{today.hours_worked != null ? Math.floor(today.hours_worked) + "h " + String(Math.round((today.hours_worked % 1) * 60)).padStart(2, "0") + "m" : "\u2014"}</div></div>
         </div>
 
-        <div className="muted" style={{ textAlign: "center", fontSize: 10, marginTop: 10 }}>Pipeskool v436</div>{/* update289: visible build tag — if this line is missing on the phone, the deploy is not live */}
+        <div className="muted" style={{ textAlign: "center", fontSize: 10, marginTop: 10 }}>Pipeskool v470</div>{/* update289: visible build tag — if this line is missing on the phone, the deploy is not live */}
         {worker.profile_complete === false && (
           <div className="note amber" style={{ textAlign: "left" }}>
             ⚠ Profile incomplete — bank details pending. Show this to your supervisor.
