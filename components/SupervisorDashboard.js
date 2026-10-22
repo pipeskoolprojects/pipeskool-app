@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Logo from "@/components/Logo";
 import styles from "./SupervisorDashboard.module.css";
-import { canSeeModule, canAnySite, setCurrentSite } from "@/lib/auth";
+import { canSeeModule, canAnySite, hasAdminCap, setCurrentSite } from "@/lib/auth";
 import { getMuster } from "@/lib/mobile";
 import { getOpenIndents } from "@/lib/procure";
 import { getTodayDpr, getProgress } from "@/lib/dpr";
@@ -25,9 +25,9 @@ const modules = [
   ["🛠","Machine Repair","Send tools & machines for repair and track them","/m/repairs","machine_repair"],
 ];
 const colors = ["#fff0e5","#eaf6ff","#eaffef","#f3eaff","#ffecef","#fff8df","#e5fbff","#f0edff","#e8f8f4"];
-const roleLabels = { supervisor: "Supervisor", storekeeper: "Storekeeper", site_engineer: "Site Engineer", project_coodinator: "Project Coordinator" };
+const roleLabels = { supervisor: "Supervisor", storekeeper: "Storekeeper", site_engineer: "Site Engineer", project_coodinator: "Project Coordinator", ho_admin: "Accountant" };
 const dateKey = () => new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kolkata"}).format(new Date());
-function canOpen(sess, module) { return !module || canSeeModule(sess,module) || (module==="workers" && (canAnySite(sess,"workers","create") || canAnySite(sess,"workers","manage"))); }
+function canOpen(sess, module) { return !module || canSeeModule(sess,module) || (module==="money" && hasAdminCap(sess,"view_all_money")) || (module==="workers" && (canAnySite(sess,"workers","create") || canAnySite(sess,"workers","manage"))); }
 
 export default function SupervisorDashboard({ sess }) {
   const [data,setData]=useState(null),[busy,setBusy]=useState(true),[err,setErr]=useState("");
@@ -41,7 +41,7 @@ export default function SupervisorDashboard({ sess }) {
       canSeeModule(sess,"attendance",siteId)?getMuster(siteId):Promise.resolve(null),
       canSeeModule(sess,"indent",siteId)?getOpenIndents(siteId):Promise.resolve(null),
       canSeeModule(sess,"dpr",siteId)?Promise.all([getTodayDpr(siteId),getProgress(siteId)]):Promise.resolve(null),
-      canSeeModule(sess,"money",siteId)?getExpenseClaimQueue(siteId):Promise.resolve(null),
+      (canSeeModule(sess,"money",siteId)||hasAdminCap(sess,"view_all_money"))?getExpenseClaimQueue(siteId):Promise.resolve(null),
       getTasks(),getMyNotifications(8),
       canSeeModule(sess,"machine_repair",siteId)?getRepairDashboardCount(siteId):Promise.resolve(0),
     ]);

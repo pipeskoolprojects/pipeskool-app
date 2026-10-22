@@ -71,7 +71,7 @@ export default function MobileNav() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
-  const supervisor = ["supervisor","storekeeper","site_engineer","project_coodinator"].includes(role) && !workerOnly;
+  const supervisor = ["supervisor","storekeeper","site_engineer","project_coodinator","ho_admin"].includes(role) && !workerOnly;
   const accountant = role === "ho_admin" && !workerOnly;
   const quickItems = [
     { href: "/m/indent", label: "Create Material Indent", icon: "🧾", show: canSeeModule(sess, "indent") },

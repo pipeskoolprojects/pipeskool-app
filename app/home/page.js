@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import HomeHeader from "@/components/HomeHeader";
 import HomeDashboard from "@/components/HomeDashboard";
-import AccountantDashboard from "@/components/AccountantDashboard";
+import SupervisorDashboard from "@/components/SupervisorDashboard";
 import { getSession } from "@/lib/auth";
 
 export default function HomePage() {
@@ -41,11 +41,13 @@ export default function HomePage() {
     <div className="layout">
       <Sidebar />
       <main className="main" style={{ padding: 0 }}>
-        <HomeHeader mode="desk" sess={sess} sites={sites} isDirector={isDirector}
-          asSite={asSite} setAsSite={setAsSite} siteName={siteName}
-          pickSite={pickSite} setPickSite={setPickSite} />
-        {sess.role === "ho_admin" ? <AccountantDashboard /> : <HomeDashboard mode="desk" asSite={asSite} setAsSite={setAsSite}
-          onSites={setSites} onOpenProjects={() => router.push("/projects")} showPageCards />}
+        {sess.role === "ho_admin" ? <SupervisorDashboard sess={sess} /> : <>
+          <HomeHeader mode="desk" sess={sess} sites={sites} isDirector={isDirector}
+            asSite={asSite} setAsSite={setAsSite} siteName={siteName}
+            pickSite={pickSite} setPickSite={setPickSite} />
+          <HomeDashboard mode="desk" asSite={asSite} setAsSite={setAsSite}
+            onSites={setSites} onOpenProjects={() => router.push("/projects")} showPageCards />
+        </>}
       </main>
     </div>
   );
