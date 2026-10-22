@@ -116,7 +116,9 @@ export default function MobileNav() {
     window.addEventListener("popstate", back);
     return () => window.removeEventListener("popstate", back);
   }, [quickOpen]);
-  const inMore = moreVisible.some(m => m.href === path);
+  const inMore = accountant
+    ? !["/m/dashboard", "/m/money", "/m/muster"].includes(path)
+    : moreVisible.some(m => m.href === path);
 
   async function logout() {
     try { localStorage.removeItem("psk_worker"); } catch {}   // worker punch profile
