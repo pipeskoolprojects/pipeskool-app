@@ -57,11 +57,11 @@ export default function AccountantDashboard({ mobile = false }) {
     const sid=siteId==="all"?"all":siteId;
     Promise.all([
       getExpenseClaimQueue(sid,{includeVendorDirect:true}),
-      getPayouts(month,sid),
+      getPayouts(month,sid,{strict:true}),
       getStaffPayouts(month,sid),
       getAdvanceLedger(sid),
       getPettyReconciliation(sid),
-      getVendors(false),
+      getVendors(false,{strict:true}),
     ]).then(([expenses,wages,staffWages,advances,petty,vendors])=>{
       if(alive) setData({expenses,wages,staffWages,advances,petty,vendors});
     }).catch(e=>{if(alive){setError(e?.message||"Could not load accountant dashboard data.");setData(null);}})
