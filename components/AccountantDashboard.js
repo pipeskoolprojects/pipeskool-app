@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Logo from "@/components/Logo";
+import { isDemo } from "@/lib/supabase";
 import { getSession, canSeeModuleAnySite, hasAdminCap } from "@/lib/auth";
 import { getSites } from "@/lib/data";
 import { getExpenseClaimQueue, getAdvanceLedger, getPettyReconciliation, inr } from "@/lib/money";
@@ -46,10 +48,11 @@ function Skeleton({mobile}) { return <div style={{display:"grid",gridTemplateCol
 export default function AccountantDashboard({ mobile = false }) {
   const [session,setSession]=useState(null), [sites,setSites]=useState([]), [siteId,setSiteId]=useState("all"), [month,setMonth]=useState(dateMonth());
   const [data,setData]=useState(null), [busy,setBusy]=useState(true), [error,setError]=useState("");
-  const [now,setNow]=useState(dateMonth());
+  const [now,setNow]=useState(dateMonth()), [reload,setReload]=useState(0);
   useEffect(()=>{setSession(getSession()); getSites({allForMoney:true}).then(setSites).catch(()=>setSites([]));},[]);
   useEffect(()=>{
     if (!session || session.role!=="ho_admin") return;
+    if (isDemo) { setBusy(false); setData(null); setError("Accounting figures are hidden in demo mode because they are not live ERP records."); return; }
     let alive=true; setBusy(true); setError("");
     const sid=siteId==="all"?"all":siteId;
     Promise.all([
@@ -64,7 +67,7 @@ export default function AccountantDashboard({ mobile = false }) {
     }).catch(e=>{if(alive){setError(e?.message||"Could not load accountant dashboard data.");setData(null);}})
       .finally(()=>{if(alive)setBusy(false);});
     return ()=>{alive=false;};
-  },[session,siteId,month]);
+  },[session,siteId,month,reload]);
   const monthName = useMemo(()=>{try{return new Date(month+"-01T00:00:00").toLocaleDateString(undefined,{month:"long",year:"numeric"});}catch{return month;}},[month]);
   const summary=useMemo(()=>{
     if(!data)return null;
@@ -87,13 +90,13 @@ export default function AccountantDashboard({ mobile = false }) {
   const styles={shell:{minHeight:mobile?"100dvh":0,background:"#f5f7fa",color:NAVY,paddingBottom:mobile?"calc(96px + env(safe-area-inset-bottom))":28},wrap:{maxWidth:1500,margin:"0 auto",padding:mobile?"8px 12px 22px":"20px clamp(16px,2vw,30px)"},select:{minHeight:42,border:"1px solid "+BORDER,borderRadius:10,padding:"8px 11px",background:"#fff",color:NAVY,fontSize:13}};
   return <main style={styles.shell}><div style={styles.wrap}>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:14}}>
-      <div><div style={{fontSize:mobile?20:24,fontWeight:800}}>Accountant Dashboard</div><div style={{fontSize:12,color:MUTED,marginTop:3}}>Manage accounts, expenses, wages and site transactions</div></div>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>{mobile&&<Logo height={20}/>}<div><div style={{fontSize:mobile?20:24,fontWeight:800}}>Accountant Dashboard</div><div style={{fontSize:12,color:MUTED,marginTop:3}}>Manage accounts, expenses, wages and site transactions</div></div></div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
         <label style={{fontSize:11,color:MUTED}}>Site <select aria-label="Filter dashboard by site" value={siteId} onChange={e=>setSiteId(e.target.value)} style={styles.select}><option value="all">All Sites</option>{sites.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
         <label style={{fontSize:11,color:MUTED}}>Period <input aria-label="Accounting period" type="month" max={now} value={month} onChange={e=>e.target.value&&setMonth(e.target.value)} style={styles.select}/></label>
       </div>
     </div>
-    {error&&<div role="alert" style={{background:"#fff0ed",color:"#b42318",padding:12,borderRadius:12,marginBottom:12}}>{error} <button type="button" onClick={()=>setMonth(m=>m)} style={{marginLeft:8,border:"1px solid currentColor",borderRadius:8,padding:"5px 9px",background:"white",color:"inherit"}}>Retry</button></div>}
+    {error&&<div role="alert" style={{background:"#fff0ed",color:"#b42318",padding:12,borderRadius:12,marginBottom:12}}>{error} <button type="button" onClick={()=>setReload(x=>x+1)} style={{marginLeft:8,border:"1px solid currentColor",borderRadius:8,padding:"5px 9px",background:"white",color:"inherit"}}>Retry</button></div>}
     {busy?<Skeleton mobile={mobile}/>:summary&&<div style={{display:"grid",gridTemplateColumns:mobile?"repeat(2,minmax(0,1fr))":"repeat(5,minmax(0,1fr))",gap:10}}>
       <Card title="Total Expenses" value={inr(summary.expTotal)} detail={"Approved · "+monthName} emoji="💳" href={goExpenses} small={mobile}/>
       <Card title="Total Wages" value={inr(summary.wageTotal)} detail={"Net payroll · "+monthName} emoji="👥" href={mobile?"/m/muster":"/wages"} small={mobile}/>
