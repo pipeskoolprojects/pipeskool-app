@@ -67,7 +67,6 @@ export default function MobileNav() {
     import("@/lib/data").then(({ getDirectorPulse }) => getDirectorPulse().then(p => { if (alive && p) setPendCount(p.moneyPending || 0); })).catch(() => {});
     return () => { alive = false; };
   }, [role]);
-  const moreVisible = (workerOnly || !sess) ? [] : accountant ? accountantMore : more.filter(m => m.show(sess));
   const path = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -104,6 +103,7 @@ export default function MobileNav() {
     { href: "/m/add", label: "Add Worker", show: s => canAnySite(s, "workers", "create") || canAnySite(s, "workers", "manage") },
     { href: "/m/report", label: "Reports", show: s => (s?.caps?.includes("view_all_money") || canSeeModuleAnySite(s, "money") || canSeeModuleAnySite(s, "dpr")) },
   ].filter(x => x.show(sess));
+  const moreVisible = (workerOnly || !sess) ? [] : accountant ? accountantMore : more.filter(m => m.show(sess));
   useEffect(() => {
     const showMore = () => setOpen(true);
     window.addEventListener("psk-open-more", showMore);
