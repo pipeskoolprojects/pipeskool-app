@@ -9,6 +9,8 @@
   background: #f3f6fa;
   color: #101828;
   font-family: inherit;
+  container-type: inline-size;
+  container-name: staffHome;
 }
 .wrap *, .wrap *::before, .wrap *::after { box-sizing: border-box; }
 .hero {
@@ -127,7 +129,7 @@
 }
 
 /* Desktop web home: a wide application dashboard, separate from the phone layout above. */
-@media (min-width: 1000px) {
+@container staffHome (min-width: 900px) {
   .wrap {
     width: 100%;
     max-width: none;
@@ -239,6 +241,6 @@
   .row { font-size: 13px; }
   .row small { font-size: 11px; }
 }
-@media (min-width: 1560px) {
+.dummyPLACEHOLDER {
   .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
