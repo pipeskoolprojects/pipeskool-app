@@ -13,11 +13,12 @@ import { getVendors } from "@/lib/vendors";
 const ORANGE = "#ff7900", NAVY = "#111827", MUTED = "#64748b", BORDER = "#e5e7eb";
 const dateMonth = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"); };
 const dateInMonth = (date, month) => String(date || "").slice(0,7) === month;
-const icon = { expenses:"💳", muster:"👥", dpr:"📋", challan:"🚚", grn:"📦", ledger:"📒", petty:"₹", site:"🏗", vendor:"🏦", tasks:"☑️", workers:"👷", reports:"📊" };
+const icon = { punch:"⏱", expenses:"💳", muster:"👥", dpr:"📋", challan:"🚚", grn:"📦", ledger:"📒", petty:"₹", site:"🏗", vendor:"🏦", tasks:"☑️", workers:"👷", reports:"📊" };
 
 function hasMoney(session) { return hasAdminCap(session, "view_all_money") || canSeeModuleAnySite(session, "money"); }
 function features(session, mobile) {
   const items = [
+    ["punch","Punch In","Record today’s site attendance",mobile?"/m":"/punch",session?.requires_punch !== false],
     ["expenses","All Expenses","View and manage authorized expense records",mobile?"/m/money":"/expenses",hasMoney(session)],
     ["muster","Muster & Wages","Attendance, muster rolls and payroll",mobile?"/m/muster":"/wages",canSeeModuleAnySite(session,"attendance") || canSeeModuleAnySite(session,"wages")],
     ["dpr","DPR","Read site progress reports",mobile?"/m/dpr":"/dpr",canSeeModuleAnySite(session,"dpr")],

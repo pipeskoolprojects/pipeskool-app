@@ -167,6 +167,7 @@ export default function Sidebar() {
               (it is reached from Quick Access) — the /approvals route itself is untouched. */}
           {/* update236: Home IS the dashboard now (Projects / Dashboard / Site reports are its tabs) */}
           <Link href="/home" className={path === "/home" || path === "/projects" || path === "/dashboard" || path === "/reports" ? "active" : ""}>🏠 Home</Link>
+          {session?.role === "ho_admin" && session?.requires_punch !== false && <Link href="/punch" className={path === "/punch" ? "active" : ""}>⏱ Punch In</Link>}
         </nav>
       )}
 
