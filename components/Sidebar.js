@@ -20,7 +20,7 @@ const GROUPS = [
       { href: "/letters", label: "Letters & Documents", module: "letters" },   // update329
     ] },
     { label: "Material & Procurement", items: [
-      { href: "/procure", label: "Indent & Purchase", module: "indent" },
+      { href: "/procure", label: "Procurement & POs", module: "indent" },   // update473: office desk (approvals, quotes, POs); ordering is in the catalogue
       { href: "/order", label: "Order Materials (Catalogue)", module: "indent" },   // update464
       { href: "/stock", label: "Material Stock & Inventory", module: "stock" },
       { href: "/stock/grn", label: "GRN Register", module: "stock" }, { href: "/stock/challans", label: "Delivery Challans", module: "stock" },
@@ -167,7 +167,6 @@ export default function Sidebar() {
               (it is reached from Quick Access) — the /approvals route itself is untouched. */}
           {/* update236: Home IS the dashboard now (Projects / Dashboard / Site reports are its tabs) */}
           <Link href="/home" className={path === "/home" || path === "/projects" || path === "/dashboard" || path === "/reports" ? "active" : ""}>🏠 Home</Link>
-          {session?.role === "ho_admin" && session?.requires_punch !== false && <Link href="/punch" className={path === "/punch" ? "active" : ""}>⏱ Punch In</Link>}
         </nav>
       )}
 

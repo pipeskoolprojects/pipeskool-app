@@ -187,7 +187,7 @@ export default function MobileReport() {
                     <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                       <button style={{ fontSize: 11.5, flex: 1 }} onClick={() => window.location.href = "/m/muster"}>👥 Muster</button>
                       <button style={{ fontSize: 11.5, flex: 1 }} onClick={() => window.location.href = "/m/dpr"}>📋 DPR</button>
-                      <button style={{ fontSize: 11.5, flex: 1 }} onClick={() => window.location.href = "/m/indent"}>🧾 Indents</button>
+                      <button style={{ fontSize: 11.5, flex: 1 }} onClick={() => window.location.href = "/m/deliveries"}>🧾 Orders</button>
                     </div>
                   </div>
                 )}

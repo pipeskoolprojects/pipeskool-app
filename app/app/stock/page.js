@@ -5,7 +5,6 @@ import DataTable from "@/components/DataTable";
 import { isDemo } from "@/lib/supabase";
 import { getBalances, getBoqNorms, getRequests, deadStock, lowStock, getHoldings } from "@/lib/stock";
 import StockEntry from "@/components/StockEntry";
-import IndentForm from "@/components/IndentForm";
 import { getSession, can } from "@/lib/auth";
 
 const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN");
@@ -48,7 +47,7 @@ export default function StockPage() {
           <StockEntry siteId={site !== "all" ? Number(site) : (session.currentSite || 1)} userId={session.id} onDone={() => setReloadKey(k => k + 1)} />
         )}
         {session && can(session, "indent", "create", site !== "all" ? Number(site) : undefined) && (
-          <IndentForm siteId={site !== "all" ? Number(site) : (session.currentSite || 1)} userId={session.id} onDone={() => setReloadKey(k => k + 1)} />
+          <div style={{ margin: "0 0 14px" }}><button type="button" className="primary" onClick={() => window.location.assign("/order")}>🛒 Order materials</button></div>
         )}
 
         {isDemo && <div className="demo-banner">Demo mode — sample inventory.</div>}
@@ -109,7 +108,7 @@ export default function StockPage() {
 
         {low.length > 0 && (
           <div className="panel">
-            <h2>⚠ Low stock — auto-suggest indent</h2>
+            <h2>⚠ Low stock — suggested order</h2>
             <table>
               <thead><tr><th>Item</th><th>Site</th><th className="num">Balance</th><th className="num">Min</th><th className="num">Suggest order</th></tr></thead>
               <tbody>
@@ -214,7 +213,7 @@ export default function StockPage() {
                 ))}
               </tbody>
             </table>
-            <div className="muted" style={{ marginTop: 8 }}>These flow into Module 5 (Indent &amp; Purchase) for PO processing.</div>
+            <div className="muted" style={{ marginTop: 8 }}>These flow into Procurement &amp; POs for PO processing.</div>
           </div>
         )}
       </main>

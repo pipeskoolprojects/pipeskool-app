@@ -16,7 +16,7 @@ export const ROUTES = {
   approvals: ["/approvals", "/m/approvals"],
   money:     ["/expenses",  "/m/money"],
   tasks:     ["/tasks",     "/m/tasks"],
-  indent:    ["/procure",   "/m/indent"],
+  indent:    ["/procure",   "/m/deliveries"],               // update473: Indent screen retired — a record opens in My orders
   stock:     ["/stock",     "/m/stock"],
   repairs:   ["/repairs", "/m/repairs"],
   deliveries: ["/stock/deliveries", "/m/deliveries"],        // update462: site receiving

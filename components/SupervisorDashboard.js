@@ -15,7 +15,7 @@ import { approvedExpenseTotal, countOpenIndents, progressPercent } from "@/lib/s
 
 const modules = [
   ["⏱","Punch","Punch in and out","/m",null,"/attendance"],
-  ["🛒","Order Material","Create indent and track material","/m/indent","indent","/procure"],
+  ["🛒","Order Material","Order and track material","/m/order","indent","/order"],
   ["👥","Muster","Review worker attendance and muster roll","/m/muster","attendance","/attendance"],
   ["📋","DPR","Create and submit Daily Progress Report","/m/dpr","dpr","/dpr"],
   ["🚚","Order Details","Deliveries, challans and GRN","/m/deliveries","stock","/stock/deliveries"],
@@ -25,7 +25,7 @@ const modules = [
   ["🛠","Machine Repair","Send tools & machines for repair and track them","/m/repairs","machine_repair","/repairs"],
 ];
 const WEB_ROUTE_BY_MOBILE = {
-  "/m": "/attendance", "/m/dashboard": "/home", "/m/indent": "/procure",
+  "/m": "/attendance", "/m/dashboard": "/home", "/m/indent": "/order", "/m/order": "/order",
   "/m/muster": "/attendance", "/m/dpr": "/dpr", "/m/deliveries": "/stock/deliveries",
   "/m/money": "/expenses", "/m/tasks": "/tasks", "/m/add": "/workers",
   "/m/repairs": "/repairs", "/m/report": "/reports", "/m/stock": "/stock",
@@ -86,7 +86,7 @@ export default function SupervisorDashboard({ sess, mode = "web" }) {
       {(sess.sites||[]).length>1&&<select aria-label="Current site" className={styles.site} value={siteId} onChange={e=>{setSiteId(e.target.value);setCurrentSite(e.target.value);}}>{sess.sites.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>}
       <div className={styles.stats}>
         <Link href={dashboardHref(mode === "mobile" ? "/m/muster" : "/attendance", mode)} className={styles.stat}><b className={styles.statValue}>{busy?"—":workerCount??"—"}</b><strong className={styles.statLabel}>Workers</strong><small className={styles.statHint}>Assigned site</small></Link>
-        <Link href={dashboardHref(mode === "mobile" ? "/m/indent" : "/procure", mode)} className={styles.stat}><b className={styles.statValue}>{busy?"—":pendingIndents??"—"}</b><strong className={styles.statLabel}>Materials</strong><small className={styles.statHint}>Open requests</small></Link>
+        <Link href={dashboardHref(mode === "mobile" ? "/m/deliveries" : "/procure", mode)} className={styles.stat}><b className={styles.statValue}>{busy?"—":pendingIndents??"—"}</b><strong className={styles.statLabel}>Materials</strong><small className={styles.statHint}>Open requests</small></Link>
         <Link href={dashboardHref(mode === "mobile" ? "/m/dpr" : "/dpr", mode)} className={styles.stat}><b className={styles.statValue}>{busy?"—":dprDone?"✓":"—"}</b><strong className={styles.statLabel}>DPR</strong><small className={styles.statHint}>Today</small></Link>
         <Link href={dashboardHref(mode === "mobile" ? "/m/money" : "/expenses", mode)} className={styles.stat}><b className={styles.statValue}>{busy?"—":expenseMonth===null?"—":"₹"+expenseMonth.toLocaleString("en-IN")}</b><strong className={styles.statLabel}>{ownOnly?"My expenses":"Expenses"}</strong><small className={styles.statHint}>{ownOnly?"Approved · this month":"This month"}</small></Link>
       </div>

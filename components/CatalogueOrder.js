@@ -96,7 +96,7 @@ function ProductCard({ p, imgs, prices, showPx, hit, inCart, onAddOne, onSetQty,
         {one && q1 > 0
           ? <div className="co-pill on"><Step value={q1} readOnly onChange={v => onSetQty(p, one, Number(v) || 0)} label={"Quantity of " + one.name} /></div>
           : <button type="button" className="co-pill" onClick={() => (one ? onAddOne(p, one) : onOpen(p, hit))}>
-              ADD{n > 1 && <small>{n} options</small>}{added > 0 && <i className="co-dot" aria-label={added + " in indent"}>{added}</i>}
+              ADD{n > 1 && <small>{n} options</small>}{added > 0 && <i className="co-dot" aria-label={added + " in order"}>{added}</i>}
             </button>}
       </div>
       {px?.rate != null && (
@@ -120,9 +120,9 @@ function OptionSheet({ p, start, imgs, prices, showPx, inCart, onAdd, onClose })
   const px = showPx && cur ? prices[cur.item_id] : null;
   const many = p.opts.length > 1;
   return (
-    <div className="co-modal" role="dialog" aria-modal="true" aria-label={many ? "Select size" : "Add to indent"} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="co-modal" role="dialog" aria-modal="true" aria-label={many ? "Select size" : "Add to order"} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="co-sheet co-optsheet">
-        <header><h3>{many ? "Select size" : "Add to indent"}</h3><button type="button" className="co-x" aria-label="Close" onClick={onClose}>×</button></header>
+        <header><h3>{many ? "Select size" : "Add to Order"}</h3><button type="button" className="co-x" aria-label="Close" onClick={onClose}>×</button></header>
         <div className="co-st">
           <div className="co-shp">
             <span className="co-shimg"><Img p={p} imgs={imgs} alt={titleOf(p)} /></span>
@@ -142,13 +142,13 @@ function OptionSheet({ p, start, imgs, prices, showPx, inCart, onAdd, onClose })
             <div className="co-sel1">
               <div className="co-sel1n">{cur.name}</div>
               <div className="co-sel1m">{[cur.code && "Code " + cur.code, cur.size !== "—" && "Size " + cur.size, "Unit " + cur.unit, cur.make && "Brand " + cur.make].filter(Boolean).join(" · ")}</div>
-              {inCart[cur.item_id] > 0 && <div className="co-sel1c">✓ {inCart[cur.item_id]} {cur.unit} already in this indent</div>}
+              {inCart[cur.item_id] > 0 && <div className="co-sel1c">✓ {inCart[cur.item_id]} {cur.unit} already in this order</div>}
             </div>)}
         </div>
         <footer>
           <div className="co-shpx">{px?.rate != null ? <><b>{inr(px.rate)}</b><span>/{px.per}</span>{px.mrp > px.rate && px.disc > 0 && <s>{inr(px.mrp)}</s>}</> : null}</div>
           <Step value={qty} min={1} onChange={setQty} label="Quantity" big />
-          <button type="button" className="primary co-cta" disabled={!cur || !(Number(qty) > 0)} onClick={() => { onAdd(p, cur, Number(qty)); setQty(1); if (!many) onClose(); }}>Add to Indent</button>
+          <button type="button" className="primary co-cta" disabled={!cur || !(Number(qty) > 0)} onClick={() => { onAdd(p, cur, Number(qty)); setQty(1); if (!many) onClose(); }}>Add to Order</button>
         </footer>
       </div>
     </div>
@@ -275,18 +275,20 @@ export default function CatalogueOrder({ mobile = false }) {
     const valid = cart.filter(x => Number(x.qty) > 0);
     if (!valid.length) { setSendErr("Add at least one size with a quantity."); return; }
     if (!siteId) { setSendErr("Pick the site first."); return; }
-    if (!mayRaise) { setSendErr("You don't have the right to raise indents for this site."); return; }
+    if (!mayRaise) { setSendErr("You don't have the right to place orders for this site."); return; }
     setBusy(true);
     const header = { site_id: siteId, required_by: meta.required_by || null, urgency: meta.urgency, note: meta.purpose || "Ordered from the catalogue", raised_by: sess?.id || null };
     const lines = valid.map(x => ({ item_id: x.item_id, item_name: x.name, item_type: x.item_type, qty: Number(x.qty), unit: x.unit, purpose: meta.purpose || null, spec: null }));
     let res = await createIndent(header, lines);
-    if (!res.ok && res.duplicate && window.confirm(res.error + "\n\nRaise it anyway as a separate indent?")) res = await createIndent({ ...header, allow_duplicate: true }, lines);
+    if (!res.ok && res.duplicate && window.confirm(`This looks like a repeat of order ${res.duplicate} — same site, mostly the same items, still open.\n\nPlace it anyway as a separate order?`)) res = await createIndent({ ...header, allow_duplicate: true }, lines);
     setBusy(false);
-    if (!res.ok) { setSendErr(res.error || "Could not raise the indent."); return; }
+    if (!res.ok) { setSendErr(String(res.error || "Could not place the order.").replace(/\bindent\b/gi, "order")); return; }
     setDone(res.indent_no); setCart([]); setMeta({ required_by: "", urgency: "normal", purpose: "" }); setCartOpen(false);
   }
 
   const siteName = (sites.find(s => Number(s.id) === Number(siteId))?.name || "").split(",")[0];
+  // update473: the separate Indent screen is retired — orders are tracked in My orders (Site deliveries & receiving)
+  const ordersHref = mobile ? "/m/deliveries" : "/stock/deliveries";
   const nItems = cart.length;
   const title = words.length ? "Search results" : (cat || "All materials");
   const siteSel = <select value={siteId || ""} onChange={e => pickSite(e.target.value)} aria-label="Site">{sites.map(s => <option key={s.id} value={s.id}>{s.name.split(",")[0]}</option>)}</select>;
@@ -315,9 +317,9 @@ export default function CatalogueOrder({ mobile = false }) {
         <label className="co-wide">Purpose / note<input value={meta.purpose} placeholder="e.g. Tower B 3rd floor toilets" onChange={e => setMeta(m => ({ ...m, purpose: e.target.value }))} /></label>
       </div>
       {sendErr && <div className="note red" style={{ marginTop: 8 }}>{sendErr}</div>}
-      <button type="button" className="primary co-send" disabled={busy || !cart.length || !mayRaise} onClick={send}>{busy ? "Sending…" : "Send indent"}</button>
-      {!mayRaise && sess && <div className="co-sub" style={{ marginTop: 6 }}>Raising indents for this site needs the Indent “create” right.</div>}
-      <div className="co-note">Only the ordered quantity is saved on the indent. Dispatched and received quantities are recorded separately on the challan and the site receipt. <a href={mobile ? "/m/indent" : "/procure"}>My indents</a></div>
+      <button type="button" className="primary co-send" disabled={busy || !cart.length || !mayRaise} onClick={send}>{busy ? "Placing order…" : "Place Order"}</button>
+      {!mayRaise && sess && <div className="co-sub" style={{ marginTop: 6 }}>Placing orders for this site needs the ordering right. Ask a Director.</div>}
+      <div className="co-note">Only the ordered quantity is saved on the order. Dispatched and received quantities are recorded separately on the challan and the site receipt. <a href={ordersHref}>My orders</a></div>
     </>
   );
 
@@ -327,10 +329,10 @@ export default function CatalogueOrder({ mobile = false }) {
       <header className="co-hd">
         <button type="button" className="co-ib co-back" aria-label="Back" onClick={goBack}>{Ico.back}</button>
         <div className="co-ht"><h1>{title}</h1><div className="co-hs">{data ? plural(list.length, "material") : "Loading…"}{siteName ? " · " + siteName : ""}</div></div>
-        <div className="co-dk co-hsite">{siteSel}<a className="co-link" href={mobile ? "/m/indent" : "/procure"}>My indents</a></div>
+        <div className="co-dk co-hsite">{siteSel}<a className="co-link" href={ordersHref}>My orders</a></div>
         <button type="button" className={"co-ib co-sbtn" + (searchOpen || q ? " on" : "")} aria-label="Search" aria-expanded={searchOpen} onClick={() => setSearchOpen(o => !o)}>{Ico.search}</button>
         <button type="button" className={"co-ib" + (nFilters ? " on" : "")} aria-label="Filters" onClick={() => setFilterOpen(true)}>{Ico.filter}{nFilters > 0 && <i className="co-dot">{nFilters}</i>}</button>
-        <button type="button" className="co-ib co-dk co-cartbtn" aria-label={`Indent cart, ${plural(nItems, "item")}`} onClick={() => setCartOpen(true)}>{Ico.cart}<span>Indent</span>{nItems > 0 && <i className="co-dot">{nItems}</i>}</button>
+        <button type="button" className="co-ib co-dk co-cartbtn" aria-label={`Order cart, ${plural(nItems, "item")}`} onClick={() => setCartOpen(true)}>{Ico.cart}<span>Order</span>{nItems > 0 && <i className="co-dot">{nItems}</i>}</button>
       </header>
       <div className={"co-sbar" + (searchOpen || q ? " open" : "")}>
         <span className="co-sico">{Ico.search}</span>
@@ -343,10 +345,10 @@ export default function CatalogueOrder({ mobile = false }) {
       </div>
       {(done || err || data?.error || data?.missing) && (
         <div className="co-notes">
-          {done && <div className="note green">Indent <b>{done}</b> raised for {siteName || "the site"}. Track it under <a href={mobile ? "/m/indent" : "/procure"}>{mobile ? "Material indent" : "Indent & Purchase"}</a>.</div>}
+          {done && <div className="note green" role="status">✓ Order <b>{done}</b> placed for {siteName || "the site"}. It goes for approval as usual — track it in <a href={ordersHref + "?q=" + encodeURIComponent(done)}>My orders</a>.</div>}
           {err && <div className="note red">{err}</div>}
           {data?.error && <div className="note red">{data.error}</div>}
-          {data?.missing && <div className="note amber">The grouped catalogue is not installed yet. Use the normal indent screen meanwhile.</div>}
+          {data?.missing && <div className="note amber">The catalogue could not be loaded. Please try again in a moment.</div>}
         </div>)}
       <div className="co-body">
         <nav className="co-side" aria-label="Categories">
@@ -363,7 +365,7 @@ export default function CatalogueOrder({ mobile = false }) {
           {list.length > shown && <button type="button" ref={more} className="co-more" onClick={() => setShown(s => s + PAGE)}>Show more ({list.length - shown} left)</button>}
         </main>
       </div>
-      {nItems > 0 && <div className="co-mbar"><span><b>Indent · {plural(nItems, "item")}</b>{siteName ? <small>{siteName}</small> : null}</span><button type="button" className="primary" onClick={() => setCartOpen(true)}>View Cart</button></div>}
+      {nItems > 0 && <div className="co-mbar"><span><b>Order · {plural(nItems, "item")}</b>{siteName ? <small>{siteName}</small> : null}</span><button type="button" className="primary" onClick={() => setCartOpen(true)}>View Cart</button></div>}
       <Portal>
       {toast && <div key={toast.k} className="co-toast" role="status" aria-live="polite"><span className="co-tick" aria-hidden="true">✓</span><span className="co-tt">{toast.text}</span></div>}
       {sheet && <OptionSheet key={sheet.p.id} p={sheet.p} start={sheet.start} imgs={imgs} prices={prices} showPx={showPx} inCart={inCart} onAdd={addLine} onClose={() => setSheet(null)} />}
@@ -382,8 +384,8 @@ export default function CatalogueOrder({ mobile = false }) {
           </div>
         </div>)}
       {cartOpen && (
-        <div className="co-modal co-drawer" role="dialog" aria-modal="true" aria-label="Indent cart" onClick={e => { if (e.target === e.currentTarget) setCartOpen(false); }}>
-          <div className="co-sheet co-cartsheet"><header><h3>Indent cart · {plural(nItems, "item")}</h3><button type="button" className="co-x" aria-label="Close" onClick={() => setCartOpen(false)}>×</button></header><div className="co-st">{cartBody}</div></div>
+        <div className="co-modal co-drawer" role="dialog" aria-modal="true" aria-label="Order cart" onClick={e => { if (e.target === e.currentTarget) setCartOpen(false); }}>
+          <div className="co-sheet co-cartsheet"><header><h3>Order cart · {plural(nItems, "item")}</h3><button type="button" className="co-x" aria-label="Close" onClick={() => setCartOpen(false)}>×</button></header><div className="co-st">{cartBody}</div></div>
         </div>)}
       </Portal>
     </div>

@@ -26,7 +26,7 @@ export default function ProcurePage() {
       <main className="main">
         {mobile && (
           <div className="mw-tabs" style={{ marginBottom: 10 }}>
-            <button className={mtab === "indents" ? "active" : ""} onClick={() => setMtab("indents")}>📝 Indents</button>
+            <button className={mtab === "indents" ? "active" : ""} onClick={() => setMtab("indents")}>📝 Orders</button>
             <button className={mtab === "po" ? "active" : ""} onClick={() => setMtab("po")}>📄 Purchase Orders</button>
           </div>
         )}

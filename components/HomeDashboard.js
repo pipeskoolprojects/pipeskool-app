@@ -337,8 +337,8 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
         stats: [["In", man.inNow], ["Absent", man.absent]], done: man.inNow > 0 && man.absent === 0, href: "/attendance", cta: "Check attendance" });
       out.push({ ico: "📝", name: "DPR submission", tag: "Evening", desc: "Submit today's Daily Progress Report",
         stats: [["Filed", dprFiled.has(siteName) ? "Yes" : "No"]], done: dprFiled.has(siteName), href: R("/m/dpr", "/dpr"), cta: "Submit DPR" });
-      out.push({ ico: "🛒", name: "Open indents", tag: "Material", desc: "Material requests awaiting action",
-        stats: [["Open", appr.ind]], done: appr.ind === 0, href: "/procure", cta: "Review indents" });
+      out.push({ ico: "🛒", name: "Open orders", tag: "Material", desc: "Material requests awaiting action",
+        stats: [["Open", appr.ind]], done: appr.ind === 0, href: "/procure", cta: "Review orders" });
     }
     return out;
   }, [sess, companyView, appr, dprMissing, man, siteName, rights.money]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -347,10 +347,10 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   // update238: view_all_money holders get the tile too — read-only inbox, no actions inside
   const apprTile = rights.open ? [["✅", "Approvals", R("/m/approvals", "/approvals"), apprTotal]] : [];
   const dirTiles = [...apprTile, ["💰", "Finance", "/expenses", 0], ["📊", "Analytics", R("/m/report", "/reports"), 0], ["🏗", "All Sites", null, 0],
-    ["📄", "PO", "/procure?tab=po", 0], ["🛒", "Indents", "/procure?tab=indents", 0],   // update284: direct tabs (mock item 1/4)
+    ["📄", "PO", "/procure?tab=po", 0], ["🛒", "Orders", "/procure?tab=indents", 0],   // update284: direct tabs (mock item 1/4)
     ["🏢", "Vendors", "/vendors", 0], ["👥", "Team & HR", "/workers", 0], ["🗒", "Assign Task", "/tasks", 0], ["🚚", "Pending Del.", "/procure/pending", pendCount], ["⚙", "Admin", "/access", 0]];   // update265: /admin never existed · update377: /rights read a table that does not exist; /access is the real Access Rights
   const staffTiles = [["📁", "Projects", null, 0], ["👷", "Muster", R("/m/muster", "/attendance"), 0], ...apprTile, ["📦", "Stock", R("/m/stock", "/stock"), 0],
-    ["💳", "Expenses", R("/m/money", "/expenses"), appr.claims], ["🗒", "Tasks", null, 0], ["📋", "Reports", R("/m/report", "/reports"), 0], ["🛒", "Indents", "/procure?tab=indents", appr.ind], ["🚚", "Pending Del.", "/procure/pending", pendCount]];   // update284: Indents tile lands on its tab
+    ["💳", "Expenses", R("/m/money", "/expenses"), appr.claims], ["🗒", "Tasks", null, 0], ["📋", "Reports", R("/m/report", "/reports"), 0], ["🛒", "Orders", "/procure?tab=indents", appr.ind], ["🚚", "Pending Del.", "/procure/pending", pendCount]];   // update284: Indents tile lands on its tab
   const tiles = companyView ? dirTiles : staffTiles;
 
   if (!sess) return null;
@@ -491,7 +491,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
             {companyView && rights.moneyView && <ApprovalRow ico="₹" title="Advance salary requests" sub="Across all sites" count={appr.adv} href="/expenses" />}
             {rights.moneyView && <ApprovalRow ico="🪙" title="Petty cash requests" sub={companyView ? "Across all sites" : siteName} count={appr.petty} href={R("/m/approvals", "/approvals")} />}
             {rights.moneyView && <ApprovalRow ico="💳" title="Expense claims" sub={companyView ? "Across all sites" : siteName} count={appr.claims} href={R("/m/approvals", "/approvals")} />}
-            <ApprovalRow ico="🛒" title={companyView && rights.indent ? "Indent approvals" : "Open indents"} sub="Material pending" count={appr.ind} href="/procure" />
+            <ApprovalRow ico="🛒" title={companyView && rights.indent ? "Order approvals" : "Open orders"} sub="Material pending" count={appr.ind} href="/procure" />
           </Section>
         )}
 

@@ -25,7 +25,6 @@ const more = [
   { href: "/m/dpr", ico: "📋", key: "nav_dpr", show: s => s?.role === "director" },   // update188: director reads DPRs from More
   { href: "/m/report", ico: "📊", key: "nav_report", show: s => s?.role === "director" },   // update227: moved off director tab bar
   { href: "/m/stock", ico: "📦", key: "nav_stock", show: s => s?.role === "director" },     // update227: moved off director tab bar
-  { href: "/m/indent", ico: "🧾", key: "m_indent", show: s => canSeeModuleAnySite(s, "indent") },
   { href: "/m/order", ico: "🛒", key: "m_order", show: s => canSeeModuleAnySite(s, "indent") },   // update464
   { href: "/m/deliveries", ico: "📥", key: "m_deliveries", show: s => canSeeModuleAnySite(s, "stock") || canSeeModuleAnySite(s, "indent") },   // update462
   { href: "/m/assets", ico: "🔧", key: "m_assets", show: s => canSeeModuleAnySite(s, "assets") },
@@ -74,7 +73,7 @@ export default function MobileNav() {
   const supervisor = ["supervisor","storekeeper","site_engineer","project_coodinator","ho_admin"].includes(role) && !workerOnly;
   const accountant = role === "ho_admin" && !workerOnly;
   const quickItems = [
-    { href: "/m/indent", label: "Create Material Indent", icon: "🧾", show: canSeeModule(sess, "indent") },
+    { href: "/m/order", label: "Order Material", icon: "🛒", show: canSeeModule(sess, "indent") },   // update473: catalogue is the only way to order
     { href: "/m/muster", label: "Review Muster", icon: "👥", show: canSeeModule(sess, "attendance") },
     { href: "/m/dpr", label: "Create DPR", icon: "📋", show: canSeeModule(sess, "dpr") },
     { href: "/m/money", label: "Site Expenses", icon: "₹", show: canSeeModule(sess, "money") },
@@ -117,7 +116,7 @@ export default function MobileNav() {
     return () => window.removeEventListener("popstate", back);
   }, [quickOpen]);
   const inMore = accountant
-    ? !["/m/dashboard", "/m", "/m/money", "/m/muster"].includes(path)
+    ? !["/m/dashboard", "/m/money", "/m/muster"].includes(path)
     : moreVisible.some(m => m.href === path);
 
   async function logout() {
@@ -179,7 +178,7 @@ export default function MobileNav() {
           <a onClick={() => setOpen(o => !o)} className={inMore ? "active" : ""} style={{ cursor: "pointer" }}><span className="ico">▦</span>More</a>
         </> : accountant ? <>
           <Link href="/m/dashboard" className={path === "/m/dashboard" ? "active" : ""}><span className="ico">🏠</span>Home</Link>
-          <Link href="/m" className={path === "/m" ? "active" : ""}><span className="ico">⏱</span>Punch</Link>
+          <Link href="/m/money" className={path === "/m/money" ? "active" : ""}><span className="ico">💳</span>Expenses</Link>
           <button type="button" onClick={() => setQuickOpen(true)} style={{ border: 0, background: "transparent", color: "inherit", font: "inherit", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", minHeight: 52 }}><span style={{ width: 48, height: 48, borderRadius: 24, background: "var(--copper)", color: "white", display: "grid", placeItems: "center", fontSize: 28, marginTop: -20 }}>＋</span>Quick Action</button>
           <Link href="/m/muster" className={path === "/m/muster" ? "active" : ""}><span className="ico">👥</span>Muster</Link>
           <a onClick={() => setOpen(o => !o)} className={inMore ? "active" : ""} style={{ cursor: "pointer" }}><span className="ico">▦</span>More</a>

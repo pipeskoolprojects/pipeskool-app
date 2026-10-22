@@ -135,7 +135,6 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     pickSug(i, { label: r.item.display_name, unit: r.item.unit, item_id: r.item.id });
     setMsg(`"${r.item.display_name}" added to Item Master.`);
   }
-  const openNewIndent = () => { setDevs({}); setNi({ site_id: "", required_by: "", urgency: "normal", note: "", lines: [blankLine()] }); };   // update372
   async function submitNewIndent() {
     if (submitting.current) return;   // update368
     setErr("");
@@ -541,11 +540,11 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
         {showInd && <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: 16, marginBottom: 20 }}>{/* update407 */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
             <div style={{ fontSize: 14.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}><span className="muted">📋</span>Open material requests<span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>{open.length}</span></div>
-            <div style={{ display: "flex", gap: 8 }}><button type="button" onClick={() => { setAllInd([]); getAllIndents().then(setAllInd); }}>🗂 All indents</button><button className="primary" onClick={openNewIndent}>＋ New indent</button></div>
+            <div style={{ display: "flex", gap: 8 }}><button type="button" onClick={() => { setAllInd([]); getAllIndents().then(setAllInd); }}>🗂 All orders</button><button type="button" className="primary" onClick={() => window.location.assign("/order")}>🛒 Order materials</button></div>{/* update473: new orders only from the catalogue */}
           </div>
           {ni && (
             <div style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 14, margin: "10px 0", background: "#FAFBFC" }}>
-              <div style={{ fontWeight: 700, marginBottom: 8 }}>Raise material indent</div>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>{editingId ? "Edit order " + (editingNo || "") : "Material order"}</div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 8 }}>
                 <div><label className="muted">Site *</label><br />
                   <select value={ni.site_id} onChange={e => setNi(n => ({ ...n, site_id: e.target.value }))}>
@@ -620,12 +619,12 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
               ))}
               <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                 <button onClick={() => setNi(n => ({ ...n, lines: [...n.lines, blankLine()] }))}>＋ Add item</button>
-                <button className="primary" disabled={busy} onClick={submitNewIndent}>{busy ? "⏳ Raising…" : (editingId ? "Save changes" : "Raise indent")}</button>
+                <button className="primary" disabled={busy} onClick={submitNewIndent}>{busy ? "⏳ Saving…" : "Save changes"}</button>
                 <button onClick={() => setNi(null)}>Cancel</button>
               </div>
             </div>
           )}
-          {!indents ? <div className="muted">Loading…</div> : open.length === 0 ? <span className="muted">No open indents. Site staff raise them from Material stock → Raise material request.</span> : (
+          {!indents ? <div className="muted">Loading…</div> : open.length === 0 ? <span className="muted">No open orders. Site staff place them from Order Materials (catalogue).</span> : (
             <>
             {pager(indPage, setIndPage, open.length)}
             {openPage.map(ind => (

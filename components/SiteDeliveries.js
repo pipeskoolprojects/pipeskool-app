@@ -217,6 +217,7 @@ export default function SiteDeliveries({ mobile = false }) {
     const sp = new URLSearchParams(window.location.search);
     if (sp.get("dc")) setRecv(Number(sp.get("dc")));
     if (sp.get("indent")) setOpen(o => ({ ...o, [Number(sp.get("indent"))]: true }));
+    if (sp.get("q")) setQ(sp.get("q").slice(0, 60));   // update473: "track it in My orders" from the catalogue opens on that order
   }, []);
   const load = useCallback(async () => {
     if (!siteId) return;
@@ -262,7 +263,7 @@ export default function SiteDeliveries({ mobile = false }) {
               <button className={tab === "orders" ? "on" : ""} onClick={() => setTab("orders")}>My orders ({data.indents.length})</button>
               <button className={tab === "challans" ? "on" : ""} onClick={() => setTab("challans")}>All challans ({data.challans.length})</button>
             </div>
-            <input className="sd-search" placeholder="Search indent, challan or material" value={q} onChange={e => setQ(e.target.value)} />
+            <input className="sd-search" placeholder="Search order, challan or material" value={q} onChange={e => setQ(e.target.value)} />
             {tab === "orders" && (indents.length ? indents.map(i => {
               const isOpen = !!open[i.id];
               return (
