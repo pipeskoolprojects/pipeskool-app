@@ -191,7 +191,7 @@ export default function MobileNav() {
             )}
           </Link>
         ))}
-        {!supervisor && <a onClick={() => setOpen(o => !o)} className={inMore ? "active" : ""} style={{ cursor: "pointer" }}>
+        {!supervisor && !accountant && <a onClick={() => setOpen(o => !o)} className={inMore ? "active" : ""} style={{ cursor: "pointer" }}>
           <span className="ico">⋯</span>{t(lang, "nav_more")}
         </a>}
       </nav>
