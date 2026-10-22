@@ -9,6 +9,7 @@ import MobileNav from "@/components/MobileNav";
 import HomeHeader from "@/components/HomeHeader";
 import HomeDashboard from "@/components/HomeDashboard";
 import SupervisorDashboard from "@/components/SupervisorDashboard";
+import AccountantDashboard from "@/components/AccountantDashboard";
 
 import { getSession } from "@/lib/auth";
 
@@ -40,7 +41,7 @@ export default function MobileHomePage() {
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100dvh" }}>
-      {["supervisor","storekeeper","site_engineer","project_coodinator","ho_admin"].includes(sess.role) ? <SupervisorDashboard sess={sess} mode="mobile" /> : <>
+      {sess.role === "ho_admin" ? <AccountantDashboard mobile /> : ["supervisor","storekeeper","site_engineer","project_coodinator"].includes(sess.role) ? <SupervisorDashboard sess={sess} mode="mobile" /> : <>
         <HomeHeader mode="mobile" sess={sess} sites={sites} isDirector={isDirector}
           asSite={asSite} setAsSite={setAsSite} siteName={siteName}
           pickSite={pickSite} setPickSite={setPickSite} />
