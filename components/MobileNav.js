@@ -117,7 +117,7 @@ export default function MobileNav() {
     return () => window.removeEventListener("popstate", back);
   }, [quickOpen]);
   const inMore = accountant
-    ? !["/m/dashboard", "/m/money", "/m/muster"].includes(path)
+    ? !["/m/dashboard", "/m", "/m/money", "/m/muster"].includes(path)
     : moreVisible.some(m => m.href === path);
 
   async function logout() {
@@ -179,7 +179,7 @@ export default function MobileNav() {
           <a onClick={() => setOpen(o => !o)} className={inMore ? "active" : ""} style={{ cursor: "pointer" }}><span className="ico">▦</span>More</a>
         </> : accountant ? <>
           <Link href="/m/dashboard" className={path === "/m/dashboard" ? "active" : ""}><span className="ico">🏠</span>Home</Link>
-          <Link href="/m/money" className={path === "/m/money" ? "active" : ""}><span className="ico">💳</span>Expenses</Link>
+          <Link href="/m" className={path === "/m" ? "active" : ""}><span className="ico">⏱</span>Punch</Link>
           <button type="button" onClick={() => setQuickOpen(true)} style={{ border: 0, background: "transparent", color: "inherit", font: "inherit", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", minHeight: 52 }}><span style={{ width: 48, height: 48, borderRadius: 24, background: "var(--copper)", color: "white", display: "grid", placeItems: "center", fontSize: 28, marginTop: -20 }}>＋</span>Quick Action</button>
           <Link href="/m/muster" className={path === "/m/muster" ? "active" : ""}><span className="ico">👥</span>Muster</Link>
           <a onClick={() => setOpen(o => !o)} className={inMore ? "active" : ""} style={{ cursor: "pointer" }}><span className="ico">▦</span>More</a>
