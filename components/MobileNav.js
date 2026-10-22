@@ -83,21 +83,27 @@ export default function MobileNav() {
     { href: "/m/add", label: "Add Worker", icon: "👷", show: canAnySite(sess, "workers", "create") || canAnySite(sess, "workers", "manage") },
   ].filter(x => x.show);
   const accountantQuickItems = [
-    { href: "/m/money", label: "Open All Expenses", icon: "💳" },
-    { href: "/m/muster", label: "View Muster & Wages", icon: "👥" },
-    { href: "/m/approvals", label: "Review expense claims", icon: "✅" },
-    { href: "/m/money", label: "Advance Salary & Ledgers", icon: "📒" },
-    { href: "/m/money", label: "Open Petty Cash", icon: "₹" },
-    { href: "/m/money", label: "Direct Vendor Payment records", icon: "🏦" },
+    { href: "/m/money", label: "Open All Expenses", icon: "💳", show: s => s?.caps?.includes("view_all_money") || canSeeModuleAnySite(s, "money") },
+    { href: "/m/muster", label: "View Muster & Wages", icon: "👥", show: s => canSeeModuleAnySite(s, "attendance") || canSeeModuleAnySite(s, "wages") },
+    { href: "/m/approvals", label: "View pending expense claims", icon: "✅", show: s => s?.caps?.includes("view_all_money") || canSeeModuleAnySite(s, "money") },
+    { href: "/m/money", label: "Advance Salary & Ledgers", icon: "📒", show: s => s?.caps?.includes("view_all_money") || canSeeModuleAnySite(s, "money") },
+    { href: "/m/money", label: "Open Petty Cash", icon: "₹", show: s => s?.caps?.includes("view_all_money") || canSeeModuleAnySite(s, "money") },
+    { href: "/m/money", label: "Direct Vendor Payment records", icon: "🏦", show: s => s?.caps?.includes("view_all_money") || canSeeModuleAnySite(s, "money") },
   ];
-  const activeQuickItems = accountant ? accountantQuickItems : quickItems;
+  const activeQuickItems = accountant ? accountantQuickItems.filter(x => x.show(sess)) : quickItems;
   const accountantMore = [
-    { href: "/m/money", label: "All Expenses" }, { href: "/m/muster", label: "Muster & Wages" },
-    { href: "/m/dpr", label: "DPR" }, { href: "/m/deliveries", label: "Delivery Challan" },
-    { href: "/m/stock", label: "All GRN" }, { href: "/m/money", label: "Advance & Ledgers" },
-    { href: "/m/money", label: "Petty Cash" }, { href: "/m/money", label: "Direct Vendor Payment" },
-    { href: "/m/tasks", label: "My Task" }, { href: "/m/add", label: "Add Worker" }, { href: "/m/report", label: "Reports" },
-  ];
+    { href: "/m/money", label: "All Expenses", show: s => s?.caps?.includes("view_all_money") || canSeeModuleAnySite(s, "money") },
+    { href: "/m/muster", label: "Muster & Wages", show: s => canSeeModuleAnySite(s, "attendance") || canSeeModuleAnySite(s, "wages") },
+    { href: "/m/dpr", label: "DPR", show: s => canSeeModuleAnySite(s, "dpr") },
+    { href: "/m/deliveries", label: "Delivery Challan", show: s => canSeeModuleAnySite(s, "stock") },
+    { href: "/m/stock", label: "All GRN", show: s => canSeeModuleAnySite(s, "stock") },
+    { href: "/m/money", label: "Advance & Ledgers", show: s => s?.caps?.includes("view_all_money") || canSeeModuleAnySite(s, "money") },
+    { href: "/m/money", label: "Petty Cash", show: s => s?.caps?.includes("view_all_money") || canSeeModuleAnySite(s, "money") },
+    { href: "/m/money", label: "Direct Vendor Payment", show: s => s?.caps?.includes("view_all_money") || canSeeModuleAnySite(s, "money") },
+    { href: "/m/tasks", label: "My Task", show: s => !!s?.id },
+    { href: "/m/add", label: "Add Worker", show: s => canAnySite(s, "workers", "create") || canAnySite(s, "workers", "manage") },
+    { href: "/m/report", label: "Reports", show: s => (s?.caps?.includes("view_all_money") || canSeeModuleAnySite(s, "money") || canSeeModuleAnySite(s, "dpr")) },
+  ].filter(x => x.show(sess));
   useEffect(() => {
     const showMore = () => setOpen(true);
     window.addEventListener("psk-open-more", showMore);
