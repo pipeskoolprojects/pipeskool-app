@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import HomeHeader from "@/components/HomeHeader";
 import HomeDashboard from "@/components/HomeDashboard";
+import AccountantDashboard from "@/components/AccountantDashboard";
 import { getSession } from "@/lib/auth";
 
 export default function HomePage() {
@@ -43,8 +44,8 @@ export default function HomePage() {
         <HomeHeader mode="desk" sess={sess} sites={sites} isDirector={isDirector}
           asSite={asSite} setAsSite={setAsSite} siteName={siteName}
           pickSite={pickSite} setPickSite={setPickSite} />
-        <HomeDashboard mode="desk" asSite={asSite} setAsSite={setAsSite}
-          onSites={setSites} onOpenProjects={() => router.push("/projects")} showPageCards />
+        {sess.role === "ho_admin" ? <AccountantDashboard /> : <HomeDashboard mode="desk" asSite={asSite} setAsSite={setAsSite}
+          onSites={setSites} onOpenProjects={() => router.push("/projects")} showPageCards />}
       </main>
     </div>
   );
