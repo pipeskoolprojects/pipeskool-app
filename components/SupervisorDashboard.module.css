@@ -125,3 +125,120 @@
   .statLabel { font-size:12px; }
   .statHint { font-size:11px; }
 }
+
+/* Desktop web home: a wide application dashboard, separate from the phone layout above. */
+@media (min-width: 1000px) {
+  .wrap {
+    width: 100%;
+    max-width: none;
+    min-height: 100%;
+    margin-left: 0;
+    padding: 0 0 40px;
+    background: #f4f6f9;
+  }
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.78fr) minmax(560px, 1.22fr);
+    grid-template-areas:
+      "top stats"
+      "greet stats"
+      "name stats"
+      "sub stats"
+      "site stats";
+    align-content: center;
+    align-items: start;
+    gap: 4px 36px;
+    min-height: 250px;
+    padding: 28px clamp(28px, 3vw, 56px);
+    border-radius: 0 0 18px 18px;
+  }
+  .top { grid-area: top; margin: 0 0 8px; }
+  .greet { grid-area: greet; font-size: 14px; }
+  .name { grid-area: name; font-size: 30px; margin: 0 0 2px; }
+  .sub { grid-area: sub; font-size: 14px; }
+  .site { grid-area: site; margin-top: 8px; }
+  .actions { display: flex; align-items: center; gap: 10px; }
+  .assistant {
+    width: 40px;
+    height: 40px;
+    border: 1px solid #ffffff55;
+    border-radius: 50%;
+    background: #ffffff18;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+  }
+  .avatar { display: none; }
+  .stats {
+    grid-area: stats;
+    align-self: stretch;
+    align-content: center;
+    margin: 0;
+    padding: 18px 8px;
+    border-radius: 14px;
+    box-shadow: 0 8px 24px #0002;
+  }
+  .stat { padding: 8px 14px; }
+  .statValue { font-size: clamp(20px, 1.7vw, 28px); }
+  .statLabel { font-size: 13px; }
+  .statHint { font-size: 11px; }
+  .content {
+    width: 100%;
+    max-width: 1600px;
+    padding: 28px clamp(24px, 3vw, 48px);
+  }
+  .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .card {
+    min-height: 126px;
+    padding: 18px 44px 18px 18px;
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-content: center;
+    align-items: center;
+    gap: 6px 14px;
+    border: 1px solid #e4e7ec;
+    border-left: 4px solid #f87920;
+    border-radius: 12px;
+    background: #fff !important;
+    box-shadow: 0 2px 6px #10182808;
+  }
+  .icon {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    width: 46px;
+    height: 46px;
+    flex-basis: 46px;
+    border-radius: 12px;
+    background: #f3f6fa;
+    font-size: 23px;
+  }
+  .cardTitle { grid-column: 2; grid-row: 1; font-size: 14px; }
+  .cardDescription { grid-column: 2; grid-row: 2; font-size: 12px; }
+  .liveChip { position: absolute; top: 12px; right: 42px; }
+  .arrow {
+    top: 50%;
+    right: 13px;
+    bottom: auto;
+    transform: translateY(-50%);
+    padding: 2px 8px;
+    background: #f3f6fa;
+  }
+  .panel {
+    margin-top: 16px;
+    padding: 20px;
+    border: 1px solid #e4e7ec;
+    border-radius: 12px;
+    box-shadow: 0 2px 6px #10182808;
+  }
+  .panelHead h2 { font-size: 18px; }
+  .progress { grid-template-columns: 34px minmax(0, 1fr) 48px; gap: 12px; padding: 13px 0; }
+  .progressTitle { font-size: 14px; }
+  .progress strong { font-size: 13px; }
+  .lower { gap: 16px; }
+  .row { font-size: 13px; }
+  .row small { font-size: 11px; }
+}
+@media (min-width: 1560px) {
+  .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
