@@ -25,6 +25,7 @@ const modules = [
   ["🛠","Machine Repair","Send tools & machines for repair and track them","/m/repairs","machine_repair"],
 ];
 const colors = ["#fff0e5","#eaf6ff","#eaffef","#f3eaff","#ffecef","#fff8df","#e5fbff","#f0edff","#e8f8f4"];
+const roleLabels = { supervisor: "Supervisor", storekeeper: "Storekeeper", site_engineer: "Site Engineer", project_coodinator: "Project Coordinator" };
 const dateKey = () => new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kolkata"}).format(new Date());
 function canOpen(sess, module) { return !module || canSeeModule(sess,module) || (module==="workers" && (canAnySite(sess,"workers","create") || canAnySite(sess,"workers","manage"))); }
 
@@ -65,7 +66,7 @@ export default function SupervisorDashboard({ sess }) {
     <header className={styles.hero}>
       <div className={styles.top}><Logo variant="white" height={26}/><div className={styles.actions}><button aria-label="Open Pipeskool Assistant" className={styles.assistant} onClick={()=>window.dispatchEvent(new Event("psk-open-assistant"))}>🤖</button><button aria-label="Open menu" className={styles.avatar} onClick={()=>window.dispatchEvent(new Event("psk-open-more"))}>☰</button></div></div>
       <div className={styles.greet}>{greeting},</div><div className={styles.name}>{sess.name||"Supervisor"}</div>
-      <div className={styles.sub}>📍 {sess.role === "storekeeper" ? "Storekeeper" : "Supervisor"} {site?<>　|　{site.name}</>:null}</div>
+      <div className={styles.sub}>📍 {roleLabels[sess.role] || "Site Staff"} {site?<>　|　{site.name}</>:null}</div>
       {(sess.sites||[]).length>1&&<select aria-label="Current site" className={styles.site} value={siteId} onChange={e=>{setSiteId(e.target.value);setCurrentSite(e.target.value);}}>{sess.sites.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>}
       <div className={styles.stats}>
         <Link href="/m/muster" className={styles.stat}><b className={styles.statValue}>{busy?"—":workerCount??"—"}</b><strong className={styles.statLabel}>Workers</strong><small className={styles.statHint}>Assigned site</small></Link>
