@@ -7,6 +7,7 @@ import { getWorkers, saveWorker, uploadAadhaarDoc, uploadBankDoc, uploadAadhaarF
 import { getContractors, getSitesList } from "@/lib/mobile";
 import { getStaff, addStaff, updateStaff, getRoles, addRole, renameRole, deleteRole, resetStaffPassword, getUserSites, assignSite, removeSite } from "@/lib/access";
 import { getSession } from "@/lib/auth";
+import { canSeeSalary } from "@/lib/payPrivacy";   // update471
 import { isDemo, supabase } from "@/lib/supabase";
 
 const ADD_NEW = "__add_new__";
@@ -79,6 +80,8 @@ export default function WorkersPage() {
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
 
   const sess = typeof window !== "undefined" ? getSession() : null;
+  const [payOk, setPayOk] = useState(false);   // update471: pay columns/fields only for pay-authorised users
+  useEffect(() => { setPayOk(canSeeSalary(getSession())); }, []);
   const isDirector = sess?.role === "director";
   // update178: "Manage staff" capability extends staff add/edit beyond Directors
   const [staffAdmin, setStaffAdmin] = useState(sess?.role === "director");
@@ -210,7 +213,7 @@ export default function WorkersPage() {
     mobile: u.mobile,
     role: roleLabel(u.role),
     bank: u.bank_name || "—",
-    kyc: u.bank_account_no && u.bank_ifsc ? "Complete" : (Number(u.monthly_salary) > 0 ? "Pending" : "Not on payroll"),
+    kyc: u.bank_account_no && u.bank_ifsc ? "Complete" : (u.monthly_salary == null || Number(u.monthly_salary) > 0 ? "Pending" : "Not on payroll"),   // update471: salary may be hidden
     status: u.last_working_day ? "Left" : "Active",
     raw: u,
   }));
@@ -233,7 +236,7 @@ export default function WorkersPage() {
         setErr(""); const us = await getUserSites(r.id); const ids = us.map(x => Number(x.id));
         const u = r.raw;
         setSmodal({ id: u.id, full_name: u.full_name, mobile: u.mobile, role: u.role, is_active: true,
-          monthly_salary: u.monthly_salary || "", ot_eligible: !!u.ot_eligible,
+          monthly_salary: u.monthly_salary == null ? null : (u.monthly_salary || ""), ot_eligible: !!u.ot_eligible,
           annual_paid_leaves: u.annual_paid_leaves || "", joining_date: u.joining_date || "",
           requires_punch: u.requires_punch !== false, bank_account_no: u.bank_account_no || "",
           pf_no: u.pf_no || "", pf_uan: u.pf_uan || "", esi_no: u.esi_no || "", department: u.department || "",   // update450
@@ -259,7 +262,7 @@ export default function WorkersPage() {
       render: r => r.payType === "Contractor" ? <span className="badge info">Contractor</span>
                  : r.payType === "Union" ? <span className="badge warn">Union</span>
                  : <span className="badge gray">Direct</span> },
-    { key: "wage", label: "Daily wage", type: "num", render: r => inr(r.wage), exportValue: r => r.wage },
+    ...(payOk ? [{ key: "wage", label: "Daily wage", type: "num", render: r => inr(r.wage), exportValue: r => r.wage }] : []),   // update471
     { key: "complete", label: "Profile", filter: "select",
       optionLabel: o => o ? "Complete" : "Incomplete",
       render: r => r.complete ? <span className="badge p">Complete</span> : <span className="badge warn">Incomplete</span>,
@@ -388,7 +391,7 @@ export default function WorkersPage() {
                       {!cats.some(c => c.code === modal.category) && modal.category ? <option value={modal.category}>{modal.category}</option> : null}
                       <option value={ADD_NEW}>➕ Add new category…</option>
                     </select></div>
-                  <div><label className="muted">Daily wage ₹ *</label><input inputMode="numeric" value={modal.daily_wage} onChange={e => set("daily_wage", e.target.value)} /></div>
+                  {(!modal.id || payOk) && <div><label className="muted">Daily wage ₹ *</label><input inputMode="numeric" value={modal.daily_wage} onChange={e => set("daily_wage", e.target.value)} /></div>}{/* update471: an existing wage is never shown to people without pay access */}
                   <div className="wf-check">
                     <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }} title="OFF = extra hours are never paid as OT; the + OT button disappears everywhere for this worker.">
                       <input type="checkbox" checked={modal.ot_eligible !== false} onChange={e => set("ot_eligible", e.target.checked)} style={{ accentColor: "var(--copper)" }} /> OT eligible
@@ -595,8 +598,8 @@ export default function WorkersPage() {
                   <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
                   <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 6 }}>Salary & leaves</div>
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-                    <div style={{ width: 130 }}><label className="muted">Monthly salary ₹</label>
-                      <input style={{ width: "100%" }} inputMode="numeric" value={smodal.monthly_salary ?? ""} onChange={e => sset("monthly_salary", e.target.value)} /></div>
+                    {payOk && <div style={{ width: 130 }}><label className="muted">Monthly salary ₹</label>
+                      <input style={{ width: "100%" }} inputMode="numeric" value={smodal.monthly_salary ?? ""} onChange={e => sset("monthly_salary", e.target.value)} /></div>}
                     <div style={{ width: 145 }}><label className="muted">Joining date</label>
                       <input type="date" style={{ width: "100%" }} value={smodal.joining_date || ""} onChange={e => sset("joining_date", e.target.value)} /></div>
                     <div style={{ width: 105 }}><label className="muted">Paid leaves / yr</label>

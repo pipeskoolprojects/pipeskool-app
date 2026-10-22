@@ -175,7 +175,8 @@ export default function MusterScreen() {
     const head = ["Date", "Site", "In", "Out", "Hours", "Status", "OT (punch)", "OT approved", "Punch", "Verify"];
     const body = sheetData.days.map(d => [d.date, d.site, d.in, d.out, d.hours, d.status, d.ot, d.otApproved, d.punch, d.verify].map(esc).join(","));
     const w = sheetData.worker;
-    const sum = ["", `Worker,${w.name}`, `Month,${sheetData.month}`, `Present,${sheetData.present}`, `Half,${sheetData.half}`, `Absent,${sheetData.absent}`, `Total hours,${sheetData.totalHours}`, `OT hours,${sheetData.otHours}`, `OT rate,${w.otRate}`, `OT amount,${sheetData.otAmt}`, `Daily wage,${w.wage}`, `Days pay,${sheetData.earned}`, `Gross,${sheetData.gross}`];
+    const sum = ["", `Worker,${w.name}`, `Month,${sheetData.month}`, `Present,${sheetData.present}`, `Half,${sheetData.half}`, `Absent,${sheetData.absent}`, `Total hours,${sheetData.totalHours}`, `OT hours,${sheetData.otHours}`,
+      ...(sheetData.payHidden ? [] : [`OT rate,${w.otRate}`, `OT amount,${sheetData.otAmt}`, `Daily wage,${w.wage}`, `Days pay,${sheetData.earned}`, `Gross,${sheetData.gross}`])];   // update471: no pay for Supervisors
     const blob = new Blob([head.join(",") + "\n" + body.join("\n") + "\n" + sum.join("\n")], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${w.name.replace(/\s+/g, "_")}_${sheetData.month}_attendance.csv`; a.click();
   };
@@ -336,20 +337,20 @@ export default function MusterScreen() {
               <div style={{ fontWeight: 600 }}>{ymLabel(sheetYm)}</div>
               <button style={btn} onClick={() => setSheetYm(shiftYm(sheetYm, 1))} disabled={sheetYm >= ymNow()}>›</button>
               <button style={{ ...btn, marginLeft: "auto" }} onClick={exportCsv} disabled={!sheetData}>⬇ Report</button>
-              <a href={`/attendance/slip?worker=${sheet.workerId}&month=${sheetYm}`} target="_blank" rel="noreferrer"><button style={btn} disabled={!sheetData}>🖨 Slip / PDF</button></a>
+              {sheetData && !sheetData.payHidden && <a href={`/attendance/slip?worker=${sheet.workerId}&month=${sheetYm}`} target="_blank" rel="noreferrer"><button style={btn}>🖨 Slip / PDF</button></a>}{/* update471: salary slip only for pay-authorised users */}
             </div>
             {!sheetData ? <div className="muted">Loading…</div> : (
               <>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${sheetData.payHidden ? (sheetData.worker.otEligible ? 3 : 2) : 4},1fr)`, gap: 6 }}>
                   {[["Present", sheetData.present + (sheetData.half ? ` +${sheetData.half}½` : ""), "var(--green)", null],
                     ["Absent ▾", sheetData.absent, "var(--red)", "absent"],
                     ...(sheetData.worker.otEligible ? [["OT ✓", fmtHM(sheetData.otHours), "var(--brand-dark)", null]] : []),
-                    ["Earned", inr(sheetData.gross), "var(--text)", null]].map(([l, v, c, click]) => (
+                    ...(sheetData.payHidden ? [] : [["Earned", inr(sheetData.gross), "var(--text)", null]])].map(([l, v, c, click]) => (
                     <div key={l} onClick={click === "absent" ? () => setShowAbsent(x => !x) : undefined} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "8px 6px", textAlign: "center", cursor: click ? "pointer" : "default" }}><div className="muted" style={{ fontSize: 10.5 }}>{l}</div><div style={{ fontWeight: 700, fontSize: 15, color: c }}>{v}</div></div>
                   ))}
                 </div>
                 <div className="muted" style={{ fontSize: 11.5, margin: "8px 0" }}>
-                  Absent = {sheetData.absentRows} recorded + {sheetData.noRecord} no-punch days of {sheetData.daysElapsed} (incl. {sheetData.sundays} Sundays) · Hours {fmtHM(sheetData.totalHours)} · Daily wage {inr(sheetData.worker.wage)}{sheetData.worker.otEligible ? <> · OT rate ₹{sheetData.worker.otRate}/h (wage ÷ {sheetData.worker.stdHrs} h) · OT amount {inr(sheetData.otAmt)}</> : <> · <b>Not OT-eligible</b> (extra hours are not paid as OT)</>} · Days pay {inr(sheetData.earned)}. Final wages come from the Wages page (advances deducted).
+                  Absent = {sheetData.absentRows} recorded + {sheetData.noRecord} no-punch days of {sheetData.daysElapsed} (incl. {sheetData.sundays} Sundays) · Hours {fmtHM(sheetData.totalHours)}{sheetData.payHidden ? <>{sheetData.worker.otEligible ? "" : <> · <b>Not OT-eligible</b></>}.</> : <> · Daily wage {inr(sheetData.worker.wage)}{sheetData.worker.otEligible ? <> · OT rate ₹{sheetData.worker.otRate}/h (wage ÷ {sheetData.worker.stdHrs} h) · OT amount {inr(sheetData.otAmt)}</> : <> · <b>Not OT-eligible</b> (extra hours are not paid as OT)</>} · Days pay {inr(sheetData.earned)}. Final wages come from the Wages page (advances deducted).</>}
                 </div>
                 {showAbsent && (
                   <div style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px", marginBottom: 8 }}>
@@ -378,8 +379,8 @@ export default function MusterScreen() {
                     </tbody>
                   </table>
                 </div>
-                <div style={{ fontWeight: 600, fontSize: 13, margin: "10px 0 4px" }}>Salary history (wage payouts)</div>
-                {sheetData.worker.staffPay ? (
+                {!sheetData.payHidden && <div style={{ fontWeight: 600, fontSize: 13, margin: "10px 0 4px" }}>Salary history (wage payouts)</div>}
+                {sheetData.payHidden ? null : sheetData.worker.staffPay ? (
                   // update375: this profile is really staff — labour history is a phantom.
                   // Their salary is computed on the Staff Salary sheet from monthly_salary ÷ days-in-month.
                   <div className="muted" style={{ fontSize: 12, padding: "6px 8px", background: "#f3f4f6", borderRadius: 6 }}>

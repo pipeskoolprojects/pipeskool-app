@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 import { supabase, isDemo } from "@/lib/supabase";
 import { getCompany, fmtDate } from "@/lib/letters";
+import { canSeeSalary, workerWages, staffSalaries } from "@/lib/payPrivacy";   // update471: pay only for pay-authorised users
 
 const NAVY = "#1f2a4b";
 const ORANGE = "#FF7A1A";
@@ -66,14 +67,15 @@ export default function WorkerProfilePrint() {
         if (isStaff) {
           const [{ data: u, error: e2 }, comp2] = await Promise.all([
             supabase.from("app_users")
-              .select("id, full_name, mobile, role, monthly_salary, ot_eligible, annual_paid_leaves, joining_date, requires_punch, bank_account_no, bank_ifsc, bank_name, pan_no, aadhaar_doc_url, aadhaar_docs, bank_doc_url, last_working_day, exit_reason, is_active, emergency_name, emergency_relation, emergency_mobile, emergency_alt_mobile, emergency_address")
+              .select("id, full_name, mobile, role, ot_eligible, annual_paid_leaves, joining_date, requires_punch, bank_account_no, bank_ifsc, bank_name, pan_no, aadhaar_doc_url, aadhaar_docs, bank_doc_url, last_working_day, exit_reason, is_active, emergency_name, emergency_relation, emergency_mobile, emergency_alt_mobile, emergency_address")
               .eq("id", id).maybeSingle(),
             getCompany(),
           ]);
           if (e2) throw new Error(e2.message);
           if (!u) { setErr("That staff member was not found, or you do not have rights to open the record."); return; }
           const { data: us } = await supabase.from("user_sites").select("sites(name)").eq("user_id", id);
-          setW({ ...u, isStaff: true, category: u.role, labour_type: "staff",
+          const sal = canSeeSalary() ? (await staffSalaries([u.id]))[u.id] ?? null : null;
+          setW({ ...u, monthly_salary: sal, isStaff: true, category: u.role, labour_type: "staff",
                  daily_wage: null, sites: null, contractors: null });
           setC(comp2);
           setSitesAllotted((us || []).map(x => x.sites?.name).filter(Boolean));
@@ -81,13 +83,14 @@ export default function WorkerProfilePrint() {
         }
         const [{ data: row, error }, comp] = await Promise.all([
           supabase.from("workers")
-            .select("id, full_name, mobile, category, labour_type, daily_wage, is_active, ot_eligible, proxy_authority, joining_date, last_working_day, exit_reason, bank_account_no, bank_ifsc, bank_name, aadhaar_doc_url, aadhaar_docs, bank_doc_url, emergency_name, emergency_relation, emergency_mobile, emergency_alt_mobile, emergency_address, site_id, sites!workers_site_id_fkey(name), contractors(name)")
+            .select("id, full_name, mobile, category, labour_type, is_active, ot_eligible, proxy_authority, joining_date, last_working_day, exit_reason, bank_account_no, bank_ifsc, bank_name, aadhaar_doc_url, aadhaar_docs, bank_doc_url, emergency_name, emergency_relation, emergency_mobile, emergency_alt_mobile, emergency_address, site_id, sites!workers_site_id_fkey(name), contractors(name)")
             .eq("id", id).maybeSingle(),
           getCompany(),
         ]);
         if (error) throw new Error(error.message);
         if (!row) { setErr("That employee was not found, or you do not have rights to open the record."); return; }
-        setW(row); setC(comp);
+        const wage = canSeeSalary() ? (await workerWages([row.id]))[row.id] ?? null : null;
+        setW({ ...row, daily_wage: wage }); setC(comp);
         const { data: al } = await supabase.from("worker_sites").select("sites(name)").eq("worker_id", id);
         setSitesAllotted((al || []).map(x => x.sites?.name).filter(Boolean));
       } catch (e) { setErr(e.message); }
@@ -146,8 +149,8 @@ export default function WorkerProfilePrint() {
 
       <Section title="Engagement">
         <Row a="Joining date" av={fmtDate(w.joining_date)}
-             b={w.isStaff ? "Monthly salary" : "Daily wage"}
-             bv={w.isStaff
+             b={!canSeeSalary() ? "" : w.isStaff ? "Monthly salary" : "Daily wage"}
+             bv={!canSeeSalary() ? "" : w.isStaff
                    ? (w.monthly_salary ? "Rs. " + Number(w.monthly_salary).toLocaleString("en-IN") + " per month" : "")
                    : (w.daily_wage ? "Rs. " + Number(w.daily_wage).toLocaleString("en-IN") + " per day" : "")} />
         <Row a="Last working day" av={fmtDate(w.last_working_day)} b="OT eligible" bv={w.ot_eligible === false ? "No" : "Yes"} />

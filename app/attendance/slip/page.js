@@ -7,6 +7,7 @@ import { getWorkerMonth } from "@/lib/mobile";
 import { fmtHM } from "@/lib/payroll";
 import { supabase, isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
+import { canSeeSalary } from "@/lib/payPrivacy";   // update471
 import Logo from "@/components/Logo";   // update331c
 import { setPayoutStatutory } from "@/lib/payroll";
 
@@ -26,6 +27,7 @@ function Slip() {
   const [pfIn, setPfIn] = useState(""); const [ptIn, setPtIn] = useState(""); const [statMsg, setStatMsg] = useState("");
   useEffect(() => {
     if (!sess) return;
+    if (!canSeeSalary(sess)) { setCanView(false); return; }   // update471: Supervisors never open a salary slip
     const roleOk = ["director", "it_executive", "accountant"].includes(sess.role);
     if (roleOk) { setCanView(true); setCanEdit(true); return; }
     if (isDemo) { setCanView(true); return; }
@@ -77,6 +79,7 @@ function Slip() {
     if (!workerId) { setErr("No worker given."); return; }
     getWorkerMonth(Number(workerId), month).then(x => x ? setD(x) : setErr("Worker not found or no access."));
   }, [workerId, month]);
+  if (canView === false) return <div style={{ padding: 30 }}>Salary slips are available to the office (Accounts / HR / Director) only.</div>;   // update471
   if (err) return <div style={{ padding: 30 }}>{err}</div>;
   if (!d) return <div style={{ padding: 30 }}>Loading…</div>;
   const w = d.worker;

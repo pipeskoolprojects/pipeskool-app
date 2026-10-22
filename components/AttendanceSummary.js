@@ -22,6 +22,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { supabase, isDemo, fetchAll } from "@/lib/supabase";   // update320
 import { getSession, can } from "@/lib/auth";   // update297
+import { workerWages, staffSalaries } from "@/lib/payPrivacy";   // update471
 import { getPayrollSettings, weeklyOffDates, isoLocal, monthBounds } from "@/lib/payrollSettings";   // update279
 import { getHolidaysBetween } from "@/lib/holidays";
 import { exportAttendanceXlsx } from "@/lib/payrollExport";   // update278: styled workbook
@@ -59,7 +60,7 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
   if (isDemo) return { days, rows: [], people: [], wo: new Set(), hol: {} };
   const [settings, hols, { data: staffRows }, { data: siteRows }, { data: userSites }, { data: workerSites }, { data: leaves }] = await Promise.all([
     getPayrollSettings(), getHolidaysBetween(from, to),
-    supabase.from("app_users").select("id, mobile, role, monthly_salary").eq("is_active", true),
+    supabase.from("app_users").select("id, mobile, role").eq("is_active", true),
     supabase.from("sites").select("id, name"),
     supabase.from("user_sites").select("user_id, site_id"),                       // update333: master assignment
     supabase.from("worker_sites").select("worker_id, site_id"),                   // update344: labour allotments
@@ -82,7 +83,7 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
   });
 
   const mk = () => { let q = supabase.from("attendance")
-    .select("worker_id, site_id, punch_out_site_id, att_date, status, review_status, ot_hours, ot_approved, ot_approved_hours, override_by, override_by_name, override_at, override_reason, override_marker, sites!attendance_site_id_fkey(name), workers(full_name, mobile, category, labour_type, daily_wage, site_id)")   // update278: OT row · update335: override markers
+    .select("worker_id, site_id, punch_out_site_id, att_date, status, review_status, ot_hours, ot_approved, ot_approved_hours, override_by, override_by_name, override_at, override_reason, override_marker, sites!attendance_site_id_fkey(name), workers(full_name, mobile, category, labour_type, site_id)")   // update278: OT row · update335: override markers
     .gte("att_date", from).lt("att_date", to).order("id");
   if (siteId && siteId !== "all") q = q.eq("site_id", siteId);
     return q; };   // update320: factory — a fresh query per page
@@ -92,6 +93,8 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
   const wo = new Set(settings.wo_paid ? weeklyOffDates(from, to, settings.wo_weekday) : []);
   const hol = {}; (hols || []).forEach(h => { hol[h.on_date] = h.name; });
 
+  // update471: pay from the gated views — empty for anyone without pay access (Supervisors)
+  const [wageOf, salOf] = await Promise.all([workerWages((data || []).map(a => a.worker_id)), staffSalaries((staffRows || []).map(u => u.id))]);
   const map = {};
   (data || []).forEach(a => {
     const mob = String(a.workers?.mobile);
@@ -108,8 +111,8 @@ export async function loadAttendanceGrid(monthStr, siteId, kind) {
       uid: su?.id || null,                        // app_users.id — staff_payouts is keyed by THIS
       role: su?.role || "",
       designation: isStaff ? prettyRole(su.role) : cap(a.workers?.category || ""),
-      dailyWage: Number(a.workers?.daily_wage) || 0,
-      monthlySalary: Number(su?.monthly_salary) || 0,
+      dailyWage: Number(wageOf[a.worker_id]) || 0,
+      monthlySalary: Number(su?.id ? salOf[su.id] : 0) || 0,
       masterSite: isStaff ? null : (a.workers?.site_id ?? null),
       leave: (isStaff && su?.id && leaveBy[su.id]) || null,   // update333
     };

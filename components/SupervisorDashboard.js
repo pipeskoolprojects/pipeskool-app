@@ -56,7 +56,10 @@ export default function SupervisorDashboard({ sess }) {
   const tasks=Array.isArray(taskResult)?taskResult:[];
   const todayTasks=tasks.filter(t=>t.status!=="completed").slice(0,4);
   const progress=(dprPack?.[1]||[]).slice(0,4);
-  const expenseMonth=useMemo(()=>approvedExpenseTotal(expenses,dateKey().slice(0,7)),[expenses]);
+  // update471: a Supervisor's total is HIS OWN expenses only (the database already returns only his rows; this
+  // filter keeps the figure right even if a wider list ever came back).
+  const ownOnly=String(sess?.role||"").toLowerCase()==="supervisor";
+  const expenseMonth=useMemo(()=>approvedExpenseTotal(Array.isArray(expenses)&&ownOnly?expenses.filter(e=>Number(e.claimant_id)===Number(sess?.id)):expenses,dateKey().slice(0,7)),[expenses,ownOnly,sess?.id]);
   const repairCount=Number(data?.[6]||0);
   const links=modules.filter(m=>canOpen(sess,m[4]));
   const workerCount=Array.isArray(muster)?muster.length:null;
@@ -72,7 +75,7 @@ export default function SupervisorDashboard({ sess }) {
         <Link href="/m/muster" className={styles.stat}><b className={styles.statValue}>{busy?"—":workerCount??"—"}</b><strong className={styles.statLabel}>Workers</strong><small className={styles.statHint}>Assigned site</small></Link>
         <Link href="/m/indent" className={styles.stat}><b className={styles.statValue}>{busy?"—":pendingIndents??"—"}</b><strong className={styles.statLabel}>Materials</strong><small className={styles.statHint}>Open requests</small></Link>
         <Link href="/m/dpr" className={styles.stat}><b className={styles.statValue}>{busy?"—":dprDone?"✓":"—"}</b><strong className={styles.statLabel}>DPR</strong><small className={styles.statHint}>Today</small></Link>
-        <Link href="/m/money" className={styles.stat}><b className={styles.statValue}>{busy?"—":expenseMonth===null?"—":"₹"+expenseMonth.toLocaleString("en-IN")}</b><strong className={styles.statLabel}>Expenses</strong><small className={styles.statHint}>This month</small></Link>
+        <Link href="/m/money" className={styles.stat}><b className={styles.statValue}>{busy?"—":expenseMonth===null?"—":"₹"+expenseMonth.toLocaleString("en-IN")}</b><strong className={styles.statLabel}>{ownOnly?"My expenses":"Expenses"}</strong><small className={styles.statHint}>{ownOnly?"Approved · this month":"This month"}</small></Link>
       </div>
     </header>
     <div className={styles.content}>
