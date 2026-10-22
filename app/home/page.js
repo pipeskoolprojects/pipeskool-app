@@ -12,6 +12,7 @@ import Sidebar from "@/components/Sidebar";
 import HomeHeader from "@/components/HomeHeader";
 import HomeDashboard from "@/components/HomeDashboard";
 import SupervisorDashboard from "@/components/SupervisorDashboard";
+import AccountantDashboard from "@/components/AccountantDashboard";
 import { getSession } from "@/lib/auth";
 
 export default function HomePage() {
@@ -47,7 +48,7 @@ export default function HomePage() {
             pickSite={pickSite} setPickSite={setPickSite} />
           <HomeDashboard mode="desk" asSite={asSite} setAsSite={setAsSite}
             onSites={setSites} onOpenProjects={() => router.push("/projects")} showPageCards />
-        </> : <SupervisorDashboard sess={sess} />}
+        </> : sess.role === "ho_admin" ? <AccountantDashboard /> : <SupervisorDashboard sess={sess} />}
       </main>
     </div>
   );
