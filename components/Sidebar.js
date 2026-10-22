@@ -166,7 +166,7 @@ export default function Sidebar() {
               are reached from the page cards at the bottom of Home. Approvals is NOT listed here
               (it is reached from Quick Access) — the /approvals route itself is untouched. */}
           {/* update236: Home IS the dashboard now (Projects / Dashboard / Site reports are its tabs) */}
-          <Link href="/home" className={path === "/home" || path === "/projects" || path === "/dashboard" || path === "/reports" ? "active" : ""}>🏠 Director Home</Link>
+          <Link href="/home" className={path === "/home" || path === "/projects" || path === "/dashboard" || path === "/reports" ? "active" : ""}>🏠 Home</Link>
         </nav>
       )}
 
