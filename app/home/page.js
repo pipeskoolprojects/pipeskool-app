@@ -41,13 +41,13 @@ export default function HomePage() {
     <div className="layout">
       <Sidebar />
       <main className="main" style={{ padding: 0 }}>
-        {sess.role === "ho_admin" ? <SupervisorDashboard sess={sess} /> : <>
+        {sess.role === "director" ? <>
           <HomeHeader mode="desk" sess={sess} sites={sites} isDirector={isDirector}
             asSite={asSite} setAsSite={setAsSite} siteName={siteName}
             pickSite={pickSite} setPickSite={setPickSite} />
           <HomeDashboard mode="desk" asSite={asSite} setAsSite={setAsSite}
             onSites={setSites} onOpenProjects={() => router.push("/projects")} showPageCards />
-        </>}
+        </> : <SupervisorDashboard sess={sess} />}
       </main>
     </div>
   );
