@@ -138,16 +138,16 @@ function DirectorWorkspace({ pj, appr, missingDpr, man, weekData, pendCount, pos
     </article>
   </Link>;
   return <div style={{background:"#f3f0ea",color:"#1f2937",padding:"0 0 8px"}}>
-    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+    {desk && (    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
       <div style={{width:42,height:42,borderRadius:"50%",background:"linear-gradient(135deg,#ffb27a,#f26a1b)",color:"#fff",display:"grid",placeItems:"center",fontWeight:800,fontSize:17,boxShadow:"0 3px 9px #f26a1b33"}}>{initial(directorName)}</div>
       <div style={{minWidth:0,flex:1}}><div style={{fontSize:10,color:"#6b7280",fontWeight:800,letterSpacing:".08em",textTransform:"uppercase"}}>Director · {new Intl.DateTimeFormat("en-IN",{weekday:"short",day:"2-digit",month:"short",timeZone:"Asia/Kolkata"}).format(new Date())}</div><div style={{fontSize:18,fontWeight:800,color:"#0f1b3a"}}>Portfolio at a glance</div></div>
       <button type="button" onClick={onProjects} style={{border:"1px solid #e6e2d9",borderRadius:10,background:"#fff",padding:"9px 12px",fontWeight:700,color:"#1f2937",cursor:"pointer"}}>All sites&nbsp; →</button>
-    </div>
+    </div>    )}
     <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:4,marginBottom:11}}>
-      {totalApprovals>0&&chip("✅ "+totalApprovals+" approvals",{bg:"#fff0dc",fg:"#8a4b08",border:"#f2d5b4"},route("/approvals","/m/approvals"))}
-      {missingDpr>0&&chip("📋 "+missingDpr+" DPR missing",{bg:"#fff0f0",fg:"#ad2929",border:"#f2caca"},route("/dpr","/m/dpr"))}
-      {inTransit>0&&chip("🚚 "+inTransit+" in transit",{bg:"#eef2f7",fg:"#334155",border:"#dce2eb"},route("/procure/pending","/m/deliveries"))}
-      {pendCount>0&&chip("📦 "+pendCount+" pending lines",{bg:"#f1efff",fg:"#5d45a7",border:"#ded9f7"},route("/procure/pending","/m/deliveries"))}
+      {chip("✅ "+totalApprovals+" approvals",{bg:"#fff0dc",fg:"#8a4b08",border:"#f2d5b4"},route("/approvals","/m/approvals"))}
+      {chip("📋 "+missingDpr+" DPR missing",{bg:"#fff0f0",fg:"#ad2929",border:"#f2caca"},route("/dpr","/m/dpr"))}
+      {chip("₹ Payables · ageing unavailable",{bg:"#f1efff",fg:"#5d45a7",border:"#ded9f7"},route("/expenses","/m/money"))}
+      {chip("🚚 "+inTransit+" in transit",{bg:"#eef2f7",fg:"#334155",border:"#dce2eb"},route("/procure/pending","/m/deliveries"))}
     </div>
     <div style={{display:"grid",gridTemplateColumns:desk?"repeat(4,minmax(0,1fr))":"repeat(2,minmax(0,1fr))",gap:11}}>
       <Link href="/projects" style={{textDecoration:"none",color:"#fff",gridColumn:"span 2"}}>
