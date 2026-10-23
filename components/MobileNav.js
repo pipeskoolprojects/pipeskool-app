@@ -102,7 +102,20 @@ export default function MobileNav() {
     { href: "/m/add", label: "Add Worker", show: s => canAnySite(s, "workers", "create") || canAnySite(s, "workers", "manage") },
     { href: "/m/report", label: "Reports", show: s => (s?.caps?.includes("view_all_money") || canSeeModuleAnySite(s, "money") || canSeeModuleAnySite(s, "dpr")) },
   ].filter(x => x.show(sess));
-  const moreVisible = (workerOnly || !sess) ? [] : accountant ? accountantMore : more.filter(m => m.show(sess));
+  const directorMore = [
+    { href: "/my-expenses", ico: "🧾", label: "My Expenses" },
+    { href: "/m/money", ico: "💰", label: "Finance" },
+    { href: "/m/report", ico: "📊", label: "Analytics" },
+    { href: "/projects", ico: "🏗", label: "All Sites" },
+    { href: "/procure?tab=po", ico: "📄", label: "Purchase Orders" },
+    { href: "/procure/pending", ico: "🚚", label: "Pending Deliveries" },
+    { href: "/vendors", ico: "🏢", label: "Vendors" },
+    { href: "/tasks", ico: "📝", label: "Assign Task" },
+    { href: "/admin-access", ico: "⚙", label: "Admin" },
+    { href: "/dpr", ico: "📋", label: "Site Reports" },
+    { href: "/attendance", ico: "👥", label: "Muster" }
+  ];
+  const moreVisible = (workerOnly || !sess) ? [] : accountant ? accountantMore : role === "director" ? directorMore : more.filter(m => m.show(sess));
   useEffect(() => {
     const showMore = () => setOpen(true);
     window.addEventListener("psk-open-more", showMore);
