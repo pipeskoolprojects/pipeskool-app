@@ -530,7 +530,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
         {/* update230: TASKS ON HOME — the separate Tasks tab is gone; everything lives here.
             Auto tasks are computed live from the same operational data (never stored). */}
         <div id="home-tasks" />
-        <Section title="My tasks today"
+        {!companyView && <Section title="My tasks today"
           action={<span style={{ display: "flex", gap: 10, alignItems: "center" }}>
             {taskPending > 0 && <span style={{ background: "var(--red)", color: "#fff", borderRadius: 999, padding: "2px 10px", fontSize: 11.5, fontWeight: 800 }}>{taskPending} pending</span>}
             <Link href="/tasks" style={{ fontSize: 12.5, color: COPPER, fontWeight: 700 }}>{isDirector ? "Assign / all →" : "All tasks →"}</Link>
@@ -567,9 +567,9 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
             ); })}
             {autoTasks.length + myTasks.length === 0 && <div className="muted" style={{ fontSize: 12.5 }}>{tasks === null ? "Loading tasks…" : "Nothing due today. 🎉"}</div>}
           </div>
-        </Section>
+        </Section>}
 
-        <Section title={companyView ? "Manpower — company wide" : "Manpower today"}
+        {!companyView && <Section title="Manpower today"
           action={<Link href="/attendance" style={{ fontSize: 12.5, color: COPPER, fontWeight: 700 }}>Full register →</Link>}>
           <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
             <TrioCard v={att === null ? "…" : man.inNow} l="Marked in today" />
@@ -577,7 +577,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
             <TrioCard v={man.pct + "%"} l="Deployment" color="var(--green)" />
           </div>
           {weekData.length > 0 && <WeekChart data={weekData} />}
-        </Section>
+        </Section>}
 
         {/* update238: each row appears only if this person may actually act on it. Open indents
             is NOT an approval — it is a work queue — so it stays for everyone who sees indents. */}
