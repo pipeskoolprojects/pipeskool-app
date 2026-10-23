@@ -39,6 +39,21 @@ export default function ItemsPage() {
   // Same rule as the Approvals inbox and as fn_approve_item in the database.
   const canApprItem = canApprove(session, "stock");
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  // update474: sizes typed on the form (main Size box + any extra size boxes), trimmed, no repeats
+  const sizeList = f => { const seen = new Set(); return [f.size, ...(f.sizes || [])].map(x => String(x || "").trim()).filter(x => x && !seen.has(x.toLowerCase()) && seen.add(x.toLowerCase())); };
+  const norm = v => String(v || "").trim().toLowerCase();
+  const sameItemExists = (p, sz) => (rows || []).some(r => norm(r.item_type) === norm(p.item_type) && norm(r.material) === norm(p.material) && norm(r.sub_type) === norm(p.sub_type)
+    && norm(r.item_class) === norm(p.item_class) && norm(r.make) === norm(p.make) && norm(r.size) === norm(sz));
+  const productName = p => [p.item_type, "-", p.material, p.sub_type, p.item_class ? "(" + p.item_class + ")" : "", p.make ? "[" + p.make + "]" : ""].filter(Boolean).join(" ");
+  // "+ Size" on a row: same product, only new sizes are typed
+  const openAddSizes = r => { setForm({ item_type: r.item_type || "GENERAL", material: r.material || "", sub_type: r.sub_type || "", item_class: r.item_class || "", make: r.make || "",
+    unit: r.unit || "Nos", hsn_code: r.hsn_code || "", min_stock: r.min_stock || "", is_active: true, photo_url: r.photo_url || null, size: "", sizes: [], sizeMode: true,
+    knownSizes: (rows || []).filter(x => norm(x.item_type) === norm(r.item_type) && norm(x.material) === norm(r.material) && norm(x.sub_type) === norm(r.sub_type)
+      && norm(x.item_class) === norm(r.item_class) && norm(x.make) === norm(r.make)).map(x => x.size).filter(Boolean) }); setMsg(""); setErr("");
+    setTimeout(() => { try { window.scrollTo({ top: 0, behavior: "smooth" }); document.getElementById("size-0")?.focus(); } catch {} }, 50); };
+  const setSizeAt = (i, v) => setForm(f => { if (i === 0) return { ...f, size: v }; const s = [...(f.sizes || [])]; s[i - 1] = v; return { ...f, sizes: s }; });
+  const addSizeBox = () => { setForm(f => ({ ...f, sizes: [...(f.sizes || []), ""] })); setTimeout(() => { const n = document.querySelectorAll("[data-size-box]"); n[n.length - 1]?.focus(); }, 30); };
+  const removeSizeBox = i => setForm(f => ({ ...f, sizes: (f.sizes || []).filter((_, j) => j !== i - 1) }));
 
   async function remove(it) {
     if (!confirm(`Delete "${it.display_name}" permanently?\n\nOnly possible if it was never used in any indent, GRN or stock record. Used items must be deactivated instead.`)) return;
@@ -63,13 +78,36 @@ export default function ItemsPage() {
       size: form.size?.trim() || null, item_class: form.item_class?.trim() || null, make: form.make?.trim() || null,
       unit: form.unit, hsn_code: form.hsn_code?.trim() || null, min_stock: Number(form.min_stock || 0) };
     if (form.photoFile || (form.id && Object.prototype.hasOwnProperty.call(form, "photo_url"))) payload.photo_url = photoPath;
+    // update474: one product, several sizes — every size is its own Material Master item (own stock, own PO line)
+    if (!form.id) {
+      const sizes = sizeList(form);
+      if (form.sizeMode && !sizes.length) { setBusy(false); setErr("Type at least one size."); return; }
+      if (sizes.length > 1 || form.sizeMode) {
+        if (photoPath) payload.photo_url = photoPath;
+        const added = [], skipped = [], failed = [];
+        for (const sz of sizes) {
+          if (sameItemExists(payload, sz)) { skipped.push(sz); continue; }
+          const r = await addItem({ ...payload, size: sz });
+          if (r.ok) added.push(sz);
+          else if (/duplicate|unique/i.test(r.error || "")) skipped.push(sz);
+          else failed.push(sz + " — " + r.error);
+        }
+        setBusy(false);
+        if (form.photoPreview && !failed.length) URL.revokeObjectURL(form.photoPreview);
+        const parts = [];
+        if (added.length) parts.push(`${added.length} size${added.length > 1 ? "s" : ""} added to ${productName(payload)}: ${added.join(", ")}`);
+        if (skipped.length) parts.push(`already in the master (not added again): ${skipped.join(", ")}`);
+        if (failed.length) { setErr("Could not add: " + failed.join(" · ")); if (parts.length) setMsg(parts.join(" · ")); load(); return; }
+        setMsg(parts.join(" · ") || "Nothing new to add."); setForm(null); load(); return;
+      }
+    }
     const editPayload = { ...form };
     delete editPayload.photoFile; delete editPayload.photoPreview;
     if (form.photoFile || Object.prototype.hasOwnProperty.call(form, "photo_url")) editPayload.photo_url = photoPath;
     else delete editPayload.photo_url;
     const res = form.id ? await updateItem(form.id, editPayload) : await addItem(payload);
     setBusy(false);
-    if (!res.ok) { setErr(res.error); return; }
+    if (!res.ok) { setErr(/duplicate|unique/i.test(res.error || "") ? "This item already exists in the master (same type, material, size, class and make)." : res.error); return; }
     setMsg(form.id ? "Item updated — the name recomposed automatically." : "Item added: " + (res.name || ""));
     if (form.photoPreview) URL.revokeObjectURL(form.photoPreview);
     setForm(null); load();
@@ -208,6 +246,7 @@ export default function ItemsPage() {
     { key: "_action", label: "Action", sortable: false, render: r => canManage ? (
       <span style={{ whiteSpace: "nowrap" }}>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => { setForm({ ...r, min_stock: r.min_stock || "", sub_type: r.sub_type || "", size: r.size || "", item_class: r.item_class || "", make: r.make || "", hsn_code: r.hsn_code || "" }); setMsg(""); setErr(""); }}>Edit</button>
+        <button style={{ fontSize: 11.5, marginRight: 4 }} title="Add more sizes of this same product" onClick={() => openAddSizes(r)}>＋ Size</button>
         <button style={{ fontSize: 11.5, marginRight: 4 }} onClick={() => toggle(r)}>{r.is_active ? "Deactivate" : "Activate"}</button>
         {canManage && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => remove(r)}>🗑</button>}
       </span>) : <span className="muted">—</span>, exportValue: () => "" },
@@ -263,8 +302,28 @@ export default function ItemsPage() {
 
         {form && (
           <div className="panel">
-            <h2>{form.id ? "Edit item" : "Add item"}</h2>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12 }}>
+            <h2>{form.id ? "Edit item" : form.sizeMode ? "Add sizes" : "Add item"}</h2>
+            {form.sizeMode && (
+              <div style={{ background: "var(--copper-soft, #FFF2EA)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
+                <div style={{ fontWeight: 700 }}>{productName(form)}</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>Unit {form.unit}{form.hsn_code ? " · HSN " + form.hsn_code : ""}{form.photo_url ? " · same photo" : ""} — copied from this product. Type only the new sizes.</div>
+                {form.knownSizes?.length > 0 && <div style={{ fontSize: 12, marginTop: 6 }}><span className="muted">Sizes already in the master: </span>{form.knownSizes.join(", ")}</div>}
+              </div>)}
+            {(form.sizeMode || !form.id) && (
+              <div style={{ marginBottom: 12 }}>
+                <label className="muted">{form.sizeMode ? "New sizes" : "Size"}{!form.sizeMode && <span style={{ fontWeight: 400 }}> — one product in several sizes? add each size; every size becomes its own item</span>}</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 4 }}>
+                  {[form.size, ...(form.sizes || [])].map((v, i) => (
+                    <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <input id={"size-" + i} data-size-box="1" style={{ width: 150 }} value={v} placeholder={i === 0 ? "25mm / 300 x 300" : "next size"}
+                        onChange={e => setSizeAt(i, e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSizeBox(); } }} />
+                      {i > 0 && <button type="button" aria-label="Remove this size" onClick={() => removeSizeBox(i)} style={{ padding: "4px 8px" }}>✕</button>}
+                    </span>))}
+                  <button type="button" onClick={addSizeBox}>＋ Another size</button>
+                </div>
+                {sizeList(form).length > 1 && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>{sizeList(form).length} items will be created — one per size.</div>}
+              </div>)}
+            {!form.sizeMode && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12 }}>
               <div><label className="muted">Type</label>
                 <select style={{ width: "100%" }} value={form.item_type} onChange={e => pickType(e.target.value)}>
                   {[...types, ...(types.includes(form.item_type) ? [] : [form.item_type])].map(t => <option key={t}>{t}</option>)}
@@ -272,7 +331,7 @@ export default function ItemsPage() {
                 </select></div>
               <div><label className="muted">Material / name *</label><input style={{ width: "100%" }} value={form.material} onChange={e => set("material", e.target.value)} placeholder="e.g. CPVC or MS 350NB" /></div>
               <div><label className="muted">Sub-type</label><input style={{ width: "100%" }} value={form.sub_type} onChange={e => set("sub_type", e.target.value)} placeholder="Elbow / Tee / Gate valve" /></div>
-              <div><label className="muted">Size</label><input style={{ width: "100%" }} value={form.size} onChange={e => set("size", e.target.value)} placeholder="25mm / 350NB" /></div>
+              {form.id && <div><label className="muted">Size</label><input style={{ width: "100%" }} value={form.size} onChange={e => set("size", e.target.value)} placeholder="25mm / 350NB" /></div>}
               <div><label className="muted">Class</label><input style={{ width: "100%" }} value={form.item_class} onChange={e => set("item_class", e.target.value)} placeholder="SDR 11 / Heavy / PN10" /></div>
               <div><label className="muted">Make</label><input style={{ width: "100%" }} value={form.make} onChange={e => set("make", e.target.value)} placeholder="Astral / Dutron" /></div>
               <div><label className="muted">Unit</label>
@@ -281,8 +340,8 @@ export default function ItemsPage() {
                 </select></div>
               <div><label className="muted">HSN code</label><input style={{ width: "100%" }} value={form.hsn_code} onChange={e => set("hsn_code", e.target.value)} /></div>
               <div><label className="muted">Min stock (alert level)</label><input style={{ width: "100%" }} inputMode="numeric" value={form.min_stock} onChange={e => set("min_stock", e.target.value)} /></div>
-            </div>
-            <div style={{ marginTop: 14, maxWidth: 360 }}>
+            </div>}
+            {!form.sizeMode && <div style={{ marginTop: 14, maxWidth: 360 }}>
               <label className="muted" htmlFor="material-photo">Material photo</label>
               <input id="material-photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={e => {
                 const file = e.target.files?.[0]; if (!file) return;
@@ -299,10 +358,10 @@ export default function ItemsPage() {
                 }}>Remove photo</button>
               </div>}
               <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>Optional · JPG, PNG or WebP · max 12 MB</div>
-            </div>
+            </div>}
             {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <button className="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : form.id ? "Save changes" : "Add item"}</button>
+              <button className="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : form.id ? "Save changes" : sizeList(form).length > 1 || form.sizeMode ? `Add ${sizeList(form).length || ""} size${sizeList(form).length === 1 ? "" : "s"}` : "Add item"}</button>
               <button onClick={() => setForm(null)}>Cancel</button>
             </div>
           </div>
