@@ -108,12 +108,12 @@ export default function MobileNav() {
     { href: "/m/report", ico: "📊", label: "Analytics" },
     { href: "/projects", ico: "🏗", label: "All Sites" },
     { href: "/procure?tab=po", ico: "📄", label: "Purchase Orders" },
-    { href: "/procure/pending", ico: "🚚", label: "Pending Deliveries" },
+    { href: "/m/deliveries", ico: "🚚", label: "Pending Deliveries" },
     { href: "/vendors", ico: "🏢", label: "Vendors" },
-    { href: "/tasks", ico: "📝", label: "Assign Task" },
+    { href: "/m/tasks", ico: "📝", label: "Assign Task" },
     { href: "/admin-access", ico: "⚙", label: "Admin" },
-    { href: "/dpr", ico: "📋", label: "Site Reports" },
-    { href: "/attendance", ico: "👥", label: "Muster" }
+    { href: "/m/dpr", ico: "📋", label: "Site Reports" },
+    { href: "/m/muster", ico: "👥", label: "Muster" }
   ];
   const moreVisible = (workerOnly || !sess) ? [] : accountant ? accountantMore : role === "director" ? directorMore : more.filter(m => m.show(sess));
   useEffect(() => {
