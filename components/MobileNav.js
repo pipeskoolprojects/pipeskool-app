@@ -103,7 +103,7 @@ export default function MobileNav() {
     { href: "/m/report", label: "Reports", show: s => (s?.caps?.includes("view_all_money") || canSeeModuleAnySite(s, "money") || canSeeModuleAnySite(s, "dpr")) },
   ].filter(x => x.show(sess));
   const directorMore = [
-    { href: "/my-expenses", ico: "🧾", label: "My Expenses" },
+    { href: "/m/my-expenses", ico: "🧾", label: "My Expenses" },
     { href: "/m/money", ico: "💰", label: "Finance" },
     { href: "/m/report", ico: "📊", label: "Analytics" },
     { href: "/projects", ico: "🏗", label: "All Sites" },
