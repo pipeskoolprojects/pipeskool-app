@@ -164,8 +164,9 @@ th.num { text-align: right; font-family: var(--font); }
 .sidebar-show:hover { background: var(--copper); }
 
 /* --- update126: content clears the ☰ button when sidebar is hidden --- */
-html.psk-nosb .main { padding-left: 76px; }
-@media (max-width: 760px) { html.psk-nosb .main { padding-left: 16px; padding-top: 56px; } }
+html.psk-nosb .main { padding-left: 76px !important; }
+html.psk-nosb .director-header-logo { display: inline-flex !important; }
+@media (max-width: 760px) { html.psk-nosb .main { padding-left: 16px !important; padding-top: 56px; } }
 
 /* --- update126: tables scroll internally, page chrome stays put --- */
 .dt-scroll {
