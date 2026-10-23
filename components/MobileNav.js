@@ -111,7 +111,11 @@ export default function MobileNav() {
     { href: "/m/deliveries", ico: "🚚", label: "Pending Deliveries" },
     { href: "/vendors", ico: "🏢", label: "Vendors" },
     { href: "/m/tasks", ico: "📝", label: "Assign Task" },
-    { href: "/admin-access", ico: "⚙", label: "Admin" },
+    { href: "/admin-access", ico: "⚙", label: "Admin & access" },
+    { href: "/access", ico: "🔐", label: "Access Rights" },
+    { href: "/sitemaster", ico: "🏗", label: "Site Master (timings)" },
+    { href: "/backup", ico: "💾", label: "Backup & Restore" },
+    { href: "/tickets", ico: "🎫", label: "Support Tickets" },
     { href: "/m/dpr", ico: "📋", label: "Site Reports" },
     { href: "/m/muster", ico: "👥", label: "Muster" }
   ];
