@@ -575,7 +575,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
 
         {/* update238: each row appears only if this person may actually act on it. Open indents
             is NOT an approval — it is a work queue — so it stays for everyone who sees indents. */}
-        {(rights.open || appr.ind > 0) && (
+        {!companyView && (rights.open || appr.ind > 0) && (
           <Section title={rights.any ? "Pending approvals" : rights.moneyView ? "Pending approvals · view only" : "Pending with you"} action={apprTotal > 0 && rights.open ? <span style={{ background: COPPER, color: "#fff", borderRadius: 999, padding: "2px 10px", fontSize: 12, fontWeight: 800 }}>{apprTotal}</span> : null}>
             {companyView && rights.indent && <ApprovalRow ico="🧾" title="PO draft approvals" sub="Awaiting your approval" count={appr.po} href="/procure" />}
             {companyView && rights.moneyView && <ApprovalRow ico="₹" title="Advance salary requests" sub="Across all sites" count={appr.adv} href="/expenses" />}
