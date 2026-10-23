@@ -220,7 +220,8 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   const [panel, setPanel] = useState(null);       // project explorer (mobile only — kept from 228)
   const [expId, setExpId] = useState(null);
   const [tasks, setTasks] = useState(null);
-  const [pendCount, setPendCount] = useState(0);   // update256: PO lines still awaiting delivery\n  const [billingTrend, setBillingTrend] = useState(null);
+  const [pendCount, setPendCount] = useState(0);   // update256: PO lines still awaiting delivery
+  const [billingTrend, setBillingTrend] = useState(null);
   // update449: the Home tab's own site picker — every role. "all" = every site the person is allotted
   // (Directors: the company portfolio). A real site also becomes the session's current site, so
   // Muster / DPR / Stock / Indent open on it — ONE selection drives all mobile pages (same as before).
@@ -465,7 +466,8 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   return (
     <div style={{ background: "var(--bg)", minHeight: desk ? 0 : "100dvh", paddingBottom: desk ? 24 : "calc(128px + env(safe-area-inset-bottom))" }}>{/* update265: clears the fixed nav AND the floating chat bubble */}
       <div style={{ padding: desk ? "18px 28px 0" : "14px 12px 0", maxWidth: desk ? "none" : 1100, margin: desk ? 0 : "0 auto" }}>
-        {!companyView && (\n        <div style={{ background: "linear-gradient(140deg, " + NAVY + " 0%, " + NAVY2 + " 100%)", color: "#fff", borderRadius: 18, padding: 17, boxShadow: "0 10px 26px rgba(15,26,46,0.28)", position: "relative", overflow: "hidden" }}>{/* update265b: hard containment */}
+        {!companyView && (
+        <div style={{ background: "linear-gradient(140deg, " + NAVY + " 0%, " + NAVY2 + " 100%)", color: "#fff", borderRadius: 18, padding: 17, boxShadow: "0 10px 26px rgba(15,26,46,0.28)", position: "relative", overflow: "hidden" }}>{/* update265b: hard containment */}
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 9.5, letterSpacing: 1.1, color: COPPER, fontWeight: 800, textTransform: "uppercase" }}>{companyView ? "Company portfolio" : allView ? "All my sites" : "Active site"}</div>
@@ -494,7 +496,10 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
             <HeroStat ico="🗓" label={allView ? "Nearest deadline" : "Target finish"} value={(allView ? pj.deadline : pj.site?.end_date) || "—"} />
             <HeroStat ico="👥" label={allView ? "Total workforce" : "Workforce"} value={workers === null ? "…" : man.roll + " on roll"} />
           </div>
-        </div>\n        )}\n\n        {/* update449: site sheet — same list the Muster / DPR screens use (the person's allotted sites) */}
+        </div>
+        )}
+
+        {/* update449: site sheet — same list the Muster / DPR screens use (the person's allotted sites) */}
         {pickOpen && (
           <div onClick={() => setPickOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", zIndex: 120, display: "flex", alignItems: desk ? "center" : "flex-end", justifyContent: "center" }}>
             <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: desk ? 14 : "16px 16px 0 0", width: "100%", maxWidth: 480, maxHeight: "70vh", overflowY: "auto", padding: "12px 12px calc(16px + env(safe-area-inset-bottom))", boxShadow: "0 -10px 30px rgba(0,0,0,0.2)" }}>
