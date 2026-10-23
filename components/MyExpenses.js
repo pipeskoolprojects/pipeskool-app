@@ -11,9 +11,9 @@ const getMonths=()=>{const now=todayLocal().slice(0,7).split("-").map(Number);re
 
 export default function MyExpenses({ mobile=false }) {
   const router=useRouter();
-  const [profile,setProfile]=useState(null),[busy,setBusy]=useState(true),[error,setError]=useState(""),[period,setPeriod]=useState("6m");
+  const [profile,setProfile]=useState(null),[busy,setBusy]=useState(true),[error,setError]=useState("");
   const load=useCallback(async()=>{const session=getSession();if(!session){router.replace(mobile?"/m/login":"/login");return}if(session.role!=="director"){router.replace(mobile?"/m/dashboard":"/home");return}setBusy(true);setError("");try{const result=await getPersonMoneyProfile(session.id);setProfile(result||{txns:[],totals:{all:0,month:0}})}catch(e){setError(e?.message||"Could not load your expenses.")}finally{setBusy(false)}},[mobile,router]);
-  useEffect(()=>{load()},[load]);
+  useEffect(()=>{if(typeof window!=="undefined"){const small=window.innerWidth<=760;if(small&&!mobile)router.replace("/m/my-expenses");if(!small&&mobile)router.replace("/my-expenses")}load()},[load,mobile,router]);
   const rows=useMemo(()=>profile?.txns?.filter(t=>t.kind==="exp"&&t.status==="approved")||[],[profile]);
   const months=useMemo(getMonths,[]);
   const series=useMemo(()=>months.map(m=>rows.filter(r=>(r.date||"").slice(0,7)===m).reduce((s,r)=>s+Number(r.amount||0),0)),[rows,months]);
