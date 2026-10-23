@@ -120,6 +120,42 @@ function GlanceCard({ label, value, foot, footColor, href }) {
   );
 }
 
+function DirectorWorkspace({ pj, appr, missingDpr, man, weekData, pendCount, desk, onProjects, onSite }) {
+  const peak = Math.max(1, ...(weekData || []).map(d => Number(d.n) || 0));
+  const modules = [
+    ["Approvals","Review decisions waiting","✅","/approvals","#fff2e8"],["Finance","Expenses and payments","₹","/expenses","#eaf3ff"],
+    ["Reports","Company performance","▤","/reports","#edf8f0"],["All sites","Browse the portfolio","⌂","/projects","#f4efff"],
+    ["Purchase orders","Review PO activity","▣","/procure?tab=po","#fff7e5"],["Pending deliveries","Follow up material","↗","/procure/pending","#e9f8f7"],
+    ["Vendors","Vendor directory","▤","/vendors","#fff0f0"],["Assign task","Create and follow up work","✓","/tasks","#f3f1ff"],
+    ["Administration","Access and settings","⚙","/admin-access","#f1f4f7"],["Site reports","Daily progress reports","▤","/dpr","#eef6ff"],["Muster","Workforce attendance","●","/attendance","#eef8f2"]
+  ];
+  const metrics = [["Active projects",pj.active+pj.hold+pj.delayed,pj.total+" projects on record"],["Average progress",pj.avg+"%","Projects with reported progress"],["Present today",man.inNow,man.roll+" workers on roll"]];
+  const followups = [["Money approvals",appr.petty+appr.claims+appr.adv,"Claims, advances and petty cash","/approvals"],["PO approvals",appr.po,"Waiting for review","/procure"],["Sites without today's DPR",missingDpr,"Daily report follow-up","/dpr"],["Pending deliveries",pendCount,"Material still due at site","/procure/pending"]];
+  return <div style={{marginTop:22}}>
+    <div style={{display:"flex",alignItems:"end",justifyContent:"space-between",gap:12,marginBottom:13,flexWrap:"wrap"}}>
+      <div><div style={{color:"#c65b13",fontSize:10,letterSpacing:".14em",fontWeight:800,textTransform:"uppercase"}}>Director workspace</div><h2 style={{margin:"5px 0 0",color:"#172033",fontSize:21,letterSpacing:"-.025em"}}>Portfolio overview</h2><div style={{color:"#727b89",fontSize:13,marginTop:3}}>Live project health and decisions across your sites.</div></div>
+      <button type="button" onClick={onProjects} style={{border:"1px solid #d6dbe2",background:"#fff",borderRadius:10,padding:"9px 13px",fontWeight:700,color:"#243047",cursor:"pointer"}}>Open all sites →</button>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:desk?"repeat(3,minmax(0,1fr))":"repeat(auto-fit,minmax(145px,1fr))",gap:10}}>
+      {metrics.map(([label,value,note],i)=><div key={label} style={{background:"#fff",border:"1px solid #e4e7eb",borderRadius:16,padding:"16px 17px"}}><div style={{color:"#6b7280",fontSize:11,fontWeight:700,letterSpacing:".08em",textTransform:"uppercase"}}>{label}</div><div style={{fontSize:25,fontWeight:800,color:i===1?"#b95416":"#172033",marginTop:7}}>{value}</div><div style={{fontSize:12,color:"#727b89",marginTop:4}}>{note}</div></div>)}
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:desk?"minmax(0,1.3fr) minmax(290px,.8fr)":"1fr",gap:13,marginTop:13}}>
+      <section style={{background:"#fff",border:"1px solid #e4e7eb",borderRadius:17,padding:16,minWidth:0}}>
+        <div style={{marginBottom:11}}><h3 style={{margin:0,fontSize:15,color:"#172033"}}>Project health</h3><div style={{color:"#7b8490",fontSize:11.5,marginTop:3}}>Active, held and delayed projects</div></div>
+        {pj.live.length?<div style={{display:"grid",gap:7}}>{pj.live.slice(0,6).map(p=>{const meta=ST_META[p.status]||["Active","#15803d"],pct=Math.max(0,Math.min(100,Number(p.progress)||0));return <button type="button" key={p.id} onClick={()=>onSite(p.id)} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:"6px 12px",alignItems:"center",width:"100%",textAlign:"left",background:"#fbfcfd",border:"1px solid #edf0f3",borderRadius:12,padding:"10px 11px",cursor:"pointer",color:"#172033"}}><span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:13,fontWeight:700}}>{p.name}</span><span style={{color:meta[1],fontSize:10.5,fontWeight:800}}>{meta[0]}</span><span style={{height:5,background:"#e9edf1",borderRadius:8,overflow:"hidden"}}><span style={{display:"block",width:p.progress==null?"0%":pct+"%",height:"100%",background:meta[1],borderRadius:8}}/></span><span style={{color:"#667085",fontSize:11,textAlign:"right"}}>{p.progress==null?"No update":pct+"%"}</span></button>})}</div>:<div style={{padding:24,textAlign:"center",color:"#7b8490",fontSize:13}}>No active projects to show.</div>}
+      </section>
+      <section style={{background:"#fff",border:"1px solid #e4e7eb",borderRadius:17,padding:16}}>
+        <div style={{marginBottom:7}}><h3 style={{margin:0,fontSize:15,color:"#172033"}}>Needs attention</h3><div style={{color:"#7b8490",fontSize:11.5,marginTop:3}}>Live queues and daily follow-up</div></div>
+        {followups.map(([label,count,note,href])=><Link key={label} href={href} style={{textDecoration:"none",color:"#172033",display:"flex",alignItems:"center",gap:10,borderTop:"1px solid #edf0f3",padding:"11px 0"}}><span style={{flex:1}}><b style={{display:"block",fontSize:12.5}}>{label}</b><span style={{display:"block",color:"#7b8490",fontSize:11,marginTop:3}}>{note}</span></span><b style={{color:count?"#b95416":"#16804a",fontSize:19}}>{count}</b><span style={{color:"#9aa2ad"}}>›</span></Link>)}
+      </section>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:desk?"minmax(260px,.7fr) minmax(0,1.5fr)":"1fr",gap:13,marginTop:13}}>
+      <section style={{background:"#fff",border:"1px solid #e4e7eb",borderRadius:17,padding:16}}><h3 style={{margin:0,fontSize:15,color:"#172033"}}>Attendance this week</h3><div style={{color:"#7b8490",fontSize:11.5,marginTop:3}}>Workers marked present each day</div><div style={{display:"flex",alignItems:"end",gap:8,height:102,marginTop:15}}>{(weekData||[]).map(d=><div key={d.date} title={d.date+": "+d.n+" present"} style={{flex:1,textAlign:"center"}}><div style={{fontSize:10,color:"#727b89",marginBottom:4}}>{d.n}</div><div style={{height:Math.max(5,Math.round((Number(d.n)||0)/peak*60)),background:"#cf6a2b",borderRadius:"5px 5px 2px 2px"}}/><div style={{color:"#727b89",fontSize:10,marginTop:5}}>{d.day}</div></div>)}</div></section>
+      <section style={{background:"#fff",border:"1px solid #e4e7eb",borderRadius:17,padding:16}}><h3 style={{margin:0,fontSize:15,color:"#172033"}}>Workspace</h3><div style={{color:"#7b8490",fontSize:11.5,marginTop:3,marginBottom:11}}>Go straight to a module</div><div style={{display:"grid",gridTemplateColumns:desk?"repeat(4,minmax(0,1fr))":"repeat(auto-fit,minmax(138px,1fr))",gap:8}}>{modules.map(([title,desc,icon,href,tint])=><Link key={title} href={href} style={{minHeight:64,padding:10,display:"flex",gap:9,alignItems:"center",background:tint,borderRadius:12,textDecoration:"none",color:"#202b3b",border:"1px solid rgba(23,32,51,.045)"}}><span style={{width:31,height:31,borderRadius:9,background:"rgba(255,255,255,.82)",display:"grid",placeItems:"center",color:"#34445d",fontWeight:800,flexShrink:0}}>{icon}</span><span style={{minWidth:0}}><b style={{display:"block",fontSize:11.5,lineHeight:1.2}}>{title}</b><span style={{display:"block",fontSize:10,color:"#687386",lineHeight:1.25,marginTop:3}}>{desc}</span></span></Link>)}</div></section>
+    </div>
+  </div>;
+}
+
 /* update237: the four page cards that replaced the top tab strip. Module scope. */
 function PageCard({ ico, title, desc, href, current, onClick }) {
   const inner = (
@@ -405,31 +441,16 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
           </div>
         )}
 
-        {companyView && (
-          <Section title="Sites overview" action={<a onClick={openProjects} style={{ fontSize: 12.5, color: COPPER, fontWeight: 700, cursor: "pointer" }}>View all {pj.total} →</a>}>
-            <div style={{ display: "flex", gap: 9, overflowX: "auto", paddingBottom: 4 }}>
-              {pj.live.map(p => { const sm = ST_META[p.status] || ["Active", "#15803d"]; return (
-                <div key={p.id} onClick={() => { setAsSite(Number(p.id)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                  style={{ flexShrink: 0, minWidth: 178, background: "#fff", border: "1px solid var(--border)", borderRadius: 14, padding: "11px 13px", cursor: "pointer", boxShadow: "0 2px 8px rgba(15,26,46,0.05)" }}>
-                  <b style={{ fontSize: 13, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</b>
-                  <span style={{ fontSize: 11, color: sm[1], fontWeight: 700 }}>● {sm[0]}{p.progress !== null && p.progress !== undefined ? " · " + p.progress + "%" : ""}</span>
-                </div>
-              ); })}
-              {pj.live.length === 0 && <div className="muted" style={{ fontSize: 12.5 }}>No active sites.</div>}
+        {companyView ? <DirectorWorkspace pj={pj} appr={appr} missingDpr={dprMissing.length} man={man} weekData={weekData} pendCount={pendCount} desk={desk} onProjects={openProjects} onSite={id => { setAsSite(Number(id)); window.scrollTo({ top: 0, behavior: "smooth" }); }} /> : (
+          <Section title="Quick access">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(86px, 1fr))", gap: 9 }}>
+              {tiles.map(([ico, label, href, badge]) => (
+                <Tile key={label} ico={ico} label={label} badge={badge} href={href || undefined}
+                  onClick={href ? undefined : () => label === "Tasks" ? document.getElementById("home-tasks")?.scrollIntoView({ behavior: "smooth", block: "start" }) : openProjects()} />
+              ))}
             </div>
           </Section>
         )}
-
-        <Section title="Quick access">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(86px, 1fr))", gap: 9 }}>
-            {tiles.map(([ico, label, href, badge]) => (
-              <Tile key={label} ico={ico} label={label} badge={badge} href={href || undefined}
-                onClick={href ? undefined : () => label === "Tasks"
-                  ? document.getElementById("home-tasks")?.scrollIntoView({ behavior: "smooth", block: "start" })
-                  : openProjects()} />
-            ))}
-          </div>
-        </Section>
 
         {/* update230: TASKS ON HOME — the separate Tasks tab is gone; everything lives here.
             Auto tasks are computed live from the same operational data (never stored). */}
@@ -495,7 +516,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
           </Section>
         )}
 
-        {showPageCards && (
+        {showPageCards && !isDirector && (
           <Section title="Go to">
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 12 }}>
               <PageCard ico="🏠" title="Home" desc="Overview of sites, tasks and important updates." current
@@ -507,14 +528,14 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
           </Section>
         )}
 
-        <Section title="Today at a glance">
+        {!companyView && <Section title="Today at a glance">
           <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
             <GlanceCard label="Expenses approved" value={inr(expApproved)} foot={inr(expPending) + " pending"} href="/expenses" />
             {companyView
               ? <GlanceCard label="Sites without DPR" value={dprMissing.length + " today"} foot="Open DPR digest →" footColor={dprMissing.length ? "var(--red)" : "var(--green)"} href="/dpr" />
               : <GlanceCard label="My DPR status" value={dprFiled.has(siteName) ? "Filed ✓" : "Pending"} foot={dprFiled.has(siteName) ? "Submitted today" : "Submit today's DPR →"} footColor={dprFiled.has(siteName) ? "var(--green)" : "var(--red)"} href={R("/m/dpr", "/dpr")} />}
           </div>
-        </Section>
+        </Section>}
       </div>
 
       {!desk && panel && (
