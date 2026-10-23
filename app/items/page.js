@@ -7,9 +7,10 @@ import { supabase, isDemo, fetchAll } from "@/lib/supabase";   // update324: sup
 import { ITEM_TYPES, getItemTypes, addItemType, getAllItems, addItem, updateItem, toggleItemActive, deleteItem, approveItem } from "@/lib/stock";
 import { getSession, canAnySite } from "@/lib/auth";
 import { canApprove } from "@/lib/perms";
+import { fileStore, fileHref } from "@/lib/files";
 
 const UNITS = ["Nos", "Rmt", "Mtr", "Kg", "Set", "Box", "Litre", "Bag"];
-const BLANK = { item_type: "Pipe", material: "", sub_type: "", size: "", item_class: "", make: "", unit: "Rmt", hsn_code: "", min_stock: "", is_active: true };
+const BLANK = { item_type: "Pipe", material: "", sub_type: "", size: "", item_class: "", make: "", unit: "Rmt", hsn_code: "", min_stock: "", is_active: true, photo_url: null };
 
 export default function ItemsPage() {
   const [rows, setRows] = useState(null);
@@ -50,14 +51,27 @@ export default function ItemsPage() {
     setErr("");
     if (!String(form.material || "").trim()) { setErr("Material / name is required — it's the main part of the item name."); return; }
     setBusy(true);
-    const res = form.id
-      ? await updateItem(form.id, form)
-      : await addItem({ item_type: form.item_type, material: form.material.trim(), sub_type: form.sub_type?.trim() || null,
-          size: form.size?.trim() || null, item_class: form.item_class?.trim() || null, make: form.make?.trim() || null,
-          unit: form.unit, hsn_code: form.hsn_code?.trim() || null, min_stock: Number(form.min_stock || 0) });
+    let photoPath = form.photo_url || null;
+    if (form.photoFile && !isDemo) {
+      const ext = form.photoFile.type === "image/png" ? "png" : form.photoFile.type === "image/webp" ? "webp" : "jpg";
+      const key = "company/materials/" + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2)) + "." + ext;
+      const { error: uploadError } = await fileStore.from("attendance-photos").upload(key, form.photoFile, { contentType: form.photoFile.type || "image/jpeg" });
+      if (uploadError) { setBusy(false); setErr("Photo upload failed: " + uploadError.message + ". Your material details are still here; choose the photo again and retry."); return; }
+      photoPath = key;
+    }
+    const payload = { item_type: form.item_type, material: form.material.trim(), sub_type: form.sub_type?.trim() || null,
+      size: form.size?.trim() || null, item_class: form.item_class?.trim() || null, make: form.make?.trim() || null,
+      unit: form.unit, hsn_code: form.hsn_code?.trim() || null, min_stock: Number(form.min_stock || 0) };
+    if (form.photoFile || (form.id && Object.prototype.hasOwnProperty.call(form, "photo_url"))) payload.photo_url = photoPath;
+    const editPayload = { ...form };
+    delete editPayload.photoFile; delete editPayload.photoPreview;
+    if (form.photoFile || Object.prototype.hasOwnProperty.call(form, "photo_url")) editPayload.photo_url = photoPath;
+    else delete editPayload.photo_url;
+    const res = form.id ? await updateItem(form.id, editPayload) : await addItem(payload);
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
     setMsg(form.id ? "Item updated — the name recomposed automatically." : "Item added: " + (res.name || ""));
+    if (form.photoPreview) URL.revokeObjectURL(form.photoPreview);
     setForm(null); load();
   }
   async function toggle(it) {
@@ -159,6 +173,9 @@ export default function ItemsPage() {
   useEffect(() => { if (tabRefresh) setTab(t => t); }, [tabRefresh]);
 
   const columns = [
+    { key: "photo_url", label: "Photo", sortable: false, render: r => r.photo_url
+      ? <img src={fileHref(r.photo_url)} alt={r.display_name || "Material"} loading="lazy" style={{ width: 44, height: 44, objectFit: "contain", borderRadius: 7, background: "#f7f8fa", border: "1px solid var(--border)" }} />
+      : <span className="muted" title="No photo added">—</span>, exportValue: () => "" },
     { key: "display_name", label: "Item", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.display_name}</span> },
     { key: "item_type", label: "Type", filter: "select" },
     { key: "unit", label: "Unit", filter: "select" },
@@ -264,6 +281,24 @@ export default function ItemsPage() {
                 </select></div>
               <div><label className="muted">HSN code</label><input style={{ width: "100%" }} value={form.hsn_code} onChange={e => set("hsn_code", e.target.value)} /></div>
               <div><label className="muted">Min stock (alert level)</label><input style={{ width: "100%" }} inputMode="numeric" value={form.min_stock} onChange={e => set("min_stock", e.target.value)} /></div>
+            </div>
+            <div style={{ marginTop: 14, maxWidth: 360 }}>
+              <label className="muted" htmlFor="material-photo">Material photo</label>
+              <input id="material-photo" type="file" accept="image/*" onChange={e => {
+                const file = e.target.files?.[0]; if (!file) return;
+                if (!file.type.startsWith("image/")) { setErr("Choose an image file."); e.target.value = ""; return; }
+                if (file.size > 12 * 1024 * 1024) { setErr("Choose an image smaller than 12 MB."); e.target.value = ""; return; }
+                set("photoFile", file); set("photoPreview", URL.createObjectURL(file)); setErr("");
+              }} style={{ display: "block", width: "100%", marginTop: 5 }} />
+              {(form.photoPreview || form.photo_url) && <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                <img src={form.photoPreview || fileHref(form.photo_url)} alt="Material preview" style={{ width: 88, height: 72, objectFit: "contain", border: "1px solid var(--border)", borderRadius: 8, background: "#f7f8fa" }} />
+                <button type="button" onClick={() => {
+                  if (form.photoPreview) URL.revokeObjectURL(form.photoPreview);
+                  set("photoFile", null); set("photoPreview", ""); set("photo_url", null);
+                  const input = document.getElementById("material-photo"); if (input) input.value = "";
+                }}>Remove photo</button>
+              </div>}
+              <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>Optional · JPG, PNG or WebP · max 12 MB</div>
             </div>
             {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
