@@ -46,7 +46,7 @@ export default function HomeHeader({ sess, sites, isDirector, asSite, setAsSite,
   return (
     <>
       {desk ? (
-        <header className="director-home-header" style={{position:"sticky",top:0,zIndex:25,background:"#fff",borderBottom:"1px solid "+LINE,padding:"12px 28px",boxShadow:"0 2px 8px rgba(15,27,58,.04)}}>
+        <header className="director-home-header" style={{position:"sticky",top:0,zIndex:25,background:"#fff",borderBottom:"1px solid "+LINE,padding:"12px 28px",boxShadow:"0 2px 8px rgba(15,27,58,.04)"}}>
           <div style={{display:"flex",alignItems:"center",gap:18,maxWidth:1600,margin:"0 auto"}}>
             <Link className="director-header-logo" href="/home" aria-label="Pipeskool home" style={{display:"none",flexShrink:0}}><Logo height={27}/></Link>
             <div style={{minWidth:170,flex:1}}>
