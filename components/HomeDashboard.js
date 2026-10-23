@@ -120,7 +120,7 @@ function GlanceCard({ label, value, foot, footColor, href }) {
   );
 }
 
-function DirectorWorkspace({ pj, appr, missingDpr, man, weekData, pendCount, pos, billing, autoTasks, myTasks, taskPending, onProjects, onSite, onComplete, desk }) {
+function DirectorWorkspace({ pj, appr, missingDpr, man, weekData, pendCount, pos, billing, autoTasks, myTasks, taskPending, directorName, onProjects, onSite, onComplete, desk }) {
   const first = (name) => String(name || "").trim().split(/\s+/)[0] || "there";
   const inTransit = pos.filter(p => p.delivery_status === "dispatched").length;
   const partial = pos.filter(p => p.delivery_status === "partial").length;
@@ -138,7 +138,7 @@ function DirectorWorkspace({ pj, appr, missingDpr, man, weekData, pendCount, pos
   </Link>;
   return <div style={{background:"#f3f0ea",color:"#1f2937",padding:"0 0 8px"}}>
     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-      <div style={{width:42,height:42,borderRadius:"50%",background:"linear-gradient(135deg,#ffb27a,#f26a1b)",color:"#fff",display:"grid",placeItems:"center",fontWeight:800,fontSize:17,boxShadow:"0 3px 9px #f26a1b33"}}>{initial(pj.name)}</div>
+      <div style={{width:42,height:42,borderRadius:"50%",background:"linear-gradient(135deg,#ffb27a,#f26a1b)",color:"#fff",display:"grid",placeItems:"center",fontWeight:800,fontSize:17,boxShadow:"0 3px 9px #f26a1b33"}}>{initial(directorName)}</div>
       <div style={{minWidth:0,flex:1}}><div style={{fontSize:10,color:"#6b7280",fontWeight:800,letterSpacing:".08em",textTransform:"uppercase"}}>Director · {new Intl.DateTimeFormat("en-IN",{weekday:"short",day:"2-digit",month:"short",timeZone:"Asia/Kolkata"}).format(new Date())}</div><div style={{fontSize:18,fontWeight:800,color:"#0f1b3a"}}>Portfolio at a glance</div></div>
       <button type="button" onClick={onProjects} style={{border:"1px solid #e6e2d9",borderRadius:10,background:"#fff",padding:"9px 12px",fontWeight:700,color:"#1f2937",cursor:"pointer"}}>All sites&nbsp; →</button>
     </div>
@@ -220,7 +220,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   const [panel, setPanel] = useState(null);       // project explorer (mobile only — kept from 228)
   const [expId, setExpId] = useState(null);
   const [tasks, setTasks] = useState(null);
-  const [pendCount, setPendCount] = useState(0);   // update256: PO lines still awaiting delivery
+  const [pendCount, setPendCount] = useState(0);   // update256: PO lines still awaiting delivery\n  const [billingTrend, setBillingTrend] = useState(null);
   // update449: the Home tab's own site picker — every role. "all" = every site the person is allotted
   // (Directors: the company portfolio). A real site also becomes the session's current site, so
   // Muster / DPR / Stock / Indent open on it — ONE selection drives all mobile pages (same as before).
@@ -341,6 +341,50 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
       site: all.find(p => String(p.id) === String(viewSiteId)) || null };
   }, [projects, viewSiteId]);
 
+  const billingSiteKey = pj.all.map(p => p.id).join(",");
+  useEffect(() => {
+    if (!companyView || !billingSiteKey || isDemo || !supabase) { if (!companyView) setBillingTrend(null); return; }
+    let alive = true;
+    (async () => {
+      const ids = billingSiteKey.split(",").filter(Boolean).map(Number);
+      const months = [];
+      const now = new Date(todayLocal() + "T12:00:00");
+      for (let i = 5; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); months.push(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")); }
+      const empty = Object.fromEntries(months.map(m => [m,{ billed:0, collected:0 }]));
+      try {
+        const { data: bills, error: be } = await supabase.from("ra_bills").select("id, site_id, bill_no, bill_date, status, billing_mode, material_pct, install_pct").in("site_id",ids).order("site_id").order("bill_no");
+        if (be) throw be;
+        const billIds = (bills || []).map(b => b.id);
+        if (!billIds.length) { if(alive) setBillingTrend({months,billed:months.map(()=>0),collected:months.map(()=>0)}); return; }
+        const [{data:lines,error:le},{data:boq,error:qe}] = await Promise.all([
+          supabase.from("ra_bill_lines").select("ra_bill_id, boq_item_id, cum_qty, cum_material_qty, cum_install_qty, cum_tc_qty, rate, sup_pct, ins_pct, tc_pct").in("ra_bill_id",billIds),
+          supabase.from("boq_items").select("id, rate").in("site_id",ids)
+        ]);
+        if (le) throw le; if (qe) throw qe;
+        const rates = Object.fromEntries((boq||[]).map(x=>[x.id,Number(x.rate)||0]));
+        const byBill = new Map();
+        (lines||[]).forEach(l=>{const a=byBill.get(l.ra_bill_id)||[];a.push(l);byBill.set(l.ra_bill_id,a);});
+        const prior = new Map();
+        for (const bill of (bills||[])) {
+          const lineRows=byBill.get(bill.id)||[];
+          const cumulative=lineRows.reduce((sum,l)=>{
+            const rate=l.rate!=null?Number(l.rate):(rates[l.boq_item_id]||0);
+            if(bill.billing_mode==="staged") return sum+rate*((Number(l.cum_material_qty)||0)*(Number(l.sup_pct)||0)+(Number(l.cum_install_qty)||0)*(Number(l.ins_pct)||0)+(Number(l.cum_tc_qty)||0)*(Number(l.tc_pct)||0))/100;
+            if(bill.billing_mode==="split") return sum+(Number(l.cum_material_qty)||0)*rate*(Number(bill.material_pct)||0)/100+(Number(l.cum_install_qty)||0)*rate*(Number(bill.install_pct)||0)/100;
+            return sum+(Number(l.cum_qty)||0)*rate;
+          },0);
+          const prev=prior.get(bill.site_id)||0, amount=Math.max(0,cumulative-prev);
+          prior.set(bill.site_id,cumulative);
+          if(["certified","paid"].includes(bill.status)) {
+            const month=String(bill.bill_date||"").slice(0,7);
+            if(empty[month]) { empty[month].billed+=amount; if(bill.status==="paid") empty[month].collected+=amount; }
+          }
+        }
+        if(alive) setBillingTrend({months,billed:months.map(m=>empty[m].billed),collected:months.map(m=>empty[m].collected)});
+      } catch { if(alive) setBillingTrend({months:[],billed:[],collected:[],error:true}); }
+    })();
+    return()=>{alive=false;};
+  }, [companyView,billingSiteKey]);
   const inSite = rows => allView ? rows : rows.filter(r => String(r.site_id) === String(viewSiteId));   // update449: allView
   const presentCount = rows => rows.filter(r => (r.in && r.in !== "—") || r.status === "present" || r.status === "half_day").length;
 
@@ -421,7 +465,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   return (
     <div style={{ background: "var(--bg)", minHeight: desk ? 0 : "100dvh", paddingBottom: desk ? 24 : "calc(128px + env(safe-area-inset-bottom))" }}>{/* update265: clears the fixed nav AND the floating chat bubble */}
       <div style={{ padding: desk ? "18px 28px 0" : "14px 12px 0", maxWidth: desk ? "none" : 1100, margin: desk ? 0 : "0 auto" }}>
-        <div style={{ background: "linear-gradient(140deg, " + NAVY + " 0%, " + NAVY2 + " 100%)", color: "#fff", borderRadius: 18, padding: 17, boxShadow: "0 10px 26px rgba(15,26,46,0.28)", position: "relative", overflow: "hidden" }}>{/* update265b: hard containment */}
+        {!companyView && (\n        <div style={{ background: "linear-gradient(140deg, " + NAVY + " 0%, " + NAVY2 + " 100%)", color: "#fff", borderRadius: 18, padding: 17, boxShadow: "0 10px 26px rgba(15,26,46,0.28)", position: "relative", overflow: "hidden" }}>{/* update265b: hard containment */}
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 9.5, letterSpacing: 1.1, color: COPPER, fontWeight: 800, textTransform: "uppercase" }}>{companyView ? "Company portfolio" : allView ? "All my sites" : "Active site"}</div>
@@ -450,9 +494,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
             <HeroStat ico="🗓" label={allView ? "Nearest deadline" : "Target finish"} value={(allView ? pj.deadline : pj.site?.end_date) || "—"} />
             <HeroStat ico="👥" label={allView ? "Total workforce" : "Workforce"} value={workers === null ? "…" : man.roll + " on roll"} />
           </div>
-        </div>
-
-        {/* update449: site sheet — same list the Muster / DPR screens use (the person's allotted sites) */}
+        </div>\n        )}\n\n        {/* update449: site sheet — same list the Muster / DPR screens use (the person's allotted sites) */}
         {pickOpen && (
           <div onClick={() => setPickOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,20,25,0.55)", zIndex: 120, display: "flex", alignItems: desk ? "center" : "flex-end", justifyContent: "center" }}>
             <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: desk ? 14 : "16px 16px 0 0", width: "100%", maxWidth: 480, maxHeight: "70vh", overflowY: "auto", padding: "12px 12px calc(16px + env(safe-area-inset-bottom))", boxShadow: "0 -10px 30px rgba(0,0,0,0.2)" }}>
@@ -468,7 +510,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
           </div>
         )}
 
-        {companyView ? <DirectorWorkspace pj={pj} appr={appr} missingDpr={dprMissing.length} man={man} weekData={weekData} pendCount={pendCount} desk={desk} onProjects={openProjects} onSite={id => { setAsSite(Number(id)); window.scrollTo({ top: 0, behavior: "smooth" }); }} /> : (
+        {companyView ? <DirectorWorkspace pj={pj} appr={appr} missingDpr={dprMissing.length} man={man} weekData={weekData} pendCount={pendCount} pos={pos} billing={billingTrend} autoTasks={autoTasks} myTasks={myTasks} taskPending={taskPending} directorName={sess?.name || sess?.full_name} desk={desk} onProjects={openProjects} onComplete={completeTask} onSite={id => { setAsSite(Number(id)); window.scrollTo({ top: 0, behavior: "smooth" }); }} /> : (
           <Section title="Quick access">
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(86px, 1fr))", gap: 9 }}>
               {tiles.map(([ico, label, href, badge]) => (
