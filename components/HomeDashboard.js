@@ -120,39 +120,68 @@ function GlanceCard({ label, value, foot, footColor, href }) {
   );
 }
 
-function DirectorWorkspace({ pj, appr, missingDpr, man, weekData, pendCount, desk, onProjects, onSite }) {
-  const peak = Math.max(1, ...(weekData || []).map(d => Number(d.n) || 0));
-  const modules = [
-    ["Approvals","Review decisions waiting","✅","/approvals","#fff2e8"],["Finance","Expenses and payments","₹","/expenses","#eaf3ff"],
-    ["Reports","Company performance","▤","/reports","#edf8f0"],["All sites","Browse the portfolio","⌂","/projects","#f4efff"],
-    ["Purchase orders","Review PO activity","▣","/procure?tab=po","#fff7e5"],["Pending deliveries","Follow up material","↗","/procure/pending","#e9f8f7"],
-    ["Vendors","Vendor directory","▤","/vendors","#fff0f0"],["Assign task","Create and follow up work","✓","/tasks","#f3f1ff"],
-    ["Administration","Access and settings","⚙","/admin-access","#f1f4f7"],["Site reports","Daily progress reports","▤","/dpr","#eef6ff"],["Muster","Workforce attendance","●","/attendance","#eef8f2"]
-  ];
-  const metrics = [["Active projects",pj.active+pj.hold+pj.delayed,pj.total+" projects on record"],["Average progress",pj.avg+"%","Projects with reported progress"],["Present today",man.inNow,man.roll+" workers on roll"]];
-  const followups = [["Money approvals",appr.petty+appr.claims+appr.adv,"Claims, advances and petty cash","/approvals"],["PO approvals",appr.po,"Waiting for review","/procure"],["Sites without today's DPR",missingDpr,"Daily report follow-up","/dpr"],["Pending deliveries",pendCount,"Material still due at site","/procure/pending"]];
-  return <div style={{marginTop:22}}>
-    <div style={{display:"flex",alignItems:"end",justifyContent:"space-between",gap:12,marginBottom:13,flexWrap:"wrap"}}>
-      <div><div style={{color:"#c65b13",fontSize:10,letterSpacing:".14em",fontWeight:800,textTransform:"uppercase"}}>Director workspace</div><h2 style={{margin:"5px 0 0",color:"#172033",fontSize:21,letterSpacing:"-.025em"}}>Portfolio overview</h2><div style={{color:"#727b89",fontSize:13,marginTop:3}}>Live project health and decisions across your sites.</div></div>
-      <button type="button" onClick={onProjects} style={{border:"1px solid #d6dbe2",background:"#fff",borderRadius:10,padding:"9px 13px",fontWeight:700,color:"#243047",cursor:"pointer"}}>Open all sites →</button>
+function DirectorWorkspace({ pj, appr, missingDpr, man, weekData, pendCount, pos, billing, autoTasks, myTasks, taskPending, directorName, onProjects, onSite, onComplete, desk }) {
+  const first = (name) => String(name || "").trim().split(/\s+/)[0] || "there";
+  const inTransit = pos.filter(p => p.delivery_status === "dispatched").length;
+  const partial = pos.filter(p => p.delivery_status === "partial").length;
+  const totalApprovals = appr.po + appr.adv + appr.claims + appr.petty;
+  const health = p => p.status === "delayed" ? "#ef4444" : p.status === "on_hold" ? "#f59e0b" : p.status === "completed" ? "#94a3b8" : "#22a45d";
+  const initial = n => String(n || "?").replace(/[^A-Za-z ]/g,"").split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase() || "?";
+  const fmt = n => crore(Number(n)||0);
+  const maxTrend = Math.max(1,...(billing?.billed||[]),...(billing?.collected||[]));
+  const months = billing?.months || [];
+  const route = (web,mobilePath) => desk ? web : (mobilePath || web);
+  const chip = (txt, tone, href) => <Link href={href} key={txt} style={{display:"inline-flex",alignItems:"center",gap:6,whiteSpace:"nowrap",padding:"7px 11px",borderRadius:999,background:tone.bg,color:tone.fg,textDecoration:"none",fontSize:12,fontWeight:700,border:"1px solid "+tone.border}}>{txt}<span aria-hidden="true">→</span></Link>;
+  const tile = (title, children, href, cls="") => <Link href={href} style={{textDecoration:"none",color:"#1f2937",gridColumn:cls==="wide"?"span 2":undefined,display:"block",minWidth:0}}>
+    <article style={{height:"100%",minHeight:desk?164:150,background:"#fff",border:"1px solid #e6e2d9",borderRadius:17,padding:15,boxShadow:"0 2px 8px rgba(31,41,55,.045)",overflow:"hidden"}}>
+      <h3 style={{fontSize:14,margin:"0 0 10px",display:"flex",justifyContent:"space-between",alignItems:"center",fontWeight:750}}>{title}<span style={{fontSize:12,color:"#f26a1b"}}>↗</span></h3>{children}
+    </article>
+  </Link>;
+  return <div style={{background:"#f3f0ea",color:"#1f2937",padding:"0 0 8px"}}>
+    {desk && (    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+      <div style={{width:42,height:42,borderRadius:"50%",background:"linear-gradient(135deg,#ffb27a,#f26a1b)",color:"#fff",display:"grid",placeItems:"center",fontWeight:800,fontSize:17,boxShadow:"0 3px 9px #f26a1b33"}}>{initial(directorName)}</div>
+      <div style={{minWidth:0,flex:1}}><div style={{fontSize:10,color:"#6b7280",fontWeight:800,letterSpacing:".08em",textTransform:"uppercase"}}>Director · {new Intl.DateTimeFormat("en-IN",{weekday:"short",day:"2-digit",month:"short",timeZone:"Asia/Kolkata"}).format(new Date())}</div><div style={{fontSize:18,fontWeight:800,color:"#0f1b3a"}}>Portfolio at a glance</div></div>
+      <button type="button" onClick={onProjects} style={{border:"1px solid #e6e2d9",borderRadius:10,background:"#fff",padding:"9px 12px",fontWeight:700,color:"#1f2937",cursor:"pointer"}}>All sites&nbsp; →</button>
+    </div>    )}
+    <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:4,marginBottom:11}}>
+      {chip("✅ "+totalApprovals+" approvals",{bg:"#fff0dc",fg:"#8a4b08",border:"#f2d5b4"},route("/approvals","/m/approvals"))}
+      {chip("📋 "+missingDpr+" DPR missing",{bg:"#fff0f0",fg:"#ad2929",border:"#f2caca"},route("/dpr","/m/dpr"))}
+      {chip("₹ Payables · ageing unavailable",{bg:"#f1efff",fg:"#5d45a7",border:"#ded9f7"},route("/expenses","/m/money"))}
+      {chip("🚚 "+inTransit+" in transit",{bg:"#eef2f7",fg:"#334155",border:"#dce2eb"},route("/procure/pending","/m/deliveries"))}
     </div>
-    <div style={{display:"grid",gridTemplateColumns:desk?"repeat(3,minmax(0,1fr))":"repeat(auto-fit,minmax(145px,1fr))",gap:10}}>
-      {metrics.map(([label,value,note],i)=><div key={label} style={{background:"#fff",border:"1px solid #e4e7eb",borderRadius:16,padding:"16px 17px"}}><div style={{color:"#6b7280",fontSize:11,fontWeight:700,letterSpacing:".08em",textTransform:"uppercase"}}>{label}</div><div style={{fontSize:25,fontWeight:800,color:i===1?"#b95416":"#172033",marginTop:7}}>{value}</div><div style={{fontSize:12,color:"#727b89",marginTop:4}}>{note}</div></div>)}
+    <div style={{display:"grid",gridTemplateColumns:desk?"repeat(4,minmax(0,1fr))":"repeat(2,minmax(0,1fr))",gap:11}}>
+      <Link href="/projects" style={{textDecoration:"none",color:"#fff",gridColumn:"span 2"}}>
+        <article style={{height:"100%",minHeight:desk?164:150,borderRadius:17,padding:15,background:"linear-gradient(120deg,#ff8a3d,#f26a1b 58%,#d8530a)",boxShadow:"0 7px 16px #d8530a28",overflow:"hidden"}}>
+          <h3 style={{fontSize:14,margin:"0 0 10px",fontWeight:750}}>Portfolio</h3>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+            <div><div style={{fontSize:23,fontWeight:850}}>{fmt(pj.invoiced)}</div><small style={{opacity:.9}}>billed of {fmt(pj.contract)} contract</small></div>
+            <div style={{width:67,height:67,borderRadius:"50%",border:"6px solid #ffffff48",borderTopColor:"#fff",display:"grid",placeItems:"center",fontSize:16,fontWeight:800}}>{pj.avg}%</div>
+          </div>
+          <div style={{height:7,background:"#ffffff40",borderRadius:8,margin:"9px 0 7px",overflow:"hidden"}}><div style={{height:"100%",width:pj.contract?Math.min(100,pj.invoiced/pj.contract*100)+"%":"0%",background:"#fff",borderRadius:8}}/></div>
+          <small>{pj.total} sites · {pj.active} active · {pj.hold} on hold · {pj.delayed} delayed · average progress {pj.avg}%</small>
+        </article>
+      </Link>
+      {tile("Approvals",<><div style={{fontSize:28,fontWeight:850,color:"#0f1b3a"}}>{totalApprovals}</div><div style={{display:"flex",height:8,borderRadius:9,overflow:"hidden",margin:"9px 0 6px"}}>{[[appr.petty,"#f59e0b"],[appr.claims,"#3b82f6"],[appr.adv,"#7c3aed"],[appr.po,"#ef4444"]].map(([n,c],i)=><i key={i} style={{flex:Math.max(0,n),minWidth:n?4:0,background:c}}/>)}</div><small style={{color:"#6b7280"}}>Petty {appr.petty} · Claims {appr.claims} · Advances {appr.adv} · PO {appr.po}</small></> ,route("/approvals","/m/approvals"))}
+      {tile("DPR today",<div style={{display:"flex",alignItems:"center",gap:10}}><svg width="76" height="76" viewBox="0 0 76 76" aria-label={Math.max(0,pj.total-missingDpr)+" sites filed DPR out of "+pj.total}><circle cx="38" cy="38" r="29" fill="none" stroke="#fbd0d0" strokeWidth="10"/><circle cx="38" cy="38" r="29" fill="none" stroke="#22a45d" strokeWidth="10" strokeDasharray={(pj.total?Math.max(0,pj.total-missingDpr)/pj.total:0)*182+" 182"} transform="rotate(-90 38 38)"/><text x="38" y="42" textAnchor="middle" fontSize="12" fontWeight="800" fill="#1f2937">{Math.max(0,pj.total-missingDpr)}/{pj.total}</text></svg><div><b style={{fontSize:18}}>{missingDpr}</b><div style={{fontSize:11,color:"#6b7280"}}>sites missing</div></div></div>,route("/dpr","/m/dpr"))}
+      <div style={{gridColumn:"span 2"}}>{tile("Manpower · last 7 days",<><div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}><b style={{fontSize:22}}>{man.inNow} <small style={{fontSize:11,fontWeight:500,color:"#6b7280"}}>on site today</small></b><small style={{color:"#1a8f3c",fontWeight:700}}>{weekData.length>1?((weekData.at(-1)?.n||0)-(weekData.at(-2)?.n||0)>=0?"▲ ":"▼ ")+Math.abs((weekData.at(-1)?.n||0)-(weekData.at(-2)?.n||0))+" vs yesterday":"Live attendance"}</small></div><div style={{height:64,display:"flex",alignItems:"end",gap:7,marginTop:5}}>{weekData.map((d,i)=><div key={d.date} title={d.date+": "+d.n+" present"} style={{flex:1,textAlign:"center"}}><div style={{height:Math.max(3,Math.round((d.n/Math.max(1,...weekData.map(x=>x.n)))*43)),background:i===weekData.length-1?"#f26a1b":"#fbc9a5",borderRadius:"4px 4px 0 0"}}/><small style={{fontSize:9,color:"#6b7280"}}>{d.day}</small></div>)}</div></>,route("/attendance","/m/muster"))}</div>
+      {tile("Deliveries",<><div style={{fontSize:26,fontWeight:850}}>{pendCount}</div><small style={{color:"#6b7280"}}>pending delivery lines</small><div style={{display:"flex",height:8,borderRadius:9,overflow:"hidden",margin:"10px 0 7px"}}>{[[pendCount,"#f59e0b"],[inTransit,"#3b82f6"],[partial,"#7c3aed"]].map(([n,c],i)=><i key={i} style={{flex:Math.max(n,0),minWidth:n?4:0,background:c}}/>)}</div><small style={{color:"#6b7280"}}>{inTransit} in transit · {partial} partial</small></>,route("/procure/pending","/m/deliveries"))}
+      {tile("Payables",<><div style={{fontSize:24,fontWeight:850,color:"#6b7280"}}>—</div><div style={{display:"flex",gap:5,margin:"13px 0 8px"}}>{["#ef4444","#f59e0b","#3b82f6","#94a3b8"].map(c=><i key={c} style={{height:8,flex:1,background:c,borderRadius:5,opacity:.35}}/>)}</div><small style={{color:"#6b7280"}}>Payable ageing is not recorded in the current finance data.</small></>,route("/expenses","/m/money"))}
+      <div style={{gridColumn:"span 2"}}>{tile("Billed vs Collected · last 6 months",<><div style={{display:"flex",gap:13,fontSize:10.5,color:"#6b7280",marginBottom:3}}><span><i style={{display:"inline-block",width:8,height:8,background:"#f26a1b",borderRadius:9,marginRight:5}}/>Billed</span><span><i style={{display:"inline-block",width:8,height:8,background:"#22a45d",borderRadius:9,marginRight:5}}/>Collected</span></div><div style={{height:75,display:"flex",alignItems:"end",gap:9}}>{months.map((m,i)=>{const a=billing?.billed?.[i]||0,b=billing?.collected?.[i]||0;return <div key={m} title={m+": billed "+inr(a)+", collected "+inr(b)} style={{flex:1,display:"flex",alignItems:"end",justifyContent:"center",gap:3,height:"100%"}}><i style={{height:Math.max(a?3:0,a/maxTrend*54),width:"35%",background:"#f26a1b",borderRadius:"4px 4px 0 0"}}/><i style={{height:Math.max(b?3:0,b/maxTrend*54),width:"35%",background:"#22a45d",borderRadius:"4px 4px 0 0"}}/></div>})}</div><div style={{display:"flex",gap:9,justifyContent:"space-around",fontSize:9,color:"#6b7280",marginTop:4}}>{months.map(m=><span key={m}>{new Intl.DateTimeFormat("en-IN",{month:"short",timeZone:"Asia/Kolkata"}).format(new Date(m+"-01T12:00:00"))}</span>)}</div>{!billing&&<small style={{color:"#6b7280"}}>Loading verified RA bill totals…</small>}{billing?.error&&<small style={{color:"#ad2929"}}>Billing trend is unavailable right now.</small>}{billing&&!billing.error&&!(billing.billed||[]).some(x=>x>0)&&!(billing.collected||[]).some(x=>x>0)&&<small style={{color:"#6b7280"}}>No RA bills recorded in this period.</small>}</>,route("/expenses","/m/report"))}</div>
+      <div style={{gridColumn:"span 2"}}>{tile("Site health",<><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(28px,1fr))",gap:5}}>{pj.all.slice(0,28).map(p=><button key={p.id} type="button" title={p.name+" · "+(ST_META[p.status]?.[0]||p.status)} onClick={e=>{e.preventDefault();onSite(p.id)}} style={{width:"100%",aspectRatio:"1",border:0,borderRadius:7,background:health(p),color:"#fff",fontSize:9,fontWeight:800,cursor:"pointer"}}>{initial(p.name)}</button>)}</div><div style={{display:"flex",gap:11,flexWrap:"wrap",marginTop:9,fontSize:10,color:"#6b7280"}}>{[["#22a45d","Active"],["#ef4444","Delayed"],["#f59e0b","On hold"],["#94a3b8","Other"]].map(([c,l])=><span key={l}><i style={{display:"inline-block",width:8,height:8,borderRadius:8,background:c,marginRight:4}}/>{l}</span>)}</div></>,"/projects")}</div>
     </div>
-    <div style={{display:"grid",gridTemplateColumns:desk?"minmax(0,1.3fr) minmax(290px,.8fr)":"1fr",gap:13,marginTop:13}}>
-      <section style={{background:"#fff",border:"1px solid #e4e7eb",borderRadius:17,padding:16,minWidth:0}}>
-        <div style={{marginBottom:11}}><h3 style={{margin:0,fontSize:15,color:"#172033"}}>Project health</h3><div style={{color:"#7b8490",fontSize:11.5,marginTop:3}}>Active, held and delayed projects</div></div>
-        {pj.live.length?<div style={{display:"grid",gap:7}}>{pj.live.slice(0,6).map(p=>{const meta=ST_META[p.status]||["Active","#15803d"],pct=Math.max(0,Math.min(100,Number(p.progress)||0));return <button type="button" key={p.id} onClick={()=>onSite(p.id)} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:"6px 12px",alignItems:"center",width:"100%",textAlign:"left",background:"#fbfcfd",border:"1px solid #edf0f3",borderRadius:12,padding:"10px 11px",cursor:"pointer",color:"#172033"}}><span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:13,fontWeight:700}}>{p.name}</span><span style={{color:meta[1],fontSize:10.5,fontWeight:800}}>{meta[0]}</span><span style={{height:5,background:"#e9edf1",borderRadius:8,overflow:"hidden"}}><span style={{display:"block",width:p.progress==null?"0%":pct+"%",height:"100%",background:meta[1],borderRadius:8}}/></span><span style={{color:"#667085",fontSize:11,textAlign:"right"}}>{p.progress==null?"No update":pct+"%"}</span></button>})}</div>:<div style={{padding:24,textAlign:"center",color:"#7b8490",fontSize:13}}>No active projects to show.</div>}
-      </section>
-      <section style={{background:"#fff",border:"1px solid #e4e7eb",borderRadius:17,padding:16}}>
-        <div style={{marginBottom:7}}><h3 style={{margin:0,fontSize:15,color:"#172033"}}>Needs attention</h3><div style={{color:"#7b8490",fontSize:11.5,marginTop:3}}>Live queues and daily follow-up</div></div>
-        {followups.map(([label,count,note,href])=><Link key={label} href={href} style={{textDecoration:"none",color:"#172033",display:"flex",alignItems:"center",gap:10,borderTop:"1px solid #edf0f3",padding:"11px 0"}}><span style={{flex:1}}><b style={{display:"block",fontSize:12.5}}>{label}</b><span style={{display:"block",color:"#7b8490",fontSize:11,marginTop:3}}>{note}</span></span><b style={{color:count?"#b95416":"#16804a",fontSize:19}}>{count}</b><span style={{color:"#9aa2ad"}}>›</span></Link>)}
-      </section>
-    </div>
-    <div style={{display:"grid",gridTemplateColumns:desk?"minmax(260px,.7fr) minmax(0,1.5fr)":"1fr",gap:13,marginTop:13}}>
-      <section style={{background:"#fff",border:"1px solid #e4e7eb",borderRadius:17,padding:16}}><h3 style={{margin:0,fontSize:15,color:"#172033"}}>Attendance this week</h3><div style={{color:"#7b8490",fontSize:11.5,marginTop:3}}>Workers marked present each day</div><div style={{display:"flex",alignItems:"end",gap:8,height:102,marginTop:15}}>{(weekData||[]).map(d=><div key={d.date} title={d.date+": "+d.n+" present"} style={{flex:1,textAlign:"center"}}><div style={{fontSize:10,color:"#727b89",marginBottom:4}}>{d.n}</div><div style={{height:Math.max(5,Math.round((Number(d.n)||0)/peak*60)),background:"#cf6a2b",borderRadius:"5px 5px 2px 2px"}}/><div style={{color:"#727b89",fontSize:10,marginTop:5}}>{d.day}</div></div>)}</div></section>
-      <section style={{background:"#fff",border:"1px solid #e4e7eb",borderRadius:17,padding:16}}><h3 style={{margin:0,fontSize:15,color:"#172033"}}>Workspace</h3><div style={{color:"#7b8490",fontSize:11.5,marginTop:3,marginBottom:11}}>Go straight to a module</div><div style={{display:"grid",gridTemplateColumns:desk?"repeat(4,minmax(0,1fr))":"repeat(auto-fit,minmax(138px,1fr))",gap:8}}>{modules.map(([title,desc,icon,href,tint])=><Link key={title} href={href} style={{minHeight:64,padding:10,display:"flex",gap:9,alignItems:"center",background:tint,borderRadius:12,textDecoration:"none",color:"#202b3b",border:"1px solid rgba(23,32,51,.045)"}}><span style={{width:31,height:31,borderRadius:9,background:"rgba(255,255,255,.82)",display:"grid",placeItems:"center",color:"#34445d",fontWeight:800,flexShrink:0}}>{icon}</span><span style={{minWidth:0}}><b style={{display:"block",fontSize:11.5,lineHeight:1.2}}>{title}</b><span style={{display:"block",fontSize:10,color:"#687386",lineHeight:1.25,marginTop:3}}>{desc}</span></span></Link>)}</div></section>
-    </div>
+    <section style={{marginTop:15}}><h2 style={{fontSize:16,margin:"0 0 8px",color:"#1f2937"}}>Modules</h2><div style={{display:"flex",gap:7,overflowX:desk?"visible":"auto",flexWrap:desk?"wrap":"nowrap",paddingBottom:4}}>
+      {[
+        ["My Expenses","🧾","/my-expenses","/m/my-expenses"],["Finance","💰","/expenses","/m/money"],["Analytics","📊","/reports","/m/report"],["All Sites","🏗","/projects","/projects"],["PO","📄","/procure?tab=po","/m/order"],["Pending Del.","🚚","/procure/pending","/m/deliveries"],["Vendors","🏢","/vendors","/vendors"],["Assign Task","📝","/tasks","/m/tasks"],["Admin","⚙","/admin-access","/admin-access"],["Site Report","📋","/dpr","/m/dpr"]
+      ].map(([label,ico,webHref,mobHref])=><Link key={label} href={route(webHref,mobHref)} style={{minWidth:desk?78:72,width:desk?82:76,flexShrink:0,textAlign:"center",textDecoration:"none",color:"#1f2937",fontSize:10.5,fontWeight:650}}><span style={{margin:"0 auto 4px",width:40,height:40,borderRadius:"50%",display:"grid",placeItems:"center",background:"#fff",border:"1px solid #e6e2d9",fontSize:19}}>{ico}</span>{label}</Link>)}
+    </div></section>
+    <section style={{marginTop:14,background:"#fff",border:"1px solid #e6e2d9",borderRadius:16,padding:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><h2 style={{margin:0,fontSize:16}}>My tasks today</h2><Link href={route("/tasks","/m/tasks")} style={{color:"#f26a1b",fontSize:12,textDecoration:"none"}}>View all →</Link></div>
+      <div style={{display:"flex",gap:7,marginBottom:8}}>{taskPending>0&&<span style={{background:"#c62828",color:"#fff",borderRadius:20,padding:"3px 9px",fontSize:10,fontWeight:800}}>{taskPending} pending</span>}<button type="button" onClick={()=>window.dispatchEvent(new Event("psk-open-quick-action"))} style={{border:0,background:"#fff3e8",color:"#b95416",borderRadius:20,padding:"3px 9px",fontSize:10,fontWeight:700}}>＋ Assign task</button></div>
+      {[...autoTasks.map((t,i)=>({...t,_key:"auto"+i})),...myTasks.map(t=>({...t,_key:"task"+t.id}))].slice(0,6).map(t=><div key={t._key} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 0",borderTop:"1px solid #f0eee9"}}>
+        <span style={{width:29,height:29,borderRadius:9,background:"#f7f4ee",display:"grid",placeItems:"center"}}>{t.ico||"📝"}</span><span style={{flex:1,minWidth:0}}><b style={{display:"block",fontSize:12,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.name||t.title}</b><small style={{color:"#6b7280"}}>{t.desc||("Assigned: "+(t.assignee||"Team")+" · "+(t.priority||"Normal"))}</small></span><span style={{fontSize:10,color:t.done?"#1a8f3c":"#d97706",fontWeight:750}}>{t.done?"Done":t.status||"Pending"}</span>{t.id&&t.status!=="completed"&&<button type="button" onClick={()=>onComplete(t)} aria-label="Mark task done" style={{border:"1px solid #d6e9dc",borderRadius:9,padding:"5px 8px",background:"#fff",color:"#1a8f3c",fontSize:10,fontWeight:700}}>Done</button>}
+      </div>)}
+      {!autoTasks.length&&!myTasks.length&&<div style={{fontSize:12,color:"#6b7280",padding:"12px 0"}}>No tasks due today.</div>}
+    </section>
   </div>;
 }
 
@@ -193,6 +222,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   const [expId, setExpId] = useState(null);
   const [tasks, setTasks] = useState(null);
   const [pendCount, setPendCount] = useState(0);   // update256: PO lines still awaiting delivery
+  const [billingTrend, setBillingTrend] = useState(null);
   // update449: the Home tab's own site picker — every role. "all" = every site the person is allotted
   // (Directors: the company portfolio). A real site also becomes the session's current site, so
   // Muster / DPR / Stock / Indent open on it — ONE selection drives all mobile pages (same as before).
@@ -313,6 +343,50 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
       site: all.find(p => String(p.id) === String(viewSiteId)) || null };
   }, [projects, viewSiteId]);
 
+  const billingSiteKey = pj.all.map(p => p.id).join(",");
+  useEffect(() => {
+    if (!companyView || !billingSiteKey || isDemo || !supabase) { if (!companyView) setBillingTrend(null); return; }
+    let alive = true;
+    (async () => {
+      const ids = billingSiteKey.split(",").filter(Boolean).map(Number);
+      const months = [];
+      const now = new Date(todayLocal() + "T12:00:00");
+      for (let i = 5; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); months.push(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")); }
+      const empty = Object.fromEntries(months.map(m => [m,{ billed:0, collected:0 }]));
+      try {
+        const { data: bills, error: be } = await supabase.from("ra_bills").select("id, site_id, bill_no, bill_date, status, billing_mode, material_pct, install_pct").in("site_id",ids).order("site_id").order("bill_no");
+        if (be) throw be;
+        const billIds = (bills || []).map(b => b.id);
+        if (!billIds.length) { if(alive) setBillingTrend({months,billed:months.map(()=>0),collected:months.map(()=>0)}); return; }
+        const [{data:lines,error:le},{data:boq,error:qe}] = await Promise.all([
+          supabase.from("ra_bill_lines").select("ra_bill_id, boq_item_id, cum_qty, cum_material_qty, cum_install_qty, cum_tc_qty, rate, sup_pct, ins_pct, tc_pct").in("ra_bill_id",billIds),
+          supabase.from("boq_items").select("id, rate").in("site_id",ids)
+        ]);
+        if (le) throw le; if (qe) throw qe;
+        const rates = Object.fromEntries((boq||[]).map(x=>[x.id,Number(x.rate)||0]));
+        const byBill = new Map();
+        (lines||[]).forEach(l=>{const a=byBill.get(l.ra_bill_id)||[];a.push(l);byBill.set(l.ra_bill_id,a);});
+        const prior = new Map();
+        for (const bill of (bills||[])) {
+          const lineRows=byBill.get(bill.id)||[];
+          const cumulative=lineRows.reduce((sum,l)=>{
+            const rate=l.rate!=null?Number(l.rate):(rates[l.boq_item_id]||0);
+            if(bill.billing_mode==="staged") return sum+rate*((Number(l.cum_material_qty)||0)*(Number(l.sup_pct)||0)+(Number(l.cum_install_qty)||0)*(Number(l.ins_pct)||0)+(Number(l.cum_tc_qty)||0)*(Number(l.tc_pct)||0))/100;
+            if(bill.billing_mode==="split") return sum+(Number(l.cum_material_qty)||0)*rate*(Number(bill.material_pct)||0)/100+(Number(l.cum_install_qty)||0)*rate*(Number(bill.install_pct)||0)/100;
+            return sum+(Number(l.cum_qty)||0)*rate;
+          },0);
+          const prev=prior.get(bill.site_id)||0, amount=Math.max(0,cumulative-prev);
+          prior.set(bill.site_id,cumulative);
+          if(["certified","paid"].includes(bill.status)) {
+            const month=String(bill.bill_date||"").slice(0,7);
+            if(empty[month]) { empty[month].billed+=amount; if(bill.status==="paid") empty[month].collected+=amount; }
+          }
+        }
+        if(alive) setBillingTrend({months,billed:months.map(m=>empty[m].billed),collected:months.map(m=>empty[m].collected)});
+      } catch { if(alive) setBillingTrend({months:[],billed:[],collected:[],error:true}); }
+    })();
+    return()=>{alive=false;};
+  }, [companyView,billingSiteKey]);
   const inSite = rows => allView ? rows : rows.filter(r => String(r.site_id) === String(viewSiteId));   // update449: allView
   const presentCount = rows => rows.filter(r => (r.in && r.in !== "—") || r.status === "present" || r.status === "half_day").length;
 
@@ -393,6 +467,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
   return (
     <div style={{ background: "var(--bg)", minHeight: desk ? 0 : "100dvh", paddingBottom: desk ? 24 : "calc(128px + env(safe-area-inset-bottom))" }}>{/* update265: clears the fixed nav AND the floating chat bubble */}
       <div style={{ padding: desk ? "18px 28px 0" : "14px 12px 0", maxWidth: desk ? "none" : 1100, margin: desk ? 0 : "0 auto" }}>
+        {!companyView && (
         <div style={{ background: "linear-gradient(140deg, " + NAVY + " 0%, " + NAVY2 + " 100%)", color: "#fff", borderRadius: 18, padding: 17, boxShadow: "0 10px 26px rgba(15,26,46,0.28)", position: "relative", overflow: "hidden" }}>{/* update265b: hard containment */}
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -423,6 +498,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
             <HeroStat ico="👥" label={allView ? "Total workforce" : "Workforce"} value={workers === null ? "…" : man.roll + " on roll"} />
           </div>
         </div>
+        )}
 
         {/* update449: site sheet — same list the Muster / DPR screens use (the person's allotted sites) */}
         {pickOpen && (
@@ -440,7 +516,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
           </div>
         )}
 
-        {companyView ? <DirectorWorkspace pj={pj} appr={appr} missingDpr={dprMissing.length} man={man} weekData={weekData} pendCount={pendCount} desk={desk} onProjects={openProjects} onSite={id => { setAsSite(Number(id)); window.scrollTo({ top: 0, behavior: "smooth" }); }} /> : (
+        {companyView ? <DirectorWorkspace pj={pj} appr={appr} missingDpr={dprMissing.length} man={man} weekData={weekData} pendCount={pendCount} pos={pos} billing={billingTrend} autoTasks={autoTasks} myTasks={myTasks} taskPending={taskPending} directorName={sess?.name || sess?.full_name} desk={desk} onProjects={openProjects} onComplete={completeTask} onSite={id => { setAsSite(Number(id)); window.scrollTo({ top: 0, behavior: "smooth" }); }} /> : (
           <Section title="Quick access">
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(86px, 1fr))", gap: 9 }}>
               {tiles.map(([ico, label, href, badge]) => (
@@ -454,7 +530,7 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
         {/* update230: TASKS ON HOME — the separate Tasks tab is gone; everything lives here.
             Auto tasks are computed live from the same operational data (never stored). */}
         <div id="home-tasks" />
-        <Section title="My tasks today"
+        {!companyView && <Section title="My tasks today"
           action={<span style={{ display: "flex", gap: 10, alignItems: "center" }}>
             {taskPending > 0 && <span style={{ background: "var(--red)", color: "#fff", borderRadius: 999, padding: "2px 10px", fontSize: 11.5, fontWeight: 800 }}>{taskPending} pending</span>}
             <Link href="/tasks" style={{ fontSize: 12.5, color: COPPER, fontWeight: 700 }}>{isDirector ? "Assign / all →" : "All tasks →"}</Link>
@@ -491,9 +567,9 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
             ); })}
             {autoTasks.length + myTasks.length === 0 && <div className="muted" style={{ fontSize: 12.5 }}>{tasks === null ? "Loading tasks…" : "Nothing due today. 🎉"}</div>}
           </div>
-        </Section>
+        </Section>}
 
-        <Section title={companyView ? "Manpower — company wide" : "Manpower today"}
+        {!companyView && <Section title="Manpower today"
           action={<Link href="/attendance" style={{ fontSize: 12.5, color: COPPER, fontWeight: 700 }}>Full register →</Link>}>
           <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
             <TrioCard v={att === null ? "…" : man.inNow} l="Marked in today" />
@@ -501,11 +577,11 @@ export default function HomeDashboard({ mode = "mobile", asSite = null, setAsSit
             <TrioCard v={man.pct + "%"} l="Deployment" color="var(--green)" />
           </div>
           {weekData.length > 0 && <WeekChart data={weekData} />}
-        </Section>
+        </Section>}
 
         {/* update238: each row appears only if this person may actually act on it. Open indents
             is NOT an approval — it is a work queue — so it stays for everyone who sees indents. */}
-        {(rights.open || appr.ind > 0) && (
+        {!companyView && (rights.open || appr.ind > 0) && (
           <Section title={rights.any ? "Pending approvals" : rights.moneyView ? "Pending approvals · view only" : "Pending with you"} action={apprTotal > 0 && rights.open ? <span style={{ background: COPPER, color: "#fff", borderRadius: 999, padding: "2px 10px", fontSize: 12, fontWeight: 800 }}>{apprTotal}</span> : null}>
             {companyView && rights.indent && <ApprovalRow ico="🧾" title="PO draft approvals" sub="Awaiting your approval" count={appr.po} href="/procure" />}
             {companyView && rights.moneyView && <ApprovalRow ico="₹" title="Advance salary requests" sub="Across all sites" count={appr.adv} href="/expenses" />}

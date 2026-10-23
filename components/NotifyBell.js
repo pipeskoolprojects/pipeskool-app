@@ -20,7 +20,7 @@ function timeAgo(ts) {
 // update353: links baked into older notification rows, remapped at CLICK time.
 const LEGACY = { "/expenses": "/go?to=money", "/approvals": "/go?to=money", "/go?to=approvals": "/go?to=money" };   // update364
 
-export default function NotifyBell({ mobile }) {
+export default function NotifyBell({ mobile, compact = false }) {
   const [open, setOpen] = useState(false);
   const [pstat, setPstat] = useState(null);   // update267: real device push status
   useEffect(() => {
@@ -58,16 +58,18 @@ export default function NotifyBell({ mobile }) {
   }
 
   const btnStyle = mobile
-    ? { position: "fixed", top: "calc(12px + env(safe-area-inset-top))", right: 12, zIndex: 140, width: 38, height: 38, borderRadius: "50%",   // update265c: clear the phone status bar (installed app draws under it)
+    ? { position: "fixed", top: "calc(12px + env(safe-area-inset-top))", right: 12, zIndex: 140, width: 38, height: 38, borderRadius: "50%",
         background: "rgba(255,255,255,0.14)", color: "#fff", border: "none", fontSize: 17, cursor: "pointer" }
-    : { position: "relative", background: "rgba(255,255,255,0.08)", color: "#fff", border: "1px solid rgba(255,255,255,0.15)",
-        borderRadius: 8, width: "100%", padding: "5px 8px", fontSize: 12.5, cursor: "pointer", textAlign: "left" };
+    : compact
+      ? { position: "relative", width: 38, height: 38, borderRadius: 11, background: "#fff", color: "#1f2937", border: "1px solid #e6e2d9", fontSize: 17, cursor: "pointer" }
+      : { position: "relative", background: "rgba(255,255,255,0.08)", color: "#fff", border: "1px solid rgba(255,255,255,0.15)",
+          borderRadius: 8, width: "100%", padding: "5px 8px", fontSize: 12.5, cursor: "pointer", textAlign: "left" };
 
   return (
     <>
       {(!mobile || !open) && (
       <button onClick={() => { setOpen(o => !o); }} className="no-print" style={btnStyle} title="Notifications">
-        🔔 {!mobile && "Notifications"}
+        🔔 {!mobile && !compact && "Notifications"}
         {unread > 0 && (
           <span style={{ position: "absolute", top: -6, right: -6, background: "var(--copper, #FF7A1A)", color: "#fff",
             borderRadius: 10, fontSize: 10.5, fontWeight: 700, padding: "1px 6px", minWidth: 18, textAlign: "center" }}>
