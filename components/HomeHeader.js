@@ -70,7 +70,7 @@ export default function HomeHeader({ sess, sites, isDirector, asSite, setAsSite,
         <header style={{background:"#f3f0ea",color:INK,padding:"calc(10px + env(safe-area-inset-top)) 16px 10px",position:"relative",zIndex:20}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <Link href="/m/dashboard" style={{flex:1}}><Logo height={25}/></Link>
-            <Link href="/profile" title="Profile" style={{width:38,height:38,borderRadius:"50%",background:NAVY,color:"#fff",textDecoration:"none",display:"grid",placeItems:"center",fontWeight:800}}>{name.charAt(0).toUpperCase()}</Link>
+            <button type="button" title="Open menu" onClick={()=>window.dispatchEvent(new Event("psk-open-more"))} style={{width:38,height:38,borderRadius:"50%",background:NAVY,color:"#fff",border:0,display:"grid",placeItems:"center",fontWeight:800,cursor:"pointer"}}>{name.charAt(0).toUpperCase()}</button>
           </div>
           <div style={{marginTop:13}}>
             <div style={{fontSize:10,color:COPPER,fontWeight:800,letterSpacing:".1em",textTransform:"uppercase"}}>{greet} · {date}</div>
