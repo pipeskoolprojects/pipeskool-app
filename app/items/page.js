@@ -284,9 +284,9 @@ export default function ItemsPage() {
             </div>
             <div style={{ marginTop: 14, maxWidth: 360 }}>
               <label className="muted" htmlFor="material-photo">Material photo</label>
-              <input id="material-photo" type="file" accept="image/*" onChange={e => {
+              <input id="material-photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={e => {
                 const file = e.target.files?.[0]; if (!file) return;
-                if (!file.type.startsWith("image/")) { setErr("Choose an image file."); e.target.value = ""; return; }
+                if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) { setErr("Choose a JPG, PNG or WebP image."); e.target.value = ""; return; }
                 if (file.size > 12 * 1024 * 1024) { setErr("Choose an image smaller than 12 MB."); e.target.value = ""; return; }
                 set("photoFile", file); set("photoPreview", URL.createObjectURL(file)); setErr("");
               }} style={{ display: "block", width: "100%", marginTop: 5 }} />
