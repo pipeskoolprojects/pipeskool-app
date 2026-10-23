@@ -23,7 +23,7 @@ export default function HomeHeader({ sess, sites, isDirector, asSite, setAsSite,
               On desktop the sidebar already shows who is logged in, so the header carries only the
               controls. The mobile home is unchanged. */}
           {!desk ? (<>
-            <span style={{ width: 40, height: 40, borderRadius: 12, background: "rgba(255,255,255,0.1)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{isDirector ? "👑" : "🔧"}</span>
+            <span aria-hidden="true" style={{ width: 40, height: 40, borderRadius: 12, background: isDirector ? "linear-gradient(145deg, #f08a36, #c65b13)" : "rgba(255,255,255,0.1)", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: isDirector ? 16 : 18, fontWeight: 800, flexShrink: 0 }}>{isDirector ? (String(sess.name || sess.full_name || "D").trim().charAt(0).toUpperCase() || "D") : "🔧"}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 9.5, letterSpacing: 1, color: COPPER, fontWeight: 800, textTransform: "uppercase" }}>{greet}</div>
               <div style={{ fontSize: 17, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
