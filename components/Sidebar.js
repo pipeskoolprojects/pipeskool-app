@@ -146,7 +146,7 @@ export default function Sidebar() {
       ["/admin-access", "Admin & access"], ["/access", "Access Rights"], ["/sitemaster", "Site Master (timings)"], ["/backup", "Backup & Restore"], ["/tickets", "Support Tickets"]
     ];
     const adminOpen = open.Admin ?? directorAdminLinks.some(([href]) => path === href);
-    return <><AuthLostBanner /><aside className="sidebar director-sidebar" style={{width:240,flexShrink:0,height:"100dvh",position:"sticky",top:0,overflowY:"auto",background:"#0f1b3a",color:"#fff",display:"flex",flexDirection:"column",boxShadow:"2px 0 12px #0f1b3a18"}}>
+    return <><AuthLostBanner /><aside className="sidebar director-sidebar" style={{width:240,flexShrink:0,height:"100dvh",position:"sticky",top:0,overflowY:"auto",background:"#0f1b3a",color:"#fff",flexDirection:"column",boxShadow:"2px 0 12px #0f1b3a18"}}>
       <button className="sidebar-hide" title="Hide menu (more screen space)" aria-label="Hide menu" onClick={() => toggleHidden(true)}>⟨</button>
       <div style={{padding:"19px 18px 16px",borderBottom:"1px solid #ffffff16"}}><Link href="/home" style={{display:"inline-block"}}><Logo height={25} variant="white"/></Link><div style={{fontSize:10,color:"#aebbd1",marginTop:7}}>Director Workspace</div></div>
       <div style={{padding:"14px 16px",borderBottom:"1px solid #ffffff16",display:"flex",alignItems:"center",gap:10}}>
