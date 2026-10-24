@@ -6,6 +6,7 @@ import Sidebar from "@/components/Sidebar";
 import DashboardView from "@/components/DashboardView";
 import SupervisorDashboard from "@/components/SupervisorDashboard";
 import AccountantDashboard from "@/components/AccountantDashboard";
+import ITDashboardHome from "@/components/ITDashboardHome";
 import { getSession } from "@/lib/auth";
 
 export default function DashboardPage() {
@@ -22,6 +23,7 @@ export default function DashboardPage() {
   }, [router]);
 
   if (!sess) return null;
+  if (String(sess.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive") return <ITDashboardHome sess={sess} mode="desktop" />;
 
   return (
     <div className="layout">
