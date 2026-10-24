@@ -200,6 +200,7 @@ html[data-p=ios] .tab em{height:26px}
 html[data-frame=off] .fabwrap{position:fixed;left:0;right:0}
 .fab{position:absolute;bottom:0;right:16px;width:56px;height:56px;border-radius:18px;background:linear-gradient(145deg,var(--a2),var(--a));color:#fff;font-size:24px;box-shadow:0 14px 28px -8px var(--a)}
 @media(max-width:760px){.st-l span{display:none}.studio{padding:0 10px}}
+html[data-layout=phone] .top{flex-wrap:wrap;align-items:flex-start}html[data-layout=phone] .top h2{flex:none}html[data-layout=phone] .top .r{width:100%;justify-content:space-between;flex-wrap:wrap}.empty-note{pointer-events:none}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}.flow::after{display:none}}
 </style>
 </head>
 <body>
@@ -225,7 +226,7 @@ html[data-frame=off] .fabwrap{position:fixed;left:0;right:0}
     <main>
       <div class="top">
         <h2>IT Command Center</h2>
-        <div class="r"><select id="siteSelect" class="chip site-chip" aria-label="Select site"><option value="">Select site</option></select><span class="chip" id="bellChip">🔔 <span id="bellCount">0</span></span><button class="theme" id="theme" aria-label="Toggle dark or light mode"><span>☀️</span><span>🌙</span><i></i></button>
+        <div class="r"><select id="siteSelect" class="chip site-chip" aria-label="Select site"><option value="">Select site</option></select><span class="chip" id="bellChip" data-route="notifications" role="button" tabindex="0">🔔 <span id="bellCount">0</span></span><button class="theme" id="theme" aria-label="Toggle dark or light mode"><span>☀️</span><span>🌙</span><i></i></button>
           <div class="winctl only-win"><span>—</span><span>▢</span><span>✕</span></div></div>
       </div>
 
@@ -436,7 +437,11 @@ $$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerT
     [0,.33,.66,1].forEach((v,i)=>{let y=Y(mx*v);g+='<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y+'" y2="'+y+'" style="stroke:var(--line)"/><text x="'+(pl-8)+'" y="'+(y+3)+'" text-anchor="end" class="axt">'+Math.round(mx*v/1000)+'k</text>'});
     for(let i=0;i<vals.length;i+=2)g+='<text x="'+X(i)+'" y="'+(HH-6)+'" text-anchor="middle" class="axt">'+esc(labels[i]||"")+'</text>';
     if(vals.length)g+='<path d="'+path+'L'+X(vals.length-1)+' '+Y(0)+'L'+X(0)+' '+Y(0)+'Z" fill="url(#ag-live)"/><path d="'+path+'" fill="none" stroke="#ff7a2f" stroke-width="3.2" stroke-linecap="round"/>';
+    g+='<line id="xl-live" y1="'+pt+'" y2="'+(HH-pb)+'" style="stroke:var(--mut)" stroke-dasharray="3 4" opacity="0"/><circle id="xc-live" r="6" style="fill:var(--a);stroke:var(--solid1)" stroke-width="3" opacity="0"/><rect id="hit-live" x="'+pl+'" y="0" width="'+(W-pl-pr)+'" height="'+HH+'" fill="transparent"/>';
     box.querySelector("svg")?.remove();box.insertAdjacentHTML("afterbegin",'<svg viewBox="0 0 '+W+' '+HH+'">'+g+'</svg>');
+    const svg=box.querySelector("svg"),hit=$("#hit-live"),tip=$("#tip"),line=$("#xl-live"),dot=$("#xc-live");
+    hit?.addEventListener("pointermove",e=>{if(!vals.length)return;const r=svg.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W,i=Math.max(0,Math.min(vals.length-1,Math.round((x-pl)/((W-pl-pr)/Math.max(1,vals.length-1)))));line.setAttribute("x1",X(i));line.setAttribute("x2",X(i));dot.setAttribute("cx",X(i));dot.setAttribute("cy",Y(vals[i]));line.style.opacity=dot.style.opacity=1;tip.style.opacity=1;tip.style.left=X(i)/W*100+"%";tip.style.top=Y(vals[i])/HH*100+"%";tip.innerHTML="<b>"+esc(labels[i]||"")+" Oct</b> · "+inr(vals[i])});
+    hit?.addEventListener("pointerleave",()=>{line.style.opacity=dot.style.opacity=0;tip.style.opacity=0});
     empty(box,vals.some(Boolean)?"":"No data yet");
   }
   function drawBars(rows){
