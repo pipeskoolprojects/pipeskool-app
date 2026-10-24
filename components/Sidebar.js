@@ -146,6 +146,7 @@ export default function Sidebar() {
       ["/admin-access", "Admin & access"], ["/access", "Access Rights"], ["/sitemaster", "Site Master (timings)"], ["/backup", "Backup & Restore"], ["/tickets", "Support Tickets"]
     ];
     const adminOpen = open.Admin ?? directorAdminLinks.some(([href]) => path === href);
+    const renderDirectorLink = ([ico,label,href]) => { const active=href==="/home"?path==="/home"||path==="/m/dashboard":path===href; return <Link key={href} href={href} style={{display:"flex",alignItems:"center",gap:11,padding:"9px 11px",borderRadius:9,textDecoration:"none",fontSize:12.5,fontWeight:active?750:550,color:active?"#fff":"#dbe3f1",background:active?"#f26a1b":"transparent",borderLeft:active?"3px solid #ffad71":"3px solid transparent"}}><span style={{width:18,textAlign:"center",fontSize:15}}>{ico}</span>{label}</Link>; };
     return <><AuthLostBanner /><aside className="sidebar director-sidebar" style={{width:240,flexShrink:0,height:"100dvh",position:"sticky",top:0,overflowY:"auto",background:"#0f1b3a",color:"#fff",flexDirection:"column",boxShadow:"2px 0 12px #0f1b3a18"}}>
       <button className="sidebar-hide" title="Hide menu (more screen space)" aria-label="Hide menu" onClick={() => toggleHidden(true)}>⟨</button>
       <div style={{padding:"19px 18px 16px",borderBottom:"1px solid #ffffff16"}}><Link href="/home" style={{display:"inline-block"}}><Logo height={25} variant="white"/></Link><div style={{fontSize:10,color:"#aebbd1",marginTop:7}}>Director Workspace</div></div>
@@ -155,7 +156,9 @@ export default function Sidebar() {
       </div>
       <div style={{padding:"10px 14px"}}><NotifyBell /></div>
       <nav style={{padding:"4px 10px",display:"grid",gap:3}}>
-        {links.map(([ico,label,href])=>{const active=href==="/home"?path==="/home"||path==="/m/dashboard":path===href;return <Link key={href} href={href} style={{display:"flex",alignItems:"center",gap:11,padding:"9px 11px",borderRadius:9,textDecoration:"none",fontSize:12.5,fontWeight:active?750:550,color:active?"#fff":"#dbe3f1",background:active?"#f26a1b":"transparent",borderLeft:active?"3px solid #ffad71":"3px solid transparent"}}><span style={{width:18,textAlign:"center",fontSize:15}}>{ico}</span>{label}</Link>})}
+        {renderDirectorLink(links[0])}
+        {GROUPS.filter(g => g.label === "Core Site Operations").map(g => <Group key={g.label} label={g.label} items={g.items} subs={g.subs} canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} />)}
+        {links.slice(1).map(renderDirectorLink)}
         <button type="button" aria-expanded={adminOpen} onClick={() => toggle("Admin")} style={{width:"100%",display:"flex",alignItems:"center",gap:11,padding:"9px 11px",border:0,borderRadius:9,textAlign:"left",fontSize:12.5,fontWeight:adminOpen||directorAdminLinks.some(([href])=>path===href)?750:550,color:"#dbe3f1",background:"transparent",cursor:"pointer"}}><span style={{width:18,textAlign:"center",fontSize:15}}>⚙</span>Admin<span style={{marginLeft:"auto"}}>{adminOpen?"▾":"▸"}</span></button>
         {adminOpen && <div style={{display:"grid",gap:2,paddingLeft:25}}>{directorAdminLinks.map(([href,label])=><Link key={href} href={href} style={{display:"block",padding:"7px 9px",borderRadius:7,textDecoration:"none",fontSize:11.5,color:path===href?"#fff":"#c5d0e1",background:path===href?"#f26a1b":"transparent"}}>{label}</Link>)}</div>}
       </nav>
