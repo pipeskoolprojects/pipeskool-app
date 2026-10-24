@@ -96,7 +96,7 @@ function buildDashboardData(session, siteId, raw) {
 }
 
 export default function ITDashboardHome({ sess, mode="desktop" }) {
-  const router=useRouter(),frame=useRef(null),[active,setActive]=useState(sess||null),[siteId,setSiteId]=useState(sess?.currentSite||sess?.sites?.[0]?.id||null),[data,setData]=useState(null),[ready,setReady]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[toast,setToast]=useState(""),[moreOpen,setMoreOpen]=useState(false),[notificationOpen,setNotificationOpen]=useState(false);
+  const router=useRouter(),frame=useRef(null),[active,setActive]=useState(sess||null),[siteId,setSiteId]=useState(sess?.currentSite||sess?.sites?.[0]?.id||null),[data,setData]=useState(null),[ready,setReady]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[toast,setToast]=useState(""),[moreOpen,setMoreOpen]=useState(false),[notificationOpen,setNotificationOpen]=useState(false),[frameTimedOut,setFrameTimedOut]=useState(false);
   const site=active?.sites?.find(s=>String(s.id)===String(siteId))||active?.sites?.[0]||null;
   const load=useCallback(async()=>{
     const s=active||sess, sid=site?.id||siteId||"all";
@@ -127,6 +127,7 @@ export default function ITDashboardHome({ sess, mode="desktop" }) {
   },[mode,router]);
   useEffect(()=>{if(active&&isIT(active.role))load()},[active,siteId,load]);
   useEffect(()=>{if(!active)return;const id=setInterval(load,60000);return()=>clearInterval(id)},[active,load]);
+  useEffect(()=>{if(ready){setFrameTimedOut(false);return}const id=setTimeout(()=>setFrameTimedOut(true),12000);return()=>clearTimeout(id)},[ready,siteId]);
   useEffect(()=>{
     if(!data||!frame.current?.contentWindow)return;
     frame.current.contentWindow.postMessage({type:"psk-it-dashboard-data",payload:data},window.location.origin);
@@ -134,6 +135,7 @@ export default function ITDashboardHome({ sess, mode="desktop" }) {
   useEffect(()=>{
     const onMessage=async e=>{
       if(e.origin!==window.location.origin||e.source!==frame.current?.contentWindow)return;
+      if(e.data?.type==="psk-it-dashboard-render-error"){setError("Dashboard data could not be displayed. Retry to reload.");setFrameTimedOut(true);return}
       if(e.data?.type==="psk-it-dashboard-ready"){setReady(true);return}
       if(e.data?.type!=="psk-it-action")return;
       const {action,route}=e.data;
@@ -165,7 +167,7 @@ export default function ITDashboardHome({ sess, mode="desktop" }) {
   const go=path=>{setMoreOpen(false);router.push(path)};const moreOptions=[["Punch","/m"],["Orders","/m/order","indent"],["Expenses","/m/money","money"],["Stock","/m/stock","stock"]].filter(x=>!x[2]||(data?.modules||[]).includes(x[2]));
   if(!active||!isIT(active.role))return <div style={{minHeight:"100dvh",background:"#05070f"}}/>;
   return <div style={{position:"relative",width:"100%",height:"100dvh",minHeight:"100dvh",overflow:"hidden",background:"#05070f"}}>
-    {!ready&&<div style={{position:"absolute",inset:0,zIndex:2,display:"grid",placeItems:"center",background:"#05070f",color:"#f5f7fb",fontFamily:"system-ui,sans-serif"}}><div style={{textAlign:"center"}}><div style={{fontSize:26,marginBottom:8}}>◌</div><b>Loading IT Command Center…</b>{error&&<div style={{marginTop:12}}><span>{error}</span><button onClick={load} style={{marginLeft:12,padding:"8px 12px",borderRadius:10,background:"#ff7a2f",color:"white"}}>Retry</button></div>}</div></div>}
+    {!ready&&<div style={{position:"absolute",inset:0,zIndex:2,display:"grid",placeItems:"center",background:"#05070f",color:"#f5f7fb",fontFamily:"system-ui,sans-serif"}}><div style={{textAlign:"center"}}><div style={{fontSize:26,marginBottom:8}}>◌</div><b>{frameTimedOut?"Dashboard could not finish loading":"Loading IT Command Center…"}</b>{(error||frameTimedOut)&&<div style={{marginTop:12}}><span>{error||"Tap retry to reload the dashboard."}</span><button onClick={()=>{setError("");setFrameTimedOut(false);setReady(false);if(frame.current)frame.current.src="/it-dashboard-home.html?retry="+Date.now();load()}} style={{marginLeft:12,padding:"8px 12px",borderRadius:10,background:"#ff7a2f",color:"white"}}>Retry</button></div>}</div></div>}
     <iframe ref={frame} onLoad={onFrameLoad} title="IT Command Center" src="/it-dashboard-home.html" style={{width:"100%",height:"100%",border:0,display:"block",visibility:ready?"visible":"hidden"}}/>
     {error&&ready&&<div role="alert" style={{position:"fixed",left:"50%",top:12,transform:"translateX(-50%)",zIndex:8,padding:"9px 12px",borderRadius:12,background:"#7f1d1d",color:"#fff",font:"12px system-ui"}}>{error}<button onClick={load} style={{marginLeft:8,color:"#fff",textDecoration:"underline"}}>Retry</button></div>}{busy&&ready&&<div aria-live="polite" style={{position:"fixed",right:12,bottom:mode==="mobile"?92:18,zIndex:5,font:"12px system-ui",color:"#f5f7fb",background:"rgba(12,19,48,.88)",padding:"7px 11px",borderRadius:20}}>Refreshing…</div>}
     {!!toast&&<div role="status" style={{position:"fixed",left:"50%",bottom:mode==="mobile"?86:18,transform:"translateX(-50%)",zIndex:9,padding:"10px 16px",borderRadius:14,background:"#18254a",color:"#fff",boxShadow:"0 10px 30px #0007",font:"13px system-ui"}}>{toast}</div>}
