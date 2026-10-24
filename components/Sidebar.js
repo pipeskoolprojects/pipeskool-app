@@ -138,9 +138,7 @@ export default function Sidebar() {
   if (session?.role === "director") {
     const links = [
       ["🏠","Home","/home"], ["✅","Approvals","/approvals"], ["🧾","My Expenses","/my-expenses"],
-      ["💰","Finance","/expenses"], ["📊","Analytics","/reports"], ["🏗","All Sites","/projects"],
-      ["📄","PO","/procure?tab=po"], ["🚚","Pending Del.","/procure/pending"], ["🏢","Vendors","/vendors"],
-      ["📝","Assign Task","/tasks"], ["📋","Site Report","/dpr"], ["👥","Muster","/attendance"]
+      ["📊","Analytics","/reports"], ["🏗","All Sites","/projects"], ["📝","Assign Task","/tasks"]
     ];
     const directorAdminLinks = [
       ["/admin-access", "Admin & access"], ["/access", "Access Rights"], ["/sitemaster", "Site Master (timings)"], ["/backup", "Backup & Restore"], ["/tickets", "Support Tickets"]
@@ -157,7 +155,8 @@ export default function Sidebar() {
       <div style={{padding:"10px 14px"}}><NotifyBell /></div>
       <nav style={{padding:"4px 10px",display:"grid",gap:3}}>
         {renderDirectorLink(links[0])}
-        {GROUPS.filter(g => g.label === "Core Site Operations").map(g => <Group key={g.label} label={g.label} items={g.items} subs={g.subs} canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} />)}
+        {GROUPS.map(g => <Group key={g.label} label={g.label} items={g.items} subs={g.subs} canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} />)}
+        <Group label="Help" canSee={() => true} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} items={[{ href: "/help?ctx=" + encodeURIComponent(path || "/"), label: "❓ Help Center", module: null }]} />
         {links.slice(1).map(renderDirectorLink)}
         <button type="button" aria-expanded={adminOpen} onClick={() => toggle("Admin")} style={{width:"100%",display:"flex",alignItems:"center",gap:11,padding:"9px 11px",border:0,borderRadius:9,textAlign:"left",fontSize:12.5,fontWeight:adminOpen||directorAdminLinks.some(([href])=>path===href)?750:550,color:"#dbe3f1",background:"transparent",cursor:"pointer"}}><span style={{width:18,textAlign:"center",fontSize:15}}>⚙</span>Admin<span style={{marginLeft:"auto"}}>{adminOpen?"▾":"▸"}</span></button>
         {adminOpen && <div style={{display:"grid",gap:2,paddingLeft:25}}>{directorAdminLinks.map(([href,label])=><Link key={href} href={href} style={{display:"block",padding:"7px 9px",borderRadius:7,textDecoration:"none",fontSize:11.5,color:path===href?"#fff":"#c5d0e1",background:path===href?"#f26a1b":"transparent"}}>{label}</Link>)}</div>}
