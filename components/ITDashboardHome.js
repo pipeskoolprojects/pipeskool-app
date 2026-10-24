@@ -14,7 +14,7 @@ import { getAttendanceHeatmap } from "@/lib/data";
 const isIT = role => String(role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
 const localDate = date => [date.getFullYear(), String(date.getMonth()+1).padStart(2,"0"), String(date.getDate()).padStart(2,"0")].join("-");
 const asArray = value => Array.isArray(value) ? value : [];
-const safe = promise => Promise.resolve(promise).catch(() => null);
+const safe = promise => Promise.resolve(promise).catch(error => ({ __loadError: error?.message || "Could not load data" }));
 
 function buildDashboardData(session, siteId, raw) {
   const sites = asArray(session?.sites);
@@ -99,8 +99,8 @@ export default function ITDashboardHome({ sess, mode="desktop" }) {
   const router=useRouter(),frame=useRef(null),[active,setActive]=useState(sess||null),[siteId,setSiteId]=useState(sess?.currentSite||sess?.sites?.[0]?.id||null),[data,setData]=useState(null),[ready,setReady]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[toast,setToast]=useState(""),[moreOpen,setMoreOpen]=useState(false),[notificationOpen,setNotificationOpen]=useState(false);
   const site=active?.sites?.find(s=>String(s.id)===String(siteId))||active?.sites?.[0]||null;
   const load=useCallback(async()=>{
-    const s=active||sess, sid=site?.id||siteId;
-    if(!s||!sid)return;
+    const s=active||sess, sid=site?.id||siteId||"all";
+    if(!s)return;
     setBusy(true);setError("");
     const now=new Date(),from=new Date(now);from.setDate(now.getDate()-97);
     const fromKey=localDate(from),toKey=localDate(now);
@@ -111,11 +111,11 @@ export default function ITDashboardHome({ sess, mode="desktop" }) {
     ]);
     const val=i=>results[i].status==="fulfilled"?results[i].value:null;
     const raw={muster:val(0),indents:val(1),pos:val(2),dpr:val(3),progress:val(4),expenses:val(5),tasks:val(6),notifications:val(7),stock:val(8),heatmap:val(9)};
-    if(raw.tasks?.error)raw.tasks=[];
-    if(raw.heatmap?.error)raw.heatmap={rows:[]};
+    if(raw.tasks?.error||raw.tasks?.__loadError)raw.tasks=[];
+    if(raw.heatmap?.error||raw.heatmap?.__loadError)raw.heatmap={rows:[]};
     const next=buildDashboardData(s,sid,raw);
     setData(next);setBusy(false);
-    if(results.every(r=>r.status==="rejected"))setError("Could not load dashboard data. Pull down to retry.");
+    const failed=results.filter(r=>r.value?.__loadError).length;setError(failed?"Some live data could not be loaded. Pull down to retry.":"");
   },[active,sess,site,siteId]);
   useEffect(()=>{
     const s=getSession();
@@ -167,7 +167,7 @@ export default function ITDashboardHome({ sess, mode="desktop" }) {
   return <div style={{position:"relative",width:"100%",height:"100dvh",minHeight:"100dvh",overflow:"hidden",background:"#05070f"}}>
     {!ready&&<div style={{position:"absolute",inset:0,zIndex:2,display:"grid",placeItems:"center",background:"#05070f",color:"#f5f7fb",fontFamily:"system-ui,sans-serif"}}><div style={{textAlign:"center"}}><div style={{fontSize:26,marginBottom:8}}>◌</div><b>Loading IT Command Center…</b>{error&&<div style={{marginTop:12}}><span>{error}</span><button onClick={load} style={{marginLeft:12,padding:"8px 12px",borderRadius:10,background:"#ff7a2f",color:"white"}}>Retry</button></div>}</div></div>}
     <iframe ref={frame} onLoad={onFrameLoad} title="IT Command Center" src="/it-dashboard-home.html" style={{width:"100%",height:"100%",border:0,display:"block",visibility:ready?"visible":"hidden"}}/>
-    {busy&&ready&&<div aria-live="polite" style={{position:"fixed",right:12,bottom:mode==="mobile"?92:18,zIndex:5,font:"12px system-ui",color:"#f5f7fb",background:"rgba(12,19,48,.88)",padding:"7px 11px",borderRadius:20}}>Refreshing…</div>}
+    {error&&ready&&<div role="alert" style={{position:"fixed",left:"50%",top:12,transform:"translateX(-50%)",zIndex:8,padding:"9px 12px",borderRadius:12,background:"#7f1d1d",color:"#fff",font:"12px system-ui"}}>{error}<button onClick={load} style={{marginLeft:8,color:"#fff",textDecoration:"underline"}}>Retry</button></div>}{busy&&ready&&<div aria-live="polite" style={{position:"fixed",right:12,bottom:mode==="mobile"?92:18,zIndex:5,font:"12px system-ui",color:"#f5f7fb",background:"rgba(12,19,48,.88)",padding:"7px 11px",borderRadius:20}}>Refreshing…</div>}
     {!!toast&&<div role="status" style={{position:"fixed",left:"50%",bottom:mode==="mobile"?86:18,transform:"translateX(-50%)",zIndex:9,padding:"10px 16px",borderRadius:14,background:"#18254a",color:"#fff",boxShadow:"0 10px 30px #0007",font:"13px system-ui"}}>{toast}</div>}
     {moreOpen&&<div role="dialog" aria-modal="true" onClick={()=>setMoreOpen(false)} style={{position:"fixed",inset:0,zIndex:10,background:"#0009",display:"grid",placeItems:"end center",fontFamily:"system-ui,sans-serif"}}><div onClick={e=>e.stopPropagation()} style={{width:"min(100%,520px)",padding:"20px 18px calc(20px + env(safe-area-inset-bottom))",borderRadius:"24px 24px 0 0",background:"#101a33",color:"#f5f7fb",boxShadow:"0 -12px 50px #0008"}}><div style={{fontSize:18,fontWeight:700,marginBottom:12}}>More</div>{moreOptions.map(([label,path])=><button key={path} onClick={()=>go(path)} style={{display:"block",width:"100%",textAlign:"left",padding:"14px 8px",color:"inherit",borderBottom:"1px solid #ffffff22",background:"transparent",fontSize:15}}>{label}　→</button>)}<button onClick={()=>{setMoreOpen(false);setNotificationOpen(true)}} style={{display:"block",width:"100%",textAlign:"left",padding:"14px 8px",color:"inherit",borderBottom:"1px solid #ffffff22",background:"transparent",fontSize:15}}>Notifications　→</button></div></div>}
     {notificationOpen&&<div role="dialog" aria-modal="true" onClick={()=>setNotificationOpen(false)} style={{position:"fixed",inset:0,zIndex:11,background:"#0009",display:"grid",placeItems:"center",padding:16,fontFamily:"system-ui,sans-serif"}}><div onClick={e=>e.stopPropagation()} style={{width:"min(100%,520px)",maxHeight:"80dvh",overflow:"auto",padding:20,borderRadius:22,background:"#101a33",color:"#f5f7fb",boxShadow:"0 20px 60px #0008"}}><div style={{fontSize:18,fontWeight:700,marginBottom:12}}>Notifications</div>{(data?.notificationRows||[]).length?(data.notificationRows.map((x,i)=><div key={i} style={{padding:"12px 4px",borderBottom:"1px solid #ffffff22"}}><b>{x.title}</b><div style={{fontSize:13,color:"#b7c1d8",marginTop:4}}>{x.body||"—"}</div><small style={{color:"#8f9bb6"}}>{x.created_at?new Date(x.created_at).toLocaleString("en-IN"):""}</small></div>)):<div style={{color:"#b7c1d8",padding:10}}>No notifications yet.</div>}<button onClick={()=>setNotificationOpen(false)} style={{marginTop:14,padding:"10px 14px",borderRadius:12,background:"#ff7a2f",color:"#fff"}}>Close</button></div></div>}
