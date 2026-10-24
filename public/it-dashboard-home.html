@@ -405,12 +405,12 @@ $$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerT
     const greet=(new Date().getHours()<12?"Good morning, ":new Date().getHours()<17?"Good afternoon, ":"Good evening, ")+(d.name||"");
     $("#greeting").textContent=greet.trim();$("#heroMeta").textContent=(d.siteName||"No site selected")+" · "+(d.roleLabel||"IT Executive")+" · "+(d.today||"");
     $("#miniWorkers").textContent=d.onRoll?nfmt(d.onRoll):"No data yet";$("#miniComplete").textContent=d.completePct==null?"No data yet":d.completePct+"%";$("#miniBilled").textContent=d.billed==null?"No data yet":inr(d.billed);
-    const ringVals=[d.punchPct,d.dprPct,d.approvalPct];$$(".vv").forEach((c,i)=>{let v=ringVals[i];c.dataset.v=String((v||0)/100);c.setAttribute("stroke-dasharray",((v||0)/100*Number(c.dataset.c||0))+" 500")});
+    const ringVals=[d.punchPct,d.dprPct,d.approvalPct];$all(".vv").forEach((c,i)=>{let v=ringVals[i];c.dataset.v=String((v||0)/100);c.setAttribute("stroke-dasharray",((v||0)/100*Number(c.dataset.c||0))+" 500")});
     $("#ringPunch").textContent=d.punchPct==null?"—":d.punchPct+"%";$("#ringDpr").textContent=d.dprPct==null?"—":d.dprPct+"%";$("#ringApprovals").textContent=d.approvalPct==null?"—":d.approvalPct+"%";
     const badge=d.unread||0;$("#bellCount").textContent=nfmt(badge);$("#navUnread").textContent=nfmt(badge);$("#navUnread").style.display=badge?"":"none";
-    const flips=$$(".flip"),kpis=d.kpis||[];
+    const flips=$all(".flip"),kpis=d.kpis||[];
     flips.forEach((f,i)=>{const k=kpis[i]||{};f.querySelector(".lb").textContent=k.label||"—";f.querySelector(".vl").textContent=k.value==null?"No data yet":String(k.value);f.querySelector(".sb").textContent=k.sub||"No data yet";f.querySelector(".front .ic").textContent=k.icon||"•";const b=f.querySelector(".back");b.innerHTML="<h4>"+esc(k.backTitle||"Details")+"</h4>"+(k.rows||[]).map(r=>"<div><span>"+esc(r[0])+"</span><b>"+esc(r[1])+"</b></div>").join("")+'<small>Tap to flip back</small>'});
-    const nodes=$$(".flow .node"),stages=d.stages||[];nodes.forEach((n,i)=>{const x=stages[i]||{};n.querySelector("b").textContent=x.label||"—";n.querySelector("span").textContent=x.value||"No data yet";n.dataset.route=x.route||"";n.setAttribute("role","link");n.tabIndex=0});
+    const nodes=$all(".flow .node"),stages=d.stages||[];nodes.forEach((n,i)=>{const x=stages[i]||{};n.querySelector("b").textContent=x.label||"—";n.querySelector("span").textContent=x.value||"No data yet";n.dataset.route=x.route||"";n.setAttribute("role","link");n.tabIndex=0});
     const gv=$("#gv");gv.dataset.value=String((d.workforcePct||0)/100);gv.setAttribute("stroke-dasharray",((d.workforcePct||0)/100*251.3)+" 260");
     $(".gt").textContent=d.workforcePct==null?"—":d.workforcePct+"%";$(".gs").textContent=d.present==null?"No data yet":nfmt(d.present)+" of "+nfmt(d.onRoll)+" present";
     $("#gfoot").innerHTML='<div><b>'+ (d.present==null?"—":nfmt(d.present))+'</b>Present</div><div><b>'+ (d.shortfall==null?"—":nfmt(d.shortfall))+'</b>Shortfall</div><div><b>'+ (d.trades==null?"—":nfmt(d.trades))+'</b>Trades</div>';
