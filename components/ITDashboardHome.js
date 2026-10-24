@@ -90,13 +90,13 @@ function buildDashboardData(session, siteId, raw) {
       {key:"billing",value:completePct||0}
     ],
     heatmap:raw.heatmap||{rows:[]},stock:stocks.slice(0,4),tasks,
-    activity,approvals,approvalCount:pendingClaims.length,unread:Number(raw.notifications?.unread||0),
+    activity,approvals,approvalCount:pendingClaims.length,notificationRows:notifications.slice(0,12).map(x=>({title:x.title||"Notification",body:x.body||"",created_at:x.created_at||""})),unread:Number(raw.notifications?.unread||0),
     modules:moduleKeys
   };
 }
 
 export default function ITDashboardHome({ sess, mode="desktop" }) {
-  const router=useRouter(),frame=useRef(null),[active,setActive]=useState(sess||null),[siteId,setSiteId]=useState(sess?.currentSite||sess?.sites?.[0]?.id||null),[data,setData]=useState(null),[ready,setReady]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[toast,setToast]=useState(""),[moreOpen,setMoreOpen]=useState(false);
+  const router=useRouter(),frame=useRef(null),[active,setActive]=useState(sess||null),[siteId,setSiteId]=useState(sess?.currentSite||sess?.sites?.[0]?.id||null),[data,setData]=useState(null),[ready,setReady]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[toast,setToast]=useState(""),[moreOpen,setMoreOpen]=useState(false),[notificationOpen,setNotificationOpen]=useState(false);
   const site=active?.sites?.find(s=>String(s.id)===String(siteId))||active?.sites?.[0]||null;
   const load=useCallback(async()=>{
     const s=active||sess, sid=site?.id||siteId;
@@ -143,7 +143,7 @@ export default function ITDashboardHome({ sess, mode="desktop" }) {
         setCurrentSite(next.id);setSiteId(next.id);setReady(false);return;
       }
       if(action==="navigate"){
-        if(route==="more"){setMoreOpen(true);return}
+        if(route==="more"){setMoreOpen(true);return}if(route==="notifications"){setNotificationOpen(true);return}
         const paths={home:mode==="mobile"?"/m/dashboard":"/home",punch:"/m",muster:mode==="mobile"?"/m/muster":"/attendance",dpr:mode==="mobile"?"/m/dpr":"/dpr",orders:mode==="mobile"?"/m/order":"/procure",stock:mode==="mobile"?"/m/stock":"/stock",expenses:mode==="mobile"?"/m/money":"/expenses",notifications:mode==="mobile"?"/m/dashboard":"/notifications"};
         if(paths[route])router.push(paths[route]);return;
       }
@@ -162,13 +162,13 @@ export default function ITDashboardHome({ sess, mode="desktop" }) {
     window.addEventListener("message",onMessage);return()=>window.removeEventListener("message",onMessage);
   },[active,data,load,mode,router]);
   const onFrameLoad=()=>{if(data)frame.current?.contentWindow?.postMessage({type:"psk-it-dashboard-data",payload:data},window.location.origin)};
-  const go=path=>{setMoreOpen(false);router.push(path)};
+  const go=path=>{setMoreOpen(false);router.push(path)};const moreOptions=[["Punch","/m"],["Orders","/m/order","indent"],["Expenses","/m/money","money"],["Stock","/m/stock","stock"]].filter(x=>!x[2]||(data?.modules||[]).includes(x[2]));
   if(!active||!isIT(active.role))return <div style={{minHeight:"100dvh",background:"#05070f"}}/>;
   return <div style={{position:"relative",width:"100%",height:"100dvh",minHeight:"100dvh",overflow:"hidden",background:"#05070f"}}>
     {!ready&&<div style={{position:"absolute",inset:0,zIndex:2,display:"grid",placeItems:"center",background:"#05070f",color:"#f5f7fb",fontFamily:"system-ui,sans-serif"}}><div style={{textAlign:"center"}}><div style={{fontSize:26,marginBottom:8}}>◌</div><b>Loading IT Command Center…</b>{error&&<div style={{marginTop:12}}><span>{error}</span><button onClick={load} style={{marginLeft:12,padding:"8px 12px",borderRadius:10,background:"#ff7a2f",color:"white"}}>Retry</button></div>}</div></div>}
     <iframe ref={frame} onLoad={onFrameLoad} title="IT Command Center" src="/it-dashboard-home.html" style={{width:"100%",height:"100%",border:0,display:"block",visibility:ready?"visible":"hidden"}}/>
     {busy&&ready&&<div aria-live="polite" style={{position:"fixed",right:12,bottom:mode==="mobile"?92:18,zIndex:5,font:"12px system-ui",color:"#f5f7fb",background:"rgba(12,19,48,.88)",padding:"7px 11px",borderRadius:20}}>Refreshing…</div>}
     {!!toast&&<div role="status" style={{position:"fixed",left:"50%",bottom:mode==="mobile"?86:18,transform:"translateX(-50%)",zIndex:9,padding:"10px 16px",borderRadius:14,background:"#18254a",color:"#fff",boxShadow:"0 10px 30px #0007",font:"13px system-ui"}}>{toast}</div>}
-    {moreOpen&&<div role="dialog" aria-modal="true" onClick={()=>setMoreOpen(false)} style={{position:"fixed",inset:0,zIndex:10,background:"#0009",display:"grid",placeItems:"end center",fontFamily:"system-ui,sans-serif"}}><div onClick={e=>e.stopPropagation()} style={{width:"min(100%,520px)",padding:"20px 18px calc(20px + env(safe-area-inset-bottom))",borderRadius:"24px 24px 0 0",background:"#101a33",color:"#f5f7fb",boxShadow:"0 -12px 50px #0008"}}><div style={{fontSize:18,fontWeight:700,marginBottom:12}}>More</div>{[["Punch","/m"],["Orders","/m/order"],["Expenses","/m/money"],["Notifications","/m/dashboard"]].map(([label,path])=><button key={path} onClick={()=>go(path)} style={{display:"block",width:"100%",textAlign:"left",padding:"14px 8px",color:"inherit",borderBottom:"1px solid #ffffff22",background:"transparent",fontSize:15}}>{label}　→</button>)}</div></div>}
+    {moreOpen&&<div role="dialog" aria-modal="true" onClick={()=>setMoreOpen(false)} style={{position:"fixed",inset:0,zIndex:10,background:"#0009",display:"grid",placeItems:"end center",fontFamily:"system-ui,sans-serif"}}><div onClick={e=>e.stopPropagation()} style={{width:"min(100%,520px)",padding:"20px 18px calc(20px + env(safe-area-inset-bottom))",borderRadius:"24px 24px 0 0",background:"#101a33",color:"#f5f7fb",boxShadow:"0 -12px 50px #0008"}}><div style={{fontSize:18,fontWeight:700,marginBottom:12}}>More</div>{moreOptions.map(([label,path])=><button key={path} onClick={()=>go(path)} style={{display:"block",width:"100%",textAlign:"left",padding:"14px 8px",color:"inherit",borderBottom:"1px solid #ffffff22",background:"transparent",fontSize:15}}>{label}　→</button>)}</div></div>}
   </div>;
 }
