@@ -398,6 +398,7 @@ $$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerT
   function pct(v){return Math.max(0,Math.min(100,Number(v)||0))}
   function apply(d){
     if(!d)return;
+    $("[data-module]").forEach(el=>{el.style.display=(d.modules||[]).includes(el.dataset.module)?"":"none"});
     const site=$("#siteSelect");if(site){site.innerHTML=(d.sites||[]).map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+'</option>').join("")||'<option value="">No sites available</option>';site.value=String(d.siteId||"")}
     $("#userName").textContent=d.name||"IT Executive";$("#userRole").textContent=d.roleLabel||"IT Executive";$("#avatar").textContent=(d.name||"IT").split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase();
     const greet=(new Date().getHours()<12?"Good morning, ":new Date().getHours()<17?"Good afternoon, ":"Good evening, ")+(d.name||"");
@@ -424,8 +425,7 @@ $$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerT
     const approvalBox=$(".grid .card")[12],approvals=d.approvals||[];
     approvalBox.innerHTML='<h3>Pending approvals <small>'+nfmt(d.approvalCount||0)+'</small></h3>'+(approvals.length?approvals.slice(0,4).map(a=>'<div class="item"><div>'+esc(a.title)+'<small>'+esc(a.detail)+'</small></div><button class="btn" data-approve="'+esc(a.id)+'" '+(a.blocked?"disabled":"")+'>Approve</button></div>').join(""):'<div class="item"><div>No data yet<small>No pending expense approvals for this site.</small></div></div>');
     const svg=$("#radar");if(svg){let note=$("#healthNotes");if(!note){note=document.createElement("div");note.id="healthNotes";note.style.cssText="color:var(--mut);font-size:10px;line-height:1.4;margin-top:4px";svg.after(note)}note.textContent="Attendance: present ÷ on roll · Material: items at/above minimum ÷ tracked · DPR: filed ÷ expected · Safety/Billing: no current health metric."}
-    addEventListener("resize",layout);
-    if(!window.__pskReady){window.__pskReady=true;setTimeout(()=>parent.postMessage({type:"psk-it-dashboard-ready"},"*"),1500)}
+    setTimeout(()=>parent.postMessage({type:"psk-it-dashboard-ready"},"*"),1500)
   }
   function drawArea(rows){
     const box=$("#area");if(!box)return;const vals=rows.map(x=>Number(x.value)||0),labels=rows.map(x=>x.label||"");
