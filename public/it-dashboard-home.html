@@ -415,7 +415,7 @@ $$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerT
     $(".gt").textContent=d.workforcePct==null?"—":d.workforcePct+"%";$(".gs").textContent=d.present==null?"No data yet":nfmt(d.present)+" of "+nfmt(d.onRoll)+" present";
     $("#gfoot").innerHTML='<div><b>'+ (d.present==null?"—":nfmt(d.present))+'</b>Present</div><div><b>'+ (d.shortfall==null?"—":nfmt(d.shortfall))+'</b>Shortfall</div><div><b>'+ (d.trades==null?"—":nfmt(d.trades))+'</b>Trades</div>';
     drawArea(d.expenseSeries||[]);drawBars(d.weekManpower||[]);drawMix(d.workMix||[]);drawRadar(d.health||[]);
-    drawHeat(d.heatmap||[]);
+    drawHeat(d.heatmap?.rows||[]);
     const tanks=$("#cyls"),stock=d.stock||[];
     tanks.innerHTML=stock.slice(0,4).map(x=>{const p=pct(x.pct),col=p>60?"#22c984":p>=50?"#3b9bff":p>=30?"#ff7a2f":"#ff5470";return '<div class="cy"><div class="cyl" style="--c:'+col+';--c2:'+col+'"><div class="bd"><div class="liq" data-l="'+p+'%"></div></div><div class="tp"></div></div><b>'+p+'%</b>'+esc(x.name)+'</div>'}).join("");
     empty(tanks,stock.length?"":"No data yet");
@@ -483,7 +483,7 @@ $$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerT
   },true);
   const ss=$("#siteSelect");if(ss)ss.addEventListener("change",()=>parent.postMessage({type:"psk-it-action",action:"site-change",siteId:ss.value},"*"));
   let ts=0;document.addEventListener("touchstart",e=>{ts=e.touches?.[0]?.clientY||0},{passive:true});document.addEventListener("touchend",e=>{let y=e.changedTouches?.[0]?.clientY||0;if(ts>0&&y-ts>85&&(document.scrollingElement?.scrollTop||0)<=0)parent.postMessage({type:"psk-it-action",action:"refresh"},"*");ts=0},{passive:true});
-  addEventListener("message",e=>{if(e.data?.type==="psk-it-dashboard-data")apply(e.data.payload)});
+  addEventListener("message",e=>{if(e.data?.type!=="psk-it-dashboard-data")return;try{apply(e.data.payload)}catch(err){console.error("IT dashboard render failed",err);parent.postMessage({type:"psk-it-dashboard-render-error"},"*")}});
 })();
 </script>
 </body>
