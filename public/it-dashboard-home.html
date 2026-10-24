@@ -391,7 +391,7 @@ $$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerT
 </script>
 <script>
 (function(){
-  const H=document.documentElement,$=s=>document.querySelector(s),$=s=>Array.from(document.querySelectorAll(s));
+  const H=document.documentElement,$=s=>document.querySelector(s),$all=s=>Array.from(document.querySelectorAll(s));
   const esc=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const nfmt=v=>Number(v||0).toLocaleString("en-IN");
   const inr=v=>"₹"+nfmt(v);
@@ -399,7 +399,7 @@ $$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerT
   function pct(v){return Math.max(0,Math.min(100,Number(v)||0))}
   function apply(d){
     if(!d)return;
-    $$("[data-module]").forEach(el=>{el.style.display=(d.modules||[]).includes(el.dataset.module)?"":"none"});
+    $all("[data-module]").forEach(el=>{el.style.display=(d.modules||[]).includes(el.dataset.module)?"":"none"});
     const site=$("#siteSelect");if(site){site.innerHTML=(d.sites||[]).map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+'</option>').join("")||'<option value="">No sites available</option>';site.value=String(d.siteId||"")}
     $("#userName").textContent=d.name||"IT Executive";$("#userRole").textContent=d.roleLabel||"IT Executive";$("#avatar").textContent=(d.name||"IT").split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase();
     const greet=(new Date().getHours()<12?"Good morning, ":new Date().getHours()<17?"Good afternoon, ":"Good evening, ")+(d.name||"");
@@ -419,7 +419,7 @@ $$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerT
     const tanks=$("#cyls"),stock=d.stock||[];
     tanks.innerHTML=stock.slice(0,4).map(x=>{const p=pct(x.pct),col=p>60?"#22c984":p>=50?"#3b9bff":p>=30?"#ff7a2f":"#ff5470";return '<div class="cy"><div class="cyl" style="--c:'+col+';--c2:'+col+'"><div class="bd"><div class="liq" data-l="'+p+'%"></div></div><div class="tp"></div></div><b>'+p+'%</b>'+esc(x.name)+'</div>'}).join("");
     empty(tanks,stock.length?"":"No data yet");
-    const cardByTitle=t=>$$(".grid .card").find(c=>(c.querySelector("h3")?.textContent||"").includes(t));const taskBox=cardByTitle("Today's tasks"), taskRows=(d.tasks||[]).slice(0,4);
+    const cardByTitle=t=>$all(".grid .card").find(c=>(c.querySelector("h3")?.textContent||"").includes(t));const taskBox=cardByTitle("Today's tasks"), taskRows=(d.tasks||[]).slice(0,4);
     taskBox.innerHTML="<h3>Today's tasks</h3>"+(taskRows.length?taskRows.map(t=>'<div class="item '+(t.status==="completed"?"done":"")+'"><button class="chk" data-task="'+esc(t.id)+'" data-task-status="'+(t.status==="completed"?"pending":"completed")+'">'+(t.status==="completed"?"✓":"")+'</button><div class="tx">'+esc(t.title)+'<small>'+esc(t.due||t.status||"Open")+(t.priority?" · "+esc(t.priority):"")+'</small></div></div>').join(""):'<div class="item"><div>No data yet<small>No open tasks assigned to you.</small></div></div>');
     const actBox=cardByTitle("Recent activity"),acts=d.activity||[];
     actBox.innerHTML="<h3>Recent activity</h3>"+(acts.length?acts.slice(0,4).map(a=>'<div class="item"><span class="dot" style="--c:'+esc(a.color||"#3b9bff")+'"></span><div>'+esc(a.title)+'<small>'+esc(a.detail||"")+'</small></div><span class="tag">'+esc(a.time||"")+'</span></div>').join(""):'<div class="item"><div>No data yet<small>Recent updates will appear here.</small></div></div>');
