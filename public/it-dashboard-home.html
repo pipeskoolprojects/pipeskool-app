@@ -419,11 +419,11 @@ $$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerT
     const tanks=$("#cyls"),stock=d.stock||[];
     tanks.innerHTML=stock.slice(0,4).map(x=>{const p=pct(x.pct),col=p>60?"#22c984":p>=50?"#3b9bff":p>=30?"#ff7a2f":"#ff5470";return '<div class="cy"><div class="cyl" style="--c:'+col+';--c2:'+col+'"><div class="bd"><div class="liq" data-l="'+p+'%"></div></div><div class="tp"></div></div><b>'+p+'%</b>'+esc(x.name)+'</div>'}).join("");
     empty(tanks,stock.length?"":"No data yet");
-    const taskBox=$(".grid .card")[10], taskRows=(d.tasks||[]).slice(0,4);
+    const cardByTitle=t=>$(".grid .card").find(c=>(c.querySelector("h3")?.textContent||"").includes(t));const taskBox=cardByTitle("Today\\'s tasks"), taskRows=(d.tasks||[]).slice(0,4);
     taskBox.innerHTML="<h3>Today's tasks</h3>"+(taskRows.length?taskRows.map(t=>'<div class="item '+(t.status==="completed"?"done":"")+'"><button class="chk" data-task="'+esc(t.id)+'" data-task-status="'+(t.status==="completed"?"pending":"completed")+'">'+(t.status==="completed"?"✓":"")+'</button><div class="tx">'+esc(t.title)+'<small>'+esc(t.due||t.status||"Open")+(t.priority?" · "+esc(t.priority):"")+'</small></div></div>').join(""):'<div class="item"><div>No data yet<small>No open tasks assigned to you.</small></div></div>');
-    const actBox=$(".grid .card")[11],acts=d.activity||[];
+    const actBox=cardByTitle("Recent activity"),acts=d.activity||[];
     actBox.innerHTML="<h3>Recent activity</h3>"+(acts.length?acts.slice(0,4).map(a=>'<div class="item"><span class="dot" style="--c:'+esc(a.color||"#3b9bff")+'"></span><div>'+esc(a.title)+'<small>'+esc(a.detail||"")+'</small></div><span class="tag">'+esc(a.time||"")+'</span></div>').join(""):'<div class="item"><div>No data yet<small>Recent updates will appear here.</small></div></div>');
-    const approvalBox=$(".grid .card")[12],approvals=d.approvals||[];
+    const approvalBox=cardByTitle("Pending approvals"),approvals=d.approvals||[];
     approvalBox.innerHTML='<h3>Pending approvals <small>'+nfmt(d.approvalCount||0)+'</small></h3>'+(approvals.length?approvals.slice(0,4).map(a=>'<div class="item"><div>'+esc(a.title)+'<small>'+esc(a.detail)+'</small></div><button class="btn" data-approve="'+esc(a.id)+'" '+(a.blocked?"disabled":"")+'>Approve</button></div>').join(""):'<div class="item"><div>No data yet<small>No pending expense approvals for this site.</small></div></div>');
     const svg=$("#radar");if(svg){let note=$("#healthNotes");if(!note){note=document.createElement("div");note.id="healthNotes";note.style.cssText="color:var(--mut);font-size:10px;line-height:1.4;margin-top:4px";svg.after(note)}note.textContent="Attendance: present ÷ on roll · Material: items at/above minimum ÷ tracked · DPR: filed ÷ expected · Safety/Billing: no current health metric."}
     setTimeout(()=>parent.postMessage({type:"psk-it-dashboard-ready"},"*"),1500)
