@@ -10,6 +10,7 @@ import HomeHeader from "@/components/HomeHeader";
 import HomeDashboard from "@/components/HomeDashboard";
 import SupervisorDashboard from "@/components/SupervisorDashboard";
 import AccountantDashboard from "@/components/AccountantDashboard";
+import ITDashboardHome from "@/components/ITDashboardHome";
 
 import { getSession } from "@/lib/auth";
 
@@ -38,6 +39,7 @@ export default function MobileHomePage() {
     || (sess?.sites || []).find(s => String(s.id) === String(viewSiteId))?.name || "", [sites, viewSiteId, sess]);
 
   if (!sess) return null;
+  if (String(sess.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive") return <ITDashboardHome sess={sess} mode="mobile" />;
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100dvh" }}>
