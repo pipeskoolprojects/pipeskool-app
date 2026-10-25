@@ -41,6 +41,7 @@ export default function MobileNav() {
   const [sess, setSess] = useState(null);
   const [workerOnly, setWorkerOnly] = useState(false);
   const [lang, setLangState] = useState("en");
+  const [itTheme, setItTheme] = useState("dark");
   useEffect(() => {
     const st = getSession(); setSess(st || null); setWorkerOnly(!st && !!getLocalWorker()); setLangState(getLang());
     // live rights: re-pull from DB so Access Rights changes apply without re-login
@@ -52,16 +53,25 @@ export default function MobileNav() {
     const root = document.documentElement;
     root.classList.toggle("it-executive-ui", itExecutive);
     if (itExecutive) {
-      const ua = navigator.userAgent || "";
-      root.dataset.itPlatform = /iPhone|iPad|iPod/i.test(ua) ? "ios"
-        : /Android/i.test(ua) ? "android"
-        : /Windows/i.test(ua) ? "windows"
-        : /Macintosh|Mac OS X/i.test(ua) ? "mac" : "desktop";
+      const applyPlatform = () => {
+        const ua = navigator.userAgent || "", nativePhone = /iPhone|iPad|iPod|Android/i.test(ua), width = window.innerWidth;
+        root.dataset.itPlatform = /iPhone|iPad|iPod/i.test(ua) ? "ios" : /Android/i.test(ua) ? "android" : /Windows/i.test(ua) ? "windows" : "mac";
+        root.dataset.itLayout = nativePhone || width < 760 ? "phone" : width < 1100 ? "tablet" : "desktop";
+      };
+      const syncTheme = value => { const next = value === "light" ? "light" : "dark"; setItTheme(next); root.dataset.itTheme = next; };
+      try { syncTheme(localStorage.getItem("pk-theme") || (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")); } catch { syncTheme("dark"); }
+      const onStorage = e => { if (e.key === "pk-theme") syncTheme(e.newValue); };
+      applyPlatform(); window.addEventListener("resize", applyPlatform);
+      window.addEventListener("storage", onStorage);
+      return () => { window.removeEventListener("resize", applyPlatform); window.removeEventListener("storage", onStorage); delete root.dataset.itLayout; delete root.dataset.itTheme; };
     } else {
       delete root.dataset.itPlatform;
+      delete root.dataset.itLayout;
+      delete root.dataset.itTheme;
     }
   }, [sess?.role]);
   const pickLang = l => { setLang(l); window.location.reload(); };
+  const toggleItTheme = () => { const next = itTheme === "dark" ? "light" : "dark"; setItTheme(next); document.documentElement.dataset.itTheme = next; try { localStorage.setItem("pk-theme", next); } catch {} };
   const role = sess?.role || null;
   const workerPrimary = [{ href: "/m", ico: "⏱", key: "nav_punch" }];
   // update188: director tabs = view & approve, entry screens live one tap deeper.
@@ -179,6 +189,12 @@ export default function MobileNav() {
                 <span style={{ fontSize: 18 }}>{m.ico}</span>{m.label || t(lang, m.key)}
               </Link>
             ))}
+            {String(role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive" && (
+              <button type="button" onClick={toggleItTheme}
+                style={{ width: "100%", display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", fontSize: 14, border: 0, borderBottom: "1px solid var(--border)", background: "transparent", color: "var(--text)", textAlign: "left", cursor: "pointer" }}>
+                <span style={{ fontSize: 18 }}>{itTheme === "dark" ? "☀️" : "🌙"}</span>{itTheme === "dark" ? "Switch to light appearance" : "Switch to dark appearance"}
+              </button>
+            )}
             <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "12px 14px", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
               <span style={{ fontSize: 18 }}>🌐</span>
               {LANGS.map(([code, label]) => (
