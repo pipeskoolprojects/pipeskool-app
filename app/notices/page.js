@@ -43,6 +43,7 @@ export default function NoticesPage() {
     getRoles().then(rs => setRoles((rs || []).map(r => [r.code, r.label])));
   }, []);
   const isAdmin = sess && (sess.role === "director" || canAny(sess, "notices", "manage"));
+  const isITExecutive = String(sess?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
   const canCreate = sess && (sess.role === "director" || canAny(sess, "notices", "create"));
 
   useEffect(() => { if (isAdmin) { getStaff().then(setStaffList); getTodayQuoteRow().then(setQuoteRow); } }, [isAdmin]);
@@ -90,16 +91,32 @@ export default function NoticesPage() {
   const shown = (list || []).filter(n =>
     (!q.trim() || (n.title + " " + n.body).toLowerCase().includes(q.toLowerCase())) &&
     (!fCat || n.category === fCat) && (!fPrio || n.priority === fPrio));
+  const noticePriorityCounts = PRIORITIES.map(([key, label]) => ({ key, label, value: shown.filter(n => n.priority === key).length }))
+    .filter(x => x.value > 0);
+  const noticePriorityTotal = noticePriorityCounts.reduce((total, item) => total + item.value, 0);
+  const priorityColors = { normal: "#2e90fa", important: "#f79009", urgent: "#f04438", emergency: "#b42318" };
+  let priorityCursor = 0;
+  const noticePriorityGradient = noticePriorityTotal
+    ? noticePriorityCounts.map(item => { const start = priorityCursor; priorityCursor += item.value / noticePriorityTotal * 100; return `${priorityColors[item.key] || "#98a2b3"} ${start}% ${priorityCursor}%`; }).join(", ")
+    : "#e4e7ec 0% 100%";
+  const activeNotices = list || [];
+  const urgentNotices = activeNotices.filter(n => n.priority === "urgent" || n.priority === "emergency").length;
+  const pinnedNotices = activeNotices.filter(n => n.is_pinned).length;
+  const pendingAcks = activeNotices.filter(n => n.require_ack && !mine.acks.has(n.id)).length;
 
   const multi = (arr, id, on) => on ? [...arr, id] : arr.filter(x => x !== id);
 
   return (
     <div className="layout">
       <Sidebar />
-      <main className="main">
+      <main className={"main" + (isITExecutive ? " it-notices-page" : "")}>
         <div className="page-head"><h1>Notice Board</h1>
           {canCreate && <button className="primary" onClick={() => { setEditId(null); setFiles([]); setForm({ ...blank }); }}>＋ New notice</button>}
         </div>
+        {isITExecutive && <section aria-label="Live notice overview" className="it-notice-overview">
+          {[["Active notices", activeNotices.length], ["Urgent notices", urgentNotices], ["Pinned notices", pinnedNotices], ["Acknowledgements pending", pendingAcks]].map(([label, value]) => <article key={label} className="panel" style={{ padding: 14, display: "grid", alignContent: "center", gap: 5 }}><span className="muted" style={{ fontSize: 12 }}>{label}</span><strong style={{ fontSize: 25, lineHeight: 1.1 }}>{list === null ? "—" : value.toLocaleString("en-IN")}</strong><small className="muted" style={{ fontSize: 10.5 }}>{list === null ? "Loading live notices" : "From notices visible to your account"}</small></article>)}
+          <article className="panel" style={{ padding: 14, minWidth: 0 }}><span className="muted" style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".12em", color: "var(--copper)" }}>LIVE PRIORITY MIX</span><h2 style={{ fontSize: 15, margin: "5px 0" }}>Visible notices by priority</h2><p className="muted" style={{ fontSize: 11, margin: 0 }}>Current search and filters applied.</p><div style={{ display: "grid", gridTemplateColumns: "76px minmax(0,1fr)", alignItems: "center", gap: 12, marginTop: 10 }}><div style={{ width: 74, aspectRatio: 1, borderRadius: "50%", display: "grid", placeItems: "center", position: "relative", background: `conic-gradient(${noticePriorityGradient})` }}><span style={{ position: "absolute", inset: 11, borderRadius: "50%", background: "var(--card)", display: "grid", placeItems: "center", fontWeight: 800 }}>{list === null ? "—" : shown.length.toLocaleString("en-IN")}</span></div><div style={{ display: "grid", gap: 6, fontSize: 11.5 }}>{noticePriorityCounts.map(item => <span key={item.key} style={{ display: "flex", alignItems: "center", gap: 6 }}><i style={{ width: 8, height: 8, borderRadius: "50%", background: priorityColors[item.key] }} />{item.label}<b style={{ marginLeft: "auto" }}>{item.value.toLocaleString("en-IN")}</b></span>)}{!noticePriorityCounts.length && <span className="muted">No matching notices</span>}</div></div></article>
+        </section>}
         {msg && <div className="note green" style={{ marginBottom: 10 }}>{msg}</div>}
         {err && <div className="note red" style={{ marginBottom: 10 }}>{err}</div>}
 
