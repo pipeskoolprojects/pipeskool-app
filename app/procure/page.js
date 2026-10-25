@@ -7,11 +7,14 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import ProcureView from "@/components/ProcureView";
+import { getSession } from "@/lib/auth";
 
 export default function ProcurePage() {
   const [mobile, setMobile] = useState(false);
   const [mtab, setMtab] = useState("indents");   // indents | po
+  const [session, setSession] = useState(null);
   useEffect(() => {
+    setSession(getSession());
     // update284: deep links from the Home tiles — /procure?tab=po | ?tab=indents
     const t = new URLSearchParams(window.location.search).get("tab");
     if (t === "po" || t === "indents") setMtab(t);
@@ -20,12 +23,13 @@ export default function ProcurePage() {
     on(); mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
   }, []);
+  const isITExecutive = String(session?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
   return (
-    <div className="layout">
+    <div className={"layout" + (isITExecutive ? " it-page it-page-procure" : "")}>
       <Sidebar />
       <main className="main">
         {mobile && (
-          <div className="mw-tabs" style={{ marginBottom: 10 }}>
+          <div className="mw-tabs it-procure-tabs" style={{ marginBottom: 10 }}>
             <button className={mtab === "indents" ? "active" : ""} onClick={() => setMtab("indents")}>📝 Orders</button>
             <button className={mtab === "po" ? "active" : ""} onClick={() => setMtab("po")}>📄 Purchase Orders</button>
           </div>
