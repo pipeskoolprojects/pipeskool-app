@@ -126,7 +126,17 @@ export default function Sidebar() {
   const showDash = canSee("dashboard");
   useEffect(() => {
     const itExecutive = String(session?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
-    document.documentElement.classList.toggle("it-executive-ui", itExecutive);
+    const root = document.documentElement;
+    root.classList.toggle("it-executive-ui", itExecutive);
+    if (itExecutive) {
+      const ua = navigator.userAgent || "";
+      root.dataset.itPlatform = /iPhone|iPad|iPod/i.test(ua) ? "ios"
+        : /Android/i.test(ua) ? "android"
+        : /Windows/i.test(ua) ? "windows"
+        : /Macintosh|Mac OS X/i.test(ua) ? "mac" : "desktop";
+    } else {
+      delete root.dataset.itPlatform;
+    }
   }, [session?.role]);
 
 
