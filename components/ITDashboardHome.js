@@ -182,6 +182,12 @@ export default function ITDashboardHome({ sess, mode="desktop" }) {
     };
     window.addEventListener("message",onMessage);return()=>window.removeEventListener("message",onMessage);
   },[active,data,load,mode,router]);
+  // update475: tell the dashboard when the ERP sidebar is hidden so its title clears the floating ☰
+  useEffect(()=>{
+    const send=()=>frame.current?.contentWindow?.postMessage({type:"psk-it-shell",nosb:document.documentElement.classList.contains("psk-nosb")},window.location.origin);
+    const mo=new MutationObserver(send);mo.observe(document.documentElement,{attributes:true,attributeFilter:["class"]});
+    send();return()=>mo.disconnect();
+  },[ready]);
   const onFrameLoad=()=>{
     // Never hold the whole app behind the dashboard's data/ready handshake. The iframe
     // contains its own empty states and can render while slow APIs finish loading.

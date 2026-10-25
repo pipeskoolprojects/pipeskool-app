@@ -20,7 +20,8 @@ html[data-p=ios]{--r:26px}
 html[data-p=android]{--r:28px;--font:"Google Sans",Roboto,"Segoe UI",system-ui,sans-serif}
 *{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
 :root{--mesh:radial-gradient(900px 600px at 88% -8%,var(--blob1),transparent 60%),radial-gradient(800px 600px at -8% 102%,var(--blob2),transparent 55%),radial-gradient(700px 500px at 45% 55%,var(--blob3),transparent 70%)}
-body{font-family:var(--font);color:var(--tx);background:var(--mesh),var(--bg);background-attachment:fixed;min-height:100vh;padding-top:0;transition:background .5s,color .4s;overflow-x:hidden}
+body{font-family:var(--font);color:var(--tx);background:var(--bg);min-height:100vh;padding-top:0;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--mesh)}
 button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 /* studio bar */
 .studio{position:fixed;top:0;left:0;right:0;height:56px;z-index:100;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 18px;background:var(--card);backdrop-filter:blur(26px) saturate(1.6);-webkit-backdrop-filter:blur(26px) saturate(1.6);border-bottom:1px solid var(--line)}
@@ -54,6 +55,14 @@ html[data-shell=erp] .side,html[data-shell=erp] .tabbar,html[data-shell=erp] .fa
 html[data-shell=erp] .homebar,html[data-shell=erp] .status{display:none!important}
 html[data-shell=erp] .shell{display:block;width:100%;min-height:100dvh}
 html[data-shell=erp] .shell{visibility:hidden}
+html[data-shell=erp] .traffic,html[data-shell=erp] .winctl{display:none!important}
+html[data-shell=erp][data-nosb=on] .studio{padding-left:62px}
+html[data-shell=erp][data-layout=phone] .studio{padding-right:58px}
+html[data-shell=erp] .studio{z-index:30}
+/* infinite animations pause while the tab is hidden or the user prefers less motion */
+html.paused *{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}.donut{animation:none}}
+.cw{touch-action:pan-y}
 html[data-shell=erp] main{width:100%;max-width:none;margin:0;padding-left:clamp(14px,2.4vw,36px);padding-right:clamp(14px,2.4vw,36px)}
 html[data-shell=erp][data-layout=phone] #app{padding-bottom:86px}
 .traffic{gap:8px;padding:0 6px 16px}.traffic i{width:12px;height:12px;border-radius:50%}
@@ -75,7 +84,7 @@ html[data-layout=phone] main{padding:6px 14px 100px}
 .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:10px}
 .top h2{font-size:15px;color:var(--mut);font-weight:600}
 .top .r{display:flex;gap:8px;align-items:center}
-.chip{display:inline-flex;align-items:center;gap:8px;padding:8px 13px;border-radius:30px;background:var(--card);border:1px solid var(--line);font-size:12.5px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:8px 13px;border-radius:30px;background:var(--card);border:1px solid var(--line);font-size:12.5px}
 .chip.live::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--g);animation:p 1.8s infinite}
 @keyframes p{0%{box-shadow:0 0 0 0 var(--g)}70%,100%{box-shadow:0 0 0 9px transparent}}
 .winctl{gap:16px;font-size:13px;color:var(--mut);margin-left:8px}
@@ -87,7 +96,7 @@ html[data-layout=phone] .grid{grid-template-columns:repeat(2,1fr);gap:12px}
 html[data-layout=phone] .s3{grid-column:span 1}
 html[data-layout=phone] .s4,html[data-layout=phone] .s5,html[data-layout=phone] .s6,html[data-layout=phone] .s8,html[data-layout=phone] .s12{grid-column:1/-1}
 /* cards */
-.card{position:relative;border-radius:var(--r);padding:20px;background:var(--card);border:1px solid var(--line);box-shadow:var(--sh),inset 0 1px 0 var(--hi);backdrop-filter:blur(22px) saturate(1.4);-webkit-backdrop-filter:blur(22px) saturate(1.4);transition:transform .18s ease-out,box-shadow .3s;animation:in .8s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--i,0)*60ms)}
+.card{position:relative;border-radius:var(--r);padding:20px;background:var(--card);border:1px solid var(--line);box-shadow:var(--sh),inset 0 1px 0 var(--hi);transition:transform .18s ease-out;animation:in .6s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(min(var(--i,0),8)*60ms)}
 @keyframes in{from{opacity:0;transform:translateY(24px) scale(.97)}}
 html[data-layout=phone] .card{padding:16px}
 .card h3{font-size:12px;color:var(--mut);font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -107,7 +116,7 @@ html[data-layout=phone] .hero{grid-template-columns:1fr}
 .rings .vv{transition:stroke-dasharray 1.6s cubic-bezier(.2,.8,.2,1);transform:rotate(-90deg);transform-origin:80px 80px}
 .rl div{font-size:12.5px;margin-bottom:9px;display:flex;gap:8px;align-items:center}.rl i{width:10px;height:10px;border-radius:50%}.rl b{margin-left:6px}
 /* flip kpi */
-.flip{position:relative;height:172px;perspective:1000px;cursor:pointer;transition:transform .2s ease-out;animation:in .8s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--i,0)*60ms)}
+.flip{position:relative;height:172px;perspective:1000px;cursor:pointer;transition:transform .2s ease-out;animation:in .6s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(min(var(--i,0),8)*60ms)}
 .flip .in{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .9s cubic-bezier(.2,.8,.2,1)}
 .flip.on .in{transform:rotateY(180deg)}
 .face{position:absolute;inset:0;border-radius:var(--r);padding:18px;overflow:hidden;backface-visibility:hidden;-webkit-backface-visibility:hidden;border:1px solid var(--line);background:linear-gradient(150deg,var(--solid1),var(--solid2));box-shadow:var(--sh),inset 0 1px 0 var(--hi)}
@@ -208,7 +217,7 @@ html[data-p=ios] .tab em{height:26px}
 .fabwrap{position:sticky;bottom:84px;height:0;justify-content:flex-end;padding-right:16px;z-index:45}
 html[data-frame=off] .fabwrap{position:fixed;left:0;right:0}
 .fab{position:absolute;bottom:0;right:16px;width:56px;height:56px;border-radius:18px;background:linear-gradient(145deg,var(--a2),var(--a));color:#fff;font-size:24px;box-shadow:0 14px 28px -8px var(--a)}
-@media(max-width:760px){.st-l span{display:none}.studio{padding:0 10px}}
+@media(max-width:760px){.st-l span{display:none}.studio{padding:0 10px}html[data-shell=erp] .studio{padding-right:58px}}
 html[data-layout=phone] .top{flex-wrap:wrap;align-items:flex-start}html[data-layout=phone] .top h2{flex:none}html[data-layout=phone] .top .r{width:100%;justify-content:space-between;flex-wrap:wrap}.empty-note{pointer-events:none}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}.flow::after{display:none}}
 </style>
 </head>
@@ -378,7 +387,7 @@ setTimeout(()=>{$$('.vv').forEach(c=>c.setAttribute('stroke-dasharray',`${c.data
   let ry=-28,rx=-24,drag=0,sx,sy;const cw=$('#cw'),ap=()=>st.style.transform=`rotateX(${rx}deg) rotateY(${ry}deg)`;
   cw.addEventListener('pointerdown',e=>{drag=1;sx=e.clientX;sy=e.clientY;cw.style.cursor='grabbing'});
   addEventListener('pointerup',()=>{drag=0;cw.style.cursor='grab'});
-  addEventListener('pointermove',e=>{if(!drag)return;ry+=(e.clientX-sx)*.5;rx=Math.max(-60,Math.min(-5,rx-(e.clientY-sy)*.3));sx=e.clientX;sy=e.clientY;ap()})})();
+  let raf=0;addEventListener('pointermove',e=>{if(!drag)return;ry+=(e.clientX-sx)*.5;rx=Math.max(-60,Math.min(-5,rx-(e.clientY-sy)*.3));sx=e.clientX;sy=e.clientY;if(!raf)raf=requestAnimationFrame(()=>{raf=0;ap()})},{passive:true})})();
 /* donut depth */
 (function(){const d=$('#donut'),base=d.firstElementChild;for(let i=1;i<=12;i++){const c=base.cloneNode();c.style.transform=`translateZ(${-i}px)`;c.style.filter='brightness(.55)';d.insertBefore(c,base)}base.style.transform='translateZ(1px)'})();
 /* radar */
@@ -397,8 +406,10 @@ $('#cyls').innerHTML=[['UPVC 110mm',82,'#22c984','#6ee7b7'],['CPVC 25mm',54,'#3b
 $$('.chk').forEach(b=>b.onclick=()=>b.closest('.item').classList.toggle('done'));
 $$('.btn').forEach(b=>b.onclick=()=>{b.textContent='✓ Approved';b.classList.add('ok')});
 $$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('on'));t.classList.add('on')});
-$$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse')return;const r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;
-  c.style.transform=`perspective(1000px) rotateY(${x*7}deg) rotateX(${-y*7}deg) translateZ(6px)`});c.addEventListener('pointerleave',()=>c.style.transform='')});
+if(matchMedia('(hover:hover) and (pointer:fine)').matches&&!matchMedia('(prefers-reduced-motion:reduce)').matches)$$('.flip').forEach(c=>{let raf=0,ev=null;
+  c.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse')return;ev=e;if(raf)return;raf=requestAnimationFrame(()=>{raf=0;const r=c.getBoundingClientRect(),x=(ev.clientX-r.left)/r.width-.5,y=(ev.clientY-r.top)/r.height-.5;
+  c.style.transform=`perspective(1000px) rotateY(${x*7}deg) rotateX(${-y*7}deg) translateZ(6px)`})},{passive:true});c.addEventListener('pointerleave',()=>{c.style.transform=''})});
+document.addEventListener('visibilitychange',()=>document.documentElement.classList.toggle('paused',document.hidden));
 </script>
 <script>
 (function(){
@@ -497,7 +508,7 @@ $$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerT
   },true);
   const ss=$("#siteSelect");if(ss)ss.addEventListener("change",()=>parent.postMessage({type:"psk-it-action",action:"site-change",siteId:ss.value},"*"));
   let ts=0;document.addEventListener("touchstart",e=>{ts=e.touches?.[0]?.clientY||0},{passive:true});document.addEventListener("touchend",e=>{let y=e.changedTouches?.[0]?.clientY||0;if(ts>0&&y-ts>85&&(document.scrollingElement?.scrollTop||0)<=0)parent.postMessage({type:"psk-it-action",action:"refresh"},"*");ts=0},{passive:true});
-  addEventListener("message",e=>{if(e.data?.type!=="psk-it-dashboard-data")return;try{apply(e.data.payload)}catch(err){console.error("IT dashboard render failed",err);parent.postMessage({type:"psk-it-dashboard-render-error"},"*")}});
+  addEventListener("message",e=>{if(e.data?.type==="psk-it-shell"){document.documentElement.dataset.nosb=e.data.nosb?"on":"off";return}if(e.data?.type!=="psk-it-dashboard-data")return;try{apply(e.data.payload)}catch(err){console.error("IT dashboard render failed",err);parent.postMessage({type:"psk-it-dashboard-render-error"},"*")}});
   // If the host never manages to send data, reveal a truthful empty dashboard instead
   // of leaving a black loading screen or displaying the reference's sample figures.
   setTimeout(()=>{if(erpShell&&!liveApplied){try{apply({modules:[],sites:[],siteId:null,siteName:"No site selected",name:"IT Executive",roleLabel:"IT Executive",today:"",kpis:[],stages:[],tasks:[],activity:[],approvals:[],notificationRows:[],weekManpower:[],expenseSeries:[],workMix:[],health:[],heatmap:{rows:[]},stock:[],unread:0,approvalCount:0,onRoll:null,present:null,shortfall:null,trades:null,completePct:null,billed:null,punchPct:null,dprPct:null,approvalPct:null,workforcePct:null})}catch(err){const shell=document.querySelector('.shell');if(shell)shell.style.visibility='visible';console.error("IT dashboard empty fallback failed",err)}}},3200);

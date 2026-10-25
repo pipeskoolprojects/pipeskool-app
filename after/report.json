@@ -1,0 +1,2649 @@
+[
+ {
+  "name": "home",
+  "w": 1440,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "wages",
+  "w": 1440,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "workers",
+  "w": 1440,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "challans",
+  "w": 1440,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "pending",
+  "w": 1440,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "stock",
+  "w": 1440,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "procure",
+  "w": 1440,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "order",
+  "w": 1440,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "expenses",
+  "w": 1440,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "billing",
+  "w": 1440,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "vendors",
+  "w": 1440,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "assets",
+  "w": 1440,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "repairs",
+  "w": 1440,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 0,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED"
+  ]
+ },
+ {
+  "name": "letters",
+  "w": 1440,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "notices",
+  "w": 1440,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "home",
+  "w": 1024,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "wages",
+  "w": 1024,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "workers",
+  "w": 1024,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th.num",
+   "th",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "challans",
+  "w": 1024,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table.dc406",
+   "colgroup",
+   "col",
+   "col",
+   "thead",
+   "tr"
+  ],
+  "it": true,
+  "backdrops": 1,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "pending",
+  "w": 1024,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table",
+   "thead",
+   "tr",
+   "th",
+   "th",
+   "tbody"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "stock",
+  "w": 1024,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th.num",
+   "th.num",
+   "th.num"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "procure",
+  "w": 1024,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "order",
+  "w": 1024,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "expenses",
+  "w": 1024,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "billing",
+  "w": 1024,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "vendors",
+  "w": 1024,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "assets",
+  "w": 1024,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "repairs",
+  "w": 1024,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 0,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED"
+  ]
+ },
+ {
+  "name": "letters",
+  "w": 1024,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "notices",
+  "w": 1024,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "home",
+  "w": 820,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "wages",
+  "w": 820,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "workers",
+  "w": 820,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "challans",
+  "w": 820,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "div.it-challan-legend",
+   "span",
+   "b",
+   "span",
+   "b",
+   "span"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "pending",
+  "w": 820,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "div.it-pending-legend",
+   "span",
+   "b",
+   "span",
+   "b",
+   "span"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "stock",
+  "w": 820,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th.num",
+   "th.num",
+   "th.num"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "procure",
+  "w": 820,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "order",
+  "w": 820,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "button.co-cb",
+   "button.co-cb",
+   "i",
+   "img"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "expenses",
+  "w": 820,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "billing",
+  "w": 820,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "vendors",
+  "w": 820,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "assets",
+  "w": 820,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "repairs",
+  "w": 820,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "letters",
+  "w": 820,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "notices",
+  "w": 820,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "home",
+  "w": 412,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "wages",
+  "w": 412,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "workers",
+  "w": 412,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "challans",
+  "w": 412,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table.dc406",
+   "colgroup",
+   "col",
+   "col",
+   "col",
+   "col"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "pending",
+  "w": 412,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table",
+   "thead",
+   "tr",
+   "th.num",
+   "th",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "stock",
+  "w": 412,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th.num",
+   "th.num"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "procure",
+  "w": 412,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "order",
+  "w": 412,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "expenses",
+  "w": 412,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "billing",
+  "w": 412,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "div",
+   "select"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "vendors",
+  "w": 412,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th",
+   "tbody"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "assets",
+  "w": 412,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th",
+   "tbody"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "repairs",
+  "w": 412,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "letters",
+  "w": 412,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "notices",
+  "w": 412,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "home",
+  "w": 360,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "wages",
+  "w": 360,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "workers",
+  "w": 360,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "challans",
+  "w": 360,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table.dc406",
+   "colgroup",
+   "col",
+   "col",
+   "col",
+   "col"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "pending",
+  "w": 360,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table",
+   "thead",
+   "tr",
+   "th.num",
+   "th.num",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "stock",
+  "w": 360,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th.num",
+   "th.num"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "procure",
+  "w": 360,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "order",
+  "w": 360,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "expenses",
+  "w": 360,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "billing",
+  "w": 360,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "div",
+   "select"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "vendors",
+  "w": 360,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "assets",
+  "w": 360,
+  "theme": "dark",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th.num",
+   "th",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "repairs",
+  "w": 360,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "letters",
+  "w": 360,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "notices",
+  "w": 360,
+  "theme": "dark",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "home",
+  "w": 1440,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "wages",
+  "w": 1440,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "workers",
+  "w": 1440,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "challans",
+  "w": 1440,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "pending",
+  "w": 1440,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "stock",
+  "w": 1440,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "procure",
+  "w": 1440,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "order",
+  "w": 1440,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "expenses",
+  "w": 1440,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "billing",
+  "w": 1440,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "vendors",
+  "w": 1440,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "assets",
+  "w": 1440,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "repairs",
+  "w": 1440,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 0,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED"
+  ]
+ },
+ {
+  "name": "letters",
+  "w": 1440,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "notices",
+  "w": 1440,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "desktop",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "home",
+  "w": 1024,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "wages",
+  "w": 1024,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "workers",
+  "w": 1024,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th.num",
+   "th",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "challans",
+  "w": 1024,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table.dc406",
+   "colgroup",
+   "col",
+   "col",
+   "thead",
+   "tr"
+  ],
+  "it": true,
+  "backdrops": 1,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "pending",
+  "w": 1024,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table",
+   "thead",
+   "tr",
+   "th",
+   "th",
+   "tbody"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "stock",
+  "w": 1024,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th.num",
+   "th.num",
+   "th.num"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "procure",
+  "w": 1024,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "order",
+  "w": 1024,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "expenses",
+  "w": 1024,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "billing",
+  "w": 1024,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "vendors",
+  "w": 1024,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "assets",
+  "w": 1024,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "repairs",
+  "w": 1024,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 0,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED"
+  ]
+ },
+ {
+  "name": "letters",
+  "w": 1024,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "notices",
+  "w": 1024,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "home",
+  "w": 820,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "wages",
+  "w": 820,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "workers",
+  "w": 820,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "challans",
+  "w": 820,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "div.it-challan-legend",
+   "span",
+   "b",
+   "span",
+   "b",
+   "span"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "pending",
+  "w": 820,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "div.it-pending-legend",
+   "span",
+   "b",
+   "span",
+   "b",
+   "span"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "stock",
+  "w": 820,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th.num",
+   "th.num",
+   "th.num"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "procure",
+  "w": 820,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "order",
+  "w": 820,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "button.co-cb",
+   "button.co-cb",
+   "i",
+   "img"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "expenses",
+  "w": 820,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "billing",
+  "w": 820,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "vendors",
+  "w": 820,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "assets",
+  "w": 820,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "repairs",
+  "w": 820,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "letters",
+  "w": 820,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "notices",
+  "w": 820,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "tablet",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "home",
+  "w": 412,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "wages",
+  "w": 412,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "workers",
+  "w": 412,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "challans",
+  "w": 412,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table.dc406",
+   "colgroup",
+   "col",
+   "col",
+   "col",
+   "col"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "pending",
+  "w": 412,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table",
+   "thead",
+   "tr",
+   "th.num",
+   "th",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "stock",
+  "w": 412,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th.num",
+   "th.num"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "procure",
+  "w": 412,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "order",
+  "w": 412,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "expenses",
+  "w": 412,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "billing",
+  "w": 412,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "div",
+   "select"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "vendors",
+  "w": 412,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th",
+   "tbody"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "assets",
+  "w": 412,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th",
+   "tbody"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "repairs",
+  "w": 412,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "letters",
+  "w": 412,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "notices",
+  "w": 412,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "home",
+  "w": 360,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "wages",
+  "w": 360,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "workers",
+  "w": 360,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "challans",
+  "w": 360,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table.dc406",
+   "colgroup",
+   "col",
+   "col",
+   "col",
+   "col"
+  ],
+  "it": true,
+  "backdrops": 2,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  ]
+ },
+ {
+  "name": "pending",
+  "w": 360,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table",
+   "thead",
+   "tr",
+   "th.num",
+   "th.num",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "stock",
+  "w": 360,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th.num",
+   "th.num"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "procure",
+  "w": 360,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "order",
+  "w": 360,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 2,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "expenses",
+  "w": 360,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "button",
+   "button",
+   "button",
+   "button",
+   "button",
+   "button"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "billing",
+  "w": 360,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "div",
+   "select"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "vendors",
+  "w": 360,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th",
+   "th",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "assets",
+  "w": 360,
+  "theme": "light",
+  "over": 0,
+  "wide": [
+   "table.dt-compact",
+   "thead",
+   "tr",
+   "th.num",
+   "th",
+   "th"
+  ],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "repairs",
+  "w": 360,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 1,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ },
+ {
+  "name": "letters",
+  "w": 360,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+   "Minified React error #425; visit https://react.dev/errors/425 for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+  ]
+ },
+ {
+  "name": "notices",
+  "w": 360,
+  "theme": "light",
+  "over": 0,
+  "wide": [],
+  "it": true,
+  "backdrops": 3,
+  "layout": "phone",
+  "errs": [
+   "Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c",
+   "WebSocket connection to 'ws://mock.supabase.test/realtime/v1/websocket?apikey=mockkey&vsn=1.0.0' failed: Error during WebSocket handshake: Unexpected response c"
+  ]
+ }
+]

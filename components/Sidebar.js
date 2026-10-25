@@ -60,11 +60,14 @@ function Group({ label, items, subs, depth = 0, canSee, path, open, toggle, unre
     <div style={depth ? { paddingLeft: 10 } : undefined}>
       <button className={"nav-group" + (hasActive && !isOpen ? " has-active" : "")}
               style={depth ? { fontSize: 11, opacity: 0.95 } : undefined}
-              onClick={() => toggle(label)}>
+              aria-expanded={isOpen} onClick={() => toggle(label)}>
         <span>{label}</span>
         <span className="chev">{isOpen ? "▾" : "▸"}</span>
       </button>
-      {isOpen && (subs ? (
+      {/* update475: the group body stays mounted inside .nav-acc so the IT theme can animate open/close with
+          grid rows (transform-free, no height thrash). Other roles: data-open=false is display:none — unchanged look. */}
+      <div className="nav-acc" data-open={isOpen ? "true" : "false"}><div>
+      {subs ? (
         subs.map(sg => <Group key={sg.label} label={sg.label} items={sg.items} depth={depth + 1} canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} />)
       ) : (
         <nav className="nav-sub" style={{ marginTop: 0, paddingLeft: depth ? 6 : 0 }}>
@@ -72,7 +75,8 @@ function Group({ label, items, subs, depth = 0, canSee, path, open, toggle, unre
             <Link key={l.href} href={l.href} className={path === l.href ? "active" : ""}>{l.label}{l.href === "/notices" && unreadNotices > 0 && <span style={{ background: "var(--copper)", color: "#fff", borderRadius: 9, fontSize: 10, padding: "1px 6px", marginLeft: 6 }}>{unreadNotices}</span>}</Link>
           ))}
         </nav>
-      ))}
+      )}
+      </div></div>
     </div>
   );
 }
