@@ -195,10 +195,27 @@ const STYLES = `
 .lt-card-ic { width: 44px; height: 44px; border-radius: 11px; display: flex; align-items: center;
               justify-content: center; font-size: 20px; margin-bottom: 12px; }
 .lt-card-btn { width: 100%; margin-top: 12px; }
+.it-letter-overview { display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) minmax(260px,1.2fr);gap:12px;margin:0 0 18px; }
+.it-letter-metric,.it-letter-chart { background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;min-width:0; }
+.it-letter-metric { display:grid;align-content:center;gap:6px; }
+.it-letter-metric span,.it-letter-metric small,.it-letter-chart p { color:var(--muted);font-size:12px; }
+.it-letter-metric strong { color:var(--text);font-size:26px;line-height:1.1; }
+.it-letter-chart h2 { margin:4px 0;font-size:15px;color:var(--text); }
+.it-letter-chart-body { display:grid;grid-template-columns:76px 1fr;align-items:center;gap:14px;margin-top:12px; }
+.it-letter-donut { width:74px;aspect-ratio:1;border-radius:50%;position:relative;display:grid;place-items:center; }
+.it-letter-donut:after { content:"";position:absolute;inset:11px;background:var(--card);border-radius:50%; }
+.it-letter-donut b { z-index:1;font-size:15px;color:var(--text); }
+.it-letter-legend { display:grid;gap:7px;font-size:12px;color:var(--text); }
+.it-letter-legend span { display:flex;align-items:center;gap:7px; }
+.it-letter-legend i { width:9px;height:9px;border-radius:50%;display:inline-block; }
 .lt-two { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
 .lt-side { flex: 0 0 300px; min-width: 260px; }
 .lt-body { flex: 1; min-width: 300px; }
 @media (max-width: 760px) {
+  .it-letter-overview { grid-template-columns:repeat(2,minmax(0,1fr));gap:9px; }
+  .it-letter-chart { grid-column:1/-1; }
+  .it-letter-metric,.it-letter-chart { padding:12px; }
+  .it-letter-metric strong { font-size:22px; }
   .lt-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
   .lt-card { min-height: 0; padding: 13px 14px 12px; }
   .lt-card-ic { width: 36px; height: 36px; font-size: 17px; margin-bottom: 9px; }
@@ -209,6 +226,7 @@ const STYLES = `
 
 export default function LettersPage() {
   const sess = typeof window !== "undefined" ? getSession() : null;
+  const isITExecutive = String(sess?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
   const isDirector = sess?.role === "director";
   const canManage = isDirector || canAnySite(sess, "letters", "manage");
   const canIssue = canManage || canAnySite(sess, "letters", "create");
@@ -264,6 +282,14 @@ export default function LettersPage() {
       seen.set(t.code, { ...t, label: t.name.replace(/\s*\((Staff|Labour)\)\s*$/i, "") });
     });
     return [...seen.values()];
+  }, [templates]);
+  const letterOverview = useMemo(() => {
+    const staffTypes = templates.filter(t => t.family === "staff").length;
+    const labourTypes = templates.filter(t => t.family === "labour").length;
+    const total = staffTypes + labourTypes;
+    const staffPct = total ? staffTypes / total * 100 : 0;
+    const chart = total ? `conic-gradient(#ff7a1a 0% ${staffPct}%, #5b8def ${staffPct}% 100%)` : "conic-gradient(#e4e7ec 0% 100%)";
+    return { staffTypes, labourTypes, total, chart };
   }, [templates]);
 
   const people = family === "staff" ? staff : labour;
@@ -368,7 +394,7 @@ export default function LettersPage() {
   return (
     <div className="layout">
       <Sidebar />
-      <main className="main">
+      <main className={"main" + (isITExecutive ? " it-letters-page" : "")}>
         <style>{STYLES}</style>
 
         <div className="page-head">
@@ -391,6 +417,12 @@ export default function LettersPage() {
         {/* ================================================================ HOME */}
         {!loading && view === "home" && (
           <>
+            {isITExecutive && <section className="it-letter-overview" aria-label="Live documents overview">
+              <article className="it-letter-metric"><span>Document types</span><strong>{docTypes.length.toLocaleString("en-IN")}</strong><small>Available from saved templates</small></article>
+              <article className="it-letter-metric"><span>Staff templates</span><strong>{letterOverview.staffTypes.toLocaleString("en-IN")}</strong><small>Current staff document templates</small></article>
+              <article className="it-letter-metric"><span>Labour templates</span><strong>{letterOverview.labourTypes.toLocaleString("en-IN")}</strong><small>Current labour document templates</small></article>
+              <article className="it-letter-chart"><span className="muted" style={{fontSize:10,fontWeight:800,letterSpacing:".12em",color:ORANGE}}>LIVE TEMPLATE MIX</span><h2>Templates by audience</h2><p>Distribution of currently saved templates.</p><div className="it-letter-chart-body"><div className="it-letter-donut" style={{background:letterOverview.chart}}><b>{letterOverview.total.toLocaleString("en-IN")}</b></div><div className="it-letter-legend"><span><i style={{background:"#ff7a1a"}}/>Staff <b>{letterOverview.staffTypes.toLocaleString("en-IN")}</b></span><span><i style={{background:"#5b8def"}}/>Labour <b>{letterOverview.labourTypes.toLocaleString("en-IN")}</b></span></div></div></article>
+            </section>}
             <div className="lt-tops">
               <TopOption icon="⚙️" title="Company Rules" sub="Manage clauses & templates" onClick={() => { setView("rules"); setErr(""); setMsg(""); }} />
               <TopOption icon="🗂" title="Document Register" sub="View all issued documents" onClick={() => { setView("register"); setErr(""); setMsg(""); }} />
