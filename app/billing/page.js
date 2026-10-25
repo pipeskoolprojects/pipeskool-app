@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
+import { getSession } from "@/lib/auth";
 import { isDemo } from "@/lib/supabase";
 import { getSites } from "@/lib/data";
 import {
@@ -13,6 +14,10 @@ import {
 const STATUS_FLOW = ["draft", "submitted", "certified", "paid"];
 
 export default function BillingPage() {
+  const [session, setSession] = useState(null);
+  const [billsLoaded, setBillsLoaded] = useState(false);
+  const [totalsLoaded, setTotalsLoaded] = useState(false);
+  useEffect(() => { setSession(getSession()); }, []);
   const [site, setSite] = useState(2);
   useEffect(() => {   // update206: project scoping — ?site= from a project workspace pre-filters this page
     try { const sp = new URLSearchParams(window.location.search).get("site"); if (sp) setSite(Number(sp)); } catch {}
@@ -30,7 +35,7 @@ export default function BillingPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
 
-  useEffect(() => { getRaSettings(site).then(setSettings); getRaBills(site).then(setBills); getRaBillTotals(site).then(setBillTotals); getPaymentGroups(site).then(setPg); setEdit(null); setMsg(""); setErr(""); }, [site]);
+  useEffect(() => { setBillsLoaded(false); setTotalsLoaded(false); getRaSettings(site).then(setSettings); getRaBills(site).then(rows => { setBills(rows); setBillsLoaded(true); }); getRaBillTotals(site).then(totals => { setBillTotals(totals); setTotalsLoaded(true); }); getPaymentGroups(site).then(setPg); setEdit(null); setMsg(""); setErr(""); }, [site]);
   const reloadGroups = () => getPaymentGroups(site).then(setPg);
 
   const setLine = (i, k, v) => setLines(ls => ls.map((l, j) => j === i ? { ...l, [k]: v } : l));
@@ -110,8 +115,17 @@ export default function BillingPage() {
   totals.gst = totals.net * ((edit?.gst ?? 18) / 100);
   totals.grand = totals.net + totals.gst;
 
+  const isITExecutive = String(session?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
+  const raStatusMix = STATUS_FLOW.map(status => [BILL_STATUS[status]?.[0] || status, bills.filter(b => b.status === status).length, status]);
+  const raCount = raStatusMix.reduce((n, x) => n + x[1], 0);
+  const raColors = { draft: "#9aa6b2", submitted: "#f5a623", certified: "#4aa3ff", paid: "#20b26b" };
+  let raCursor = 0;
+  const raGradient = `conic-gradient(${raStatusMix.map(([, count, status]) => { const start = raCursor; raCursor += raCount ? count * 100 / raCount : 0; return `${raColors[status]} ${start}% ${raCursor}%`; }).join(", ")})`;
+  const raThisBill = bills.reduce((total, bill) => total + Number(billTotals[bill.id]?.thisBill || 0), 0);
+  const raCumulative = bills.reduce((total, bill) => total + Number(billTotals[bill.id]?.cum || 0), 0);
+
   return (
-    <div className="layout">
+    <div className={"layout" + (isITExecutive ? " it-page it-page-billing" : "")}>
       <Sidebar />
       <main className="main">
         <div className="page-head">
@@ -126,6 +140,19 @@ export default function BillingPage() {
         {isDemo && <div className="demo-banner">Demo mode — RA Billing needs a live database.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
         {err && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
+
+        {isITExecutive && !edit && <section className="it-ra-overview" aria-label="Live running account overview">
+          <div className="it-ra-kpis">
+            <div><span>RA bills</span><strong>{billsLoaded ? bills.length.toLocaleString("en-IN") : "—"}</strong><small>For selected site</small></div>
+            <div><span>This bill total</span><strong>{totalsLoaded ? inr(raThisBill) : "—"}</strong><small>Across listed bills</small></div>
+            <div><span>Cumulative total</span><strong>{totalsLoaded ? inr(raCumulative) : "—"}</strong><small>Across listed bills</small></div>
+          </div>
+          <div className="it-ra-status">
+            <div><h2>Bill status</h2><p>Live status count for this site.</p></div>
+            {billsLoaded && raCount ? <div className="it-ra-donut" style={{ "--ra-status-chart": raGradient }}><span>{raCount}<small>bills</small></span></div> : <div className="it-ra-empty">{billsLoaded ? "No RA bills for this site yet." : "Loading RA bills…"}</div>}
+            <div className="it-ra-legend">{raStatusMix.map(([label, count, status]) => <span key={status}><i className={status} />{label}<b>{count.toLocaleString("en-IN")}</b></span>)}</div>
+          </div>
+        </section>}
 
         {!edit && settings && (
           <>
