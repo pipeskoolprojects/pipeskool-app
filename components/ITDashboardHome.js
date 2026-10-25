@@ -14,7 +14,12 @@ import { getAttendanceHeatmap } from "@/lib/data";
 const isIT = role => String(role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
 const localDate = date => [date.getFullYear(), String(date.getMonth()+1).padStart(2,"0"), String(date.getDate()).padStart(2,"0")].join("-");
 const asArray = value => Array.isArray(value) ? value : [];
-const safe = promise => Promise.resolve(promise).catch(error => ({ __loadError: error?.message || "Could not load data" }));
+const safe = (promise, timeoutMs = 8000) => new Promise(resolve => {
+  let settled = false;
+  const finish = value => { if (settled) return; settled = true; clearTimeout(timer); resolve(value); };
+  const timer = setTimeout(() => finish({ __loadError: "Data request timed out" }), timeoutMs);
+  Promise.resolve(promise).then(finish, error => finish({ __loadError: error?.message || "Could not load data" }));
+});
 
 function buildDashboardData(session, siteId, raw) {
   const sites = asArray(session?.sites);
