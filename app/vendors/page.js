@@ -15,6 +15,7 @@ export default function VendorsPage() {
   const [session, setSession] = useState(null);
   useEffect(() => { setSession(getSession()); }, []);
   const canDelete = canAnySite(session, "indent", "manage");   // Manage tick on Indent & Purchase (or Director)
+  const isITExecutive = String(session?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
 
   const load = () => getVendors(true).then(setRows);
   useEffect(() => { load(); }, []);
@@ -51,9 +52,17 @@ export default function VendorsPage() {
         {canDelete && <button style={{ fontSize: 11.5, color: "var(--red)" }} onClick={() => remove(v)}>🗑</button>}
       </span>) },
   ];
+  const activeCount = (rows || []).filter(v => v.is_active).length;
+  const inactiveCount = (rows || []).length - activeCount;
+  const categoryCounts = Object.entries((rows || []).reduce((acc, vendor) => {
+    const seen = new Set(String(vendor.categories || "").split(/[,;|]/).map(x => x.trim()).filter(Boolean).map(x => x.toLowerCase()));
+    for (const category of seen) { const label = String(vendor.categories).split(/[,;|]/).map(x => x.trim()).find(x => x.toLowerCase() === category) || category; acc[label] = (acc[label] || 0) + 1; }
+    return acc;
+  }, {})).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 6);
+  const categoryMax = Math.max(1, ...categoryCounts.map(x => x[1]));
 
   return (
-    <div className="layout">
+    <div className={"layout" + (isITExecutive ? " it-page it-page-vendors" : "")}>
       <Sidebar />
       <main className="main">
         <div className="page-head">
@@ -63,6 +72,18 @@ export default function VendorsPage() {
         {isDemo && <div className="demo-banner">Demo mode — sample vendors.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
         {err && !form && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
+
+        {isITExecutive && <section className="it-vendor-overview" aria-label="Live vendor overview">
+          <div className="it-vendor-kpis">
+            <div><span>Vendor records</span><strong>{rows ? rows.length.toLocaleString("en-IN") : "—"}</strong><small>Loaded from Vendor Master</small></div>
+            <div><span>Active vendors</span><strong className="good">{rows ? activeCount.toLocaleString("en-IN") : "—"}</strong><small>Available for procurement</small></div>
+            <div><span>Inactive vendors</span><strong className="quiet">{rows ? inactiveCount.toLocaleString("en-IN") : "—"}</strong><small>Existing records retained</small></div>
+          </div>
+          <div className="it-vendor-chart">
+            <div><h2>Supplies by vendor</h2><p>Top categories recorded in supplier profiles.</p></div>
+            {rows === null ? <div className="it-vendor-empty">Loading vendor records…</div> : categoryCounts.length ? categoryCounts.map(([category, count]) => <div className="it-vendor-bar" key={category}><span title={category}>{category}</span><i><b style={{ width: `${count / categoryMax * 100}%` }} /></i><strong>{count}</strong></div>) : <div className="it-vendor-empty">No supply categories recorded yet.</div>}
+          </div>
+        </section>}
 
         {form && (
           <div className="panel">

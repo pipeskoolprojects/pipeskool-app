@@ -38,6 +38,7 @@ export default function AssetsPage() {
   const [editA, setEditA] = useState(null);      // { asset, form }
   const [editLog, setEditLog] = useState([]);
   const sess160 = getSession();
+  const isITExecutive = String(sess160?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
   const canEditAsset = !!sess160 && (sess160.role === "director" || canAnySite(sess160, "assets", "manage") || canAnySite(sess160, "assets", "create"));
   function openEditAsset(a) {
     setErr(""); setMsg("");
@@ -128,9 +129,16 @@ export default function AssetsPage() {
   const idle = assets ? idleAssets(assets) : [];
   const totalValue = (assets || []).reduce((s, a) => s + a.cost, 0);
   const underRepair = (assets || []).filter(a => a.status === "under_repair").length;
+  const assetStatusCounts = Object.entries((assets || []).reduce((acc, a) => { const label = statusInfo(a.status)[0]; acc[label] = (acc[label] || 0) + 1; return acc; }, {})).sort((a, b) => b[1] - a[1]);
+  const assetStatusTotal = assetStatusCounts.reduce((n, x) => n + x[1], 0);
+  const assetColors = ["#20b26b", "#f5a623", "#4aa3ff", "#8b6cff", "#ef4b56", "#9aa6b2"];
+  let assetCursor = 0;
+  const assetStatusGradient = `conic-gradient(${assetStatusCounts.map(([, count], i) => { const start = assetCursor; assetCursor += assetStatusTotal ? count * 100 / assetStatusTotal : 0; return `${assetColors[i % assetColors.length]} ${start}% ${assetCursor}%`; }).join(", ")})`;
+  const assetCategories = Object.entries((assets || []).reduce((acc, a) => { const key = a.category || "Uncategorized"; acc[key] = (acc[key] || 0) + 1; return acc; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const categoryMax = Math.max(1, ...assetCategories.map(x => x[1]));
 
   return (
-    <div className="layout">
+    <div className={"layout" + (isITExecutive ? " it-page it-page-assets" : "")}>
       <Sidebar />
       <main className="main">
         <div className="page-head">
@@ -236,12 +244,24 @@ export default function AssetsPage() {
           </div>
         )}
 
-        <div className="cards">
+        <div className="cards it-asset-cards">
           <div className="card"><div className="label">Total assets</div><div className="value">{assets?.length ?? "—"}</div></div>
           <div className="card"><div className="label">Asset value</div><div className="value">{inr(totalValue)}</div></div>
           <div className="card"><div className="label">Calibration due (30d)</div><div className="value" style={{ color: calib.length ? "var(--red)" : "var(--green)" }}>{calib.length}</div></div>
           <div className="card"><div className="label">Under repair</div><div className="value" style={{ color: underRepair ? "var(--amber)" : "var(--green)" }}>{underRepair}</div></div>
         </div>
+
+        {isITExecutive && <section className="it-asset-insights" aria-label="Live tools and assets overview">
+          <div className="it-asset-chart">
+            <div><h2>Asset status</h2><p>Distribution from the current site selection.</p></div>
+            {assets === null ? <div className="it-asset-empty">Loading asset records…</div> : assetStatusTotal ? <div className="it-asset-donut" style={{ "--asset-status-chart": assetStatusGradient }}><span>{assetStatusTotal.toLocaleString("en-IN")}<small>assets</small></span></div> : <div className="it-asset-empty">No assets recorded for this site.</div>}
+            <div className="it-asset-legend">{assetStatusCounts.map(([label, count], i) => <span key={label}><i style={{ background: assetColors[i % assetColors.length] }} />{label}<b>{count.toLocaleString("en-IN")}</b></span>)}</div>
+          </div>
+          <div className="it-asset-chart">
+            <div><h2>Assets by category</h2><p>Top categories in the current register.</p></div>
+            {assets === null ? <div className="it-asset-empty">Loading asset records…</div> : assetCategories.length ? assetCategories.map(([category, count]) => <div className="it-asset-bar" key={category}><span title={category}>{category}</span><i><b style={{ width: `${count / categoryMax * 100}%` }} /></i><strong>{count}</strong></div>) : <div className="it-asset-empty">No asset categories in this view.</div>}
+          </div>
+        </section>}
 
         {calib.length > 0 && (
           <div className="panel">

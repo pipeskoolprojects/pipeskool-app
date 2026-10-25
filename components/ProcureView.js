@@ -38,6 +38,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   const [allInd, setAllInd] = useState(null);   // update209: All Indents modal data (null = closed)
   const [indents, setIndents] = useState(null);
   const [pos, setPos] = useState([]);
+  const [posReady, setPosReady] = useState(false);
   const [poFsite, setPoFsite] = useState("all");     // update178: PO list filters
   // update243: the old ?site= read set ONLY the PO filter and never the indent list — that was
   // the "other sites' indents appear inside a project" bug. Scoping is now the `scope` const
@@ -214,7 +215,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     getOpenIndents(scope).then(setIndents);
   }
 
-  const load = () => { getOpenIndents(scope).then(setIndents); getPOs(scope).then(list => { setPos(list); getPoDcPending((list || []).map(p => p.id)).then(setDcPend).catch(() => {}); }); };
+  const load = () => { getOpenIndents(scope).then(setIndents); getPOs(scope).then(list => { setPos(list); setPosReady(true); getPoDcPending((list || []).map(p => p.id)).then(setDcPend).catch(() => {}); }); };
   useEffect(() => { setSession(getSession()); load(); getVendors(false).then(setMasterVendors); }, []);
 
   async function saveDelivery() {
@@ -223,7 +224,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
     // update439: `ind` is not in scope here (delivery edit has no indent draft) — removed; it threw after a successful save
-    setDeliv(null); setMsg("Delivery updated for " + deliv.po_no + " — site can see it now."); getPOs(scope).then(setPos);
+    setDeliv(null); setMsg("Delivery updated for " + deliv.po_no + " — site can see it now."); getPOs(scope).then(list => { setPos(list); setPosReady(true); });
   }
 
   async function openIndent(ind) {
@@ -512,6 +513,16 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
   }
 
   const open = (indents || []).filter(i => i.status === "open" || i.status === "quoting");
+  const isITExecutive = String(session?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
+  const livePOs = pos.filter(p => p.status !== "cancelled");
+  const poDeliveryMix = [
+    ["Awaiting", livePOs.filter(p => ["pending", "confirmed"].includes(p.delivery_status || "pending")).length, "pending"],
+    ["In transit / partial", livePOs.filter(p => ["dispatched", "partial", "delayed"].includes(p.delivery_status)).length, "transit"],
+    ["Delivered", livePOs.filter(p => p.delivery_status === "delivered" || p.status === "delivered").length, "delivered"],
+  ];
+  const poDeliveryTotal = poDeliveryMix.reduce((n, x) => n + x[1], 0);
+  const poDeliveryParts = poDeliveryTotal ? poDeliveryMix.map(x => x[1] * 100 / poDeliveryTotal) : [0, 0, 0];
+  const poDeliveryGradient = `conic-gradient(#f5a623 0 ${poDeliveryParts[0]}%, #4aa3ff ${poDeliveryParts[0]}% ${poDeliveryParts[0] + poDeliveryParts[1]}%, #20b26b ${poDeliveryParts[0] + poDeliveryParts[1]}% 100%)`;
   // update195: pagination — 10 per page, Prev/Next + page numbers
   const [indPage, setIndPage] = useState(1);
   const [poPage, setPoPage] = useState(1);
@@ -537,7 +548,20 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
         {isDemo && <div className="demo-banner">Demo mode — sample data.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
 
-        {showInd && <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: 16, marginBottom: 20 }}>{/* update407 */}
+        {isITExecutive && <section className="it-procure-overview" aria-label="Live procurement overview">
+          <div className="it-procure-kpis">
+            <div><span>Open requests</span><strong>{indents === null ? "—" : open.length}</strong><small>Orders awaiting procurement</small></div>
+            <div><span>Live purchase orders</span><strong>{posReady ? livePOs.length : "—"}</strong><small>Cancelled POs excluded</small></div>
+            <div><span>Pending deliveries</span><strong>{posReady ? livePOs.filter(p => p.delivery_status !== "delivered" && p.status !== "delivered").length : "—"}</strong><small>Live POs not marked delivered</small></div>
+          </div>
+          <div className="it-procure-delivery">
+            <div><h2>PO delivery status</h2><p>Distribution from live purchase orders.</p></div>
+            {poDeliveryTotal ? <div className="it-procure-donut" style={{ "--po-delivery-chart": poDeliveryGradient }}><span>{poDeliveryTotal}<small>orders</small></span></div> : <div className="it-procure-empty">{posReady ? "No purchase orders in this view yet." : "Loading purchase orders…"}</div>}
+            <div className="it-procure-legend">{poDeliveryMix.map(([label, count, tone]) => <span key={tone}><i className={tone} />{label}<b>{count}</b></span>)}</div>
+          </div>
+        </section>}
+
+        {showInd && <div className="it-procure-section" style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: 16, marginBottom: 20 }}>{/* update407 */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
             <div style={{ fontSize: 14.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}><span className="muted">📋</span>Open material requests<span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>{open.length}</span></div>
             <div style={{ display: "flex", gap: 8 }}><button type="button" onClick={() => { setAllInd([]); getAllIndents().then(setAllInd); }}>🗂 All orders</button><button type="button" className="primary" onClick={() => window.location.assign("/order")}>🛒 Order materials</button></div>{/* update473: new orders only from the catalogue */}
@@ -973,7 +997,7 @@ export default function ProcureView({ siteId = null, only = "all", showHead = tr
           )}
         </div>}
 
-        {showPo && <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: 16 }}>{/* update407 */}
+        {showPo && <div className="it-procure-po" style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: 16 }}>{/* update407 */}
           <div style={{ fontSize: 14.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}><span className="muted">🧾</span>Purchase orders issued<span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>{poShown.length}{canPx === true ? " · " + inr(poShown.reduce((s2, p) => s2 + (p.status === "cancelled" ? 0 : Number(p.total || 0)), 0)) : ""}</span></div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "0 0 12px", alignItems: "center" }}>
             <select value={poFsite} onChange={e => setPoFsite(e.target.value)} style={{ height: 34 }}><option value="all">Site: all</option>{[...new Set(pos.map(p => p.site).filter(Boolean))].sort().map(x => <option key={x} value={x}>{x}</option>)}</select>

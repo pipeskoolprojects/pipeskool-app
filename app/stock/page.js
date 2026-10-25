@@ -34,9 +34,17 @@ export default function StockPage() {
   const low = balances ? lowStock(balances) : [];
   const dead = balances ? deadStock(balances) : [];
   const totalValue = (balances || []).reduce((s, b) => s + b.value, 0);
+  const isITExecutive = String(session?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
+  const stockMovement = (balances || []).reduce((a, b) => ({
+    received: a.received + (Number(b.received || 0) > 0 ? 1 : 0), issued: a.issued + (Number(b.issued || 0) > 0 ? 1 : 0),
+    consumed: a.consumed + (Number(b.consumed || 0) > 0 ? 1 : 0), returned: a.returned + (Number(b.returned || 0) > 0 ? 1 : 0),
+  }), { received: 0, issued: 0, consumed: 0, returned: 0 });
+  const movementTotal = stockMovement.received + stockMovement.issued + stockMovement.consumed + stockMovement.returned;
+  const movementParts = movementTotal ? [stockMovement.received, stockMovement.issued, stockMovement.consumed, stockMovement.returned].map(n => n * 100 / movementTotal) : [0, 0, 0, 0];
+  const movementGradient = `conic-gradient(#20b26b 0 ${movementParts[0]}%, #ff7a2f ${movementParts[0]}% ${movementParts[0] + movementParts[1]}%, #8b6cff ${movementParts[0] + movementParts[1]}% ${movementParts[0] + movementParts[1] + movementParts[2]}%, #4aa3ff ${movementParts[0] + movementParts[1] + movementParts[2]}% 100%)`;
 
   return (
-    <div className="layout">
+    <div className={"layout" + (isITExecutive ? " it-page it-page-stock" : "")}>
       <Sidebar />
       <main className="main">
         <div className="page-head">
@@ -60,14 +68,33 @@ export default function StockPage() {
 
         {isDemo && <div className="demo-banner">Demo mode — sample inventory.</div>}
 
-        <div className="cards">
+        <div className="cards it-stock-cards">
           {canPx === true && <div className="card"><div className="label">Stock value on hand</div><div className="value">{inr(totalValue)}</div></div>}
           <div className="card"><div className="label">Items below min stock</div><div className="value" style={{ color: low.length ? "var(--red)" : "var(--green)" }}>{low.length}</div></div>
           <div className="card"><div className="label">Dead / slow-moving</div><div className="value" style={{ color: dead.length ? "var(--amber)" : "var(--green)" }}>{dead.length}</div></div>
           <div className="card"><div className="label">Open material requests</div><div className="value">{requests.length}</div></div>
         </div>
 
-        <div className="panel">
+        {isITExecutive && <section className="it-stock-insights" aria-label="Stock movement summary">
+          <div className="it-stock-chart">
+            <div><h2>Stock movement</h2><p>Live item/site balances with recorded movements.</p></div>
+            {movementTotal ? <div className="it-stock-donut" style={{ "--movement-chart": movementGradient }}><span>{movementTotal.toLocaleString("en-IN")}<small>movement records</small></span></div> : <div className="it-stock-empty">No stock movements in this view yet.</div>}
+            <div className="it-stock-legend">
+              <span><i className="received" />Balances received <b>{stockMovement.received.toLocaleString("en-IN")}</b></span>
+              <span><i className="issued" />Balances issued <b>{stockMovement.issued.toLocaleString("en-IN")}</b></span>
+              <span><i className="consumed" />Balances consumed <b>{stockMovement.consumed.toLocaleString("en-IN")}</b></span>
+              <span><i className="returned" />Balances returned <b>{stockMovement.returned.toLocaleString("en-IN")}</b></span>
+            </div>
+          </div>
+          <div className="it-stock-chart it-stock-health">
+            <div><h2>Inventory health</h2><p>Current items at or below their configured minimum.</p></div>
+            <div className="it-stock-health-value"><strong>{low.length}</strong><span>below minimum</span></div>
+            <div className="it-stock-health-track"><i style={{ width: balances?.length ? `${Math.min(100, low.length / balances.length * 100)}%` : "0%" }} /></div>
+            <small>{balances?.length || 0} live item/site balances · {dead.length} slow-moving</small>
+          </div>
+        </section>}
+
+        <div className="panel it-stock-panel">
           <h2>Live stock position &amp; reconciliation</h2>
           {!balances ? <div className="muted">Loading…</div> :
             <DataTable exportName="stock_position" rows={balances.map(b => ({ ...b, key: b.item_id + b.site_code }))}

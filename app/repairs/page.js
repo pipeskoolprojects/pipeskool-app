@@ -70,6 +70,7 @@ export default function MachineRepairPage() {
   useEffect(()=>{setQuery(window.location.search);},[]);
   const receiptRef=useRef(null);
   const siteId=sess?.currentSite||sess?.sites?.[0]?.id;
+  const isITExecutive=String(sess?.role||"").toLowerCase().replace(/[^a-z]/g,"")==="itexecutive";
   const supervisor=["supervisor","site_engineer"].includes(sess?.role);
   const office=["director","ho_admin","it_executive"].includes(sess?.role)||can(sess,"machine_repair","approve",siteId)||can(sess,"machine_repair","manage",siteId);
   const canCreate=supervisor&&(can(sess,"machine_repair","create",siteId)||can(sess,"machine_repair","manage",siteId));
@@ -108,6 +109,17 @@ export default function MachineRepairPage() {
   },[sess,siteId,creating,draftReady,draftKey,machines]);
   const filtered=rows.filter(r=>repairTabMatches(tab,r.status));
   const counts=useMemo(()=>Object.fromEntries(["All","Requested","With vendor","Received"].map(t=>[t,t==="All"?rows.length:rows.filter(r=>repairTabMatches(t,r.status)).length])),[rows]);
+  const repairInsights=useMemo(()=>{
+    const totalMachines=rows.reduce((n,r)=>n+(Number(r.machine_count)||0),0);
+    const receivedMachines=rows.reduce((n,r)=>n+(Number(r.received_count)||0),0);
+    const withVendor=rows.filter(r=>repairTabMatches("With vendor",r.status)).length;
+    const waitingDispatch=rows.filter(r=>repairTabMatches("Requested",r.status)).length;
+    const slices=[{label:"Awaiting dispatch",value:waitingDispatch,color:"#f79009"},{label:"With vendor",value:withVendor,color:"#2e90fa"},{label:"Received",value:counts.Received||0,color:"#12b76a"}];
+    const sum=slices.reduce((n,x)=>n+x.value,0);
+    let cursor=0;
+    const gradient=sum?slices.map(x=>{const start=cursor;cursor+=x.value/sum*100;return `${x.color} ${start}% ${cursor}%`;}).join(", "):"#e4e7ec 0% 100%";
+    return {totalMachines,receivedMachines,withVendor,waitingDispatch,slices,gradient};
+  },[rows,counts]);
   const receiptVendor=detail?vendors.find(v=>String(v.id)===String(detail.vendor_id)):null;
   const shareReceipt=channel=>{
     const receipt=detail?.receipts?.[0];
@@ -183,10 +195,16 @@ export default function MachineRepairPage() {
   };
   if(!sess)return <main className={styles.page}><p>{error||"Loading…"}</p></main>;
   if(!canRead&&!canCreate)return <main className={styles.page}><h1>Machine Repair</h1><p>You do not have permission to view Machine Repair for this site.</p></main>;
-  return <main className={styles.page}>
+  return <main className={styles.page+(isITExecutive?" "+styles.itRepairPage:"")}>
     <header className={styles.heading}><div><h1>Machine Repair</h1><p>Track faulty tools from site to vendor and back.</p></div>{canCreate&&!creating&&!showReceipt&&<button className={styles.primary} onClick={()=>{setMachines([{name:"",problem:"",photo:null,preview:""}]);setDraftKey("");setDraftReady(false);setCreating(true);setDetail(null);setSelected(null);setError("");}}>＋ New Repair</button>}</header>
     {notice&&<div className={styles.notice} role="status">{notice}<button onClick={()=>setNotice("")}>×</button></div>}
     {error&&<div className={styles.error} role="alert">{error}<button onClick={()=>load(true)} disabled={loading}>Retry</button></div>}
+    {isITExecutive&&!creating&&!showReceipt&&<section className={styles.itRepairOverview} aria-label="Repair overview">
+      <div className={styles.itRepairMetrics}>
+        {[["Repair requests",rows.length],["Machines tracked",repairInsights.totalMachines],["With vendor",repairInsights.withVendor],["Returned",repairInsights.receivedMachines]].map(([label,value])=><article key={label}><span>{label}</span><strong>{loading?"—":value.toLocaleString("en-IN")}</strong><small>{loading?"Loading live records":"Current permitted repair records"}</small></article>)}
+      </div>
+      <article className={styles.itRepairChart}><div><span className={styles.itRepairEyebrow}>LIVE WORKFLOW</span><h2>Repair request status</h2><p>Distribution of the repair requests currently visible to your account.</p></div><div className={styles.itRepairChartBody}><div className={styles.itRepairDonut} style={{background:`conic-gradient(${repairInsights.gradient})`}}><span>{loading?"—":rows.length.toLocaleString("en-IN")}</span></div><div className={styles.itRepairLegend}>{repairInsights.slices.map(x=><div key={x.label}><i style={{background:x.color}}/><span>{x.label}</span><b>{loading?"—":x.value.toLocaleString("en-IN")}</b></div>)}</div></div></article>
+    </section>}
     {creating? <section className={styles.formCard}>
       <div className={styles.sectionHeading}><div><h2>New repair request</h2><p>Site: {sess.sites?.find(s=>String(s.id)===String(siteId))?.name||"Assigned site"} · Raised by: {sess.name}</p></div><button className={styles.secondary} onClick={()=>setCreating(false)}>Cancel</button></div>
       {machines.map((m,i)=>{const bad=invalid.find(x=>x.number===i+1)?.missing||[];return <article key={i} className={styles.machineEditor}>

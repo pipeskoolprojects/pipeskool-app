@@ -11,6 +11,13 @@ import { canSeeSalary } from "@/lib/payPrivacy";   // update471
 import { isDemo, supabase } from "@/lib/supabase";
 
 const ADD_NEW = "__add_new__";
+const isITExecutive = session => String(session?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
+const maskMobile = value => {
+  const raw = String(value || ""), digits = raw.replace(/\D/g, "");
+  if (digits.length < 4) return "••••";
+  let hide = digits.length - 2;
+  return raw.replace(/\d/g, digit => hide-- > 0 ? "•" : digit);
+};
 // update336: the worker form's layout. Kept as one stylesheet rather than inline styles so
 // the two-column grid can collapse to one column on a phone, which inline styles cannot do.
 const WORKER_FORM_CSS = `
@@ -95,6 +102,18 @@ export default function WorkersPage() {
   useEffect(() => { load(); getSitesList().then(setSites); getContractors().then(setContractors); }, []);
 
   const incompleteCount = (rows || []).filter(r => !r.complete).length;
+  const itExecutive = isITExecutive(sess);
+  const workerGroups = (rows || []).reduce((out, row) => {
+    const category = row.category || "Other", siteName = row.site || "Unassigned";
+    out.categories[category] = (out.categories[category] || 0) + 1;
+    out.sites[siteName] = (out.sites[siteName] || 0) + 1;
+    if (row.payType === "Contractor" || row.type === "Contractor") out.contractor += 1;
+    return out;
+  }, { categories: {}, sites: {}, contractor: 0 });
+  const itTotal = rows?.length ?? null;
+  const itComplete = itTotal == null ? null : itTotal - incompleteCount;
+  const itBarRows = (source, take = 5) => Object.entries(source).sort((a, b) => b[1] - a[1]).slice(0, take);
+  const itRatio = value => itTotal ? Math.round(value * 100 / itTotal) : 0;
   const set = (k, v) => setModal(m => ({ ...m, [k]: v }));
   const [allot, setAllot] = useState([]);   // update168: extra sites the worker can punch at
   useEffect(() => {
@@ -220,7 +239,7 @@ export default function WorkersPage() {
 
   const staffColumns = [
     { key: "name", label: "Name", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
-    { key: "mobile", label: "Mobile (login)", filter: "search", render: r => <span className="muted">{r.mobile}</span> },
+    { key: "mobile", label: "Mobile (login)", filter: "search", render: r => <span className="muted">{itExecutive ? maskMobile(r.mobile) : r.mobile}</span> },
     { key: "role", label: "Role", filter: "select" },
     { key: "bank", label: "Bank", filter: "select" },
     { key: "kyc", label: "Bank details", filter: "select",
@@ -252,7 +271,7 @@ export default function WorkersPage() {
 
   const columns = [
     { key: "name", label: "Worker", filter: "search", render: r => <span style={{ fontWeight: 600 }}>{r.name}{r.raw?.proxy_authority && <span title="Proxy Attendance Authority — can mark others present" style={{ marginLeft: 5 }}>🛡</span>}</span> },   // update288
-    { key: "mobile", label: "Mobile", filter: "search", render: r => <span className="muted">{r.mobile}</span> },
+    { key: "mobile", label: "Mobile", filter: "search", render: r => <span className="muted">{itExecutive ? maskMobile(r.mobile) : r.mobile}</span> },
     { key: "category", label: "Category", filter: "select" },
     { key: "type", label: "Labour type", filter: "select",
       render: r => r.type === "Own" ? <span className="badge gray">Own</span> : <span className="badge info">{r.contractor}</span> },
@@ -272,7 +291,7 @@ export default function WorkersPage() {
   ];
 
   return (
-    <div className="layout">
+    <div className={"layout" + (itExecutive ? " it-page it-page-workers" : "")}>
       <Sidebar />
       <main className="main">
         <div className="page-head">
@@ -289,6 +308,23 @@ export default function WorkersPage() {
           <button className={tab === "staff" ? "primary" : ""} onClick={() => setTab("staff")}>Staff (login users)</button>
           <button className={tab === "exited" ? "primary" : ""} onClick={() => { setTab("exited"); getExitedWorkers().then(setExited); getExitedStaff().then(setExStaff); }}>Exited{exited ? " · " + (exited.length + (exStaff || []).length) : ""}</button>
         </div>
+        {itExecutive && tab === "workers" && <section className="it-worker-insights" aria-label="Worker profile overview">
+          <article className="it-worker-kpis">
+            <div><span>Worker profiles</span><strong>{itTotal == null ? "Loading…" : itTotal.toLocaleString("en-IN")}</strong><small>Active worker records</small></div>
+            <div><span>Incomplete profiles</span><strong className="warning">{rows == null ? "—" : incompleteCount.toLocaleString("en-IN")}</strong><small>Aadhaar or bank details pending</small></div>
+            <div><span>Complete profiles</span><strong className="success">{itComplete == null ? "—" : itComplete.toLocaleString("en-IN")}</strong><small>Profile details available</small></div>
+            <div><span>Staff accounts</span><strong>{staff == null ? "—" : staff.length.toLocaleString("en-IN")}</strong><small>Login users · open Staff tab</small></div>
+          </article>
+          <article className="it-worker-chart">
+            <h2>Profile completeness</h2>
+            <div className="it-worker-donut" style={{ "--complete": `${itRatio(itComplete || 0)}%` }}><span>{itTotal == null ? "—" : `${itRatio(itComplete || 0)}%`}</span></div>
+            <small>{rows == null ? "Loading worker records" : `${itComplete} complete · ${incompleteCount} incomplete`}</small>
+          </article>
+          {[ ["Trade mix", workerGroups.categories, "var(--copper)"], ["Site distribution", workerGroups.sites, "#4388ff"] ].map(([title, groups, color]) => {
+            const entries = itBarRows(groups), max = Math.max(1, ...entries.map(([, count]) => count));
+            return <article className="it-worker-chart it-worker-bars" key={title}><h2>{title}</h2>{rows == null ? <small>Loading worker records…</small> : entries.length ? entries.map(([label, count]) => <div className="it-worker-bar-row" key={label}><span title={label}>{label}</span><i><b style={{ width: `${Math.round(count * 100 / max)}%`, background: color }} /></i><strong>{count}</strong></div>) : <small>No worker records for this view.</small>}</article>;
+          })}
+        </section>}
         {isDemo && <div className="demo-banner">Demo mode — sample worker master shown.</div>}
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
         {tab === "workers" && incompleteCount > 0 && (
@@ -323,7 +359,7 @@ export default function WorkersPage() {
             </div>
             {!exited ? <div className="muted">Loading…</div> : (
               <DataTable columns={[
-                { key: "full_name", label: "Name", render: r => <span><b>{r.full_name}</b><div className="muted" style={{ fontSize: 11 }}>{r.mobile} · {r.labour_type === "contractor" ? (r.contractor_name || "contractor") : "Own"}</div></span> },
+                { key: "full_name", label: "Name", render: r => <span><b>{r.full_name}</b><div className="muted" style={{ fontSize: 11 }}>{itExecutive ? maskMobile(r.mobile) : r.mobile} · {r.labour_type === "contractor" ? (r.contractor_name || "contractor") : "Own"}</div></span> },
                 { key: "exit_designation", label: "Designation at exit", filter: "select" }, { key: "site_name", label: "Site", filter: "select" },
                 { key: "joining_date", label: "Joining date" }, { key: "last_working_day", label: "Last working day" },
                 { key: "exit_type", label: "Exit type", filter: "select", render: r => <span style={{ background: "#FEE2E2", color: "#B91C1C", fontSize: 11, padding: "2px 8px", borderRadius: 999, textTransform: "capitalize" }}>{String(r.exit_type || "").replace("_", " ")}</span> },
@@ -335,7 +371,7 @@ export default function WorkersPage() {
             <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Their login is blocked and their punch profile is closed from the day after the last working day. History up to that day is untouched.</div>
             {!exStaff ? <div className="muted">Loading…</div> : exStaff.length === 0 ? <div className="muted">None.</div> : (
               <DataTable columns={[
-                { key: "full_name", label: "Name", render: r => <span><b>{r.full_name}</b><div className="muted" style={{ fontSize: 11 }}>{r.mobile}</div></span> },
+                { key: "full_name", label: "Name", render: r => <span><b>{r.full_name}</b><div className="muted" style={{ fontSize: 11 }}>{itExecutive ? maskMobile(r.mobile) : r.mobile}</div></span> },
                 { key: "role", label: "Role", filter: "select", render: r => String(r.role || "").replace(/_/g, " ") },
                 { key: "joining_date", label: "Joining date" }, { key: "last_working_day", label: "Last working day" },
                 { key: "exit_reason", label: "Reason" }, { key: "exited_at", label: "Applied on" },
