@@ -202,14 +202,20 @@ export default function DeliveryChallans() {
   const openOnSite = r => r.status !== "cancelled" && (rstate[r.id] ? rstate[r.id].open > 0 : !r.grn_no);
 
   const canCreate = session && (session.role === "director" || session.role === "it_executive" || canSeeModuleAnySite(session, "stock"));
+  const isITExecutive = String(session?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
   const stBadge = { matched: ["Matched", "p"], partial: ["Partial", "warn"], mismatch: ["Mismatch", "red"], pending: ["No PO", "warn"], cancelled: ["Cancelled", "a"] };   // update272/441
+  const receiptDone = shown.filter(r => r.status !== "cancelled" && !openOnSite(r)).length;
+  const receiptCancelled = shown.filter(r => r.status === "cancelled").length;
+  const receiptTotal = stat.pend + receiptDone + receiptCancelled;
+  const receiptParts = receiptTotal ? [stat.pend, receiptDone, receiptCancelled].map(n => Math.round(n * 100 / receiptTotal)) : [0, 0, 0];
+  const receiptGradient = `conic-gradient(#8b6cff 0 ${receiptParts[0]}%, #22b26b ${receiptParts[0]}% ${receiptParts[0] + receiptParts[1]}%, #9aa6b2 ${receiptParts[0] + receiptParts[1]}% 100%)`;
 
   return (
-    <div className="layout">
+    <div className={"layout" + (isITExecutive ? " it-page it-page-challans" : "")}>
       <Sidebar />
       <main className="main">
         {/* update403/406: two challan flows on one page — pill tabs with icon + count */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+        <div className="it-challan-tabs" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
           <div style={{ display: "inline-flex", background: "var(--gray-bg)", borderRadius: 8, padding: 3, gap: 2 }}>
             {[["vendor", "🚚", "Vendor challans", rows === null ? null : rows.length], ["internal", "🏭", "Internal transfers", idcCount]].map(([k, ic, l, n]) => (
               <button key={k} type="button" onClick={() => { setMainTab(k); try { const u = new URL(window.location.href); k === "internal" ? u.searchParams.set("tab", "internal") : u.searchParams.delete("tab"); window.history.replaceState(null, "", u.toString()); } catch {} }}
@@ -236,7 +242,7 @@ export default function DeliveryChallans() {
               </div>))}
           </div>)}
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 18 }}>
+        <div className="it-challan-kpis" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, marginBottom: 18 }}>
           {[["🧾", "Total challans", stat.total, null], ["⚡", "Auto-matched", stat.auto, null], ["✍", "Manual entries", stat.manual, null], ["⚠", "Qty mismatch", stat.mism, "amber"], ["⏳", "Pending → GRN", stat.pend, "blue"], ["₹", "Received value", inr(recvValue), null]].map(([ic, l, v, tone]) => (
             <div key={l} style={{ background: tone === "amber" ? "#FEF3C7" : tone === "blue" ? "#E8F0FE" : "#fff", border: "1px solid " + (tone === "amber" ? "#FDE68A" : tone === "blue" ? "#C7D7FE" : "var(--border)"), borderRadius: 12, padding: "12px 14px", color: tone === "amber" ? "#92400E" : tone === "blue" ? "#1D4ED8" : "inherit" }}>
               <div style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6, opacity: tone ? 1 : .7 }}><span>{ic}</span>{l}</div>
@@ -244,8 +250,14 @@ export default function DeliveryChallans() {
             </div>))}
         </div>
 
+        {isITExecutive && <section className="it-challan-status" aria-label="Site receipt status mix">
+          <div><h2>Site receipt status</h2><p>Challans in the current filtered view</p></div>
+          {receiptTotal ? <div className="it-challan-donut" style={{ "--receipt-chart": receiptGradient }}><span>{receiptTotal.toLocaleString("en-IN")}<small>challans</small></span></div> : <div className="it-challan-empty">No challans in this view yet.</div>}
+          <div className="it-challan-legend"><span><i className="pending" />Awaiting receipt <b>{stat.pend}</b></span><span><i className="received" />Received <b>{receiptDone}</b></span><span><i className="cancelled" />Cancelled <b>{receiptCancelled}</b></span></div>
+        </section>}
+
         {canCreate && showNew && (
-          <div style={{ background: "#F5F8FF", border: "1px solid #C7D7FE", borderRadius: 12, padding: 16, marginBottom: 18 }}>{/* update406: workflow card, accent tint */}
+          <div className="it-challan-form" style={{ background: "#F5F8FF", border: "1px solid #C7D7FE", borderRadius: 12, padding: 16, marginBottom: 18 }}>{/* update406: workflow card, accent tint */}
             <div style={{ fontSize: 13.5, color: "#1D4ED8", display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>👆 Manual entry — pick a PO to match against</div>
             <div>
               {ctab === "upload" && (
@@ -341,7 +353,7 @@ export default function DeliveryChallans() {
         )}
 
         <div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+          <div className="it-challan-filters" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
             <div style={{ flex: "1 1 200px", display: "flex", alignItems: "center", gap: 6, background: "#fff", border: "1px solid var(--border)", borderRadius: 8, padding: "0 10px", height: 36 }}><span className="muted">🔍</span><input placeholder="Search PO / DC / GRN no…" value={q} onChange={e => setQ(e.target.value)} style={{ border: "none", background: "transparent", outline: "none", width: "100%", fontSize: 13 }} /></div>
             <select value={fTally} onChange={e => setFTally(e.target.value)} style={{ height: 36 }} title="Tally posting status"><option value="all">Tally: all</option><option value="posted">Posted</option><option value="not_posted">Not posted</option></select>
             <select value={fStatus} onChange={e => setFStatus(e.target.value)} style={{ height: 36 }}><option value="all">Status: all</option><option value="matched">Matched</option><option value="mismatch">Mismatch</option><option value="pending">No PO</option><option value="pending_grn">Pending → GRN</option><option value="cancelled">Cancelled</option></select>
