@@ -217,6 +217,7 @@ export default function CatalogueOrder({ mobile = false }) {
   useEffect(() => { if (searchOpen) setTimeout(() => searchRef.current?.focus(), 30); }, [searchOpen]);
 
   const showPx = canPx === true;
+  const isITExecutive = String(sess?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
   const words = useMemo(() => searchWords(q), [q]);
   const all = data?.products || [];
   // categories straight from the data (catalogue category, or the Material Master type for other items) — busiest first
@@ -324,7 +325,7 @@ export default function CatalogueOrder({ mobile = false }) {
   );
 
   return (
-    <div ref={app} className={"co-app" + (mobile ? " co-mob" : "") + (nItems ? " co-hascart" : "")}>
+    <div ref={app} className={"co-app" + (mobile ? " co-mob" : "") + (nItems ? " co-hascart" : "") + (isITExecutive && !mobile ? " it-co-app" : "")}>
       <style>{CSS}</style>
       <header className="co-hd">
         <button type="button" className="co-ib co-back" aria-label="Back" onClick={goBack}>{Ico.back}</button>
@@ -334,6 +335,12 @@ export default function CatalogueOrder({ mobile = false }) {
         <button type="button" className={"co-ib" + (nFilters ? " on" : "")} aria-label="Filters" onClick={() => setFilterOpen(true)}>{Ico.filter}{nFilters > 0 && <i className="co-dot">{nFilters}</i>}</button>
         <button type="button" className="co-ib co-dk co-cartbtn" aria-label={`Order cart, ${plural(nItems, "item")}`} onClick={() => setCartOpen(true)}>{Ico.cart}<span>Order</span>{nItems > 0 && <i className="co-dot">{nItems}</i>}</button>
       </header>
+      {isITExecutive && !mobile && <section className="it-order-overview" aria-label="Live catalogue overview">
+        <div><span>Materials in view</span><strong>{data ? list.length.toLocaleString("en-IN") : "—"}</strong></div>
+        <div><span>Catalogue groups</span><strong>{data ? cats.length.toLocaleString("en-IN") : "—"}</strong></div>
+        <div><span>Material options</span><strong>{data ? all.reduce((n, p) => n + p.opts.length, 0).toLocaleString("en-IN") : "—"}</strong></div>
+        <div><span>Order lines</span><strong>{nItems.toLocaleString("en-IN")}</strong></div>
+      </section>}
       <div className={"co-sbar" + (searchOpen || q ? " open" : "")}>
         <span className="co-sico">{Ico.search}</span>
         <input ref={searchRef} type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, code, size, brand…" aria-label="Search the catalogue" />
