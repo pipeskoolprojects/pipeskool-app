@@ -1,5 +1,6 @@
 import "./globals.css";
 import GlobalMobileNav from "@/components/GlobalMobileNav";   // update374
+import ITExecutiveUiGate from "@/components/ITExecutiveUiGate";
 
 export const metadata = {
   title: "Pipeskool Site Management",
@@ -11,7 +12,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}<GlobalMobileNav /></body>
+      <body>{children}<ITExecutiveUiGate /><GlobalMobileNav /></body>
     </html>
   );
 }
