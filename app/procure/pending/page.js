@@ -18,7 +18,7 @@ const qty = (n, u) => Number(n || 0).toLocaleString("en-IN") + (u ? " " + u : ""
 // module scope — never define a component inside a component (update204)
 function Stat({ label, value, sub, color }) {
   return (
-    <div style={{ flex: "1 1 170px", minWidth: 150, background: "#fff", border: "1px solid var(--border)", borderRadius: 14, padding: "12px 14px" }}>
+    <div className="it-pending-stat" style={{ flex: "1 1 170px", minWidth: 150, background: "#fff", border: "1px solid var(--border)", borderRadius: 14, padding: "12px 14px" }}>
       <div className="muted" style={{ fontSize: 11.5 }}>{label}</div>
       <div style={{ fontSize: 21, fontWeight: 800, color: color || "var(--text)", marginTop: 2 }}>{value}</div>
       {sub && <div className="muted" style={{ fontSize: 11 }}>{sub}</div>}
@@ -110,9 +110,13 @@ export default function PendingDeliveriesPage() {
   }
 
   if (!session) return null;
+  const isITExecutive = String(session?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
+  const agingTotal = Number(sum?.green || 0) + Number(sum?.amber || 0) + Number(sum?.red || 0);
+  const greenPct = agingTotal ? Number(sum.green || 0) * 100 / agingTotal : 0;
+  const amberPct = agingTotal ? (Number(sum.green || 0) + Number(sum.amber || 0)) * 100 / agingTotal : 0;
 
   return (
-    <div className="layout">
+    <div className={"layout" + (isITExecutive ? " it-page it-page-pending" : "")}>
       <Sidebar />
       <main className="main">
         <div className="page-head"><h1>Pending deliveries</h1></div>
@@ -124,7 +128,7 @@ export default function PendingDeliveriesPage() {
         {msg && <div className="demo-banner" style={{ background: "var(--green-bg)", color: "var(--green)" }}>{msg}</div>}
 
         {sum && (
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+          <div className="it-pending-stats" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
             <Stat label="📋 PO lines pending" value={sum.lines} sub={sum.pos + " PO(s) · " + sum.vendors + " vendor(s)"} />
             {canPx && <Stat label="💰 Pending value" value={inr(sum.value)} sub="at PO rate" />}
             <Stat label={"🟢 Recent (<" + AGE_AMBER + " days)"} value={sum.green} sub="on track" color="var(--green)" />
@@ -133,8 +137,18 @@ export default function PendingDeliveriesPage() {
           </div>
         )}
 
-        <div className="panel">
-          <div className="filters" style={{ flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+        {isITExecutive && sum && <section className="it-pending-aging" aria-label="Pending delivery aging distribution">
+          <div><h2>Pending line aging</h2><p>Live distribution for the selected site, vendor, date, and status filters.</p></div>
+          {agingTotal ? <div className="it-pending-donut" style={{ "--green-stop": greenPct + "%", "--amber-stop": amberPct + "%" }}><span>{agingTotal}<small>lines</small></span></div> : <div className="it-pending-empty">No aging data for this view.</div>}
+          <div className="it-pending-legend">
+            <span><i className="fresh" />Recent (&lt;{AGE_AMBER} days)<b>{sum.green}</b></span>
+            <span><i className="aging" />Aging ({AGE_AMBER}–{AGE_RED} days)<b>{sum.amber}</b></span>
+            <span><i className="overdue" />Overdue ({AGE_RED}+ days)<b>{sum.red}</b></span>
+          </div>
+        </section>}
+
+        <div className="panel it-pending-panel">
+          <div className="filters it-pending-filters" style={{ flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
             <select value={site} onChange={e => setSite(e.target.value)}>
               <option value="all">Site: all</option>
               {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
