@@ -47,6 +47,10 @@ export default function MobileNav() {
     if (st?.id) refreshSessionRights().then(ns => { if (ns) setSess(ns); else window.location.href = "/m/login"; });
     if (st?.id) import("@/lib/files").then(m => m.ensureFileSession()).catch(() => {});   // update460: file-view cookie
   }, []);
+  useEffect(() => {
+    const itExecutive = String(sess?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
+    document.documentElement.classList.toggle("it-executive-ui", itExecutive);
+  }, [sess?.role]);
   const pickLang = l => { setLang(l); window.location.reload(); };
   const role = sess?.role || null;
   const workerPrimary = [{ href: "/m", ico: "⏱", key: "nav_punch" }];
