@@ -78,10 +78,21 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
   const N = x => Number(x || 0);
   const expScope = expRes?.scope, advScope = advRes?.scope, pettyScope = pettyRes?.scope;
   const pettyBal = sumBy(petty, h => h.balance);
+  const expenseStatusMix = [["Approved", expRes?.summary?.approved?.n || 0, "approved"], ["Pending", expRes?.summary?.pending?.n || 0, "pending"],
+    ["Queried", expRes?.summary?.queried?.n || 0, "queried"], ["Rejected", expRes?.summary?.rejected?.n || 0, "rejected"], ["Reversed", expRes?.summary?.reversed?.n || 0, "reversed"]];
+  const expenseStatusTotal = expenseStatusMix.reduce((n, x) => n + Number(x[1] || 0), 0);
+  const expenseStatusColors = { approved: "#20b26b", pending: "#f5a623", queried: "#4aa3ff", rejected: "#ef4b56", reversed: "#8b6cff" };
+  let expenseStatusCursor = 0;
+  const expenseStatusGradient = `conic-gradient(${expenseStatusMix.map(([label, count, key]) => {
+    const start = expenseStatusCursor;
+    expenseStatusCursor += expenseStatusTotal ? Number(count) * 100 / expenseStatusTotal : 0;
+    return `${expenseStatusColors[key]} ${start}% ${expenseStatusCursor}%`;
+  }).join(", ")})`;
 
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");   // update439: submitWebClaim referenced setErr without a state — validation errors threw instead of showing
   const [session, setSession] = useState(null);
+  const isITExecutive = String(session?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
   const [bens, setBens] = useState([]);
   const [advForm, setAdvForm] = useState({ beneficiary: "", amount: "", reason: "" });
   const [advErr, setAdvErr] = useState("");
@@ -437,7 +448,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
         {loadErr && <div className="note red" style={{ marginBottom: 8 }}>⚠ {loadErr} <button style={{ fontSize: 12, marginLeft: 8 }} onClick={load}>Retry</button></div>}
 
         {/* update200: overview cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, marginBottom: 14 }}>
+        <div className="it-money-kpis" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, marginBottom: 14 }}>
           {[["💳 Total expenses", expScope ? inr(expScope.approved?.amt) : "…", expScope ? N(expScope.total).toLocaleString("en-IN") + " transactions" : "loading", null, "claims"],
             ["🪙 Petty cash held", inr(pettyBal), petty.length + " holders", null, "pettyled"],
             ["💸 Advances (approved)", advScope ? inr(advScope.approved?.amt) : "…", N(advScope?.approved?.n) + " requests", null, "advled"],
@@ -453,9 +464,26 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
           ))}
         </div>
 
+        {isITExecutive && <section className="it-money-insights" aria-label="Expense status overview">
+          <div className="it-money-chart">
+            <div><h2>Expense status</h2><p>Counts from the live expense ledger totals.</p></div>
+            {expRes?.summary ? expenseStatusTotal ? <div className="it-money-donut" style={{ "--expense-status-chart": expenseStatusGradient }}><span>{expenseStatusTotal.toLocaleString("en-IN")}<small>claims</small></span></div> : <div className="it-money-empty">No expense claims in this summary.</div> : <div className="it-money-empty">Loading ledger summary…</div>}
+            <div className="it-money-legend">{expenseStatusMix.map(([label, count, key]) => <span key={key}><i className={key} />{label}<b>{Number(count).toLocaleString("en-IN")}</b></span>)}</div>
+          </div>
+          <div className="it-money-chart it-money-cash">
+            <div><h2>Petty cash position</h2><p>Current balances returned by reconciliation.</p></div>
+            <strong>{inr(pettyBal)}</strong>
+            <div className="it-money-cash-list">
+              {(petty || []).slice(0, 5).map((h, i) => <div key={h.user_id || h.holder || i}><span title={h.holder}>{h.holder || "—"}</span><i><b style={{ width: pettyBal > 0 ? `${Math.min(100, Number(h.balance || 0) / pettyBal * 100)}%` : "0%" }} /></i><b>{inr(h.balance)}</b></div>)}
+              {petty?.length > 5 && <small>Showing 5 of {petty.length} holders. Open Petty Cash for the full ledger.</small>}
+              {petty?.length === 0 && <small>No petty cash balances returned for this account.</small>}
+            </div>
+          </div>
+        </section>}
+
 
         <div style={fullView ? { position: "fixed", inset: 0, zIndex: 92, background: "var(--bg)", padding: "10px 14px", display: "flex", flexDirection: "column" } : { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, borderBottom: embedded ? "none" : "2px solid var(--border)", margin: "2px 0 0", flexWrap: embedded ? "wrap" : "nowrap" }}>
+        <div className="it-money-tabs" style={{ display: "flex", alignItems: "center", gap: 8, borderBottom: embedded ? "none" : "2px solid var(--border)", margin: "2px 0 0", flexWrap: embedded ? "wrap" : "nowrap" }}>
           {/* update216b: the tab strip scrolls; the ⛶ button lives OUTSIDE it in a pinned slot,
               so it can never be scrolled away, clipped, or overlapped at any width or zoom. */}
           <div style={{ flex: 1, minWidth: 0, display: "flex", gap: 2, overflowX: "auto", whiteSpace: "nowrap" }}>
@@ -477,7 +505,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
             style={{ flexShrink: 0, position: "relative", zIndex: 6, border: "1px solid var(--copper)", background: "#fff", color: "var(--copper)", borderRadius: 8, padding: "5px 12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", boxShadow: "0 1px 4px rgba(15,20,25,0.08)" }}>
             {fullView ? "✕ Close" : "⛶ Expand"}</button>}
         </div>
-        <div className="panel money-tab-panel" style={{ marginTop: 0, marginBottom: 8, borderTopLeftRadius: 0, flex: 1, minHeight: 260, overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 4px 14px rgba(15,20,25,0.05)" }}>
+        <div className="panel money-tab-panel it-money-panel" style={{ marginTop: 0, marginBottom: 8, borderTopLeftRadius: 0, flex: 1, minHeight: 260, overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 4px 14px rgba(15,20,25,0.05)" }}>
         {/* update433: Corrections — reversal requests awaiting a second acknowledgement + the permanent log */}
         <div className={mtab === "corrections" ? "money-sec" : undefined} style={{ display: mtab === "corrections" ? "flex" : "none", flexDirection: "column", overflowY: "auto", gap: 10 }}>
           <div className="card" style={{ padding: 12 }}>
