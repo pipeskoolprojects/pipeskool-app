@@ -14,11 +14,16 @@ import { getAttendanceHeatmap } from "@/lib/data";
 const isIT = role => String(role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
 const localDate = date => [date.getFullYear(), String(date.getMonth()+1).padStart(2,"0"), String(date.getDate()).padStart(2,"0")].join("-");
 const asArray = value => Array.isArray(value) ? value : [];
-const safe = (promise, timeoutMs = 8000) => new Promise(resolve => {
+const safe = (request, timeoutMs = 8000) => new Promise(resolve => {
   let settled = false;
   const finish = value => { if (settled) return; settled = true; clearTimeout(timer); resolve(value); };
   const timer = setTimeout(() => finish({ __loadError: "Data request timed out" }), timeoutMs);
-  Promise.resolve(promise).then(finish, error => finish({ __loadError: error?.message || "Could not load data" }));
+  try {
+    Promise.resolve(typeof request === "function" ? request() : request)
+      .then(finish, error => finish({ __loadError: error?.message || "Could not load data" }));
+  } catch (error) {
+    finish({ __loadError: error?.message || "Could not load data" });
+  }
 });
 
 function buildDashboardData(session, siteId, raw) {
@@ -110,9 +115,9 @@ export default function ITDashboardHome({ sess, mode="desktop" }) {
     const now=new Date(),from=new Date(now);from.setDate(now.getDate()-97);
     const fromKey=localDate(from),toKey=localDate(now);
     const results=await Promise.allSettled([
-      safe(getMuster(sid)),safe(getOpenIndents(sid)),safe(getPOs(sid)),safe(getTodayDpr(sid)),safe(getProgress(sid)),
-      safe(getExpenseClaimQueue(sid)),safe(getTasks()),safe(getMyNotifications(30)),safe(getBalances(site?.code||"all")),
-      safe(getAttendanceHeatmap(fromKey,toKey,sid))
+      safe(() => getMuster(sid)),safe(() => getOpenIndents(sid)),safe(() => getPOs(sid)),safe(() => getTodayDpr(sid)),safe(() => getProgress(sid)),
+      safe(() => getExpenseClaimQueue(sid)),safe(() => getTasks()),safe(() => getMyNotifications(30)),safe(() => getBalances(site?.code||"all")),
+      safe(() => getAttendanceHeatmap(fromKey,toKey,sid))
     ]);
     const val=i=>results[i].status==="fulfilled"?results[i].value:null;
     const raw={muster:val(0),indents:val(1),pos:val(2),dpr:val(3),progress:val(4),expenses:val(5),tasks:val(6),notifications:val(7),stock:val(8),heatmap:val(9)};
