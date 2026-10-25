@@ -630,3 +630,78 @@ html.it-executive-ui .m-nav a.active { color: #ff914d; }
   html.it-executive-ui .layout { height: auto; min-height: 100dvh; overflow: visible; }
   html.it-executive-ui .main { height: auto; min-height: 100dvh; overflow: visible; padding: 16px 12px 96px; }
 }
+
+
+/* IT Executive reference layout: native OS-shaped controls, shared across every ERP page.
+   The existing Pipeskool logo, route data and page actions remain owned by their components. */
+html.it-executive-ui {
+  --it-radius: 22px;
+  --it-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
+  --it-surface: rgba(255,255,255,.065);
+  --it-surface-strong: rgba(17,27,54,.86);
+  font-family: var(--it-font);
+}
+html.it-executive-ui[data-it-platform="windows"] {
+  --it-radius: 10px;
+  --it-font: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --it-surface: rgba(255,255,255,.075);
+}
+html.it-executive-ui[data-it-platform="mac"] { --it-radius: 24px; }
+html.it-executive-ui[data-it-platform="ios"] { --it-radius: 26px; }
+html.it-executive-ui[data-it-platform="android"] {
+  --it-radius: 28px;
+  --it-font: "Google Sans", Roboto, "Segoe UI", system-ui, sans-serif;
+}
+html.it-executive-ui body,
+html.it-executive-ui button,
+html.it-executive-ui input,
+html.it-executive-ui select,
+html.it-executive-ui textarea { font-family: var(--it-font); }
+html.it-executive-ui .card,
+html.it-executive-ui .panel,
+html.it-executive-ui .m-wrap .card,
+html.it-executive-ui .m-wrap .panel,
+html.it-executive-ui .m-wrap [class*="card"] {
+  border-radius: var(--it-radius);
+}
+html.it-executive-ui .sidebar { border-radius: var(--it-radius); }
+html.it-executive-ui button,
+html.it-executive-ui input:not([type="checkbox"]):not([type="radio"]),
+html.it-executive-ui select,
+html.it-executive-ui textarea { border-radius: max(8px, calc(var(--it-radius) * .48)); }
+html.it-executive-ui .badge,
+html.it-executive-ui .pill,
+html.it-executive-ui .chip { border-radius: 999px; }
+html.it-executive-ui .main,
+html.it-executive-ui .m-body { min-width: 0; }
+html.it-executive-ui .cards,
+html.it-executive-ui .grid,
+html.it-executive-ui .m-grid2 { min-width: 0; }
+html.it-executive-ui .panel,
+html.it-executive-ui .dt-scroll,
+html.it-executive-ui .table-wrap { max-width: 100%; }
+html.it-executive-ui .m-wrap {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+html.it-executive-ui .m-nav {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+html.it-executive-ui[data-it-platform="windows"] .sidebar nav a.active {
+  box-shadow: inset 3px 0 0 var(--copper);
+}
+html.it-executive-ui[data-it-platform="ios"] .m-nav,
+html.it-executive-ui[data-it-platform="android"] .m-nav {
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+@media (max-width: 760px) {
+  html.it-executive-ui .main { padding: 14px 14px calc(92px + env(safe-area-inset-bottom)); }
+  html.it-executive-ui .page-head { top: -14px; }
+  html.it-executive-ui .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  html.it-executive-ui .card .value { font-size: clamp(18px, 6vw, 26px); }
+  html.it-executive-ui .panel { padding: 14px; }
+  html.it-executive-ui .dt-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+  html.it-executive-ui table { min-width: 640px; }
+}
+@media (max-width: 380px) {
+  html.it-executive-ui .cards { grid-template-columns: minmax(0, 1fr); }
+}
