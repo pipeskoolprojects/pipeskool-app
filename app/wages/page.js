@@ -15,6 +15,7 @@ import PayrollSummary from "@/components/PayrollSummary";         // update278
 import SiteSummary from "@/components/SiteSummary";               // update278
 
 const STATUS = { draft: ["Draft", "gray"], approved: ["Approved", "h"], paid: ["Paid", "p"] };
+const isITExecutive = session => String(session?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
 
 // update246: festival-holiday tags on the payslip row. Module scope — never redefined per render.
 function HolidayTags({ r }) {
@@ -135,7 +136,7 @@ export default function WagesPage() {
   const approved = (rows || []).filter(r => r.status === "approved").length;
 
   return (
-    <div className="layout">
+    <div className={"layout" + (isITExecutive(sess) ? " it-page it-page-wages" : "")}>
       <Sidebar />
       <main className="main">
         <div className="page-head">
