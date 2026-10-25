@@ -106,12 +106,19 @@ function buildDashboardData(session, siteId, raw) {
 }
 
 export default function ITDashboardHome({ sess, mode="desktop" }) {
-  const router=useRouter(),frame=useRef(null),[active,setActive]=useState(sess||null),[siteId,setSiteId]=useState(sess?.currentSite||sess?.sites?.[0]?.id||null),[data,setData]=useState(null),[ready,setReady]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[toast,setToast]=useState(""),[moreOpen,setMoreOpen]=useState(false),[notificationOpen,setNotificationOpen]=useState(false),[frameTimedOut,setFrameTimedOut]=useState(false);
+  const router=useRouter(),frame=useRef(null),dataInitialized=useRef(false),[active,setActive]=useState(sess||null),[siteId,setSiteId]=useState(sess?.currentSite||sess?.sites?.[0]?.id||null),[data,setData]=useState(null),[ready,setReady]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[toast,setToast]=useState(""),[moreOpen,setMoreOpen]=useState(false),[notificationOpen,setNotificationOpen]=useState(false),[frameTimedOut,setFrameTimedOut]=useState(false);
   const site=active?.sites?.find(s=>String(s.id)===String(siteId))||active?.sites?.[0]||null;
   const load=useCallback(async()=>{
     const s=active||sess, sid=site?.id||siteId||"all";
     if(!s)return;
     setBusy(true);setError("");
+    if(!dataInitialized.current){
+      dataInitialized.current=true;
+      setData(buildDashboardData(s,sid,{
+        muster:[],indents:[],pos:[],dpr:null,progress:[],expenses:[],tasks:[],
+        notifications:{rows:[],unread:0},stock:[],heatmap:{rows:[]}
+      }));
+    }
     const now=new Date(),from=new Date(now);from.setDate(now.getDate()-97);
     const fromKey=localDate(from),toKey=localDate(now);
     const results=await Promise.allSettled([
@@ -152,7 +159,7 @@ export default function ITDashboardHome({ sess, mode="desktop" }) {
       if(action==="refresh"){load();return}
       if(action==="site-change"){
         const next=(active?.sites||[]).find(x=>String(x.id)===String(e.data.siteId));if(!next)return;
-        setCurrentSite(next.id);setSiteId(next.id);setReady(false);return;
+        setCurrentSite(next.id);dataInitialized.current=false;setData(null);setSiteId(next.id);setReady(false);return;
       }
       if(action==="navigate"){
         if(route==="more"){setMoreOpen(true);return}if(route==="notifications"){setNotificationOpen(true);return}
