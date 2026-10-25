@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
 <title>Pipeskool IT Dashboard - Home v2</title>
+<script>if(new URLSearchParams(location.search).get('shell')==='erp')document.documentElement.dataset.shell='erp';</script>
 <style>
 :root{--a:#ff7a2f;--a2:#ffb067;--b:#3b9bff;--g:#22c984;--v:#8b6cff;--rd:#ff5470;--r:24px;
   --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI Variable","Segoe UI",Roboto,Inter,sans-serif}
@@ -47,6 +48,14 @@ html[data-layout=phone][data-p=android] .fabwrap{display:flex}
 .side{position:sticky;top:12px;width:244px;flex:none;height:calc(100vh - 24px);margin:0 0 0 14px;padding:18px 14px;border-radius:var(--r);background:var(--card);backdrop-filter:blur(26px) saturate(1.5);-webkit-backdrop-filter:blur(26px) saturate(1.5);border:1px solid var(--line);box-shadow:var(--sh);display:flex;flex-direction:column;transition:width .3s}
 html[data-layout=tablet] .side{width:78px}html[data-layout=tablet] .lbl,html[data-layout=tablet] .logo small,html[data-layout=tablet] .user div{display:none}
 html[data-layout=phone] .side{display:none}
+/* The ERP shell supplies the real access-aware navigation and official logo. */
+html[data-shell=erp] #app{width:100%;max-width:none;margin:0;padding-bottom:76px}
+html[data-shell=erp] .side,html[data-shell=erp] .tabbar,html[data-shell=erp] .fabwrap,
+html[data-shell=erp] .homebar,html[data-shell=erp] .status{display:none!important}
+html[data-shell=erp] .shell{display:block;width:100%;min-height:100dvh}
+html[data-shell=erp] .shell{visibility:hidden}
+html[data-shell=erp] main{width:100%;max-width:none;margin:0;padding-left:clamp(14px,2.4vw,36px);padding-right:clamp(14px,2.4vw,36px)}
+html[data-shell=erp][data-layout=phone] #app{padding-bottom:86px}
 .traffic{gap:8px;padding:0 6px 16px}.traffic i{width:12px;height:12px;border-radius:50%}
 .logo{font-weight:800;font-size:21px;padding:0 8px 18px}
 .logo i{display:block;width:32px;height:3px;border-radius:3px;background:var(--a);margin-bottom:8px;box-shadow:0 0 12px var(--a)}
@@ -243,9 +252,9 @@ html[data-layout=phone] .top{flex-wrap:wrap;align-items:flex-start}html[data-lay
               <defs><linearGradient id="r1" x1="0" x2="1"><stop offset="0" stop-color="#ff7a2f"/><stop offset="1" stop-color="#ffb067"/></linearGradient>
               <linearGradient id="r2" x1="0" x2="1"><stop offset="0" stop-color="#22c984"/><stop offset="1" stop-color="#8bf0c0"/></linearGradient>
               <linearGradient id="r3" x1="0" x2="1"><stop offset="0" stop-color="#3b9bff"/><stop offset="1" stop-color="#8bc7ff"/></linearGradient></defs>
-              <circle class="tr" cx="80" cy="80" r="66"/><circle class="vv" data-v=".72" data-c="414.7" cx="80" cy="80" r="66" stroke="url(#r1)" stroke-dasharray="0 500"/>
-              <circle class="tr" cx="80" cy="80" r="50"/><circle class="vv" data-v=".40" data-c="314.2" cx="80" cy="80" r="50" stroke="url(#r2)" stroke-dasharray="0 500"/>
-              <circle class="tr" cx="80" cy="80" r="34"/><circle class="vv" data-v=".85" data-c="213.6" cx="80" cy="80" r="34" stroke="url(#r3)" stroke-dasharray="0 500"/>
+              <circle class="tr" cx="80" cy="80" r="66"/><circle class="vv" data-v="0" data-c="414.7" cx="80" cy="80" r="66" stroke="url(#r1)" stroke-dasharray="0 500"/>
+              <circle class="tr" cx="80" cy="80" r="50"/><circle class="vv" data-v="0" data-c="314.2" cx="80" cy="80" r="50" stroke="url(#r2)" stroke-dasharray="0 500"/>
+              <circle class="tr" cx="80" cy="80" r="34"/><circle class="vv" data-v="0" data-c="213.6" cx="80" cy="80" r="34" stroke="url(#r3)" stroke-dasharray="0 500"/>
             </svg>
             <div class="rl"><div><i style="background:var(--a)"></i>Punch-in<b id="ringPunch">—</b></div><div><i style="background:var(--g)"></i>DPR filed<b id="ringDpr">—</b></div><div><i style="background:var(--b)"></i>Approvals<b id="ringApprovals">—</b></div></div>
           </div>
@@ -320,10 +329,12 @@ html[data-layout=phone] .top{flex-wrap:wrap;align-items:flex-start}html[data-lay
 
 <script>
 const H=document.documentElement,$=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const erpShell=H.dataset.shell==='erp';
 /* theme + platform */
 let theme;try{theme=localStorage.getItem('pk-theme')}catch(e){}
 if(!theme)theme=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';
 H.dataset.theme=theme;
+addEventListener('storage',e=>{if(e.key==='pk-theme'){theme=e.newValue==='light'?'light':'dark';H.dataset.theme=theme}});
 $('#theme').onclick=()=>{theme=theme==='dark'?'light':'dark';H.dataset.theme=theme;try{localStorage.setItem('pk-theme',theme)}catch(e){}};
 const ua=navigator.userAgent,auto=/iPhone|iPad|iPod/.test(ua)?'ios':/Android/.test(ua)?'android':/Windows/.test(ua)?'win':'mac';
 let choice='auto';
@@ -392,6 +403,7 @@ $$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerT
 <script>
 (function(){
   const H=document.documentElement,$=s=>document.querySelector(s),$all=s=>Array.from(document.querySelectorAll(s));
+  let liveApplied=false;
   const esc=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const nfmt=v=>Number(v||0).toLocaleString("en-IN");
   const inr=v=>"₹"+nfmt(v);
@@ -399,6 +411,7 @@ $$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerT
   function pct(v){return Math.max(0,Math.min(100,Number(v)||0))}
   function apply(d){
     if(!d)return;
+    if(erpShell){const shell=document.querySelector('.shell');if(shell)shell.style.visibility='visible'}
     $all("[data-module]").forEach(el=>{el.style.display=(d.modules||[]).includes(el.dataset.module)?"":"none"});
     const site=$("#siteSelect");if(site){site.innerHTML=(d.sites||[]).map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+'</option>').join("")||'<option value="">No sites available</option>';site.value=String(d.siteId||"")}
     $("#userName").textContent=d.name||"IT Executive";$("#userRole").textContent=d.roleLabel||"IT Executive";$("#avatar").textContent=(d.name||"IT").split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase();
@@ -426,7 +439,8 @@ $$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerT
     const approvalBox=cardByTitle("Pending approvals"),approvals=d.approvals||[];
     approvalBox.innerHTML='<h3>Pending approvals <small>'+nfmt(d.approvalCount||0)+'</small></h3>'+(approvals.length?approvals.slice(0,4).map(a=>'<div class="item"><div>'+esc(a.title)+'<small>'+esc(a.detail)+'</small></div><button class="btn" data-approve="'+esc(a.id)+'" '+(a.blocked?"disabled":"")+'>Approve</button></div>').join(""):'<div class="item"><div>No data yet<small>No pending expense approvals for this site.</small></div></div>');
     const svg=$("#radar");if(svg){let note=$("#healthNotes");if(!note){note=document.createElement("div");note.id="healthNotes";note.style.cssText="color:var(--mut);font-size:10px;line-height:1.4;margin-top:4px";svg.after(note)}note.textContent="Attendance: present ÷ on roll · Material: items at/above minimum ÷ tracked · DPR: filed ÷ expected · Safety/Billing: no current health metric."}
-    setTimeout(()=>parent.postMessage({type:"psk-it-dashboard-ready"},"*"),1500)
+    liveApplied=true;
+    setTimeout(()=>parent.postMessage({type:"psk-it-dashboard-ready"},"*"),0)
   }
   function drawArea(rows){
     const box=$("#area");if(!box)return;const vals=rows.map(x=>Number(x.value)||0),labels=rows.map(x=>x.label||"");
@@ -484,8 +498,10 @@ $$('.tilt,.flip').forEach(c=>{c.addEventListener('pointermove',e=>{if(e.pointerT
   const ss=$("#siteSelect");if(ss)ss.addEventListener("change",()=>parent.postMessage({type:"psk-it-action",action:"site-change",siteId:ss.value},"*"));
   let ts=0;document.addEventListener("touchstart",e=>{ts=e.touches?.[0]?.clientY||0},{passive:true});document.addEventListener("touchend",e=>{let y=e.changedTouches?.[0]?.clientY||0;if(ts>0&&y-ts>85&&(document.scrollingElement?.scrollTop||0)<=0)parent.postMessage({type:"psk-it-action",action:"refresh"},"*");ts=0},{passive:true});
   addEventListener("message",e=>{if(e.data?.type!=="psk-it-dashboard-data")return;try{apply(e.data.payload)}catch(err){console.error("IT dashboard render failed",err);parent.postMessage({type:"psk-it-dashboard-render-error"},"*")}});
+  // If the host never manages to send data, reveal a truthful empty dashboard instead
+  // of leaving a black loading screen or displaying the reference's sample figures.
+  setTimeout(()=>{if(erpShell&&!liveApplied){try{apply({modules:[],sites:[],siteId:null,siteName:"No site selected",name:"IT Executive",roleLabel:"IT Executive",today:"",kpis:[],stages:[],tasks:[],activity:[],approvals:[],notificationRows:[],weekManpower:[],expenseSeries:[],workMix:[],health:[],heatmap:{rows:[]},stock:[],unread:0,approvalCount:0,onRoll:null,present:null,shortfall:null,trades:null,completePct:null,billed:null,punchPct:null,dprPct:null,approvalPct:null,workforcePct:null})}catch(err){const shell=document.querySelector('.shell');if(shell)shell.style.visibility='visible';console.error("IT dashboard empty fallback failed",err)}}},3200);
 })();
 </script>
 </body>
 </html>
-
