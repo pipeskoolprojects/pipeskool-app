@@ -87,6 +87,7 @@ export default function Sidebar() {
   const [open, setOpen] = useState({});
   const [unreadNotices, setUnreadNotices] = useState(0);
   const [hidden, setHidden] = useState(false);
+  const [itTheme, setItTheme] = useState("dark");
   useEffect(() => { if (session) getUnreadNoticeCount(session).then(setUnreadNotices); }, [session, path]);
   useEffect(() => { if (session) import("@/lib/files").then(m => m.ensureFileSession()).catch(() => {}); }, [session]);   // update460: file-view cookie
   useEffect(() => { try {
@@ -129,15 +130,34 @@ export default function Sidebar() {
     const root = document.documentElement;
     root.classList.toggle("it-executive-ui", itExecutive);
     if (itExecutive) {
-      const ua = navigator.userAgent || "";
-      root.dataset.itPlatform = /iPhone|iPad|iPod/i.test(ua) ? "ios"
-        : /Android/i.test(ua) ? "android"
-        : /Windows/i.test(ua) ? "windows"
-        : /Macintosh|Mac OS X/i.test(ua) ? "mac" : "desktop";
+      const applyPlatform = () => {
+        const ua = navigator.userAgent || "", nativePhone = /iPhone|iPad|iPod|Android/i.test(ua), width = window.innerWidth;
+        root.dataset.itPlatform = /iPhone|iPad|iPod/i.test(ua) ? "ios" : /Android/i.test(ua) ? "android" : /Windows/i.test(ua) ? "windows" : "mac";
+        root.dataset.itLayout = nativePhone || width < 760 ? "phone" : width < 1100 ? "tablet" : "desktop";
+      };
+      applyPlatform(); window.addEventListener("resize", applyPlatform);
+      return () => { window.removeEventListener("resize", applyPlatform); delete root.dataset.itLayout; };
     } else {
       delete root.dataset.itPlatform;
+      delete root.dataset.itLayout;
+      delete root.dataset.itTheme;
     }
   }, [session?.role]);
+  useEffect(() => {
+    if (String(session?.role || "").toLowerCase().replace(/[^a-z]/g, "") !== "itexecutive") return;
+    const root = document.documentElement;
+    const sync = value => { const next = value === "light" ? "light" : "dark"; setItTheme(next); root.dataset.itTheme = next; };
+    try { sync(localStorage.getItem("pk-theme") || (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")); } catch { sync("dark"); }
+    const onStorage = e => { if (e.key === "pk-theme") sync(e.newValue); };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [session?.role]);
+  const toggleItTheme = () => {
+    const next = itTheme === "dark" ? "light" : "dark";
+    setItTheme(next);
+    document.documentElement.dataset.itTheme = next;
+    try { localStorage.setItem("pk-theme", next); } catch {}
+  };
 
 
   // update243: embedded FIRST. When this renders inside an embedded view the page owns the
@@ -189,6 +209,7 @@ export default function Sidebar() {
           <Logo height={22} variant="white" />
           <span style={{ fontSize: 10, fontWeight: 400, color: "#6E7780", letterSpacing: "0.02em" }}>Site Management Software</span>
         </div>
+        {String(session?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive" && <button type="button" onClick={toggleItTheme} aria-label="Toggle light or dark theme" title="Toggle light or dark theme" style={{ marginLeft: "auto", width: 34, height: 34, borderRadius: 18, border: "1px solid #ffffff30", background: "#ffffff12", color: "#fff", cursor: "pointer" }}>{itTheme === "dark" ? "☀" : "☾"}</button>}
       </div>
       {session && (
         <div style={{ padding: "10px 18px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
