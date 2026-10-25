@@ -537,3 +537,96 @@ body.has-global-mnav .asst-panel { bottom: calc(136px + env(safe-area-inset-bott
   body.repair-print-mode .repair-print-root,
   body.repair-print-mode .repair-print-root * { visibility: visible !important; }
 }
+
+
+/* IT Executive glass theme: visual-only treatment shared by every legacy route.
+   Data loading, permissions, form state and submit handlers stay in each route. */
+html.it-executive-ui {
+  --bg: #080d19;
+  --card: rgba(255,255,255,.075);
+  --text: #f5f7fb;
+  --muted: #aab5ce;
+  --border: rgba(255,255,255,.13);
+  --deep: #0b1224;
+  --copper: #ff7a2f;
+  --copper-deep: #e9651e;
+  --copper-soft: rgba(255,122,47,.14);
+  --gray-bg: rgba(255,255,255,.09);
+  --line: rgba(255,255,255,.13);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}
+html.it-executive-ui body {
+  color: var(--text);
+  background:
+    radial-gradient(950px 620px at 88% -8%, rgba(47,84,164,.34), transparent 62%),
+    radial-gradient(760px 550px at -8% 95%, rgba(255,122,47,.18), transparent 58%),
+    #080d19;
+  background-attachment: fixed;
+}
+html.it-executive-ui .layout { background: transparent; }
+html.it-executive-ui .sidebar {
+  margin: 12px 0 12px 12px;
+  height: calc(100vh - 24px);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 22px;
+  background: rgba(10,18,38,.84);
+  box-shadow: 0 24px 60px -32px #000, inset 0 1px 0 rgba(255,255,255,.08);
+  backdrop-filter: blur(24px) saturate(1.4);
+}
+html.it-executive-ui .main { padding: 24px clamp(16px,2vw,30px); background: transparent; }
+html.it-executive-ui .page-head { background: rgba(8,13,25,.9); backdrop-filter: blur(18px); }
+html.it-executive-ui .page-head h1,
+html.it-executive-ui h1, html.it-executive-ui h2, html.it-executive-ui h3,
+html.it-executive-ui h4 { color: var(--text); }
+html.it-executive-ui .card,
+html.it-executive-ui .panel,
+html.it-executive-ui .m-wrap .panel,
+html.it-executive-ui .m-wrap .card,
+html.it-executive-ui .m-wrap [class*="card"] {
+  color: var(--text);
+  background: linear-gradient(145deg, rgba(255,255,255,.09), rgba(255,255,255,.045));
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 18px;
+  box-shadow: 0 18px 42px -28px #000, inset 0 1px 0 rgba(255,255,255,.08);
+  backdrop-filter: blur(18px) saturate(1.25);
+}
+html.it-executive-ui table { color: var(--text); }
+html.it-executive-ui thead, html.it-executive-ui th { background: rgba(255,255,255,.07); color: #b9c5dc; }
+html.it-executive-ui td, html.it-executive-ui th { border-color: rgba(255,255,255,.11); }
+html.it-executive-ui tr:hover td { background: rgba(255,255,255,.035); }
+html.it-executive-ui input:not([type="checkbox"]):not([type="radio"]),
+html.it-executive-ui select, html.it-executive-ui textarea {
+  color: var(--text);
+  background-color: rgba(5,9,18,.72);
+  border-color: rgba(255,255,255,.18);
+}
+html.it-executive-ui input::placeholder,
+html.it-executive-ui textarea::placeholder { color: #8996b2; }
+html.it-executive-ui option { background: #101a33; color: #f5f7fb; }
+html.it-executive-ui button:not(.primary) {
+  color: var(--text);
+  background-color: rgba(255,255,255,.07);
+  border-color: rgba(255,255,255,.16);
+}
+html.it-executive-ui button.primary { background: linear-gradient(145deg,#ff9b55,#ff7025); border-color: #ff7a2f; color: white; }
+html.it-executive-ui .m-wrap { width: 100%; max-width: 520px; background: transparent; color: var(--text); }
+html.it-executive-ui .m-head {
+  position: sticky; top: 0; z-index: 20;
+  background: rgba(11,18,36,.9); border-bottom: 1px solid rgba(255,255,255,.12);
+  backdrop-filter: blur(22px) saturate(1.4);
+}
+html.it-executive-ui .m-head .sub { color: #aab5ce; }
+html.it-executive-ui .m-body { color: var(--text); }
+html.it-executive-ui .m-nav {
+  background: rgba(10,16,32,.92); color: var(--text);
+  border-top: 1px solid rgba(255,255,255,.14);
+  box-shadow: 0 -12px 35px rgba(0,0,0,.28);
+  backdrop-filter: blur(22px);
+}
+html.it-executive-ui .m-nav a { color: #aab5ce; }
+html.it-executive-ui .m-nav a.active { color: #ff914d; }
+@media (max-width: 760px) {
+  html.it-executive-ui .layout { height: auto; min-height: 100dvh; overflow: visible; }
+  html.it-executive-ui .main { height: auto; min-height: 100dvh; overflow: visible; padding: 16px 12px 96px; }
+}
