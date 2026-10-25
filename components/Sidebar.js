@@ -124,6 +124,10 @@ export default function Sidebar() {
   const canSee = m => !session || !m || canSeeModuleAnySite(session, m);
   const showAccess = session && session.role === "director";
   const showDash = canSee("dashboard");
+  useEffect(() => {
+    const itExecutive = String(session?.role || "").toLowerCase().replace(/[^a-z]/g, "") === "itexecutive";
+    document.documentElement.classList.toggle("it-executive-ui", itExecutive);
+  }, [session?.role]);
 
 
   // update243: embedded FIRST. When this renders inside an embedded view the page owns the
