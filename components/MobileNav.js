@@ -91,6 +91,15 @@ export default function MobileNav() {
     return () => { alive = false; };
   }, [role]);
   const path = usePathname();
+  // update477: DPRs pending this month for the current site → red badge on the DPR tab (site roles with the DPR right)
+  const [dprPending, setDprPending] = useState(0);
+  useEffect(() => {
+    const sid = sess?.currentSite || sess?.sites?.[0]?.id;
+    if (!sid || !sess?.id || role === "director" || !canSeeModule(sess, "dpr")) { setDprPending(0); return; }
+    let alive = true;
+    import("@/lib/dpr").then(({ getDprPendingCount }) => getDprPendingCount(sid).then(n => { if (alive) setDprPending(n || 0); })).catch(() => {});
+    return () => { alive = false; };
+  }, [sess, role, path]);
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -221,7 +230,7 @@ export default function MobileNav() {
           <Link href="/m/dashboard" className={path === "/m/dashboard" ? "active" : ""}><span className="ico">🏠</span>Home</Link>
           {canSeeModule(sess,"attendance") ? <Link href="/m/muster" className={path === "/m/muster" ? "active" : ""}><span className="ico">👥</span>Muster</Link> : <span />}
           <button type="button" onClick={() => setQuickOpen(true)} style={{ border: 0, background: "transparent", color: "inherit", font: "inherit", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", minHeight: 52 }}><span style={{ width: 48, height: 48, borderRadius: 24, background: "var(--copper)", color: "white", display: "grid", placeItems: "center", fontSize: 28, marginTop: -20 }}>＋</span>Quick Action</button>
-          {canSeeModule(sess,"dpr") ? <Link href="/m/dpr" className={path === "/m/dpr" ? "active" : ""}><span className="ico">📋</span>DPR</Link> : <span />}
+          {canSeeModule(sess,"dpr") ? <Link href="/m/dpr" className={path === "/m/dpr" ? "active" : ""} style={{ position: "relative" }}><span className="ico">📋</span>DPR{dprPending > 0 && <span title="DPRs pending this month" style={{ position: "absolute", top: 2, right: "18%", background: "var(--red)", color: "#fff", borderRadius: 10, fontSize: 10, fontWeight: 700, padding: "1px 6px" }}>{dprPending}</span>}</Link> : <span />}
           <a onClick={() => setOpen(o => !o)} className={inMore ? "active" : ""} style={{ cursor: "pointer" }}><span className="ico">▦</span>More</a>
         </> : accountant ? <>
           <Link href="/m/dashboard" className={path === "/m/dashboard" ? "active" : ""}><span className="ico">🏠</span>Home</Link>
@@ -234,6 +243,9 @@ export default function MobileNav() {
             <span className="ico">{tab.ico}</span>{t(lang, tab.key)}
             {tab.key === "nav_approvals" && pendCount > 0 && (
               <span style={{ position: "absolute", top: 2, right: "18%", background: "var(--red)", color: "#fff", borderRadius: 10, fontSize: 10, fontWeight: 700, padding: "1px 6px" }}>{pendCount}</span>
+            )}
+            {tab.key === "nav_dpr" && dprPending > 0 && (
+              <span title="DPRs pending this month" style={{ position: "absolute", top: 2, right: "18%", background: "var(--red)", color: "#fff", borderRadius: 10, fontSize: 10, fontWeight: 700, padding: "1px 6px" }}>{dprPending}</span>
             )}
           </Link>
         ))}

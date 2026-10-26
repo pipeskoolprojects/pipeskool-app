@@ -1,5 +1,4 @@
 "use client";
-import React from "react";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { isDemo } from "@/lib/supabase";
@@ -41,6 +40,7 @@ const MODULE_HELP = {
   notices:    "Company notice board — post & manage notices",
   leave:      "Leave requests — View own is automatic; Approve = act on team requests",
   billing:    "BOQ master, RA bills, Tally export — writes need these ticks",
+  dpr_backdate: "Fill a DPR for a past date or many days at once (late entry, with a reason). Only the Create tick matters; ON by default wherever DPR · Create is on",
 };
 
 // One-click templates — apply, then fine-tune ticks if needed
@@ -235,15 +235,14 @@ export default function AccessPage() {
                       <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
                         These are NOT per-site. They unlock specific admin tasks for this person everywhere. Directors hold all of them automatically. Enforced by the database, not just hidden buttons.
                       </div>
-                      {ADMIN_CAPS.map((c, i) => (<React.Fragment key={c.code}>
-                        {c.group && ADMIN_CAPS[i - 1]?.group !== c.group && <div style={{ fontSize: 11, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", padding: "10px 0 2px" }}>{c.group}</div>}
-                        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "7px 0", borderBottom: "1px solid var(--border)", cursor: "pointer" }}>
+                      {ADMIN_CAPS.map(c => (
+                        <label key={c.code} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "7px 0", borderBottom: "1px solid var(--border)", cursor: "pointer" }}>
                           <input type="checkbox" checked={adminCaps.includes(c.code)}
                                  onChange={e => toggleAdminCap(c.code, e.target.checked)} style={{ marginTop: 3 }} />
                           <span><b style={{ fontSize: 13 }}>{c.label}</b>
                             <span className="muted" style={{ display: "block", fontSize: 12 }}>{c.desc}</span></span>
                         </label>
-                      </React.Fragment>))}
+                      ))}
                     </div>
                     <div className="panel" style={{ borderLeft: "4px solid #2b6cb0", marginBottom: 10 }}>
                       <h2 style={{ marginTop: 0 }}>Notifications this person receives</h2>
