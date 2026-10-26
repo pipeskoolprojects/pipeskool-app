@@ -9,7 +9,7 @@ import InternalDispatchTab from "@/components/InternalDispatchTab";   // update4
 import VendorLink from "@/components/VendorLink";   // update410
 import DcSendBox from "@/components/DcSendBox";   // update453
 import { getTallySettings } from "@/lib/tally";
-import { getSession, canSeeModuleAnySite } from "@/lib/auth";
+import { getSession, canSeeModuleAnySite, hasAdminCap } from "@/lib/auth";
 import { fileHref } from "@/lib/files";   // update460: legacy + new file links
 import { getReceiptStates, getPendingExceptions, decideException } from "@/lib/receiving";   // update462: site receiving
 import { hasDirectorAccess } from "@/lib/directorAccess";
@@ -140,7 +140,8 @@ export default function DeliveryChallans() {
   const [fStatus, setFStatus] = useState("all"); const [fSource, setFSource] = useState("all"); const [fTally, setFTally] = useState("all"); const [sel, setSel] = useState({}); /* update435 */ const [q, setQ] = useState(() => { try { return new URLSearchParams(window.location.search).get("q") || ""; } catch { return ""; } });   // update410
   const [pg, setPg] = useState(1); const PAGE = 20; const [xp, setXp] = useState({}); const [moreF, setMoreF] = useState(false);   // update406
   useEffect(() => { setPg(1); }, [fVendor, fSite, fFrom, fTo, fStatus, fSource, fTally, q]);
-  const canPost = ["director", "accountant", "it_executive"].includes(session?.role);   // update435
+  // update476: "Mark as posted (Tally)" is an Access Rights capability (challan.mark_posted), enforced by fn_dc_set_posted too.
+  const canPost = hasAdminCap(session, "challan.mark_posted");
   async function markPosted(ids, posted) {
     const r = await setChallanPosted(ids, posted); if (!r.ok) { window.alert(r.error); return; }
     setSel({}); setMsg(`${r.changed} challan(s) marked ${posted ? "posted" : "not posted"} in Tally — logged under your name.`); load();
@@ -374,7 +375,7 @@ export default function DeliveryChallans() {
           )}
           {!rows ? <div className="muted">Loading…</div> : shown.length === 0 ? <div className="muted">No delivery challans match.</div> : (
             <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-              <style>{`.dc406 tbody tr.dc-row:hover td { background: #FAFAFC; } .dc406 th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 10px 12px; background: var(--gray-bg); } .dc406 td { padding: 11px 12px; font-size: 13px; border-top: 1px solid var(--border); vertical-align: middle; } .dc406 .ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } @media (max-width: 720px) { .dc406 .hide-m { display: none; } }`}</style>
+              <style>{`.dc406 .dc-pills { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; } .dc406 .dc-pills > * { flex: 0 0 auto; max-width: 100%; } .dc406 tbody tr.dc-row:hover td { background: #FAFAFC; } .dc406 th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 10px 12px; background: var(--gray-bg); } .dc406 td { padding: 11px 12px; font-size: 13px; border-top: 1px solid var(--border); vertical-align: middle; } .dc406 .ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } @media (max-width: 720px) { .dc406 .hide-m { display: none; } }`}</style>
               <table className="dc406" style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                 <colgroup>{canPost && <col style={{ width: "4%" }} />}<col style={{ width: "22%" }} /><col style={{ width: "22%" }} /><col className="hide-m" style={{ width: "17%" }} /><col style={{ width: "11%" }} /><col style={{ width: "12%" }} /><col style={{ width: "12%" }} /></colgroup>
                 <thead><tr>{canPost && <th><input type="checkbox" title="Select all on this page" checked={shown.length > 0 && shown.slice((pg - 1) * PAGE, pg * PAGE).every(r => sel[r.id])} onChange={e => { const on = e.target.checked; setSel(s => { const n = { ...s }; shown.slice((pg - 1) * PAGE, pg * PAGE).forEach(r => { if (on) n[r.id] = true; else delete n[r.id]; }); return n; }); }} /></th>}<th>DC ref</th><th>Vendor</th><th className="hide-m">Against PO</th><th style={{ textAlign: "right" }}>Qty</th><th>Match</th><th>Tally</th></tr></thead>
@@ -387,10 +388,10 @@ export default function DeliveryChallans() {
                       <td className="ell" onClick={e => e.stopPropagation()}><VendorLink name={r.vendor} />{r.vendor_dc_no && <div className="muted" style={{ fontSize: 10.5 }}>vendor DC {r.vendor_dc_no}</div>}</td>
                       <td className="ell hide-m muted">{r.po_no || "No PO"}</td>
                       <td style={{ textAlign: "right" }}><b>{r.recv}</b>/{r.ord || "—"}</td>
-                      <td><span style={{ background: tone[0], color: tone[1], fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>{sl}</span>{(() => { const b = rcvBadge(r); return b ? <span title={r.grn_no ? "GRN " + r.grn_no : undefined} style={{ background: b[1], color: b[2], fontSize: 11, padding: "2px 8px", borderRadius: 999, marginLeft: 4, whiteSpace: "nowrap" }}>{b[0]}</span> : null; })()}{/* update462 */}
+                      <td><div className="dc-pills"><span style={{ background: tone[0], color: tone[1], fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>{sl}</span>{(() => { const b = rcvBadge(r); return b ? <span title={r.grn_no ? "GRN " + r.grn_no : undefined} style={{ background: b[1], color: b[2], fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>{b[0]}</span> : null; })()}</div>{/* update462 · update476: pills wrap, never overlap */}
                         {r.sent && <div title={`${r.sent.channel} · by ${r.sent.by}`} style={{ background: "#fff4e5", color: "#c9531f", fontSize: 10.5, padding: "1px 8px", borderRadius: 999, marginTop: 4, display: "inline-block", whiteSpace: "nowrap", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}>📨 Sent to {r.sent.to} · {r.sent.at.slice(5).replace("-", "/")} · {String(r.sent.lang).toUpperCase()}{r.sent.pdf_url && <> · <a href={fileHref(r.sent.pdf_url)} target="_blank" rel="noreferrer" title="The challan PDF that went with the message" style={{ color: "inherit" }}>📎 PDF</a></>}</div>}{/* update454: the document link */}</td>
-                      <td onClick={e => e.stopPropagation()}>{r.posted ? <span title={`Posted by ${r.posted_by} · ${r.posted_at}`} style={{ background: "#DCFCE7", color: "#15803D", fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>✓ Posted</span> : <span style={{ background: "#F3F4F6", color: "#6B7280", fontSize: 11, padding: "2px 8px", borderRadius: 999, border: "1px solid var(--border)", whiteSpace: "nowrap" }}>Not posted</span>}
-                        {canPost && r.status !== "cancelled" && <button type="button" title={r.posted ? "Mark as NOT posted (logged)" : "Mark as posted in Tally (logged)"} style={{ fontSize: 10.5, marginLeft: 4, padding: "0 5px" }} onClick={() => markPosted([r.id], !r.posted)}>{r.posted ? "↺" : "✓"}</button>}</td>
+                      <td onClick={e => e.stopPropagation()}><div className="dc-pills">{r.posted ? <span title={`Posted by ${r.posted_by} · ${r.posted_at}`} style={{ background: "#DCFCE7", color: "#15803D", fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>✓ Posted</span> : <span style={{ background: "#F3F4F6", color: "#6B7280", fontSize: 11, padding: "2px 8px", borderRadius: 999, border: "1px solid var(--border)", whiteSpace: "nowrap" }}>Not posted</span>}
+                        {canPost && r.status !== "cancelled" && <button type="button" title={r.posted ? "Mark as NOT posted (logged)" : "Mark as posted in Tally (logged)"} style={{ fontSize: 10.5, padding: "0 6px", minHeight: 22 }} onClick={() => markPosted([r.id], !r.posted)}>{r.posted ? "↺" : "✓"}</button>}</div></td>
                     </tr>
                     {o && (
                       <tr><td colSpan={5} style={{ background: "#FAFAFC", padding: "10px 14px 14px" }} onClick={e => e.stopPropagation()}>
