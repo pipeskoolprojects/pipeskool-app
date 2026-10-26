@@ -8,6 +8,7 @@ import { ITEM_TYPES, getItemTypes, addItemType, getAllItems, addItem, updateItem
 import { getSession, canAnySite } from "@/lib/auth";
 import { canApprove } from "@/lib/perms";
 import { fileStore, fileHref } from "@/lib/files";
+import { makeAndSaveThumb } from "@/lib/thumbs";   // update478: 96×96 thumbnail made once here, shown on PO lines
 
 const UNITS = ["Nos", "Rmt", "Mtr", "Kg", "Set", "Box", "Litre", "Bag"];
 const BLANK = { item_type: "Pipe", material: "", sub_type: "", size: "", item_class: "", make: "", unit: "Rmt", hsn_code: "", min_stock: "", is_active: true, photo_url: null };
@@ -84,14 +85,16 @@ export default function ItemsPage() {
       if (form.sizeMode && !sizes.length) { setBusy(false); setErr("Type at least one size."); return; }
       if (sizes.length > 1 || form.sizeMode) {
         if (photoPath) payload.photo_url = photoPath;
-        const added = [], skipped = [], failed = [];
+        const added = [], skipped = [], failed = [], addedIds = [];
         for (const sz of sizes) {
           if (sameItemExists(payload, sz)) { skipped.push(sz); continue; }
           const r = await addItem({ ...payload, size: sz });
-          if (r.ok) added.push(sz);
+          if (r.ok) { added.push(sz); if (r.id) addedIds.push(r.id); }
           else if (/duplicate|unique/i.test(r.error || "")) skipped.push(sz);
           else failed.push(sz + " — " + r.error);
         }
+        // update478: one small thumbnail for every size (same photo) — the PO line picture. Never blocks the save.
+        if (form.photoFile && photoPath && addedIds.length) await makeAndSaveThumb(addedIds, form.photoFile, photoPath).catch(() => {});
         setBusy(false);
         if (form.photoPreview && !failed.length) URL.revokeObjectURL(form.photoPreview);
         const parts = [];
@@ -106,6 +109,8 @@ export default function ItemsPage() {
     if (form.photoFile || Object.prototype.hasOwnProperty.call(form, "photo_url")) editPayload.photo_url = photoPath;
     else delete editPayload.photo_url;
     const res = form.id ? await updateItem(form.id, editPayload) : await addItem(payload);
+    // update478: the PO-line thumbnail, made from the picture just uploaded (a replaced photo gets a new thumbnail too)
+    if (res.ok && form.photoFile && photoPath && (form.id || res.id)) await makeAndSaveThumb([form.id || res.id], form.photoFile, photoPath).catch(() => {});
     setBusy(false);
     if (!res.ok) { setErr(/duplicate|unique/i.test(res.error || "") ? "This item already exists in the master (same type, material, size, class and make)." : res.error); return; }
     setMsg(form.id ? "Item updated — the name recomposed automatically." : "Item added: " + (res.name || ""));
@@ -264,6 +269,7 @@ export default function ItemsPage() {
               <button className={tab === "discount" ? "active" : ""} onClick={() => setTab("discount")}>💸 Bulk Discount Update</button>
             </div>
           )}
+          {canManage && <a href="/items/thumbnails" className="muted" style={{ fontSize: 12.5, marginRight: 10, whiteSpace: "nowrap" }} title="Make the small pictures shown on PO lines for photos uploaded earlier">🖼 PO pictures</a>}{/* update478 */}
           {canManage && <button className="primary" onClick={() => { setForm({ ...BLANK }); setMsg(""); setErr(""); }}>＋ Add item</button>}
         </div>
         {loadErr && <div className="demo-banner" style={{ background: "#fdecea", color: "var(--red)" }}>

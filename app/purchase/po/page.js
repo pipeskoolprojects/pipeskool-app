@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { getPoChallanHistory } from "@/lib/challan";   // update441
 import { getPODetail, getPOProofs, canEditPoRates, editPoRates, lastRateForVendor, getPoRateLog, getPoLineIds, duplicatePO } from "@/lib/procure";   // update408
 import { getPOItemStatus, LINE_STATUS } from "@/lib/pending";
+import { getLineImages } from "@/lib/thumbs";   // update478: line pictures (thumbnails) — screen, print, PDF
 
 function POView() {
   const params = useSearchParams();
@@ -20,7 +21,10 @@ function POView() {
   // update408: Edit PO (rates) with audit + vendor-history hints; duplicate
   const [canEdit, setCanEdit] = useState(false); const [edit, setEdit] = useState(null);
   const [rateLog, setRateLog] = useState([]); const [busyE, setBusyE] = useState(false); const [emsg, setEmsg] = useState("");
-  const reload = () => getPODetail(poId).then(d => setPo(d));
+  const [imgs, setImgs] = useState(new Map());   // update478: lineIndex → { src, full, kind } (empty Map = no pictures, table unchanged)
+  const [zoom, setZoom] = useState(null);         // update478: tap-to-enlarge
+  const loadImgs = d => { if (d?.items?.length) getLineImages(d.items).then(m => setImgs(m || new Map())).catch(() => {}); };
+  const reload = () => getPODetail(poId).then(d => { setPo(d); loadImgs(d); });
   const [dcHist, setDcHist] = useState([]);   // update441
   useEffect(() => { if (!poId) return; getPoChallanHistory(poId).then(setDcHist).catch(() => {}); }, [poId]);
   useEffect(() => { if (!poId) return; canEditPoRates().then(setCanEdit); getPoRateLog(poId).then(setRateLog); }, [poId]);
@@ -60,30 +64,21 @@ function POView() {
   async function sendPo() {
     setSending(true); setSendMsg("");
     try {
-      const el = document.querySelector(".po-doc");
-      const html2pdf = (await import("html2pdf.js")).default;
       const fname = "PO_" + String(po.po_no).replace(/[^A-Za-z0-9]+/g, "-") + ".pdf";
-      document.body.classList.add("po-rendering");
-      let blob;
-      try {
-        blob = await html2pdf().set({
-          margin: [12, 12, 14, 12], filename: fname,
-          image: { type: "jpeg", quality: 0.95 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff",
-                         ignoreElements: n => n.classList && (n.classList.contains("no-print") || n.classList.contains("po-back")) },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-          pagebreak: { mode: ["css", "legacy"], avoid: ["tr", ".po-keep"] },
-        }).from(el).outputPdf("blob");
-      } finally { document.body.classList.remove("po-rendering"); }
-      const file = new File([blob], fname, { type: "application/pdf" });
+      // update478: written natively (text + small thumbnails, size-checked) — see lib/poPdf.js. Was a page screenshot (html2pdf).
+      const { buildPoPdf, PO_PDF_BUDGET } = await import("@/lib/poPdf");
+      const r = await buildPoPdf(po, { gstin, images: imgs });
+      const note = r.dropped ? ` Pictures were left out to keep the file under ${Math.round(PO_PDF_BUDGET / 1024)} KB.` : r.quality ? " (pictures compressed a little more to keep the file small)" : "";
+      if (typeof window !== "undefined" && typeof window.__pskCapturePdf === "function") { window.__pskCapturePdf(r.blob, { ...r, blob: undefined, fname }); setSendMsg("Captured." + note); setSending(false); return; }   // test hook only
+      const file = new File([r.blob], fname, { type: "application/pdf" });
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], title: `PO ${po.po_no}`, text: `Purchase Order ${po.po_no} dated ${po.date} — Pipeskool Projects Pvt. Ltd.` });
-        setSendMsg("Shared.");
+        setSendMsg("Shared." + note);
       } else {
-        const url = URL.createObjectURL(blob);
+        const url = URL.createObjectURL(r.blob);
         const a = document.createElement("a"); a.href = url; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 4000);
-        setSendMsg("This browser cannot share files directly — the PDF was saved as " + fname + ". Attach it from your Downloads.");
+        setSendMsg("This browser cannot share files directly — the PDF was saved as " + fname + " (" + Math.round(r.bytes / 1024) + " KB). Attach it from your Downloads." + note);
       }
     } catch (e) {
       if (e && e.name === "AbortError") setSendMsg("");           // user closed the share sheet
@@ -94,7 +89,7 @@ function POView() {
 
   useEffect(() => {
     if (!poId) { setLoading(false); return; }
-    getPODetail(poId).then(d => { setPo(d); setLoading(false); });
+    getPODetail(poId).then(d => { setPo(d); setLoading(false); loadImgs(d); });   // pictures load after the PO, never before it
     // update254: the rate-comparison proof is a SEPARATE document. We only look it up so the
     // Director preview can offer a link to it — nothing about the PO body changes.
     getPOProofs(poId).then(setProofs).catch(() => setProofs({ indentId: null, proofs: [] }));
@@ -151,9 +146,15 @@ function POView() {
           @page { size: A4 portrait; margin: 0; }
           html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
           .po-doc { max-width: none !important; margin: 0 !important; padding: 14mm 14mm 16mm !important; }
-          .po-doc table tr { page-break-inside: avoid; }
+          .po-doc table tr { page-break-inside: avoid; break-inside: avoid; }
+          .po-doc table thead { display: table-header-group; }   /* update478: column header on every printed page */
+          .po-doc table tbody tr td { page-break-inside: avoid; }
         }
         body.po-rendering .po-doc .po-wm { display: none; }
+        /* update478: line pictures */
+        .po-doc .po-img { width: 40px; height: 40px; object-fit: contain; display: block; background: #fff; border-radius: 4px; cursor: zoom-in; }
+        .po-doc td.po-imgcell { width: 48px; padding: 3px !important; text-align: center; vertical-align: middle; }
+        @media print { .po-doc .po-img { cursor: default; } }
       `}</style>
       <button type="button" className="po-back" onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign("/m/approvals"); }}
         style={{ display: "none", alignItems: "center", gap: 6, marginBottom: 10, padding: "8px 12px", border: "1px solid #ddd", borderRadius: 8, background: "#fff", fontSize: 13 }}>← Back to approvals</button>
@@ -238,6 +239,7 @@ function POView() {
         <thead>
           <tr style={{ background: "#FEF2EC" }}>
             <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "left" }}>Sr No</th>
+            {imgs.size > 0 && <th style={{ border: "1px solid #e2d2c5", padding: "7px 4px", width: 48 }} aria-label="Picture"></th>}{/* update478: only when a line has a picture */}
             <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "left" }}>Description</th>
             <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Qty</th>
             <th style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>Unit</th>
@@ -252,6 +254,9 @@ function POView() {
           {items.map((it, i) => (
             <tr key={i}>
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{i + 1}</td>
+              {imgs.size > 0 && <td className="po-imgcell" style={{ border: "1px solid #e2d2c5" }}>{imgs.get(i) ?
+                <img className="po-img" src={imgs.get(i).src} alt="" width={40} height={40} loading="lazy" decoding="async" title="Tap to enlarge"
+                  onClick={() => setZoom({ ...imgs.get(i), name: it.item_name })} onError={e => { e.currentTarget.style.visibility = "hidden"; }} /> : null}</td>}
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px" }}>{it.item_name}{it.spec ? " — " + it.spec : ""}
                 {it.line_kind === "exchanged" && <div style={{ fontSize: 10, marginTop: 2 }}><span style={{ background: "#E24B4A", color: "#fff", padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>Exchanged</span> <span style={{ color: "#A32D2D" }}>ordered {it.ordered_qty}, returned {it.returned_qty} · {it.exchange_ref}</span></div>}
                 {it.line_kind === "replacement" && <div style={{ fontSize: 10, marginTop: 2 }}><span style={{ background: "#3B6D11", color: "#fff", padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>Replacement</span> <span style={{ color: "#27500A" }}>{it.exchange_ref}</span></div>}{/* update404 */}
@@ -265,11 +270,11 @@ function POView() {
               <td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(it.qty * it.rate)}</td></>}
             </tr>
           ))}
-          {px && <><tr><td colSpan="8" style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Subtotal (net)</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(subtotal)}</td></tr>
+          {px && <><tr><td colSpan={imgs.size > 0 ? 9 : 8} style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Subtotal (net)</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(subtotal)}</td></tr>
           {Object.entries(byGst).sort((a, b) => Number(a[0]) - Number(b[0])).map(([g, base]) => (
-            <tr key={g}><td colSpan="8" style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>GST @ {g}% (on {inr(base)})</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(Math.round(base * Number(g) / 100))}</td></tr>
+            <tr key={g}><td colSpan={imgs.size > 0 ? 9 : 8} style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>GST @ {g}% (on {inr(base)})</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(Math.round(base * Number(g) / 100))}</td></tr>
           ))}
-          <tr style={{ background: "#FEF2EC", fontWeight: 700 }}><td colSpan="8" style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Total</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(total)}</td></tr></>}
+          <tr style={{ background: "#FEF2EC", fontWeight: 700 }}><td colSpan={imgs.size > 0 ? 9 : 8} style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>Total</td><td style={{ border: "1px solid #e2d2c5", padding: "7px 9px", textAlign: "right" }}>{inr(total)}</td></tr></>}
         </tbody>
       </table>
       </div>{/* /po-scroll (update265) */}
@@ -371,6 +376,19 @@ function POView() {
         )}
       </div>
       {sendMsg && <div className="no-print" style={{ textAlign: "center", marginTop: 8, fontSize: 12.5, color: "#555" }}>{sendMsg}</div>}
+      {zoom && (   /* update478: the original picture, on tap — screen only */
+        <div className="no-print" onClick={() => setZoom(null)} role="dialog" aria-label="Picture"
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.72)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, cursor: "zoom-out" }}>
+          <div style={{ background: "#fff", borderRadius: 12, padding: 10, maxWidth: "min(92vw, 720px)", maxHeight: "90vh", display: "flex", flexDirection: "column", gap: 8 }} onClick={e => e.stopPropagation()}>
+            <img src={zoom.full || zoom.src} alt={zoom.name || "Material picture"} style={{ maxWidth: "100%", maxHeight: "72vh", objectFit: "contain", display: "block", margin: "0 auto", minWidth: 160, minHeight: 160, background: "#f7f8fa" }}
+              onError={e => { if (e.currentTarget.src !== zoom.src) e.currentTarget.src = zoom.src; }} />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, fontSize: 12.5 }}>
+              <span style={{ color: "#333" }}>{zoom.name}</span>
+              <button type="button" onClick={() => setZoom(null)} style={{ borderRadius: 8, padding: "6px 12px", fontSize: 13 }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
       <style>{`@media print { .no-print { display: none; } }`}</style>
     </div>
   );
