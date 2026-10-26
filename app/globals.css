@@ -647,7 +647,7 @@ html.it-executive-ui .sidebar-hide, html.it-executive-ui[data-it-theme="light"] 
 html.it-executive-ui .sidebar-show { z-index: var(--z-dropdown); border-radius: var(--it-r-sm); background: var(--it-surface-strong); color: var(--text); border: var(--it-hair) solid var(--line); box-shadow: var(--it-shadow-sm); }
 html.it-executive-ui[data-it-theme="light"] .sidebar-show { color: #111827; }
 /* content clears the floating ☰ when the sidebar is hidden */
-html.it-executive-ui.psk-nosb .main > .page-head { padding-left: 56px; }
+html.it-executive-ui.psk-nosb .main .page-head, html.it-executive-ui.psk-nosb .main .m-head { padding-left: 56px; }   /* any depth: Expenses nests its head */
 html.it-executive-ui.psk-nosb .main > iframe { padding-left: 0; }
 /* groups + items: one height, one gutter, one active state */
 html.it-executive-ui .sidebar .nav-group, html.it-executive-ui[data-it-theme="light"] .sidebar .nav-group,
@@ -756,7 +756,7 @@ html.it-executive-ui[data-it-theme="light"] .m-nav a.active { color: #e9651e; }
   html.it-executive-ui table { min-width: 640px; }
 }
 @media (max-width: 380px) { html.it-executive-ui .cards { grid-template-columns: minmax(0, 1fr); } }
-html.it-executive-ui[data-it-layout="desktop"] .main { max-width: 1520px; }
+html.it-executive-ui[data-it-layout="desktop"] .main { max-width: none; width: 100%; }   /* update475b: pages fill the whole screen; no cap, no empty strip on the right */
 html.it-executive-ui[data-it-layout="tablet"] .main { padding-left: 16px; padding-right: 16px; }
 html.it-executive-ui[data-it-layout="phone"] .main { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
 /* devices that cannot afford glass get solid surfaces */
@@ -1017,7 +1017,7 @@ html.it-executive-ui[data-it-layout="phone"] .it-page-procure .it-procure-delive
 html.it-executive-ui[data-it-layout="phone"] .it-page-procure .it-procure-delivery > div:first-child { grid-column: 1/-1; }
 html.it-executive-ui[data-it-layout="phone"] .it-page-procure .it-procure-section,
 html.it-executive-ui[data-it-layout="phone"] .it-page-procure .it-procure-po { padding: 12px !important; }
-html.it-executive-ui .it-page-order .it-co-app { max-width: 1600px; padding: 18px; border: var(--it-hair) solid var(--line); border-radius: var(--it-r-lg); background: var(--card); box-shadow: var(--it-shadow); }
+html.it-executive-ui .it-page-order .it-co-app { max-width: none; padding: 18px; border: var(--it-hair) solid var(--line); border-radius: var(--it-r-lg); background: var(--card); box-shadow: var(--it-shadow); }
 html.it-executive-ui .it-page-order .co-hd { padding-bottom: 12px; border-bottom: var(--it-hair) solid var(--line); }
 html.it-executive-ui .it-page-order .co-ht h1 { color: var(--text); }
 html.it-executive-ui .it-page-order .co-hs { color: var(--muted); }
@@ -1270,7 +1270,7 @@ html.it-executive-ui .it-page-billing .page-head > div, html.it-executive-ui .it
 html.it-executive-ui .page-head .filters > * { max-width: 100%; }
 html.it-executive-ui .it-notice-overview > article { border: var(--it-hair) solid var(--line) !important; border-radius: var(--it-r-md) !important; background: var(--it-card-bg) !important; box-shadow: var(--it-shadow); color: var(--text); }
 /* the floating ☰ (sidebar hidden) must never sit on a page title */
-html.it-executive-ui.psk-nosb .main > .page-head h1, html.it-executive-ui.psk-nosb .main > .page-head > h1 { margin-left: 0; }
+
 /* long names and big Indian-grouped numbers wrap instead of clipping */
 html.it-executive-ui .card .value, html.it-executive-ui .it-worker-kpis strong, html.it-executive-ui .it-procure-kpis strong,
 html.it-executive-ui .it-ra-kpis strong, html.it-executive-ui .it-vendor-kpis strong, html.it-executive-ui .it-stock-cards .value { overflow-wrap: anywhere; min-width: 0; }
