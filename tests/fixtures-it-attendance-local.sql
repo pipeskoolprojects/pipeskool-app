@@ -47,7 +47,8 @@ select 200 + g, w.site_id, '2026-10-26', ('2026-10-26 ' || lpad(((8 * 60 + 40 + 
 update attendance set punch_in = '2026-10-26 07:45:00+05:30' where worker_id = 201;   -- before 08:00
 update attendance set punch_in = '2026-10-26 10:20:00+05:30' where worker_id = 202;   -- after 10:00
 update attendance set punch_in = null, status = 'absent' where worker_id = 203;         -- absent mark, no punch
-update attendance set punch_in_selfie_url = null, proxy_photo_url = null where worker_id = 204;   -- no photo
+update attendance set punch_in_selfie_url = null, proxy_photo_url = null where worker_id = 204;
+update attendance set status = null, punch_out = null, hours_worked = null where worker_id in (205, 206);   -- still on site: no punch-out yet, status not computed (the live crash case)   -- no photo
 insert into attendance (worker_id, site_id, att_date, punch_in, punch_out, hours_worked, status, punch_type, verify_status, punch_in_distance_m, punch_in_selfie_url) values
  (101, 2, '2026-10-26', '2026-10-26 09:05:00+05:30', '2026-10-26 18:10:00+05:30', 9, 'present', 'self', 'pending', 60, 'selfie/s1.jpg'),
  (102, 8, '2026-10-26', '2026-10-26 10:12:00+05:30', '2026-10-26 19:00:00+05:30', 8.8, 'present', 'self', 'verified', 40, 'selfie/s2.jpg'),

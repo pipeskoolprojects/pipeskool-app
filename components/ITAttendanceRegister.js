@@ -157,10 +157,10 @@ export default function ITAttendanceRegister() {
             {tab === "notpunched" ? <NotPunched np={np} marks={marks} cutoffs={cutoffs} site={site} date={date} session={session} actNp={actNp} overrideMark={overrideMark} onCutoff={async () => { const sid = site && site !== "all" ? Number(site) : Number(window.prompt("Site id to configure (pick a site in the filter to skip this):", "")); if (!sid) return; const sc = cutoffs.find(x => x.id === sid); const cutoff = window.prompt("Auto-absent cutoff (HH:MM, IST):", sc ? String(sc.auto_absent_time).slice(0, 5) : "18:00"); if (!cutoff) return; const rem = window.prompt("First reminder time (HH:MM, IST):", sc ? String(sc.reminder_time).slice(0, 5) : "11:00"); if (!rem) return; const x = await setSiteCutoff(sid, cutoff, rem); if (!x.ok) window.alert(x.error); loadNp(); }} /> : (<>
             <div className="fl2">
               <input id="ita-q" placeholder="Search worker…" aria-label="Search" value={f.search} onChange={e => setF(x => ({ ...x, search: e.target.value }))} />
-              <Sel label="Category" v={f.category} set={v => setF(x => ({ ...x, category: v }))} items={(opts.category || []).map(c => [c, c])} />
-              <Sel label="Labour" v={f.contractor} set={v => setF(x => ({ ...x, contractor: v }))} items={(opts.contractor || []).map(c => [c, c])} />
-              <Sel label="Site" v={f.site_id} set={v => setF(x => ({ ...x, site_id: v }))} items={(opts.site || []).map(s => [String(s.id), s.name])} />
-              <Sel label="Status" v={f.status} set={v => setF(x => ({ ...x, status: v }))} items={(opts.status || []).map(s => [s, s.replace("_", " ")])} />
+              <Sel label="Category" v={f.category} set={v => setF(x => ({ ...x, category: v }))} items={(opts.category || []).filter(Boolean).map(c => [c, c])} />
+              <Sel label="Labour" v={f.contractor} set={v => setF(x => ({ ...x, contractor: v }))} items={(opts.contractor || []).filter(Boolean).map(c => [c, c])} />
+              <Sel label="Site" v={f.site_id} set={v => setF(x => ({ ...x, site_id: v }))} items={(opts.site || []).filter(s => s && s.id != null).map(s => [String(s.id), s.name || "Site " + s.id])} />
+              <Sel label="Status" v={f.status} set={v => setF(x => ({ ...x, status: v }))} items={(opts.status || []).filter(Boolean).map(s => [s, String(s).replace("_", " ")])} />
               <Sel label="Punch" v={f.punch} set={v => setF(x => ({ ...x, punch: v }))} items={[["proxy", "Proxy"], ["self", "Self"]]} />
               <Sel label="Verification" v={f.verify} set={v => setF(x => ({ ...x, verify: v }))} items={[["pending", "Pending"], ["verified", "Verified"], ["corrected", "Corrected"]]} />
               <span className="sp" />
@@ -323,7 +323,7 @@ function SitesChart({ sites }) {
   const S = sites || [], tot = Math.max(1, ...S.map(s => Math.max(s.present, s.on_roll)));
   return (<div style={{ padding: "6px 14px 12px" }} role="img" aria-label={"Present by site: " + S.map(s => `${s.name} ${s.present} of ${s.on_roll} on roll`).join("; ")}>
     {S.length === 0 && <div className="empty">NO SITES IN SCOPE</div>}
-    {S.map(s => <div className="hb" key={s.site_id}><span title={s.name}>{s.name.split(",")[0]}</span><div className="tr"><i style={{ width: s.present / tot * 100 + "%", background: AM }} /><i style={{ width: s.verified / tot * 100 + "%", background: GR }} />{s.on_roll > 0 && <s style={{ left: Math.min(100, s.on_roll / tot * 100) + "%" }} />}</div><b>{s.present} / {s.on_roll}</b></div>)}
+    {S.map(s => <div className="hb" key={s.site_id}><span title={s.name || ""}>{String(s.name || "Site " + s.site_id).split(",")[0]}</span><div className="tr"><i style={{ width: s.present / tot * 100 + "%", background: AM }} /><i style={{ width: s.verified / tot * 100 + "%", background: GR }} />{s.on_roll > 0 && <s style={{ left: Math.min(100, s.on_roll / tot * 100) + "%" }} />}</div><b>{s.present} / {s.on_roll}</b></div>)}
     <div className="lg2" style={{ padding: "8px 0 0" }}><span><i style={{ background: AM }} />PRESENT</span><span><i style={{ background: GR }} />VERIFIED</span><span>| = ON ROLL</span></div>
   </div>);
 }
