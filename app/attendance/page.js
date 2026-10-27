@@ -8,6 +8,8 @@ import { todayLocal } from "@/lib/today";
 import { isDemo } from "@/lib/supabase";
 import { fmtHM } from "@/lib/payroll";
 import { getHolidayMap } from "@/lib/holidays";
+import { isITExecutiveRole } from "@/lib/it-ui.mjs";   // update479
+import ITAttendanceRegister from "@/components/ITAttendanceRegister";   // update479
 
 const statusBadge = s =>
   s === "present" ? <span className="badge p">P</span> :
@@ -15,7 +17,18 @@ const statusBadge = s =>
   s === "absent" ? <span className="badge a">A</span> :
   <span className="badge gray">…</span>;
 
+// update479: the IT Executive gets the redesigned register (components/ITAttendanceRegister.js); every other role keeps
+// this page exactly as it was. The role check uses the same helper as the IT workspace (lib/it-ui.mjs); the database
+// functions behind the new view check the role again on the server (fn_att_it_me → 403 for anyone else).
 export default function AttendancePage() {
+  const [who, setWho] = useState(null);   // null until mounted (the session lives in localStorage)
+  useEffect(() => { setWho(isITExecutiveRole(getSession()?.role) ? "it" : "classic"); }, []);
+  if (who === null) return <div className="layout"><Sidebar /><main className="main"><div className="muted" style={{ padding: 20 }}>Loading…</div></main></div>;
+  if (who === "it") return <div className="layout"><Sidebar /><main className="main" style={{ padding: 0, maxWidth: "none" }}><ITAttendanceRegister /></main></div>;
+  return <AttendanceClassic />;
+}
+
+function AttendanceClassic() {
   const [date, setDate] = useState(() => todayLocal());
   const [site, setSite] = useState("all");
   useEffect(() => {   // update206: project scoping — ?site= from a project workspace pre-filters this page

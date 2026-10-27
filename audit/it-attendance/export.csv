@@ -1,0 +1,37 @@
+﻿Date,Worker,Category,Labour,Site,GPS,In,Out,Hrs,Status,OT,Punch / photo,Verification
+26-10-2026,Worker 9,Grinder,Own,"SOUL Campus, GIFT City",in 163m,08:58,18:09,8h 30m,present,0,self,verified
+26-10-2026,Worker 8,Fitter,Mojahid,"KEI Industries, Sanand",,08:56,18:08,8h 30m,present,0,proxy,pending
+26-10-2026,Worker 7,Welder,Own,ATOS,,08:54,—,8h 30m,present,0,proxy,pending
+26-10-2026,Worker 6,Helper,Own,"SOUL Campus, GIFT City",in 142m,08:52,18:06,8h 30m,present,0,self,pending
+26-10-2026,Worker 5,Plumber,Own,"KEI Industries, Sanand",,08:50,18:05,8h 30m,present,1.5,proxy,verified
+26-10-2026,Worker 4,Mason,Akhilesh Yadav,"SOUL Campus, GIFT City",,08:48,18:04,8h 30m,present,0,proxy,pending
+26-10-2026,Worker 36,Helper,Akhilesh Yadav,"SOUL Campus, GIFT City",in 352m,09:52,18:36,8h 30m,present,0,self,pending
+26-10-2026,Worker 35,Plumber,Own,"KEI Industries, Sanand",,09:50,—,8h 30m,present,1.5,proxy,pending
+26-10-2026,Worker 34,Mason,Own,"SOUL Campus, GIFT City",,09:48,18:34,8h 30m,present,0,proxy,pending
+26-10-2026,Worker 33,Grinder,Own,"KEI Industries, Sanand",in 331m,09:46,18:33,8h 30m,half_day,0,self,verified
+26-10-2026,Worker 32,Fitter,Mojahid,ATOS,,09:44,18:32,8h 30m,present,0,proxy,pending
+26-10-2026,Worker 31,Welder,Own,"SOUL Campus, GIFT City",,09:42,18:31,8h 30m,present,0,proxy,pending
+26-10-2026,Worker 30,Helper,Own,"KEI Industries, Sanand",in 310m,09:40,18:30,8h 30m,present,2,self,pending
+26-10-2026,Worker 3,Grinder,Own,"KEI Industries, Sanand",in 121m,—,18:03,8h 30m,absent,0,self,pending
+26-10-2026,Worker 29,Plumber,Own,"SOUL Campus, GIFT City",,09:38,18:29,8h 30m,present,0,proxy,verified
+26-10-2026,Worker 28,Mason,Akhilesh Yadav,"KEI Industries, Sanand",,09:36,—,8h 30m,present,0,proxy,pending
+26-10-2026,Worker 27,Grinder,Own,ATOS,in 289m,09:34,18:27,8h 30m,present,0,self,pending
+26-10-2026,Worker 26,Fitter,Own,"SOUL Campus, GIFT City",,09:32,18:26,8h 30m,present,0,proxy,pending
+26-10-2026,Worker 25,Welder,Own,"KEI Industries, Sanand",,09:30,18:25,8h 30m,present,1.5,proxy,verified
+26-10-2026,Worker 24,Helper,Mojahid,"SOUL Campus, GIFT City",in 268m,09:28,18:24,8h 30m,present,0,self,pending
+26-10-2026,Worker 23,Plumber,Own,"KEI Industries, Sanand",,09:26,18:23,8h 30m,present,0,proxy,pending
+26-10-2026,Worker 22,Mason,Own,ATOS,,09:24,18:22,8h 30m,half_day,0,proxy,pending
+26-10-2026,Worker 21,Grinder,Own,"SOUL Campus, GIFT City",in 247m,09:22,—,8h 30m,present,0,self,verified
+26-10-2026,Worker 20,Fitter,Akhilesh Yadav,"KEI Industries, Sanand",,09:20,18:20,8h 30m,present,2,proxy,pending
+26-10-2026,Worker 2,Fitter,Own,ATOS,,10:20,18:02,8h 30m,present,0,proxy,pending
+26-10-2026,Worker 19,Welder,Own,"SOUL Campus, GIFT City",,09:18,18:19,8h 30m,present,0,proxy,pending
+26-10-2026,Worker 18,Helper,Own,"KEI Industries, Sanand",in 226m,09:16,18:18,8h 30m,present,0,self,pending
+26-10-2026,Worker 17,Plumber,Own,ATOS,,09:14,18:17,8h 30m,present,0,proxy,verified
+26-10-2026,Worker 16,Mason,Mojahid,"SOUL Campus, GIFT City",,09:12,18:16,8h 30m,present,0,proxy,pending
+26-10-2026,Worker 15,Grinder,Own,"KEI Industries, Sanand",in 205m,09:10,18:15,8h 30m,present,1.5,self,pending
+26-10-2026,Worker 14,Fitter,Own,"SOUL Campus, GIFT City",,09:08,—,8h 30m,present,0,proxy,pending
+26-10-2026,Worker 13,Welder,Own,"KEI Industries, Sanand",,09:06,18:13,8h 30m,present,0,proxy,verified
+26-10-2026,Worker 12,Helper,Akhilesh Yadav,ATOS,in 184m,09:04,18:12,8h 30m,present,0,self,pending
+26-10-2026,Worker 11,Plumber,Own,"SOUL Campus, GIFT City",,09:02,18:11,8h 30m,half_day,0,proxy,pending
+26-10-2026,Worker 10,Mason,Own,"KEI Industries, Sanand",,09:00,18:10,8h 30m,present,2,proxy,pending
+26-10-2026,Worker 1,Welder,Own,"SOUL Campus, GIFT City",,07:45,18:01,8h 30m,present,0,proxy,verified
