@@ -6,7 +6,8 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getDeliveryChallans, getHsnMap } from "@/lib/challan";
-import DcDoc from "@/components/DcDoc";   // update454: shared with the send box
+import DnDoc, { DN_CSS } from "@/components/DnDoc";   // update480: the redesigned note (no vendor), shared with Send to site and the public link
+import { noteFromChallan } from "@/lib/dnModel";
 
 function DcPrint() {
   const params = useSearchParams();
@@ -24,12 +25,14 @@ function DcPrint() {
   if (!docs.list.length) return <div style={{ margin: 40, fontFamily: "system-ui" }}>No challans found for this link.</div>;
   return (
     <div style={{ fontFamily: "system-ui", background: "#fff" }}>
-      <style>{`@media print { .no-print { display: none !important; } } @page { size: A4; margin: 12mm; }`}</style>
+      <style>{DN_CSS}</style>
+      <style>{`@media print { .no-print { display: none !important; } .dcp-page { page-break-after: always; break-after: page; } } .dcp-page { margin: 0 auto 24px; width: 794px; max-width: 100%; }`}</style>
       <div className="no-print" style={{ display: "flex", gap: 8, padding: 14, maxWidth: 780, margin: "0 auto" }}>
         <button onClick={() => window.print()} style={{ fontWeight: 700 }}>🖨 Print / Save as PDF{docs.list.length > 1 ? ` (${docs.list.length} challans)` : ""}</button>
         <button onClick={() => window.close()}>Close</button>
+        {docs.list.length === 1 && <a href={"/stock/challans/send?id=" + docs.list[0].id}><button type="button">Send to site</button></a>}{/* update480 */}
       </div>
-      {docs.list.map(d => <DcDoc key={d.id} d={d} hsn={docs.hsn} />)}
+      {docs.list.map(d => <div key={d.id} className="dcp-page"><DnDoc note={noteFromChallan(d, docs.hsn)} /></div>)}
     </div>
   );
 }

@@ -13,7 +13,8 @@
 //   message + document together. On phones that can share files, the PDF itself can also be attached.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getSiteRecipients, getAllStaffForSend, logDcSend, getHsnMap, uploadDcPdf } from "@/lib/challan";
-import DcDoc from "@/components/DcDoc";
+import DnDoc, { DN_CSS } from "@/components/DnDoc";   // update480: the redesigned note (no vendor) goes with the message
+import { noteFromChallan } from "@/lib/dnModel";
 import { buildDcMessage, LANG_LABEL } from "@/lib/dcMessage";
 import { notifyUsers } from "@/lib/notify";
 import { waLink } from "@/lib/enquiry";
@@ -163,7 +164,7 @@ export default function DcSendBox({ dc, onClose, onSent }) {
               <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>Each recipient gets the message in their own language with their own name. Item names stay as in the Item Master. The 📎 link is created when you press send — it opens this challan&apos;s Delivery Note (PDF), exactly as Print / PDF shows it.</div>
               <div style={{ marginTop: 10, border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
                 <div className="muted" style={{ fontSize: 11, padding: "4px 8px", background: "#f7f7f7" }}>📄 Document that goes with the message (Delivery Note {dc.dc_ref})</div>
-                <div style={{ maxHeight: 240, overflow: "auto", zoom: 0.6 }}><div ref={docRef}><DcDoc d={dc} hsn={hsn} /></div></div>
+                <div style={{ maxHeight: 240, overflow: "auto", zoom: 0.6 }}><style>{DN_CSS}</style><div ref={docRef}><DnDoc note={noteFromChallan(dc, hsn)} /></div></div>
               </div>
             </div>
           </div>

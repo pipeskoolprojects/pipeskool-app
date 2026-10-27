@@ -9,6 +9,10 @@ module.exports = {
         source: "/((?!_next/|favicon|icon-|manifest).*)",
         headers: [{ key: "Cache-Control", value: "no-store, must-revalidate" }],
       },
+      {   // update480: public delivery-note links — never indexed, never cached
+        source: "/dn/:path*",
+        headers: [{ key: "Cache-Control", value: "no-store" }, { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" }, { key: "Referrer-Policy", value: "no-referrer" }],
+      },
     ];
   },
 };

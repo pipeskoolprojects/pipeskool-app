@@ -17,7 +17,7 @@ import MobileNav from "@/components/MobileNav";
 import { getSession } from "@/lib/auth";
 
 const NO_BAR = [/^\/login/, /^\/go(\b|\/)/, /\/print(\b|\/)/, /\/slip(\b|\/)/, /^\/workers\/profile/, /^\/letters\/print/,
-  /^\/purchase\/po(\b|\/)/, /^\/stock\/idc-print/, /^\/stock\/exchange-print/, /^\/expenses\/voucher/, /^\/expenses\/advance-voucher/];   // update390: documents — no app chrome
+  /^\/purchase\/po(\b|\/)/, /^\/stock\/idc-print/, /^\/stock\/exchange-print/, /^\/expenses\/voucher/, /^\/expenses\/advance-voucher/, /^\/dn\//];   // update390: documents — no app chrome · update480: public delivery-note link
 
 export default function GlobalMobileNav() {
   const path = usePathname() || "/";

@@ -407,6 +407,7 @@ export default function DeliveryChallans() {
                         {r.status === "cancelled" && <div className="note red" style={{ marginBottom: 8 }}>Cancelled{r.cancelled_by ? " by " + r.cancelled_by : ""}{r.cancel_reason ? " — " + r.cancel_reason : ""}</div>}
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                           <a href={"/stock/dc-print?ids=" + r.id} target="_blank" rel="noreferrer"><button type="button" style={{ fontSize: 11.5 }}>🖨 Print / PDF</button></a>
+                          <a href={"/stock/challans/send?id=" + r.id}><button type="button" style={{ fontSize: 11.5, background: "#f47b20", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700 }} title="Delivery Note with Send to site: WhatsApp / email / SMS to a person, share, copy link, download PDF">📤 Send to site</button></a>{/* update480 */}
                           <button type="button" style={{ fontSize: 11.5 }} disabled={!tally} onClick={() => dlTally([r], r.dc_ref.replace(/\//g, "-") + ".xml")}>📊 Tally XML</button>
                           {canPost && r.status !== "cancelled" && (r.posted
                             ? <button type="button" style={{ fontSize: 11.5 }} title={`Posted by ${r.posted_by} · ${r.posted_at}`} onClick={() => markPosted([r.id], false)}>↺ Mark as not posted</button>
