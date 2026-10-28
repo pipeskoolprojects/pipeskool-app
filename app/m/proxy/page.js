@@ -4,8 +4,10 @@
 // Verify-status badges, Mark out for on-site workers — every action live-photo'd (in/out) and
 // server-verified against the marker's Proxy Attendance Authority on EVERY call. Verify and
 // + OT stay with staff permissions (they lock records / set pay) — deliberately not here.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import CameraCapture from "@/components/CameraCapture";
+import { startCamera } from "@/lib/cameraDiag";   // update481
+import { getSession } from "@/lib/auth";
 import { getLocalWorker, getWorkerSiteOptions, getProxyTeam, proxyPunch, proxyMarkOut, proxyMarkAbsent, proxyUnmarkAbsent, getWorkerProxyFlag, proxySearchWorkers } from "@/lib/mobile";   // update292
 
 const btn = { fontSize: 12.5, borderRadius: 10, padding: "8px 12px", fontWeight: 700, border: "1px solid var(--border)", background: "#fff" };
@@ -20,6 +22,7 @@ export default function WorkerProxyPage() {
   const [target, setTarget] = useState(null);
   const [mode, setMode] = useState("in");
   const [showCam, setShowCam] = useState(false);
+  const camStart = useRef(null);   // update481
   const [absFor, setAbsFor] = useState(null);
   const [absReason, setAbsReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -123,10 +126,10 @@ export default function WorkerProxyPage() {
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>{/* same action row shape as the muster */}
-                    {!r.att_id && !r.absent_id && <button style={{ ...btn, background: "var(--brand)", color: "#fff", border: 0 }} onClick={() => { setTarget(r); setMode("in"); setErr(""); setMsg(""); setShowCam(true); }}>📷 Mark present</button>}
+                    {!r.att_id && !r.absent_id && <button style={{ ...btn, background: "var(--brand)", color: "#fff", border: 0 }} onClick={() => { setTarget(r); setMode("in"); setErr(""); setMsg(""); camStart.current = startCamera("environment", { kind: "proxy", userId: getSession()?.id || null }); setShowCam(true); }}>📷 Mark present</button>}
                     {!r.att_id && !r.absent_id && <button style={{ ...btn, borderColor: "var(--red)", color: "var(--red)" }} onClick={() => { setAbsFor(r); setAbsReason(""); }}>Absent</button>}
                     {!r.att_id && r.absent_id && <button style={btn} onClick={async () => { const x = await proxyUnmarkAbsent(worker.id, r.absent_id); if (!x.ok) { flash(false, x.error); return; } flash(true, `Absent mark removed for ${r.name}.`); load(); }}>Undo absent</button>}
-                    {here && !r.out && <button style={btn} onClick={() => { setTarget(r); setMode("out"); setErr(""); setMsg(""); setShowCam(true); }}>Mark out</button>}
+                    {here && !r.out && <button style={btn} onClick={() => { setTarget(r); setMode("out"); setErr(""); setMsg(""); camStart.current = startCamera("environment", { kind: "proxy", userId: getSession()?.id || null }); setShowCam(true); }}>Mark out</button>}
                     {here && r.verify !== "verified" && <span className="muted" style={{ fontSize: 11, alignSelf: "center" }}>Verification stays with your supervisor.</span>}
                   </div>
                 </div>
@@ -150,7 +153,7 @@ export default function WorkerProxyPage() {
                       {f.att_site_id
                         ? <span className="badge gray">Marked today</span>
                         : <button style={{ fontSize: 12.5, background: "var(--brand)", color: "#fff", border: 0, borderRadius: 10, padding: "8px 12px", fontWeight: 700 }}
-                            onClick={() => { setTarget({ id: f.id, name: f.name, _manualSite: Number(f.home_site_id) !== Number(site) }); setMode("in"); setErr(""); setMsg(""); setShowCam(true); }}>📷 Mark here</button>}
+                            onClick={() => { setTarget({ id: f.id, name: f.name, _manualSite: Number(f.home_site_id) !== Number(site) }); setMode("in"); setErr(""); setMsg(""); camStart.current = startCamera("environment", { kind: "proxy", userId: getSession()?.id || null }); setShowCam(true); }}>📷 Mark here</button>}
                     </div>
                   ))}
                   <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Marking here records the day at <b>{wsites.find(s => Number(s.id) === Number(site))?.name || "this site"}</b> with a "site set manually" tag.</div>
@@ -173,7 +176,7 @@ export default function WorkerProxyPage() {
             </div>
           </div>
         )}
-        {showCam && <CameraCapture facing="environment" title={`Live photo of ${target?.name || "worker"} at site`} onCapture={onPhoto} onCancel={() => { setShowCam(false); setTarget(null); }} />}
+        {showCam && <CameraCapture facing="environment" title={`Live photo of ${target?.name || "worker"} at site`} start={camStart.current} diag={{ kind: "proxy", userId: getSession()?.id || null }} onCapture={onPhoto} onCancel={() => { setShowCam(false); setTarget(null); }} />}
       </div>
     </div>
   );

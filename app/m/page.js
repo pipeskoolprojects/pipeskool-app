@@ -11,6 +11,7 @@ import { siteForPunch, workerRaiseAdvance, workerMyAdvances } from "@/lib/mobile
 import { getLang, t } from "@/lib/i18n";
 import Logo from "@/components/Logo";
 import CameraCapture from "@/components/CameraCapture";
+import { startCamera } from "@/lib/cameraDiag";   // update481: camera starts from the tap, every attempt is logged
 import { getTodayQuote } from "@/lib/notices";
 import { getWorkerUpcomingHolidays } from "@/lib/attendanceRules";   // update394
 
@@ -77,6 +78,7 @@ export default function PunchScreen() {
   const [today, setToday] = useState({});
   const [busy, setBusy] = useState(false);
   const [showCam, setShowCam] = useState(false);
+  const camStart = useRef(null);   // update481
   const [msg, setMsg] = useState("");
 
 
@@ -158,6 +160,7 @@ export default function PunchScreen() {
 
   function startPunch() {
     if (!insideFence || phase === "done" || busy) return;
+    camStart.current = startCamera("user", { kind: "punch", userId: getSession()?.id || null, workerId: worker.id });   // update481: in the tap itself (user gesture)
     setShowCam(true); // live selfie first, punch on capture — no file picker
   }
 
@@ -258,7 +261,7 @@ export default function PunchScreen() {
         )}{/* update288: visible only to workers granted Proxy Attendance Authority */}
         {proxyErr && <div className="note amber" style={{ marginTop: 8, fontSize: 11.5 }}>🛡 Proxy-authority check failed: {proxyErr}</div>}{/* update289 */}
 
-        {showCam && <CameraCapture facing="user" title="Live selfie for punch" onCapture={onSelfie} onCancel={() => setShowCam(false)} />}
+        {showCam && <CameraCapture facing="user" title="Live selfie for punch" start={camStart.current} diag={{ kind: "punch", userId: getSession()?.id || null, workerId: worker.id }} onCapture={onSelfie} onCancel={() => setShowCam(false)} />}
 
         {msg && <div className="note green" style={{ textAlign: "left" }}>{msg}</div>}
 
@@ -268,7 +271,7 @@ export default function PunchScreen() {
           <div className="stat-box"><div className="k">Hours</div><div className="v">{today.hours_worked != null ? Math.floor(today.hours_worked) + "h " + String(Math.round((today.hours_worked % 1) * 60)).padStart(2, "0") + "m" : "\u2014"}</div></div>
         </div>
 
-        <div className="muted" style={{ textAlign: "center", fontSize: 10, marginTop: 10 }}>Pipeskool v470</div>{/* update289: visible build tag — if this line is missing on the phone, the deploy is not live */}
+        <div className="muted" style={{ textAlign: "center", fontSize: 10, marginTop: 10 }}>Pipeskool v481</div>{/* update289: visible build tag — if this line is missing on the phone, the deploy is not live */}
         {worker.profile_complete === false && (
           <div className="note amber" style={{ textAlign: "left" }}>
             ⚠ Profile incomplete — bank details pending. Show this to your supervisor.

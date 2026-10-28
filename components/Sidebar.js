@@ -118,7 +118,7 @@ export default function Sidebar() {
         next[g.label] = true;
         (g.subs || []).forEach(sg => { if (sg.items.some(it => it.href === path)) next[sg.label] = true; });
       }
-      if (["/access", "/admin-access", "/sitemaster", "/backup", "/tickets"].includes(path)) next["Admin"] = true;
+      if (["/access", "/admin-access", "/sitemaster", "/backup", "/tickets", "/it/camera-log"].includes(path)) next["Admin"] = true;
       return next;
     });
   }, [path]);
@@ -179,7 +179,7 @@ export default function Sidebar() {
       ["📊","Analytics","/reports"], ["🏗","All Sites","/projects"], ["📝","Assign Task","/tasks"]
     ];
     const directorAdminLinks = [
-      ["/admin-access", "Admin & access"], ["/access", "Access Rights"], ["/sitemaster", "Site Master (timings)"], ["/backup", "Backup & Restore"], ["/tickets", "Support Tickets"]
+      ["/admin-access", "Admin & access"], ["/access", "Access Rights"], ["/it/camera-log", "Punch camera diagnostics"], ["/sitemaster", "Site Master (timings)"], ["/backup", "Backup & Restore"], ["/tickets", "Support Tickets"]
     ];
     const adminOpen = open.Admin ?? directorAdminLinks.some(([href]) => path === href);
     const renderDirectorLink = ([ico,label,href]) => { const active=href==="/home"?path==="/home"||path==="/m/dashboard":path===href; return <Link key={href} href={href} style={{display:"flex",alignItems:"center",gap:11,padding:"9px 11px",borderRadius:9,textDecoration:"none",fontSize:12.5,fontWeight:active?750:550,color:active?"#fff":"#dbe3f1",background:active?"#f26a1b":"transparent",borderLeft:active?"3px solid #ffad71":"3px solid transparent"}}><span style={{width:18,textAlign:"center",fontSize:15}}>{ico}</span>{label}</Link>; };
@@ -242,7 +242,7 @@ export default function Sidebar() {
       {GROUPS.map(g => <Group key={g.label} label={g.label} items={g.items} subs={g.subs} canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} />)}
 
       <Group label="Help" canSee={() => true} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} items={[{ href: "/help?ctx=" + encodeURIComponent(path || "/"), label: "❓ Help Center", module: null }]} />{/* update401 */}
-      {showAccess && <Group label="Admin" canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} items={[{ href: "/access", label: "Access Rights", module: null }, { href: "/admin-access", label: "Admin & access (Director)", module: null }, { href: "/sitemaster", label: "Site Master (timings)", module: null }, { href: "/backup", label: "Backup & Restore", module: null }, { href: "/tickets", label: "Support Tickets", module: null }]} />}
+      {showAccess && <Group label="Admin" canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} items={[{ href: "/access", label: "Access Rights", module: null }, { href: "/it/camera-log", label: "Punch camera diagnostics", module: null }, { href: "/admin-access", label: "Admin & access (Director)", module: null }, { href: "/sitemaster", label: "Site Master (timings)", module: null }, { href: "/backup", label: "Backup & Restore", module: null }, { href: "/tickets", label: "Support Tickets", module: null }]} />}
 
       <nav style={{ marginTop: 20 }}>
         <a onClick={logout} style={{ cursor: "pointer" }}>Log out</a>

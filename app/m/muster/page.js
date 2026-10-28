@@ -1,9 +1,10 @@
 "use client";
 // update186: supervisor Daily Muster — verify / OT / absent per row, worker detail sheet,
 // global cross-site protection, bottom "Verify all" bar. Worker-side app untouched.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MobileNav from "@/components/MobileNav";
 import CameraCapture from "@/components/CameraCapture";
+import { startCamera } from "@/lib/cameraDiag";   // update481
 import { isDemo } from "@/lib/supabase";
 import { Fragment } from "react";   // update286
 import { getMuster, proxyPunch, proxyPunchOut, getSiteGeo, getPosition, distanceMeters, verifyDay, verifyOne, markAbsent, unmarkAbsent, getWorkerMonth, getMyProxyAuthority } from "@/lib/mobile";   // update287
@@ -31,6 +32,7 @@ export default function MusterScreen() {
   const [err, setErr] = useState("");
   const [geo, setGeo] = useState(null);
   const [showCam, setShowCam] = useState(false);
+  const camStart = useRef(null);   // update481
   const [q, setQ] = useState("");
   const [otFor, setOtFor] = useState(null); const [otHrs, setOtHrs] = useState("");
   const [absFor, setAbsFor] = useState(null); const [absReason, setAbsReason] = useState("");
@@ -91,6 +93,7 @@ export default function MusterScreen() {
     if (!canProxyAt(m === "out" ? (r.attSiteId ?? r.homeSiteId) : (selSite[r.id] ?? r.homeSiteId))) { flash(false, "Only the site supervisor / incharge can mark on behalf."); return; }   // update286: per-site right
     if (m === "in" && r.elsewhere) { flash(false, `${r.name} is already present at ${r.elsewhere.site} (in ${r.elsewhere.time}).`); return; }
     setTarget(r); setMode(m); setErr(""); setMsg("");
+    camStart.current = startCamera("environment", { kind: "muster", userId: getSession()?.id || null });   // update481: from the tap
     setShowCam(true);   // live camera only — locked rule
   }
   async function onPhoto(file) {
@@ -278,7 +281,7 @@ export default function MusterScreen() {
           );
         })}
 
-        {showCam && <CameraCapture facing="environment" title={`Live photo of ${target?.name || "worker"} at site`} onCapture={onPhoto} onCancel={() => { setShowCam(false); setTarget(null); }} />}
+        {showCam && <CameraCapture facing="environment" title={`Live photo of ${target?.name || "worker"} at site`} start={camStart.current} diag={{ kind: "muster", userId: getSession()?.id || null }} onCapture={onPhoto} onCancel={() => { setShowCam(false); setTarget(null); }} />}
         <div className="note amber" style={{ marginTop: 14 }}>
           "Mark present" needs a live photo of the worker at site (camera only, flagged as proxy). Attendance is one record per worker per day across all sites.
           After verification the row locks — corrections need Office Admin / Director.
