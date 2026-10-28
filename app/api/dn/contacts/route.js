@@ -4,7 +4,7 @@ import { staffFromReq, canSend, forbid, sbGet } from "@/lib/server/dn";
 export const dynamic = "force-dynamic"; export const runtime = "nodejs";
 export async function GET(req) {
   try {
-    const staff = await staffFromReq(req); if (!staff) return Response.json({ ok: false, error: "Sign in first." }, { status: 401 });
+    const staff = await staffFromReq(req); if (!staff) return Response.json({ ok: false, code: "DN_NO_LOGIN", error: "Your login has expired — sign in again." }, { status: 401 });
     if (!(await canSend(staff))) return forbid();
     const site = Number(new URL(req.url).searchParams.get("site_id")); const out = [];
     if (site) {
