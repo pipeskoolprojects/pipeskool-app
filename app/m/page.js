@@ -11,7 +11,7 @@ import { siteForPunch, workerRaiseAdvance, workerMyAdvances } from "@/lib/mobile
 import { getLang, t } from "@/lib/i18n";
 import Logo from "@/components/Logo";
 import CameraCapture from "@/components/CameraCapture";
-import { startCamera } from "@/lib/cameraDiag";   // update481: camera starts from the tap, every attempt is logged
+import { startCamera, isBlockedCameraError, hasUserActivation, photoAgeMs, FALLBACK_MAX_AGE_MS, nowMs, newAttemptId, logCameraEvent } from "@/lib/cameraDiag";   // update481/483
 import { getTodayQuote } from "@/lib/notices";
 import { getWorkerUpcomingHolidays } from "@/lib/attendanceRules";   // update394
 
@@ -79,6 +79,8 @@ export default function PunchScreen() {
   const [busy, setBusy] = useState(false);
   const [showCam, setShowCam] = useState(false);
   const camStart = useRef(null);   // update481
+  const fileRef = useRef(null);    // update483: hidden <input capture> — the phone's camera app when getUserMedia is denied
+  const attempt = useRef({ t0: 0, id: "", path: "live" });
   const [msg, setMsg] = useState("");
 
 
@@ -158,10 +160,39 @@ export default function PunchScreen() {
   const phase = !today.punch_in ? "in" : !today.punch_out ? "out" : "done";
   const fmtTime = ts => ts ? new Date(ts).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—";
 
+  // update483: the camera diagnostics fields for this worker (no personal data)
+  const camDiag = () => ({ kind: "punch", userId: getSession()?.id || null, workerId: worker.id });
+  // denied / no camera → open the phone's own camera app, synchronously, while the tap is still a user gesture.
+  // Returns true when the camera app was asked to open; false (too late for a programmatic click) leaves the
+  // usual "Camera is blocked" card, whose Try again tap opens it.
+  function openFallback() {
+    const el = fileRef.current;
+    if (!el || !hasUserActivation()) return false;
+    try { el.click(); } catch { return false; }
+    attempt.current.path = "fallback";
+    setShowCam(false);
+    logCameraEvent({ ...camDiag(), path: "fallback", attemptId: attempt.current.id, result: "fallback_opened", tOpen: Math.round(nowMs() - attempt.current.t0) });
+    return true;
+  }
   function startPunch() {
     if (!insideFence || phase === "done" || busy) return;
-    camStart.current = startCamera("user", { kind: "punch", userId: getSession()?.id || null, workerId: worker.id });   // update481: in the tap itself (user gesture)
-    setShowCam(true); // live selfie first, punch on capture — no file picker
+    const t0 = nowMs(), id = newAttemptId(); attempt.current = { t0, id, path: "live" };
+    const p = startCamera("user", { ...camDiag(), t0, attemptId: id });   // update481: in the tap itself (user gesture); update483: getUserMedia is its first call
+    p.catch(e => { if (isBlockedCameraError(e) && openFallback()) e.fallbackHandled = true; });   // update483: no setTimeout, no await, no screen in between
+    camStart.current = p;
+    setShowCam(true); // live selfie first, punch on capture
+  }
+  // update483: photo from the phone's camera app — same punch pipeline, no resizing / compression.
+  function onFallbackFile(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";   // the same file can be picked again on the next punch
+    if (!file) return;     // camera app closed without a photo: back on the punch screen, tap again
+    if (photoAgeMs(file) > FALLBACK_MAX_AGE_MS) {
+      setMsg("This photo is older than 2 minutes. Tap the punch button again and take a new selfie.");
+      logCameraEvent({ ...camDiag(), path: "fallback", attemptId: attempt.current.id, result: "fallback_stale", note: "age " + Math.round(photoAgeMs(file) / 1000) + " s" });
+      return;
+    }
+    onSelfie(file);
   }
 
   async function onSelfie(file) {
@@ -171,6 +202,7 @@ export default function PunchScreen() {
     const res = await punch(worker, pos, file);
     setBusy(false);
     if (!res.ok) { setMsg(res.error); return; }
+    logCameraEvent({ ...camDiag(), path: attempt.current.path, attemptId: attempt.current.id, result: "punch_confirmed", tConfirm: Math.round(nowMs() - attempt.current.t0) });   // update483
     const fresh = await getTodayPunch(worker.id);
     setToday(fresh);
     setMsg(phase === "in"
@@ -261,7 +293,9 @@ export default function PunchScreen() {
         )}{/* update288: visible only to workers granted Proxy Attendance Authority */}
         {proxyErr && <div className="note amber" style={{ marginTop: 8, fontSize: 11.5 }}>🛡 Proxy-authority check failed: {proxyErr}</div>}{/* update289 */}
 
-        {showCam && <CameraCapture facing="user" title="Live selfie for punch" start={camStart.current} diag={{ kind: "punch", userId: getSession()?.id || null, workerId: worker.id }} onCapture={onSelfie} onCancel={() => setShowCam(false)} />}
+        {showCam && <CameraCapture facing="user" title="Live selfie for punch" start={camStart.current} diag={camDiag()} onCapture={onSelfie} onCancel={() => setShowCam(false)}
+          onBlocked={() => openFallback()} onRetry={({ t0, attemptId }) => { attempt.current = { t0, id: attemptId, path: "live" }; }} />}
+        <input ref={fileRef} type="file" accept="image/*" capture="user" onChange={onFallbackFile} style={{ display: "none" }} aria-hidden="true" tabIndex={-1} data-punch-fallback="" />
 
         {msg && <div className="note green" style={{ textAlign: "left" }}>{msg}</div>}
 
@@ -271,7 +305,7 @@ export default function PunchScreen() {
           <div className="stat-box"><div className="k">Hours</div><div className="v">{today.hours_worked != null ? Math.floor(today.hours_worked) + "h " + String(Math.round((today.hours_worked % 1) * 60)).padStart(2, "0") + "m" : "\u2014"}</div></div>
         </div>
 
-        <div className="muted" style={{ textAlign: "center", fontSize: 10, marginTop: 10 }}>Pipeskool v481</div>{/* update289: visible build tag — if this line is missing on the phone, the deploy is not live */}
+        <div className="muted" style={{ textAlign: "center", fontSize: 10, marginTop: 10 }}>Pipeskool v483</div>{/* update289: visible build tag — if this line is missing on the phone, the deploy is not live */}
         {worker.profile_complete === false && (
           <div className="note amber" style={{ textAlign: "left" }}>
             ⚠ Profile incomplete — bank details pending. Show this to your supervisor.

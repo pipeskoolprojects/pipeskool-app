@@ -6,7 +6,23 @@ import Sidebar from "@/components/Sidebar";
 import { supabase, isDemo } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 
-const RESULTS = ["started", "error", "timeout"];
+const RESULTS = ["started", "error", "timeout", "fallback_opened", "fallback_stale", "punch_confirmed"];   // update483: + fallback / timing rows
+const isFail = r => r.result === "error" || r.result === "timeout" || r.result === "fallback_stale";
+// update483: simple averages — tap → camera open and tap → punch confirmed, live camera vs phone camera app (fallback)
+function timing(rows) {
+  const avg = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null;
+  const med = a => { if (!a.length) return null; const b = [...a].sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
+  const vals = (f, k) => rows.filter(f).map(r => r[k]).filter(v => v != null && v >= 0);
+  const punch = r => r.kind === "punch";
+  const lines = [
+    ["Tap \u2192 camera open", "Live camera", vals(r => punch(r) && r.result === "started" && r.t_open_ms != null, "t_open_ms")],
+    ["Tap \u2192 camera open", "Phone camera app (fallback)", vals(r => punch(r) && r.result === "fallback_opened", "t_open_ms")],
+    ["Tap \u2192 punch confirmed", "Live camera", vals(r => punch(r) && r.result === "punch_confirmed" && r.path === "live", "t_confirm_ms")],
+    ["Tap \u2192 punch confirmed", "Phone camera app (fallback)", vals(r => punch(r) && r.result === "punch_confirmed" && r.path === "fallback", "t_confirm_ms")],
+  ];
+  return lines.map(([what, path, a]) => ({ what, path, n: a.length, avg: avg(a), med: med(a) }));
+}
+const secs = ms => ms == null ? "\u2014" : ms < 1000 ? ms + " ms" : (ms / 1000).toFixed(1) + " s";
 export default function CameraLogPage() {
   const [rows, setRows] = useState(null); const [err, setErr] = useState(""); const [users, setUsers] = useState({});
   const [fUser, setFUser] = useState(""); const [fResult, setFResult] = useState(""); const [fErr, setFErr] = useState(""); const [days, setDays] = useState(7);
@@ -23,8 +39,8 @@ export default function CameraLogPage() {
   useEffect(() => { load(); }, [days]);   // eslint-disable-line react-hooks/exhaustive-deps
   const shown = useMemo(() => (rows || []).filter(r => (!fUser || String(r.user_id) === fUser) && (!fResult || r.result === fResult) && (!fErr || r.error_name === fErr)), [rows, fUser, fResult, fErr]);
   const errNames = [...new Set((rows || []).map(r => r.error_name).filter(Boolean))];
-  const byUser = useMemo(() => { const m = {}; (rows || []).forEach(r => { const k = r.user_id || "—"; m[k] = m[k] || { ok: 0, bad: 0 }; r.result === "started" ? m[k].ok++ : m[k].bad++; }); return Object.entries(m).sort((a, b) => b[1].bad - a[1].bad); }, [rows]);
-  const pattern = (key, label) => { const m = {}; shown.filter(r => r.result !== "started").forEach(r => { const k = r[key] || "—"; m[k] = (m[k] || 0) + 1; }); const e = Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 6); return e.length ? <div style={{ fontSize: 12.5 }}><b>{label}:</b> {e.map(([k, n]) => `${k} (${n})`).join(" · ")}</div> : null; };
+  const byUser = useMemo(() => { const m = {}; (rows || []).forEach(r => { const k = r.user_id || "—"; m[k] = m[k] || { ok: 0, bad: 0 }; isFail(r) ? m[k].bad++ : m[k].ok++; }); return Object.entries(m).sort((a, b) => b[1].bad - a[1].bad); }, [rows]);
+  const pattern = (key, label) => { const m = {}; shown.filter(isFail).forEach(r => { const k = r[key] || "—"; m[k] = (m[k] || 0) + 1; }); const e = Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 6); return e.length ? <div style={{ fontSize: 12.5 }}><b>{label}:</b> {e.map(([k, n]) => `${k} (${n})`).join(" · ")}</div> : null; };
   const who = r => users[r.user_id]?.full_name || (r.user_id ? "#" + r.user_id : r.worker_id ? "worker #" + r.worker_id : "—");
   if (sess && !["director", "it_executive", "ho_admin"].includes(sess.role)) return <div className="layout"><Sidebar /><main className="main"><div className="muted" style={{ padding: 20 }}>IT / Director only.</div></main></div>;
   return (
@@ -36,19 +52,27 @@ export default function CameraLogPage() {
         <select value={fErr} onChange={e => setFErr(e.target.value)}><option value="">Error: all</option>{errNames.map(r => <option key={r} value={r}>{r}</option>)}</select>
         <button type="button" onClick={load}>↻ Refresh</button></div></div>
       {err && <div className="demo-banner" style={{ background: "#fdecea", color: "var(--red)" }}>⚠ {err}</div>}
+      <div className="panel" style={{ marginBottom: 12 }} data-timing="">
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>Punch timing (selected days, all users)</div>
+        <table style={{ borderCollapse: "collapse", fontSize: 12.5 }}>
+          <thead><tr style={{ textAlign: "left", color: "#6b7280" }}><th style={{ paddingRight: 16 }}>Measure</th><th style={{ paddingRight: 16 }}>Path</th><th style={{ paddingRight: 16 }}>Average</th><th style={{ paddingRight: 16 }}>Median</th><th>Punches</th></tr></thead>
+          <tbody>{timing(rows || []).map((t, i) => <tr key={i} style={{ borderTop: "1px solid var(--border)" }}><td style={{ paddingRight: 16 }}>{t.what}</td><td style={{ paddingRight: 16 }}>{t.path}</td><td style={{ paddingRight: 16 }}><b>{secs(t.avg)}</b></td><td style={{ paddingRight: 16 }}>{secs(t.med)}</td><td>{t.n}</td></tr>)}</tbody>
+        </table>
+        <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>Camera open for the fallback is when the phone camera app was requested. Punch confirmed includes the time the worker takes to pose and the photo upload.</div>
+      </div>
       <div className="panel" style={{ marginBottom: 12 }}>
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>Pattern in the failures shown ({shown.filter(r => r.result !== "started").length} of {shown.length} attempts)</div>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>Pattern in the failures shown ({shown.filter(isFail).length} of {shown.length} rows)</div>
         {pattern("error_name", "Error")}{pattern("permission_state", "Permission")}{pattern("in_app", "In-app browser")}{pattern("webview", "WebView")}{pattern("chrome_version", "Chrome")}{pattern("os_version", "OS")}{pattern("device_model", "Phone")}{pattern("secure_context", "Secure (https)")}{pattern("media_devices", "Camera API present")}
-        {shown.length > 0 && shown.every(r => r.result === "started") && <div className="muted" style={{ fontSize: 12.5 }}>No failures in this view.</div>}
+        {shown.length > 0 && !shown.some(isFail) && <div className="muted" style={{ fontSize: 12.5 }}>No failures in this view.</div>}
       </div>
       <div className="panel" style={{ overflowX: "auto" }}>
         {rows === null ? <div className="muted">Loading…</div> : !shown.length ? <div className="muted">No camera attempts recorded{rows.length ? " for this filter" : " yet — rows appear from the first punch after this update is deployed"}.</div> : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+          <table data-log="" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
             <thead><tr style={{ textAlign: "left", color: "#6b7280" }}><th>Time</th><th>User</th><th>Kind</th><th>Result</th><th>Error</th><th>Start</th><th>Permission</th><th>Browser</th><th>Phone / OS</th><th>Flags</th></tr></thead>
-            <tbody>{shown.map(r => <tr key={r.id} style={{ borderTop: "1px solid var(--border)", background: r.result === "started" ? undefined : "#fff5f5" }}>
+            <tbody>{shown.map(r => <tr key={r.id} style={{ borderTop: "1px solid var(--border)", background: isFail(r) ? "#fff5f5" : undefined }}>
               <td style={{ whiteSpace: "nowrap" }}>{String(r.at).slice(0, 16).replace("T", " ")}</td><td>{who(r)}<div className="muted" style={{ fontSize: 11 }}>{users[r.user_id]?.role?.replace(/_/g, " ") || ""}</div></td><td>{r.kind}</td>
-              <td><span className={"badge " + (r.result === "started" ? "p" : "warn")}>{r.result}</span></td><td>{r.error_name}<div className="muted" style={{ fontSize: 11, maxWidth: 260 }}>{r.error_message}</div></td>
-              <td style={{ whiteSpace: "nowrap" }}>{r.start_ms != null ? (r.start_ms / 1000).toFixed(1) + " s" : "—"}</td><td>{r.permission_state}</td>
+              <td><span className={"badge " + (isFail(r) ? "warn" : "p")}>{r.result}</span>{r.path ? <div className="muted" style={{ fontSize: 11 }}>{r.path}</div> : null}</td><td>{r.error_name}<div className="muted" style={{ fontSize: 11, maxWidth: 260 }}>{r.error_message}</div></td>
+              <td style={{ whiteSpace: "nowrap" }}>{r.t_confirm_ms != null ? "confirmed " + secs(r.t_confirm_ms) : r.start_ms != null ? (r.start_ms / 1000).toFixed(1) + " s" : "—"}</td><td>{r.permission_state}</td>
               <td>{r.in_app ? "in-app: " + r.in_app : r.webview ? r.webview : "Chrome " + (r.chrome_version || "?")}{r.standalone ? " · installed" : ""}</td><td>{r.device_model || "—"}<div className="muted" style={{ fontSize: 11 }}>{r.os_version}</div></td>
               <td style={{ fontSize: 11 }}>{r.secure_context === false ? "NOT https · " : ""}{r.media_devices === false ? "no camera API · " : ""}{r.app_version}</td>
             </tr>)}</tbody>

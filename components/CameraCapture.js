@@ -4,11 +4,14 @@
 // browser's user-gesture rule is always met; this component only shows a state: "Starting camera…" → live
 // <video autoplay playsinline muted> → or a clear error with the steps to fix it and Try again. Retries use the
 // same fallback chain (facing → no facing → any camera) and re-run by themselves when the app regains focus after
-// a permission error. No file-picker fallback: punch / proxy photos must be taken live.
+// a permission error.
+// update483: optional `onBlocked(err)` — when the camera is denied / missing, the caller may open the phone's own
+// camera app (hidden capture input) and return true; this component then shows nothing more. Try again starts the
+// camera inside its own tap so that path also works when the first denial came too late for a programmatic click.
 import { useEffect, useRef, useState } from "react";
-import { startCamera, stopStream, cameraErrorHelp, cameraEnv, CAMERA_TIMEOUT_MS } from "@/lib/cameraDiag";
+import { startCamera, stopStream, cameraErrorHelp, cameraEnv, isBlockedCameraError, nowMs, newAttemptId } from "@/lib/cameraDiag";
 
-export default function CameraCapture({ facing = "user", title = "Take selfie", onCapture, onCancel, start, diag = {} }) {
+export default function CameraCapture({ facing = "user", title = "Take selfie", onCapture, onCancel, start, diag = {}, onBlocked = null, onRetry = null }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [state, setState] = useState("starting");   // starting | live | error
@@ -25,7 +28,7 @@ export default function CameraCapture({ facing = "user", title = "Take selfie", 
       const v = videoRef.current; if (v) { v.onloadedmetadata = () => { if (alive) setReady(true); }; v.srcObject = stream; try { await v.play(); } catch {} }
       const t = stream.getVideoTracks()[0]; if (t) t.onended = () => { if (alive) { setErr(Object.assign(new Error("Camera stopped"), { name: "NotReadableError" })); setState("error"); } };
       setReady(true);
-    }).catch(e => { if (!alive) return; setErr(e); setState("error"); });
+    }).catch(e => { if (!alive || e?.fallbackHandled) return; setErr(e); setState("error"); });
     return () => { alive = false; clearInterval(tick); stopStream(streamRef.current); streamRef.current = null; };
   }, [facing, tries]);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -37,6 +40,14 @@ export default function CameraCapture({ facing = "user", title = "Take selfie", 
     return () => { document.removeEventListener("visibilitychange", h); window.removeEventListener("focus", h); };
   }, [state, err]);
 
+  // Try again: the camera is (re)started inside this tap, so a denial can still open the phone's camera app
+  function retry() {
+    const t0 = nowMs(), attemptId = newAttemptId();
+    if (onRetry) onRetry({ t0, attemptId });
+    const p = startCamera(facing, { ...diag, t0, attemptId });
+    if (onBlocked) p.catch(e => { if (isBlockedCameraError(e) && onBlocked(e)) e.fallbackHandled = true; });
+    startRef.current = p; setTries(t => t + 1);
+  }
   function shoot() {
     const v = videoRef.current; if (!v || !ready) return;
     const c = document.createElement("canvas");
@@ -59,7 +70,7 @@ export default function CameraCapture({ facing = "user", title = "Take selfie", 
           <ol style={{ margin: "0 0 10px", paddingLeft: 20, fontSize: 13.5, lineHeight: 1.5, textAlign: "left" }}>{help.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
           <div className="muted" style={{ fontSize: 11, marginBottom: 10 }}>Error: {err?.name || "unknown"} · this attempt was reported to IT</div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-            <button type="button" className="primary" style={{ fontSize: 15, padding: "10px 22px", minHeight: 44 }} onClick={() => setTries(t => t + 1)}>Try again</button>
+            <button type="button" className="primary" style={{ fontSize: 15, padding: "10px 22px", minHeight: 44 }} onClick={retry}>Try again</button>
             <button type="button" style={{ fontSize: 15, minHeight: 44 }} onClick={onCancel}>Cancel</button>
           </div>
         </div>
