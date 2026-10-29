@@ -1,5 +1,6 @@
 "use client";
 // update355: LOCAL PURCHASE VOUCHER — A4, on the company letterhead, same style as the expense and advance vouchers.
+// update486: bills are fetched from /api/vendor-voucher/bill (same origin) — see loadBill below.
 // update485: the attached bills now really print. Root cause of "Attached bills: 1 file(s) — ." with no pages:
 // this page asked Supabase Storage for signed links, but since update 460 the bill files live in Cloudflare R2, so
 // every link request failed silently and the bill list came back empty. Bills now load through the app's own
@@ -14,6 +15,7 @@ import Logo from "@/components/Logo";
 import { getVendorVoucher, amountInWords } from "@/lib/vendorVoucher";
 import { getCompany } from "@/lib/letters";
 import { ensureFileSession, fileHref } from "@/lib/files";
+import { supabase } from "@/lib/supabase";
 import { inr } from "@/lib/data";
 import { A4, FOOTER_MM, CONT_HEAD_MM, CONT_FOOT_MM, GAP_MM, planPages, firstPageSpace, gridSlotMm, attachedLine, fileNameOf } from "@/lib/billLayout.mjs";
 
@@ -27,39 +29,72 @@ const isPdf = p => /\.pdf($|\?)/i.test(String(p || ""));
 const isHeic = p => /\.(heic|heif)($|\?)/i.test(String(p || ""));
 
 // ---------------------------------------------------------------- bills → slots (an image = 1 slot, a PDF = 1 slot per page)
+// update486: every bill is fetched as bytes from OUR route /api/vendor-voucher/bill (same origin). The old way —
+// pdf.js reading /api/files/v, which redirects to a private Cloudflare R2 link — failed for PDFs with "Failed to fetch":
+// the browser follows that redirect for an <img> without CORS, but not for fetch(). Images now also come in as
+// same-origin blob: URLs, so the Download PDF (html2canvas) can always draw them.
+const TIMEOUT_MS = 45000;
+async function bearer() { try { const { data } = await supabase.auth.getSession(); return data?.session?.access_token || ""; } catch { return ""; } }
+const billApi = (voucherId, billId) => `/api/vendor-voucher/bill?v=${encodeURIComponent(voucherId)}&b=${encodeURIComponent(billId)}`;
+const REASON = { 400: "Bad request", 401: "Session expired — reload the page", 403: "No permission", 404: "Not found", 413: "File too large", 500: "Server error", 502: "Storage did not answer", 504: "Timed out" };
+async function fetchBill(voucherId, billId) {
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  try {
+    const r = await fetch(billApi(voucherId, billId), { headers: { authorization: "Bearer " + await bearer() }, cache: "no-store", signal: ctl.signal });
+    if (!r.ok) { const msg = (await r.text().catch(() => "")).slice(0, 120); throw Object.assign(new Error((REASON[r.status] || "Error " + r.status) + (msg && !REASON[r.status] ? " — " + msg : "")), { status: r.status }); }
+    return await r.blob();
+  } catch (e) { if (e?.name === "AbortError") throw new Error("Timed out — the file is very large or the network is slow"); throw e; }
+  finally { clearTimeout(t); }
+}
 function loadImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = async () => { try { if (img.decode) await img.decode(); } catch {} resolve({ w: img.naturalWidth, h: img.naturalHeight }); };
-    img.onerror = () => reject(new Error("could not be loaded"));
+    img.onerror = () => reject(new Error("Not a readable image"));
     img.src = src;
   });
 }
-async function pdfSlots(url) {
+async function pdfSlots(bytes) {
   const pdfjs = await import("pdfjs-dist");
-  pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-  const doc = await pdfjs.getDocument({ url, withCredentials: true }).promise;
+  pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";   // same version as the library (4.10.38), from our own domain
+  const task = pdfjs.getDocument({ data: new Uint8Array(bytes) });
+  task.onPassword = () => { task.destroy(); };   // never prompt — a protected PDF gets a clear message instead
+  let doc;
+  try { doc = await task.promise; }
+  catch (e) {
+    const n = e?.name || "";
+    if (n === "PasswordException" || /password/i.test(e?.message || "")) throw new Error("Password-protected PDF — open the original file");
+    if (n === "InvalidPDFException" || /invalid pdf/i.test(e?.message || "")) throw new Error("Corrupt PDF — the file is damaged");
+    throw new Error("PDF could not be read" + (e?.message ? " (" + e.message + ")" : ""));
+  }
   const out = [];
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
-    const base = page.getViewport({ scale: 1 });
-    const scale = Math.min(3, 1700 / Math.max(base.width, base.height));   // ≈ 200 dpi on a half page — sharp in print
+    const base = page.getViewport({ scale: 1 });                     // includes the page's own rotation
+    const scale = Math.min(150 / 72, 1400 / base.width);            // ≈ 150 dpi, at most 1400 px wide
     const vp = page.getViewport({ scale });
     const canvas = document.createElement("canvas"); canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
     const ctx = canvas.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvasContext: ctx, viewport: vp }).promise;
-    out.push({ src: canvas.toDataURL("image/jpeg", 0.9), w: canvas.width, h: canvas.height, page: p, pages: doc.numPages });
+    out.push({ src: canvas.toDataURL("image/jpeg", 0.88), w: canvas.width, h: canvas.height, page: p, pages: doc.numPages });
+    page.cleanup();
   }
+  doc.destroy();
   return out;
 }
-async function loadBill(b, attempt = 0) {
-  const url = b.url + (attempt ? (b.url.includes("?") ? "&" : "?") + "r=" + Date.now() : "");
+async function logBillError(voucherId, billId, error) {
+  try { await fetch(billApi(voucherId, billId), { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + await bearer() }, body: JSON.stringify({ error }) }); } catch {}
+}
+async function loadBill(voucherId, b) {
   try {
-    if (b.pdf) return (await pdfSlots(url)).map(s => ({ ...s, kind: "pdf", status: "ok" }));
-    const dim = await loadImage(url);
-    return [{ kind: "image", src: url, ...dim, status: "ok" }];
+    const blob = await fetchBill(voucherId, b.id);
+    if (b.pdf) return (await pdfSlots(await blob.arrayBuffer())).map(s => ({ ...s, kind: "pdf", status: "ok" }));
+    const src = URL.createObjectURL(blob);
+    try { const dim = await loadImage(src); return [{ kind: "image", src, ...dim, status: "ok" }]; }
+    catch (e) { URL.revokeObjectURL(src); throw isHeic(b.path) ? new Error("HEIC photo — this browser cannot show it; open the original and save it as JPG") : e; }
   } catch (e) {
-    const why = isHeic(b.path) ? "HEIC photo — this browser cannot show it; open the file and save it as JPG" : (b.pdf ? "PDF could not be read" : "could not be loaded") + (e?.message && !/could not be loaded/.test(e.message) ? " (" + e.message + ")" : "");
+    const why = e?.message || "Could not be loaded";
+    if (!e?.status || e.status >= 500) logBillError(voucherId, b.id, why);
     return [{ kind: b.pdf ? "pdf" : "image", status: "error", error: why }];
   }
 }
@@ -76,8 +111,8 @@ function Slot({ s, wMm, hMm, url, onRetry }) {
       <div className="vp-cap" title={s.caption}>{s.caption}</div>
       <div className="vp-imgbox" style={{ height: box.h + "mm" }}>
         {s.status === "ok" ? <img src={s.src} alt={s.caption} style={{ width: f.w + "mm", height: f.h + "mm" }} />
-          : s.status === "error" ? <div className="vp-err">This bill {s.error}.<br /><button type="button" className="no-print" onClick={onRetry}>Retry</button>
-              <a className="no-print" href={url} target="_blank" rel="noreferrer" style={{ marginLeft: 8 }}>Open file</a></div>
+          : s.status === "error" ? <div className="vp-err">{s.error}.<br /><button type="button" className="no-print" onClick={onRetry}>Retry</button>
+              <a className="no-print" href={url} target="_blank" rel="noreferrer" style={{ marginLeft: 8 }}>Open original file</a></div>
           : <div className="vp-err muted">Loading bill…</div>}
       </div>
     </div>);
@@ -100,11 +135,11 @@ export default function VoucherPrint() {
         if (!row) { setErr("That voucher was not found, or you do not have rights to open it."); return; }
         setV(row); setC(comp);
         const files = (row.billFiles || (row.bills || []).map(p => ({ path: p, name: null })));
-        if (files.length) await ensureFileSession();   // the cookie the file route needs for <img> / pdf.js
-        const list = files.map(f => ({ path: f.path, name: fileNameOf(f.path, f.name), url: fileHref(f.path), pdf: isPdf(f.path) }));
+        if (files.length) ensureFileSession();   // only for the "Open original file" links; the bills themselves come through /api/vendor-voucher/bill
+        const list = files.map(f => ({ id: f.id, path: f.path, name: fileNameOf(f.path, f.name), url: fileHref(f.path), pdf: isPdf(f.path) }));
         setBills(list);
         setSlots(Array(list.length).fill(null));
-        for (let i = 0; i < list.length; i++) { const res = await loadBill(list[i]); setSlots(cur => cur.map((x, k) => k === i ? res : x)); }
+        for (let i = 0; i < list.length; i++) { const res = await loadBill(row.id, list[i]); setSlots(cur => cur.map((x, k) => k === i ? res : x)); }
       } catch (e) { setErr(e.message); }
     })();
   }, []);
@@ -121,7 +156,7 @@ export default function VoucherPrint() {
 
   async function retry(i) {
     setSlots(s => s.map((x, k) => k === i ? null : x));
-    const res = await loadBill(bills[i], 1);
+    const res = await loadBill(v.id, bills[i]);
     setSlots(s => s.map((x, k) => k === i ? res : x));
   }
 
@@ -215,7 +250,7 @@ export default function VoucherPrint() {
         <button className="primary" onClick={() => window.print()} disabled={!ready} data-print="">🖨 Print</button>
         <button onClick={downloadPdf} disabled={!ready || !!dl} data-pdf="">{dl || "⬇ Download PDF"}</button>
         <button onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign("/vendor-voucher"); }}>← Back</button>
-        {!ready && N > 0 && <span className="muted" style={{ fontSize: 12.5 }} data-loading="">Loading bills… {(slots || []).filter(Boolean).length} of {N}</span>}
+        {!ready && N > 0 && <span className="muted" style={{ fontSize: 12.5 }} data-loading="">Loading bills ({(slots || []).filter(Boolean).length} of {N})…</span>}
         {ready && flat.some(s => s.status === "error") && <span style={{ fontSize: 12.5, color: "#b91c1c" }}>{flat.filter(s => s.status === "error").length} bill(s) could not be loaded — Retry on the bill, or print without it.</span>}
       </div>
 

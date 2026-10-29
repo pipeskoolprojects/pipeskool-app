@@ -10,14 +10,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? "  ✓ " : "  ✗ ") + m)
 const A = n => fs.readFileSync(__dirname + "/assets/" + n);
 const TYPE = { jpg: "image/jpeg", png: "image/png", webp: "image/webp", pdf: "application/pdf", heic: "image/heic" };
 const img = n => ({ path: "bills/" + n, file_name: "site-" + n });
-const SETS = {
-  500: [], 501: ["portrait.jpg"], 502: ["portrait.jpg", "landscape.jpg"], 503: ["portrait.jpg", "landscape.jpg", "bill.png"],
-  504: ["portrait.jpg", "landscape.jpg", "bill.png", "bill.webp"], 505: ["portrait.jpg", "landscape.jpg", "bill.png", "bill.webp", "exif6.jpg"],
-  507: ["portrait.jpg", "landscape.jpg", "bill.png", "bill.webp", "exif6.jpg", "huge.jpg", "portrait.jpg"],
-  508: ["portrait.jpg", "three.pdf", "one.pdf"],          // 1 + 3 + 1 = 5 slots
-  509: ["portrait.jpg", "missing.jpg", "landscape.jpg"],   // the 2nd bill fails to load
-  510: ["landscape.jpg"], 511: ["portrait.jpg", "landscape.jpg"], 512: ["portrait.jpg", "landscape.jpg"], 513: ["photo.heic"],
-};
+const SETS = require("./sets485.js");
 const LONG = "Direct vendor payment — " + "Ashapur traders, supply of river sand, cement bags, binding wire, GI nuts and bolts for the toilet block and the terrace waterproofing work ".repeat(3);
 function voucher(id) {
   return { id, voucher_no: "PSP/LPV/2026-27/" + String(id).slice(1), expense_date: "2026-10-21", amount: id === 512 ? 98765 : 11200, category: "local_material",
@@ -33,14 +26,14 @@ async function open(b, id, { slow = 0, failMissing = true } = {}) {
   const page = await ctx.newPage(); const log = { selects: [], rpc: [], denied: [], writes: [], px: [], files: [] };
   const errs = []; page.on("pageerror", e => errs.push(String(e)));
   await base.install(page, "director", log);
-  let allowMissing = !failMissing;
+  await fetch(DB + "/__mode", { method: "POST", body: JSON.stringify({ allowMissing: !failMissing, slow }) });
   await page.route(`${DB}/rest/v1/**`, route => {
     const u = new URL(route.request().url()); const t = u.pathname.replace("/rest/v1/", ""); const single = /vnd\.pgrst\.object/.test(route.request().headers().accept || "");
     const vid = Number((u.searchParams.get("id") || u.searchParams.get("expense_id") || "").replace(/^eq\./, ""));
     const j = b => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
     if (t === "expenses") return j(single ? (SETS[vid] ? voucher(vid) : null) : (SETS[vid] ? [voucher(vid)] : []));
     if (t === "expense_items") return j(items(vid));
-    if (t === "expense_bills") return j((SETS[vid] || []).map(n => img(n)));
+    if (t === "expense_bills") return j((SETS[vid] || []).map((n, i) => ({ id: i + 1, ...img(n) })));
     if (t === "app_settings") return j([["company.name", "PIPESKOOL PROJECTS PVT LTD."], ["company.address", "102, Darshak, Opp Shrey Hospital, Punjabi Hall Lane, Navrangpura, Ahmedabad - 09"], ["company.cin", "U26956GJ2021PTC126015"], ["company.gstin", "24AAMCP3389A1ZF"], ["company.email", "pipeskoolprojects@gmail.com"]].map(([key, value]) => ({ key, value })));
     return route.fallback();
   });
@@ -54,7 +47,7 @@ async function open(b, id, { slow = 0, failMissing = true } = {}) {
   });
   await page.route("**/api/files/session", r => r.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
   await page.goto(`${APP}/vendor-voucher/print?id=${id}`, { waitUntil: "domcontentloaded" });
-  return { ctx, page, log, errs, allow: () => { allowMissing = true; } };
+  return { ctx, page, log, errs, allow: () => fetch(DB + "/__mode", { method: "POST", body: JSON.stringify({ allowMissing: true }) }) };
 }
 const ready = page => page.waitForFunction(() => { const b = document.querySelector("[data-print]"); return b && !b.disabled; }, null, { timeout: 30000 });
 async function layout(page) {
@@ -118,10 +111,10 @@ const png = (pdf, prefix) => { try { execFileSync("pdftoppm", ["-r", "45", "-png
   { const { ctx, page, allow } = await open(b, 509); await ready(page);
     let L = await layout(page); const slots = L.flatMap(p => p.slots);
     ok(slots.filter(s => s.status === "error").length === 1 && slots.filter(s => s.status === "ok").length === 2, "1 error tile, 2 bills fine");
-    ok(/could not be loaded/.test(await page.textContent("[data-slot=error]")), "error tile explains it");
+    ok(/Not found/.test(await page.textContent("[data-slot=error]")), "error tile gives the real reason (Not found)");
     const pr = await printPdf(page, `${OUT}/print-509.pdf`); png(`${OUT}/print-509.pdf`, `${OUT}/print-509`);
     ok(pr.pages === L.length, "prints anyway (" + pr.pages + " pages)");
-    allow(); await page.click("[data-slot=error] button:has-text('Retry')"); await page.waitForFunction(() => !document.querySelector("[data-slot=error]") && !document.querySelector("[data-slot=loading]"), null, { timeout: 15000 });
+    await allow(); await page.click("[data-slot=error] button:has-text('Retry')"); await page.waitForFunction(() => !document.querySelector("[data-slot=error]") && !document.querySelector("[data-slot=loading]"), null, { timeout: 15000 });
     L = await layout(page); ok(L.flatMap(p => p.slots).every(s => s.status === "ok"), "Retry loads it"); await ctx.close(); }
 
   console.log("5. Long vendor / particulars, PAID voucher, tall voucher, HEIC");
