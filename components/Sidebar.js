@@ -7,7 +7,7 @@ import NotifyBell from "@/components/NotifyBell";
 import { getUnreadNoticeCount } from "@/lib/notices";
 import Assistant from "@/components/Assistant";
 import AuthLostBanner from "@/components/AuthLostBanner";   // update451
-import { getSession, clearSession, logoutAuth, refreshSessionRights, canSeeModuleAnySite, setCurrentSite } from "@/lib/auth";
+import { getSession, clearSession, logoutAuth, refreshSessionRights, canSeeModuleAnySite, canAnySite, setCurrentSite } from "@/lib/auth";
 
 const GROUPS = [
   { label: "Core Site Operations", subs: [
@@ -22,6 +22,7 @@ const GROUPS = [
     { label: "Material & Procurement", items: [
       { href: "/procure", label: "Procurement & POs", module: "indent" },   // update473: office desk (approvals, quotes, POs); ordering is in the catalogue
       { href: "/order", label: "Order Materials (Catalogue)", module: "indent" },   // update464
+      { href: "/procure/import", label: "Import Indent from Excel", module: "indent", show: s => s.role === "director" || canAnySite(s, "indent", "create") || canAnySite(s, "indent", "manage") },   // update484: only for people who may raise indents
       { href: "/stock", label: "Material Stock & Inventory", module: "stock" },
       { href: "/stock/grn", label: "GRN Register", module: "stock" }, { href: "/stock/challans", label: "Delivery Challans", module: "stock" },
       { href: "/stock/deliveries", label: "Site Deliveries & Receiving", module: "stock" },   // update462
@@ -52,7 +53,7 @@ const groupItems = g => g.items || (g.subs || []).flatMap(x => x.items);
 // stable top-level (update204): defined inside Sidebar it remounted the whole nav on every badge/path re-render, eating taps on Android
 function Group({ label, items, subs, depth = 0, canSee, path, open, toggle, unreadNotices }) {
   const all = items || (subs || []).flatMap(x => x.items);
-  const visibleAll = all.filter(it => canSee(it.module));
+  const visibleAll = all.filter(it => canSee(it.module, it));
   if (visibleAll.length === 0) return null;
   const hasActive = visibleAll.some(it => it.href === path);
   const isOpen = open[label] ?? hasActive;
@@ -71,7 +72,7 @@ function Group({ label, items, subs, depth = 0, canSee, path, open, toggle, unre
         subs.map(sg => <Group key={sg.label} label={sg.label} items={sg.items} depth={depth + 1} canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} />)
       ) : (
         <nav className="nav-sub" style={{ marginTop: 0, paddingLeft: depth ? 6 : 0 }}>
-          {items.filter(it => canSee(it.module)).map(l => (
+          {items.filter(it => canSee(it.module, it)).map(l => (
             <Link key={l.href} href={l.href} className={path === l.href ? "active" : ""}>{l.label}{l.href === "/notices" && unreadNotices > 0 && <span style={{ background: "var(--copper)", color: "#fff", borderRadius: 9, fontSize: 10, padding: "1px 6px", marginLeft: 6 }}>{unreadNotices}</span>}</Link>
           ))}
         </nav>
@@ -118,7 +119,7 @@ export default function Sidebar() {
         next[g.label] = true;
         (g.subs || []).forEach(sg => { if (sg.items.some(it => it.href === path)) next[sg.label] = true; });
       }
-      if (["/access", "/admin-access", "/sitemaster", "/backup", "/tickets", "/it/camera-log"].includes(path)) next["Admin"] = true;
+      if (["/access", "/admin-access", "/sitemaster", "/backup", "/tickets", "/it/camera-log", "/procure/import/admin"].includes(path)) next["Admin"] = true;
       return next;
     });
   }, [path]);
@@ -126,7 +127,7 @@ export default function Sidebar() {
   function logout() { logoutAuth(); router.push("/login"); }
   const toggle = label => setOpen(o => ({ ...o, [label]: !o[label] }));
 
-  const canSee = m => !session || !m || canSeeModuleAnySite(session, m);
+  const canSee = (m, it) => (!session || !m || canSeeModuleAnySite(session, m)) && (!it?.show || (!!session && it.show(session)));   // update484: optional per-link rule
   const showAccess = session && session.role === "director";
   const showDash = canSee("dashboard");
   useEffect(() => {
@@ -179,7 +180,7 @@ export default function Sidebar() {
       ["📊","Analytics","/reports"], ["🏗","All Sites","/projects"], ["📝","Assign Task","/tasks"]
     ];
     const directorAdminLinks = [
-      ["/admin-access", "Admin & access"], ["/access", "Access Rights"], ["/it/camera-log", "Punch camera diagnostics"], ["/sitemaster", "Site Master (timings)"], ["/backup", "Backup & Restore"], ["/tickets", "Support Tickets"]
+      ["/admin-access", "Admin & access"], ["/access", "Access Rights"], ["/it/camera-log", "Punch camera diagnostics"], ["/procure/import/admin", "Excel import: settings"], ["/sitemaster", "Site Master (timings)"], ["/backup", "Backup & Restore"], ["/tickets", "Support Tickets"]
     ];
     const adminOpen = open.Admin ?? directorAdminLinks.some(([href]) => path === href);
     const renderDirectorLink = ([ico,label,href]) => { const active=href==="/home"?path==="/home"||path==="/m/dashboard":path===href; return <Link key={href} href={href} style={{display:"flex",alignItems:"center",gap:11,padding:"9px 11px",borderRadius:9,textDecoration:"none",fontSize:12.5,fontWeight:active?750:550,color:active?"#fff":"#dbe3f1",background:active?"#f26a1b":"transparent",borderLeft:active?"3px solid #ffad71":"3px solid transparent"}}><span style={{width:18,textAlign:"center",fontSize:15}}>{ico}</span>{label}</Link>; };
@@ -242,7 +243,7 @@ export default function Sidebar() {
       {GROUPS.map(g => <Group key={g.label} label={g.label} items={g.items} subs={g.subs} canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} />)}
 
       <Group label="Help" canSee={() => true} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} items={[{ href: "/help?ctx=" + encodeURIComponent(path || "/"), label: "❓ Help Center", module: null }]} />{/* update401 */}
-      {showAccess && <Group label="Admin" canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} items={[{ href: "/access", label: "Access Rights", module: null }, { href: "/it/camera-log", label: "Punch camera diagnostics", module: null }, { href: "/admin-access", label: "Admin & access (Director)", module: null }, { href: "/sitemaster", label: "Site Master (timings)", module: null }, { href: "/backup", label: "Backup & Restore", module: null }, { href: "/tickets", label: "Support Tickets", module: null }]} />}
+      {showAccess && <Group label="Admin" canSee={canSee} path={path} open={open} toggle={toggle} unreadNotices={unreadNotices} items={[{ href: "/access", label: "Access Rights", module: null }, { href: "/it/camera-log", label: "Punch camera diagnostics", module: null }, { href: "/procure/import/admin", label: "Excel import: settings", module: null }, { href: "/admin-access", label: "Admin & access (Director)", module: null }, { href: "/sitemaster", label: "Site Master (timings)", module: null }, { href: "/backup", label: "Backup & Restore", module: null }, { href: "/tickets", label: "Support Tickets", module: null }]} />}
 
       <nav style={{ marginTop: 20 }}>
         <a onClick={logout} style={{ cursor: "pointer" }}>Log out</a>
