@@ -9,8 +9,9 @@ import { getSession, canAnySite } from "@/lib/auth";
 import { canApprove } from "@/lib/perms";
 import { fileStore, fileHref } from "@/lib/files";
 import { makeAndSaveThumb } from "@/lib/thumbs";   // update478: 96×96 thumbnail made once here, shown on PO lines
+import ItemFields from "@/components/ItemFields";   // update487: the add / edit fields, shared with Excel import
+import { itemPayload, MATERIAL_REQUIRED, DUPLICATE_MSG } from "@/lib/itemForm.mjs";
 
-const UNITS = ["Nos", "Rmt", "Mtr", "Kg", "Set", "Box", "Litre", "Bag"];
 const BLANK = { item_type: "Pipe", material: "", sub_type: "", size: "", item_class: "", make: "", unit: "Rmt", hsn_code: "", min_stock: "", is_active: true, photo_url: null };
 
 export default function ItemsPage() {
@@ -65,7 +66,7 @@ export default function ItemsPage() {
 
   async function save() {
     setErr("");
-    if (!String(form.material || "").trim()) { setErr("Material / name is required — it's the main part of the item name."); return; }
+    if (!String(form.material || "").trim()) { setErr(MATERIAL_REQUIRED); return; }
     setBusy(true);
     let photoPath = form.photo_url || null;
     if (form.photoFile && !isDemo) {
@@ -75,9 +76,7 @@ export default function ItemsPage() {
       if (uploadError) { setBusy(false); setErr("Photo upload failed: " + uploadError.message + ". Your material details are still here; choose the photo again and retry."); return; }
       photoPath = key;
     }
-    const payload = { item_type: form.item_type, material: form.material.trim(), sub_type: form.sub_type?.trim() || null,
-      size: form.size?.trim() || null, item_class: form.item_class?.trim() || null, make: form.make?.trim() || null,
-      unit: form.unit, hsn_code: form.hsn_code?.trim() || null, min_stock: Number(form.min_stock || 0) };
+    const payload = itemPayload(form);   // update487: lib/itemForm.mjs (same fields as before)
     if (form.photoFile || (form.id && Object.prototype.hasOwnProperty.call(form, "photo_url"))) payload.photo_url = photoPath;
     // update474: one product, several sizes — every size is its own Material Master item (own stock, own PO line)
     if (!form.id) {
@@ -112,7 +111,7 @@ export default function ItemsPage() {
     // update478: the PO-line thumbnail, made from the picture just uploaded (a replaced photo gets a new thumbnail too)
     if (res.ok && form.photoFile && photoPath && (form.id || res.id)) await makeAndSaveThumb([form.id || res.id], form.photoFile, photoPath).catch(() => {});
     setBusy(false);
-    if (!res.ok) { setErr(/duplicate|unique/i.test(res.error || "") ? "This item already exists in the master (same type, material, size, class and make)." : res.error); return; }
+    if (!res.ok) { setErr(/duplicate|unique/i.test(res.error || "") ? DUPLICATE_MSG : res.error); return; }
     setMsg(form.id ? "Item updated — the name recomposed automatically." : "Item added: " + (res.name || ""));
     if (form.photoPreview) URL.revokeObjectURL(form.photoPreview);
     setForm(null); load();
@@ -329,24 +328,7 @@ export default function ItemsPage() {
                 </div>
                 {sizeList(form).length > 1 && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>{sizeList(form).length} items will be created — one per size.</div>}
               </div>)}
-            {!form.sizeMode && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12 }}>
-              <div><label className="muted">Type</label>
-                <select style={{ width: "100%" }} value={form.item_type} onChange={e => pickType(e.target.value)}>
-                  {[...types, ...(types.includes(form.item_type) ? [] : [form.item_type])].map(t => <option key={t}>{t}</option>)}
-                  <option value="__add_new__">➕ Add new type…</option>
-                </select></div>
-              <div><label className="muted">Material / name *</label><input style={{ width: "100%" }} value={form.material} onChange={e => set("material", e.target.value)} placeholder="e.g. CPVC or MS 350NB" /></div>
-              <div><label className="muted">Sub-type</label><input style={{ width: "100%" }} value={form.sub_type} onChange={e => set("sub_type", e.target.value)} placeholder="Elbow / Tee / Gate valve" /></div>
-              {form.id && <div><label className="muted">Size</label><input style={{ width: "100%" }} value={form.size} onChange={e => set("size", e.target.value)} placeholder="25mm / 350NB" /></div>}
-              <div><label className="muted">Class</label><input style={{ width: "100%" }} value={form.item_class} onChange={e => set("item_class", e.target.value)} placeholder="SDR 11 / Heavy / PN10" /></div>
-              <div><label className="muted">Make</label><input style={{ width: "100%" }} value={form.make} onChange={e => set("make", e.target.value)} placeholder="Astral / Dutron" /></div>
-              <div><label className="muted">Unit</label>
-                <select style={{ width: "100%" }} value={form.unit} onChange={e => set("unit", e.target.value)}>
-                  {[...UNITS, ...(UNITS.includes(form.unit) ? [] : [form.unit])].map(u => <option key={u}>{u}</option>)}
-                </select></div>
-              <div><label className="muted">HSN code</label><input style={{ width: "100%" }} value={form.hsn_code} onChange={e => set("hsn_code", e.target.value)} /></div>
-              <div><label className="muted">Min stock (alert level)</label><input style={{ width: "100%" }} inputMode="numeric" value={form.min_stock} onChange={e => set("min_stock", e.target.value)} /></div>
-            </div>}
+            {!form.sizeMode && <ItemFields form={form} set={set} types={types} pickType={pickType} showSize={!!form.id} />}{/* update487: shared with the Excel-import Add-item drawer */}
             {!form.sizeMode && <div style={{ marginTop: 14, maxWidth: 360 }}>
               <label className="muted" htmlFor="material-photo">Material photo</label>
               <input id="material-photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={e => {

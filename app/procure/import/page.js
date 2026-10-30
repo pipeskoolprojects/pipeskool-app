@@ -8,7 +8,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import { getSession, can, canAnySite } from "@/lib/auth";
 import { getSitesList } from "@/lib/mobile";
-import { searchItems } from "@/lib/stock";
+import { searchItems, deleteItem } from "@/lib/stock";
+import AddItemDrawer from "@/components/AddItemDrawer";   // update487: in-page Add item (no new window)
+import AddItemsBulk from "@/components/AddItemsBulk";
+import { prefetchMaster, masterNow, forgetItem } from "@/lib/importMaster";
 import { getOpenIndents } from "@/lib/procure";
 import { useCanViewPrices } from "@/lib/prices";
 import {
@@ -162,12 +165,62 @@ function Upload({ session, go }) {
 }
 
 // ============================================================== steps 4–7: review and create the indent
+// update487: the Review page fills the screen — header, chips + filter, the table in its own scroll area (sticky
+// header), then the action bar, which can never cover a row. "+ Add item" opens an in-page drawer (no new window).
+const REVIEW_CSS = `
+  .imp-review { display: flex; flex-direction: column; height: calc(100vh - 48px); min-height: 0; }
+  .imp-review .imp-head { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; justify-content: space-between; margin-bottom: 8px; min-width: 0; }
+  .imp-review .imp-head h1 { margin: 0; font-size: 20px; overflow-wrap: anywhere; }
+  .imp-review .imp-meta { font-size: 13px; color: #6B7280; overflow-wrap: anywhere; }
+  .imp-review .imp-tools { flex: 0 0 auto; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  .imp-review .imp-tablewrap { flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--panel, #fff); border: 1px solid var(--border); border-radius: 12px; }
+  .imp-review table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: 13px; }
+  .imp-review thead th { position: sticky; top: 0; z-index: 2; background: var(--panel-2, #F9FAFB); text-align: left; color: #6B7280; font-weight: 600; padding: 8px 8px; border-bottom: 1px solid var(--border); }
+  .imp-review tbody td { padding: 7px 8px; border-top: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
+  .imp-review tbody tr:first-child td { border-top: 0; }
+  .imp-review .imp-bar { flex: 0 0 auto; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 0 2px; }
+  .imp-review .imp-acts { display: flex; flex-wrap: wrap; gap: 4px; }
+  .imp-review .imp-acts button, .imp-review .imp-acts a { font-size: 12px; padding: 4px 8px; white-space: nowrap; }
+  .imp-review .imp-more { position: relative; }
+  .imp-review .imp-menu { position: absolute; right: 0; top: 100%; z-index: 20; background: #fff; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 4px; display: grid; min-width: 170px; }
+  .imp-review .imp-menu button { text-align: left; border: 0; background: transparent; padding: 7px 10px; border-radius: 6px; }
+  .imp-review .imp-menu button:hover { background: #F3F4F6; }
+  .imp-skel { height: 12px; border-radius: 6px; background: linear-gradient(90deg, #eef0f3, #f7f8fa, #eef0f3); background-size: 200% 100%; animation: impsk 1.2s linear infinite; }
+  @keyframes impsk { to { background-position: -200% 0; } }
+  .imp-toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 400; background: #111827; color: #fff; border-radius: 10px; padding: 10px 14px; display: flex; gap: 14px; align-items: center; box-shadow: 0 8px 24px rgba(0,0,0,.25); font-size: 13px; max-width: calc(100vw - 32px); }
+  .imp-toast button { background: transparent; color: #FDBA74; border: 1px solid #FDBA74; border-radius: 6px; padding: 3px 10px; font-weight: 700; }
+  .aid-overlay { position: fixed; inset: 0; z-index: 300; background: rgba(15,20,25,.35); display: flex; justify-content: flex-end; }
+  .aid-drawer { width: min(560px, 100vw); height: 100%; background: #fff; display: flex; flex-direction: column; box-shadow: -8px 0 30px rgba(0,0,0,.18); animation: aidin .12s ease-out; }
+  @keyframes aidin { from { transform: translateX(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+  .aid-modal { margin: 4vh auto; width: min(1200px, calc(100vw - 24px)); max-height: 92vh; background: #fff; border-radius: 14px; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+  .aid-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 8px; }
+  .aid-x { border: 0; background: transparent; font-size: 18px; padding: 2px 8px; }
+  .aid-ref { margin: 0 16px 10px; padding: 8px 12px; background: #F3F4F6; border-radius: 8px; font-size: 13px; }
+  .aid-body { flex: 1 1 auto; overflow: auto; padding: 4px 16px 12px; }
+  .aid-preview { margin-top: 12px; padding: 8px 12px; border: 1px dashed #CBD5E1; border-radius: 8px; font-weight: 700; overflow-wrap: anywhere; }
+  .aid-similar { margin-top: 10px; padding: 8px 12px; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px; }
+  .aid-sim-row { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 4px 0; flex-wrap: wrap; }
+  .aid-sim-row button { font-size: 12px; }
+  .aid-err { margin-top: 10px; background: #FEE2E2; color: #B91C1C; border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+  .aid-foot { flex: 0 0 auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--border); }
+  .aid-bulk-table { flex: 1 1 auto; overflow: auto; padding: 0 16px; }
+  @media (max-width: 760px) {
+    .imp-review { height: auto; }
+    .imp-review .imp-tablewrap { overflow: visible; }
+    .imp-review .imp-bar { position: sticky; bottom: 0; background: var(--bg, #fff); }
+  }
+`;
+
 function Review({ id, session, go }) {
   const [data, setData] = useState(null); const [err, setErr] = useState(""); const [note, setNote] = useState(""); const [busy, setBusy] = useState(false);
   const [ai, setAi] = useState(""); const [picker, setPicker] = useState(null); const [settings, setSettings] = useState(null); const [filter, setFilter] = useState("");
   const [overlaps, setOverlaps] = useState([]); const [done, setDone] = useState(null); const ranAI = useRef(false);
+  const [master, setMaster] = useState(masterNow()); const [drawer, setDrawer] = useState(null); const [bulk, setBulk] = useState(false);
+  const [toast, setToast] = useState(null); const [savingRow, setSavingRow] = useState(null);
+  const [compact, setCompact] = useState(false); const wrapRef = useRef(null);
   const canAddMaster = session.role === "director" || canAnySite(session, "stock", "manage");
   async function load() { const d = await getImport(id); if (d.error) { setErr(d.error); return null; } setData(d); return d; }
+  useEffect(() => { if (canAddMaster) prefetchMaster().then(setMaster).catch(() => {}); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { (async () => {
     setSettings(await getSettings());
     let d = await load(); if (!d) return;
@@ -180,15 +233,35 @@ function Review({ id, session, go }) {
     }
   })(); }, [id]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!data) return; const ids = data.rows.map(r => r.final_item_id || r.suggested_item_id).filter(Boolean); if (ids.length) overlap(data.import.site_id, ids).then(setOverlaps); }, [data?.import?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // compact row actions when the table area is narrow (small window, zoom, open sidebar)
+  useEffect(() => {
+    const el = wrapRef.current; if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(es => setCompact((es[0]?.contentRect?.width || 2000) < 1020)); ro.observe(el); return () => ro.disconnect();
+  }, [data ? 1 : 0]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 9000); return () => clearTimeout(t); }, [toast]);
 
-  if (err) return <div className="panel" style={{ margin: 20, color: C.red }}>{err}</div>;
-  if (!data) return <div className="muted" style={{ padding: 20 }}>Loading…</div>;
+  // optimistic: the row changes on screen at once, the server call runs, then a quiet refresh (no reload, scroll kept)
+  const patchRow = (rowId, p) => setData(d => d ? { ...d, rows: d.rows.map(r => r.id === rowId ? { ...r, ...p } : r) } : d);
+  const act = async (fn, msg, opt) => {
+    setBusy(true); setNote(""); if (opt) { setSavingRow(opt.rowId); patchRow(opt.rowId, opt.patch); }
+    const r = await fn(); setBusy(false); setSavingRow(null);
+    if (r && r.ok === false) { setErr(r.error); } else { setErr(""); if (msg) setNote(typeof msg === "function" ? msg(r) : msg); }
+    await load();
+    return r;
+  };
+
+  if (err && !data) return <div className="panel" style={{ margin: 20, color: C.red }}>{err}</div>;
+  if (!data) return (
+    <div className="imp-review"><style>{REVIEW_CSS}</style>
+      <div className="imp-head"><h1>Review</h1><span className="imp-meta">Loading the import…</span></div>
+      <div className="imp-tablewrap" data-skeleton=""><table><tbody>{Array.from({ length: 10 }, (_, i) => <tr key={i}><td style={{ width: 36 }}><div className="imp-skel" /></td><td><div className="imp-skel" /></td><td><div className="imp-skel" /></td><td style={{ width: 70 }}><div className="imp-skel" /></td></tr>)}</tbody></table></div>
+    </div>);
   const imp = data.import, rows = data.rows, open = imp.status === "review";
   const n = s => rows.filter(r => r.status === s).length;
   const b = blockers(rows);
   const shown = filter ? rows.filter(r => filter === "green" ? ["auto", "accepted"].includes(r.status) : r.status === filter) : rows;
   const greenable = rows.filter(r => r.status === "auto" || (r.status === "confirm" && Number(r.confidence) >= Number(settings?.auto_threshold || 0.92) && !r.guard && r.suggested_item_id)).length;
-  const act = async (fn, msg) => { setBusy(true); setNote(""); const r = await fn(); setBusy(false); if (r && r.ok === false) setErr(r.error); else { setErr(""); if (msg) setNote(typeof msg === "function" ? msg(r) : msg); } await load(); };
+  const missingRows = rows.filter(r => r.status === "not_found");
 
   async function create(withPOs) {
     setErr(""); setNote("");
@@ -201,66 +274,109 @@ function Review({ id, session, go }) {
     if (withPOs && res.indent_id) po = await createDraftPOs(res.indent_id);
     setBusy(false); setDone({ ...res, po }); await load();
   }
+  // drawer finished: the row is confirmed on screen at once; toast with Undo
+  function drawerDone(res, goNext) {
+    patchRow(res.row.id, { status: "accepted", final_item_id: res.item.id, final_name: res.item.display_name, final_unit: res.item.unit, match_layer: "manual", confirmed_by: session.id });
+    const nextRow = goNext ? missingRows.find(r => r.id !== res.row.id && r.row_no > res.row.row_no) || missingRows.find(r => r.id !== res.row.id) : null;
+    setDrawer(nextRow || null);
+    setToast({ text: res.kind === "added" ? `Added to Item Master and confirmed: ${res.item.display_name}` : `Row mapped to ${res.item.display_name}`,
+      undo: async () => {
+        setToast(null); patchRow(res.row.id, { status: res.row.status, final_item_id: null, final_name: null });
+        await markRow(res.row.id, "reopen");
+        if (res.kind === "added") { const d = await deleteItem(res.item.id); if (d.ok) forgetItem(res.item.id); else setNote("Row reopened. The new item stays in the master: " + d.error); }
+        await load();
+      } });
+    load();
+  }
+  function bulkDone(results, allOk) {
+    const okN = results.filter(r => r.ok).length;
+    setToast({ text: `${okN} of ${results.length} missing items added / mapped and confirmed.` });
+    if (allOk) setBulk(false);
+    load();
+  }
 
   if (!open || done) return <Created imp={imp} rows={rows} done={done} session={session} go={go} />;
   return (
-    <>
-      <div className="page-head"><h1>Review: {imp.file_name}</h1><div className="muted" style={{ fontSize: 13 }}>{imp.site_name} · needed by {fmtD(imp.required_by)}{imp.urgency === "urgent" ? " · URGENT" : ""} · {rows.length} rows</div></div>
-      {settings?.shadow_mode && <div style={{ background: C.blueBg, color: C.blue, borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>Learning phase: only items confirmed before are accepted automatically. Strong suggestions still need your Yes — every Yes teaches the next import.</div>}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }} data-chips="">
+    <div className="imp-review" data-review-page="">
+      <style>{REVIEW_CSS}</style>
+      <div className="imp-head"><h1>Review: {imp.file_name}</h1><div className="imp-meta" data-meta="">{imp.site_name} · needed by {fmtD(imp.required_by)}{imp.urgency === "urgent" ? " · URGENT" : ""} · {rows.length} rows</div></div>
+      {settings?.shadow_mode && <div style={{ flex: "0 0 auto", background: C.blueBg, color: C.blue, borderRadius: 8, padding: "6px 12px", marginBottom: 8, fontSize: 12.5 }}>Learning phase: only items confirmed before are accepted automatically. Strong suggestions still need your Yes — every Yes teaches the next import.</div>}
+      <div className="imp-tools" data-chips="">
         {chip("auto", n("auto") + n("accepted"))}{chip("confirm", n("confirm"))}{chip("not_found", n("not_found"))}{n("to_source") ? chip("to_source", n("to_source")) : null}
         {ai && <span className="muted" style={{ fontSize: 12.5 }} data-ai="">{ai}</span>}
         <span style={{ flex: 1 }} />
-        <select value={filter} onChange={e => setFilter(e.target.value)} style={{ fontSize: 12.5 }}><option value="">All rows</option><option value="confirm">Please confirm</option><option value="not_found">Not in Item Master</option><option value="green">Matched</option><option value="to_source">To be sourced</option></select>
+        {canAddMaster && missingRows.length > 0 && <button disabled={busy || !master} onClick={() => setBulk(true)} data-add-all="">Add all {missingRows.length} missing items</button>}
+        <select value={filter} onChange={e => setFilter(e.target.value)} style={{ fontSize: 12.5 }} data-filter=""><option value="">All rows</option><option value="confirm">Please confirm</option><option value="not_found">Not in Item Master</option><option value="green">Matched</option><option value="to_source">To be sourced</option></select>
         <button disabled={busy || !greenable} onClick={() => act(() => acceptGreen(id), r => `${r.n} rows confirmed.`)} data-accept-green="">Accept all green ({greenable})</button>
       </div>
-      {err && <div role="alert" style={{ background: C.redBg, color: C.red, borderRadius: 8, padding: "8px 12px", marginBottom: 10 }}>{err}</div>}
-      {note && <div style={{ background: C.greenBg, color: C.green, borderRadius: 8, padding: "8px 12px", marginBottom: 10 }}>{note}</div>}
-      <div className="panel" style={{ overflowX: "auto", padding: 0 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} data-review="">
-          <thead><tr style={{ textAlign: "left", color: C.grey, background: "var(--panel-2, #F9FAFB)" }}><th style={{ padding: "8px 10px" }}>#</th><th>Excel text</th><th>Matched item</th><th style={{ textAlign: "right" }}>Qty</th><th>Unit</th><th>Status</th><th style={{ minWidth: 220 }}></th></tr></thead>
-          <tbody>{shown.map(r => <Row key={r.id} r={r} busy={busy} canAddMaster={canAddMaster} act={act} pick={() => setPicker(r)} />)}</tbody>
+      {err && <div role="alert" style={{ flex: "0 0 auto", background: C.redBg, color: C.red, borderRadius: 8, padding: "6px 12px", marginBottom: 8 }}>{err}</div>}
+      {note && <div style={{ flex: "0 0 auto", background: C.greenBg, color: C.green, borderRadius: 8, padding: "6px 12px", marginBottom: 8 }}>{note}</div>}
+      <div className="imp-tablewrap" ref={wrapRef} data-tablewrap="">
+        <table data-review="">
+          <colgroup><col style={{ width: 38 }} /><col style={{ width: "24%" }} /><col /><col style={{ width: 58 }} /><col style={{ width: 54 }} /><col style={{ width: 108 }} /><col style={{ width: compact ? 128 : 306 }} /></colgroup>
+          <thead><tr><th>#</th><th>Excel text</th><th>Matched item</th><th style={{ textAlign: "right" }}>Qty</th><th>Unit</th><th>Status</th><th></th></tr></thead>
+          <tbody>{shown.map(r => <Row key={r.id} r={r} busy={busy} saving={savingRow === r.id} compact={compact} canAddMaster={canAddMaster} masterReady={!!master} act={act}
+            pick={() => setPicker(r)} add={() => setDrawer(r)} />)}</tbody>
         </table>
+        {!shown.length && <div className="muted" style={{ padding: 16 }}>No rows for this filter.</div>}
       </div>
-      <div style={{ position: "sticky", bottom: 0, background: "var(--bg, #fff)", padding: "12px 0", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <button className="primary" style={{ minHeight: 42, padding: "8px 20px" }} disabled={busy || !b.ok} onClick={() => create(false)} data-create="">Create indent</button>
-        <button style={{ minHeight: 42, padding: "8px 20px" }} disabled={busy || !b.ok} onClick={() => create(true)} data-create-po="">Create indent + draft POs</button>
-        <button style={{ minHeight: 42 }} disabled={busy} onClick={async () => { if (window.confirm("Discard this import?")) { await cancelImport(id); go(""); } }}>Discard</button>
-        <span className="muted" style={{ fontSize: 12.5 }}>{b.ok ? `${indentLines(rows).length} lines will go into the indent.` : `${b.open ? b.open + " row" + (b.open > 1 ? "s" : "") + " still need a decision" : ""}${b.open && b.badQty ? " · " : ""}${b.badQty ? b.badQty + " with a quantity problem" : ""}.`}</span>
+      <div className="imp-bar" data-bar="">
+        <button className="primary" style={{ minHeight: 40, padding: "8px 20px" }} disabled={busy || !b.ok} onClick={() => create(false)} data-create="">Create indent</button>
+        <button style={{ minHeight: 40, padding: "8px 20px" }} disabled={busy || !b.ok} onClick={() => create(true)} data-create-po="">Create indent + draft POs</button>
+        <button style={{ minHeight: 40 }} disabled={busy} onClick={async () => { if (window.confirm("Discard this import?")) { await cancelImport(id); go(""); } }}>Discard</button>
+        <span className="muted" style={{ fontSize: 12.5 }} data-left="">{b.ok ? `${indentLines(rows).length} lines will go into the indent.` : `${b.open ? b.open + " row" + (b.open > 1 ? "s" : "") + " still need a decision" : ""}${b.open && b.badQty ? " · " : ""}${b.badQty ? b.badQty + " with a quantity problem" : ""}.`}</span>
         {overlaps.length > 0 && <span style={{ color: C.amber, fontSize: 12.5 }}>Open indent {overlaps.map(o => o.indent_no).join(", ")} already has some of these items.</span>}
       </div>
-      {picker && <Picker row={picker} close={() => setPicker(null)} choose={async it => { const r = picker; setPicker(null); await act(() => confirmRow(r.id, it.id, r.suggested_item_id && r.suggested_item_id !== it.id ? "change" : "yes"), "Saved — this text will be remembered."); }} />}
-    </>
+      {picker && <Picker row={picker} close={() => setPicker(null)} choose={async it => { const r = picker; setPicker(null); await act(() => confirmRow(r.id, it.id, r.suggested_item_id && r.suggested_item_id !== it.id ? "change" : "yes"), "Saved — this text will be remembered.", { rowId: r.id, patch: { status: "accepted", final_item_id: it.id, final_name: it.display_name } }); }} />}
+      {drawer && master && <AddItemDrawer key={drawer.id} row={drawer} master={master} onClose={() => setDrawer(null)} onDone={drawerDone} hasNext={missingRows.filter(r => r.id !== drawer.id).length > 0} />}
+      {bulk && master && <AddItemsBulk rows={missingRows} master={master} onClose={() => { setBulk(false); load(); }} onDone={bulkDone} />}
+      {toast && <div className="imp-toast" role="status" data-toast=""><span>{toast.text}</span>{toast.undo && <button onClick={toast.undo} data-undo="">Undo</button>}<button onClick={() => setToast(null)} aria-label="Dismiss" style={{ border: 0, color: "#9CA3AF" }}>✕</button></div>}
+    </div>
   );
 }
 
-function Row({ r, busy, canAddMaster, act, pick }) {
+function Row({ r, busy, saving, compact, canAddMaster, masterReady, act, pick, add }) {
   const st = STATUS[r.status] || STATUS.pending;
   const [qty, setQ] = useState(r.qty ?? ""); const badQty = !(Number(r.qty) > 0);
+  const [menu, setMenu] = useState(false); const menuRef = useRef(null);
+  useEffect(() => { if (!menu) return; const h = e => { if (!menuRef.current?.contains(e.target)) setMenu(false); }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, [menu]);
   const name = r.final_name || r.suggested_name;
+  const dis = busy || saving;
+  const acts = [];   // [key, label, onClick, primary]
+  if (r.status === "confirm" && r.suggested_item_id) acts.push(["yes", "Yes", () => act(() => confirmRow(r.id, r.suggested_item_id, "yes"), "Confirmed.", { rowId: r.id, patch: { status: "accepted", final_item_id: r.suggested_item_id, final_name: r.suggested_name } }), true]);
+  if (["confirm", "not_found"].includes(r.status)) {
+    if (canAddMaster) acts.push(["add", "+ Add item", add, r.status === "not_found"]);
+    else acts.push(["request", "Request new item", () => act(() => requestItem(r.id), "Request sent to the Item Master admin."), false]);
+  }
+  if (["confirm", "not_found", "auto", "accepted"].includes(r.status)) acts.push(["change", "Change", pick, false]);
+  if (["confirm", "not_found"].includes(r.status)) acts.push(["source", "To be sourced", () => act(() => markRow(r.id, "to_source"), null, { rowId: r.id, patch: { status: "to_source" } }), false]);
+  if (["accepted", "to_source"].includes(r.status)) acts.push(["undo", "Undo", () => act(() => markRow(r.id, "reopen"), null, { rowId: r.id, patch: { status: r.initial_status || "confirm", final_item_id: r.initial_status === "auto" ? r.suggested_item_id : null } }), false]);
+  const attr = k => ({ yes: { "data-yes": "" }, add: { "data-add": "" }, change: { "data-change": "" }, source: { "data-source": "" }, undo: { "data-undo-row": "" }, request: { "data-request": "" } }[k]);
+  const btn = ([k, label, fn, primary]) => <button key={k} type="button" className={primary ? "primary" : ""} disabled={dis || (k === "add" && !masterReady)} onClick={fn} {...attr(k)}>{label}</button>;
+  const first = compact ? (acts.find(a => a[3]) || acts[0]) : null;
   return (
-    <tr style={{ borderTop: "1px solid var(--border)", verticalAlign: "top" }} data-row={r.id} data-status={r.status}>
-      <td style={{ padding: "8px 10px", color: C.grey }}>{r.row_no}</td>
-      <td style={{ maxWidth: 260 }}>{r.item_text}{r.remarks ? <div className="muted" style={{ fontSize: 11.5 }}>{r.remarks}</div> : null}</td>
-      <td style={{ maxWidth: 340 }}>
+    <tr data-row={r.id} data-status={r.status} style={saving ? { opacity: 0.6 } : null}>
+      <td style={{ color: C.grey }}>{r.row_no}</td>
+      <td>{r.item_text}{r.remarks ? <div className="muted" style={{ fontSize: 11.5 }}>{r.remarks}</div> : null}</td>
+      <td>
         {r.status === "to_source" ? <span className="muted">Free-text line, flagged "not in Item Master"</span> : name ? <b style={{ fontWeight: 600 }}>{name}</b> : <span className="muted">—</span>}
         {r.status === "not_found" ? <div className="muted" style={{ fontSize: 11.5 }}>{r.reason || "No close item"}{(r.candidate_items || []).some(c => !c.hard) ? " · Change shows the closest items" : ""}</div>
-          : r.status !== "to_source" && (r.match_layer || r.confidence != null) && <div className="muted" style={{ fontSize: 11.5 }}>{LAYER[r.match_layer] || r.match_layer}{r.confidence != null && r.match_layer !== "alias" ? " · " + Math.round(Number(r.confidence) * 100) + "%" : ""}{r.reason ? " · " + r.reason : ""}</div>}
+          : r.status !== "to_source" && (r.match_layer || r.confidence != null) && <div className="muted" style={{ fontSize: 11.5 }}>{LAYER[r.match_layer] || r.match_layer}{r.confidence != null && r.match_layer !== "alias" && r.match_layer !== "manual" ? " · " + Math.round(Number(r.confidence) * 100) + "%" : ""}{r.reason && r.match_layer !== "manual" ? " · " + r.reason : ""}</div>}
         {r.guard && name && r.status !== "not_found" && <div style={{ fontSize: 11.5, color: C.amber }}>Check: {r.guard}</div>}
       </td>
       <td style={{ textAlign: "right" }}>{badQty && ["confirm", "not_found", "auto", "accepted", "to_source"].includes(r.status)
-        ? <span><input value={qty} onChange={e => setQ(e.target.value)} style={{ width: 70, borderColor: C.red }} aria-label="quantity" /> <button style={{ fontSize: 11 }} disabled={busy} onClick={() => act(() => setQty(r.id, qty, r.unit))}>Save</button></span>
+        ? <span><input value={qty} onChange={e => setQ(e.target.value)} style={{ width: 52, borderColor: C.red }} aria-label="quantity" /> <button style={{ fontSize: 11, marginTop: 2 }} disabled={dis} onClick={() => act(() => setQty(r.id, qty, r.unit))}>Save</button></span>
         : Number(r.qty).toLocaleString("en-IN")}</td>
       <td>{r.unit || <span className="muted">{r.final_unit || r.suggested_unit || "—"}</span>}</td>
-      <td><span style={{ background: st.bg, color: st.fg, borderRadius: 999, padding: "2px 10px", fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>{st.label}</span></td>
-      <td style={{ whiteSpace: "nowrap" }}>
-        {r.status === "confirm" && r.suggested_item_id && <button className="primary" style={{ fontSize: 12, marginRight: 4 }} disabled={busy} onClick={() => act(() => confirmRow(r.id, r.suggested_item_id, "yes"), "Confirmed.")} data-yes="">Yes</button>}
-        {["confirm", "not_found", "auto", "accepted"].includes(r.status) && <button style={{ fontSize: 12, marginRight: 4 }} disabled={busy} onClick={pick} data-change="">Change</button>}
-        {["confirm", "not_found"].includes(r.status) && (canAddMaster
-          ? <a href="/items" target="_blank" rel="noreferrer" style={{ fontSize: 12, marginRight: 4 }} title="Opens Item Master in a new tab. Add the item there, then use Change to pick it.">+ Add item</a>
-          : <button style={{ fontSize: 12, marginRight: 4 }} disabled={busy} onClick={() => act(() => requestItem(r.id), "Request sent to the Item Master admin.")}>Request new item</button>)}
-        {["confirm", "not_found"].includes(r.status) && <button style={{ fontSize: 12 }} disabled={busy} onClick={() => act(() => markRow(r.id, "to_source"))} data-source="">To be sourced</button>}
-        {["accepted", "to_source"].includes(r.status) && <button style={{ fontSize: 12 }} disabled={busy} onClick={() => act(() => markRow(r.id, "reopen"))}>Undo</button>}
+      <td><span style={{ background: st.bg, color: st.fg, borderRadius: 999, padding: "2px 9px", fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>{saving ? "Saving…" : st.label}</span></td>
+      <td>
+        {compact ? (
+          <div className="imp-acts">
+            {first && btn(first)}
+            {acts.length > 1 && <span className="imp-more" ref={menuRef}><button type="button" aria-label="More actions" disabled={dis} onClick={() => setMenu(m => !m)} data-more="">⋯</button>
+              {menu && <div className="imp-menu" role="menu">{acts.filter(a => a !== first).map(([k, label, fn]) => <button key={k} type="button" role="menuitem" disabled={dis || (k === "add" && !masterReady)} onClick={() => { setMenu(false); fn(); }} {...attr(k)}>{label}</button>)}</div>}</span>}
+          </div>
+        ) : <div className="imp-acts">{acts.map(btn)}</div>}
       </td>
     </tr>
   );
