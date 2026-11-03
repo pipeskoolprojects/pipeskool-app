@@ -5,6 +5,7 @@
 // <video autoplay playsinline muted> → or a clear error with the steps to fix it and Try again. Retries use the
 // same fallback chain (facing → no facing → any camera) and re-run by themselves when the app regains focus after
 // a permission error.
+// update488: on the punch screen a timeout / slow start also offers "Open phone camera" (onBlocked, from a tap).
 // update483: optional `onBlocked(err)` — when the camera is denied / missing, the caller may open the phone's own
 // camera app (hidden capture input) and return true; this component then shows nothing more. Try again starts the
 // camera inside its own tap so that path also works when the first denial came too late for a programmatic click.
@@ -48,6 +49,10 @@ export default function CameraCapture({ facing = "user", title = "Take selfie", 
     if (onBlocked) p.catch(e => { if (isBlockedCameraError(e) && onBlocked(e)) e.fallbackHandled = true; });
     startRef.current = p; setTries(t => t + 1);
   }
+  // update488: open the phone's own camera app from THIS tap (always allowed in a tap) — offered on the punch screen
+  // when the live camera times out or is slow to start. The caller's onBlocked opens the hidden capture input.
+  function usePhoneCamera() { if (onBlocked) onBlocked(err || Object.assign(new Error("user chose phone camera"), { name: "UserChoseFallback" })); }
+  const canPhoneCam = !!onBlocked;
   function shoot() {
     const v = videoRef.current; if (!v || !ready) return;
     const c = document.createElement("canvas");
@@ -70,7 +75,8 @@ export default function CameraCapture({ facing = "user", title = "Take selfie", 
           <ol style={{ margin: "0 0 10px", paddingLeft: 20, fontSize: 13.5, lineHeight: 1.5, textAlign: "left" }}>{help.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
           <div className="muted" style={{ fontSize: 11, marginBottom: 10 }}>Error: {err?.name || "unknown"} · this attempt was reported to IT</div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-            <button type="button" className="primary" style={{ fontSize: 15, padding: "10px 22px", minHeight: 44 }} onClick={retry}>Try again</button>
+            {canPhoneCam && <button type="button" className="primary" style={{ fontSize: 15, padding: "10px 18px", minHeight: 44 }} onClick={usePhoneCamera} data-phone-camera="">📷 Open phone camera</button>}
+            <button type="button" className={canPhoneCam ? "" : "primary"} style={{ fontSize: 15, padding: "10px 18px", minHeight: 44 }} onClick={retry}>Try again</button>
             <button type="button" style={{ fontSize: 15, minHeight: 44 }} onClick={onCancel}>Cancel</button>
           </div>
         </div>
@@ -83,6 +89,7 @@ export default function CameraCapture({ facing = "user", title = "Take selfie", 
                 <div aria-hidden="true" style={{ width: 34, height: 34, border: "3px solid rgba(255,255,255,.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "camspin 1s linear infinite" }} />
                 <div style={{ fontSize: 14 }}>Starting camera… {elapsed > 1 ? `(${elapsed} s)` : ""}</div>
                 <div style={{ fontSize: 12, opacity: .8 }}>If the phone asks, tap Allow</div>
+                {canPhoneCam && elapsed >= 3 && <button type="button" onClick={usePhoneCamera} data-phone-camera-early="" style={{ marginTop: 6, fontSize: 14, minHeight: 40, padding: "8px 14px", background: "#fff", color: "#111", borderRadius: 10 }}>Use phone camera instead</button>}
               </div>)}
           </div>
           <div style={{ display: "flex", gap: 12, marginTop: 14 }}>
