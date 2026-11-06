@@ -540,6 +540,31 @@ body.has-global-mnav .asst-panel { bottom: calc(136px + env(safe-area-inset-bott
 }
 
 
+/* --- update489: nothing hides under the sidebar ---------------------------------------------------------------
+   Sidebar.js writes the sidebar's real right edge to --sb-w on <html> (0px when hidden / phone / no sidebar) and adds
+   html.psk-sb while it is shown. One shared class for full-screen / expanded layers: */
+:root { --sb-w: 0px; }
+.psk-layer { position: fixed; top: 0; right: 0; bottom: 0; left: var(--sb-w, 0px); transition: left .25s ease; box-sizing: border-box; min-width: 0; }
+.psk-layer > * { min-width: 0; }
+html.psk-nosb .psk-layer .psk-layer-head { padding-left: 52px; }   /* the ☰ button (top-left) never covers the first tab */
+/* every other full-window layer (pop-up backdrops written as position:fixed + inset:0, and the class-based ones)
+   also starts next to the sidebar on wide screens, so a dialog is centred in the content area, not under the menu */
+@media (min-width: 761px) {
+  html.psk-sb .psk-layer, html.psk-sb [style*="position: fixed; inset: 0px"], html.psk-sb [style*="position:fixed;inset:0"],
+  html.psk-sb .aid-overlay, html.psk-sb .sd-modal, html.psk-sb .co-modal { left: var(--sb-w) !important; }
+}
+/* the menu slides in when re-opened (Expand layer slides with it via its left transition) */
+@keyframes psk-sb-in { from { transform: translateX(-100%); opacity: .6; } to { transform: none; opacity: 1; } }
+.sidebar.sb-enter { animation: psk-sb-in .25s ease; }
+@media (prefers-reduced-motion: reduce) { .sidebar.sb-enter { animation: none; } .psk-layer { transition: none; } }
+/* sticky first columns (DataTable stickyCols) — opaque so scrolled cells never show through */
+.dt-scroll .dt-stick { position: sticky; z-index: 2; background: var(--card, #fff); }
+.dt-scroll thead th.dt-stick { z-index: 6; }
+.dt-scroll .dt-stick-last { box-shadow: 6px 0 6px -6px rgba(15,20,25,.25); }
+html.it-executive-ui .dt-scroll .dt-stick { background: #0e172b; }
+html.it-executive-ui[data-it-theme="light"] .dt-scroll .dt-stick { background: #fff; }
+
+
 /* ============================================================================
    IT EXECUTIVE UI (fix pass, update 475) — visual-only treatment, scoped under html.it-executive-ui.
    Data loading, permissions, form state and submit handlers stay in each route.
@@ -1283,3 +1308,4 @@ html.it-executive-ui[data-it-layout="phone"] .co-step button { min-height: 0; }
   html.it-executive-ui .co-hd { background: var(--it-surface-strong); border-bottom: var(--it-hair) solid var(--line); }
   html.it-executive-ui .co-side { border-right-color: var(--line); }
 }
+

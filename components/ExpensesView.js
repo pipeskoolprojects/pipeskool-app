@@ -482,8 +482,9 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
         </section>}
 
 
-        <div style={fullView ? { position: "fixed", inset: 0, zIndex: 92, background: "var(--bg)", padding: "10px 14px", display: "flex", flexDirection: "column" } : { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-        <div className="it-money-tabs" style={{ display: "flex", alignItems: "center", gap: 8, borderBottom: embedded ? "none" : "2px solid var(--border)", margin: "2px 0 0", flexWrap: embedded ? "wrap" : "nowrap" }}>
+        <div className={fullView ? "psk-layer" : undefined} data-expanded={fullView ? "" : undefined} style={fullView ? { zIndex: 92, background: "var(--bg)", padding: "10px 14px", display: "flex", flexDirection: "column" } : { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+        {/* update489: the expanded view starts at the sidebar's right edge (psk-layer, left: var(--sb-w)) — never under it */}
+        <div className="it-money-tabs psk-layer-head" style={{ display: "flex", alignItems: "center", gap: 8, borderBottom: embedded ? "none" : "2px solid var(--border)", margin: "2px 0 0", flexWrap: embedded ? "wrap" : "nowrap" }}>
           {/* update216b: the tab strip scrolls; the ⛶ button lives OUTSIDE it in a pinned slot,
               so it can never be scrolled away, clipped, or overlapped at any width or zoom. */}
           <div style={{ flex: 1, minWidth: 0, display: "flex", gap: 2, overflowX: "auto", whiteSpace: "nowrap" }}>
@@ -672,7 +673,7 @@ export default function ExpensesView({ siteId = null, embedded = false }) {
           )}
           {/* update446: EVERY expense, paged by the database (was: newest 300 only) */}
           <SumStrip res={expRes} parts={[["approved", "Approved", "var(--green)"], ["pending", "Pending", "var(--amber)"], ["queried", "Queried", "var(--amber)"], ["rejected", "Rejected", "var(--red)"], ["reversed", "Reversed", "var(--red)"]]} />
-          <DataTable columns={claimCols} exportName="expense_claims" dateField="date" pageSize={10} fill
+          <DataTable columns={claimCols} exportName="expense_claims" dateField="date" pageSize={10} fill stickyCols={3}
             server={{ load: q => getExpenseLedgerPage(q, scope), reloadKey: expKey, onResult: setExpRes, label: "expenses",
                       sortKeys: ["date", "claimant", "site", "paid_to", "amount", "status", "approved_on", "approved_by", "posted"] }} />
         </div>

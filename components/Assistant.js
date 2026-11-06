@@ -121,7 +121,7 @@ export default function Assistant() {
           background: "linear-gradient(180deg,#FF7A45,#E8622B)", color: "#1a1207", fontSize: 24, border: "none", boxShadow: "0 4px 14px rgba(0,0,0,.25)", cursor: "pointer" }}>🤖</button>}
       {open && (
         <div className="asst-panel no-print" style={full
-          ? { position: "fixed", inset: 16, zIndex: 200, width: "auto", height: "auto" }
+          ? { position: "fixed", top: 16, right: 16, bottom: 16, left: "calc(var(--sb-w, 0px) + 16px)", transition: "left .25s ease", zIndex: 200, width: "auto", height: "auto" }
           : { position: "fixed", right: 14, bottom: (path || "").startsWith("/m") ? "calc(74px + env(safe-area-inset-bottom, 0px))" : 18, zIndex: 150, width: "min(94vw, 380px)", height: "min(80vh, 540px)" }}>
           <style>{`.asst-dots span{display:inline-block;width:6px;height:6px;margin:0 2px;border-radius:50%;background:#9096A0;animation:asstb 1.2s infinite}.asst-dots span:nth-child(2){animation-delay:.2s}.asst-dots span:nth-child(3){animation-delay:.4s}@keyframes asstb{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}`}</style>
           <div style={{ height: "100%", background: "linear-gradient(180deg,#1C2025,#15181C)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 20, boxShadow: "0 10px 34px rgba(0,0,0,.35)", display: "flex", flexDirection: "column", overflow: "hidden", color: "#F5F3EF" }}>

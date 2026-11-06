@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Logo from "@/components/Logo";
 import NotifyBell from "@/components/NotifyBell";
 import { getUnreadNoticeCount } from "@/lib/notices";
@@ -100,7 +100,22 @@ export default function Sidebar() {
     const v = wide && localStorage.getItem("psk_sidebar_hidden_v2") === "1";
     setHidden(v); document.documentElement.classList.toggle("psk-nosb", v);
   } catch {} }, []);
-  const toggleHidden = (v) => { setHidden(v); try { localStorage.setItem("psk_sidebar_hidden_v2", v ? "1" : "0"); document.documentElement.classList.toggle("psk-nosb", v); } catch {} };
+  // update489: publish the sidebar's real right edge as --sb-w on <html>, so every full-screen layer / pop-up starts
+  // next to the sidebar instead of under it (0px when the menu is hidden, on phones, or on pages without it).
+  const asideRef = useRef(null);
+  useEffect(() => {
+    const root = document.documentElement;
+    const put = w => { root.style.setProperty("--sb-w", w + "px"); root.classList.toggle("psk-sb", w > 0); };
+    const el = asideRef.current;
+    if (hidden || !el) { put(0); return; }
+    const upd = () => { const cs = getComputedStyle(el); put(cs.display === "none" ? 0 : Math.round(el.offsetLeft + el.offsetWidth + (parseFloat(cs.marginRight) || 0))); };
+    upd();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(upd) : null; ro?.observe(el);
+    window.addEventListener("resize", upd);
+    return () => { ro?.disconnect(); window.removeEventListener("resize", upd); put(0); };
+  }, [hidden, session]);
+  const [enter, setEnter] = useState(false);   // update489: slide in only when the user re-opens the menu (not on every page load)
+  const toggleHidden = (v) => { setEnter(!v); setHidden(v); try { localStorage.setItem("psk_sidebar_hidden_v2", v ? "1" : "0"); document.documentElement.classList.toggle("psk-nosb", v); } catch {} };
 
   useEffect(() => {
     const s = getSession();
@@ -184,7 +199,7 @@ export default function Sidebar() {
     ];
     const adminOpen = open.Admin ?? directorAdminLinks.some(([href]) => path === href);
     const renderDirectorLink = ([ico,label,href]) => { const active=href==="/home"?path==="/home"||path==="/m/dashboard":path===href; return <Link key={href} href={href} style={{display:"flex",alignItems:"center",gap:11,padding:"9px 11px",borderRadius:9,textDecoration:"none",fontSize:12.5,fontWeight:active?750:550,color:active?"#fff":"#dbe3f1",background:active?"#f26a1b":"transparent",borderLeft:active?"3px solid #ffad71":"3px solid transparent"}}><span style={{width:18,textAlign:"center",fontSize:15}}>{ico}</span>{label}</Link>; };
-    return <><AuthLostBanner /><aside className="sidebar director-sidebar" style={{width:240,flexShrink:0,height:"100dvh",position:"sticky",top:0,overflowY:"auto",background:"#0f1b3a",color:"#fff",flexDirection:"column",boxShadow:"2px 0 12px #0f1b3a18"}}>
+    return <><AuthLostBanner /><aside ref={asideRef} className={"sidebar director-sidebar" + (enter ? " sb-enter" : "")} style={{width:240,flexShrink:0,height:"100dvh",position:"sticky",top:0,overflowY:"auto",background:"#0f1b3a",color:"#fff",flexDirection:"column",boxShadow:"2px 0 12px #0f1b3a18"}}>
       <button className="sidebar-hide" title="Hide menu (more screen space)" aria-label="Hide menu" onClick={() => toggleHidden(true)}>⟨</button>
       <div style={{padding:"19px 18px 16px",borderBottom:"1px solid #ffffff16"}}><Link href="/home" style={{display:"inline-block"}}><Logo height={25} variant="white"/></Link><div style={{fontSize:10,color:"#aebbd1",marginTop:7}}>Director Workspace</div></div>
       <div style={{padding:"14px 16px",borderBottom:"1px solid #ffffff16",display:"flex",alignItems:"center",gap:10}}>
@@ -205,7 +220,7 @@ export default function Sidebar() {
   }
 
   return (
-    <><AuthLostBanner /><aside className="sidebar">
+    <><AuthLostBanner /><aside ref={asideRef} className={"sidebar" + (enter ? " sb-enter" : "")}>
       <button className="sidebar-hide" title="Hide menu (more screen space)" onClick={() => toggleHidden(true)}>⟨</button>
       <div className="brand">
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>

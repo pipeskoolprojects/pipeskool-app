@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 /*
   Reusable filterable / sortable / exportable table.
@@ -30,7 +30,18 @@ function wrapCell(c) {
   return c.filter === "search" && c.type !== "num" && c.type !== "date";
 }
 
-export default function DataTable({ columns, rows, exportName = "export", dateField, rightExtra, fixed, pageSize = 25, fill, server }) {
+export default function DataTable({ columns, rows, exportName = "export", dateField, rightExtra, fixed, pageSize = 25, fill, server, stickyCols = 0 }) {
+  // update489: optional sticky first columns (e.g. checkbox + Date + Claimant) — stay visible while scrolling sideways.
+  // Their left offsets are measured from the header cells and written as CSS variables on the table.
+  const tblRef = useRef(null);
+  useLayoutEffect(() => {
+    const t = tblRef.current; if (!stickyCols || !t || !t.tHead || !t.tHead.rows[0]) return;
+    const put = () => { const cells = t.tHead.rows[0].cells; let left = 0;
+      for (let i = 0; i < Math.min(stickyCols, cells.length); i++) { t.style.setProperty("--dt-l" + i, left + "px"); left += cells[i].getBoundingClientRect().width; } };
+    put(); const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(put) : null; ro?.observe(t.tHead.rows[0]);
+    return () => ro?.disconnect();
+  });
+  const stick = i => i < stickyCols ? { cls: " dt-stick" + (i === stickyCols - 1 ? " dt-stick-last" : ""), left: { left: "var(--dt-l" + i + ")" } } : { cls: "", left: null };
   const visCols = columns.filter(c => !c.hidden);   // update176: hidden cols export-only
   const [search, setSearch] = useState("");
   const [selects, setSelects] = useState({});      // {colKey: value}
@@ -212,14 +223,14 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
         </div>)}
       </div>
       <div className="dt-scroll" style={fill ? { maxHeight: "none", flex: 1, minHeight: 0, marginBottom: 4 } : undefined}>
-      <table style={fixed ? { width: "100%", tableLayout: "fixed" } : { width: "max-content", minWidth: "100%" }} className="dt-compact">
+      <table ref={tblRef} style={fixed ? { width: "100%", tableLayout: "fixed" } : { width: "max-content", minWidth: "100%" }} className="dt-compact">
         {fixed && <colgroup>{visCols.map(c => <col key={c.key} style={c.width ? { width: c.width } : {}} />)}</colgroup>}
         <thead>
           <tr>
-            {visCols.map(c => (
-              <th key={c.key} className={c.type === "num" ? "num" : ""}
+            {visCols.map((c, ci) => (
+              <th key={c.key} className={(c.type === "num" ? "num" : "") + stick(ci).cls}
                   onClick={() => canSort(c) && toggleSort(c.key)}
-                  style={{ cursor: canSort(c) ? "pointer" : "default", userSelect: "none" }}>
+                  style={{ cursor: canSort(c) ? "pointer" : "default", userSelect: "none", ...stick(ci).left }}>
                 {c.label}{sortKey === c.key ? (sortDir === "asc" ? " ▲" : " ▼") : (canSort(c) ? " ↕" : "")}
               </th>
             ))}
@@ -230,9 +241,9 @@ export default function DataTable({ columns, rows, exportName = "export", dateFi
             <tr><td colSpan={columns.length} className="muted">{server && (!res || srvBusy) && !srvErr ? "Loading…" : server && srvErr ? "Could not load — see the message above." : "No matching records."}</td></tr>
           ) : shown.map((r, i) => (
             <tr key={r.id ?? i}>
-              {visCols.map(c => (
-                <td key={c.key} className={c.type === "num" ? "num" : ""}
-                    style={wrapCell(c) ? { whiteSpace: "normal", wordBreak: "normal", overflowWrap: "normal", lineHeight: 1.4, fontSize: 12.5, minWidth: c.minWidth || 170, maxWidth: c.maxWidth || 300 } : {}}>
+              {visCols.map((c, ci) => (
+                <td key={c.key} className={(c.type === "num" ? "num" : "") + stick(ci).cls}
+                    style={{ ...(wrapCell(c) ? { whiteSpace: "normal", wordBreak: "normal", overflowWrap: "normal", lineHeight: 1.4, fontSize: 12.5, minWidth: c.minWidth || 170, maxWidth: c.maxWidth || 300 } : {}), ...stick(ci).left }}>
                   {c.render ? c.render(r) : r[c.key]}
                 </td>
               ))}
